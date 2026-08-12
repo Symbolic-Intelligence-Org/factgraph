@@ -25,7 +25,11 @@ from factgraph.application.evaluation_query_runtime import (
     _assert_compiled_evaluation_query_current,
 )
 from factgraph.application.evaluation_run_bundle_runtime import _build_evaluation_run_bundle_v0
-from factgraph.application.evaluation_run_runtime import build_evaluation_run_anchor_v0
+from factgraph.application.evaluation_run_runtime import (
+    EVALUATION_QUERY_PROJECTION_ADAPTER_VERSION,
+    NATIVE_WHERE_SEMANTICS_VERSION,
+    build_evaluation_run_anchor_v0,
+)
 from factgraph.application.explain import EvidenceGraph, probe_native
 from factgraph.application.explain.evidence_tree import (
     Const,
@@ -3491,6 +3495,16 @@ class SDKStore:
             row_support_artifacts = self._row_support_artifacts_for_outputs(outputs, rows)
             row_provenance_envelopes = self._row_provenance_envelopes_for_outputs(outputs, rows)
             row_digests = tuple(_row_digest_for(row, result_id=result_id, claim_name=head.id) for row in rows)
+            engine_version = (
+                NATIVE_WHERE_SEMANTICS_VERSION
+                if evaluation_query is not None and engine == "native"
+                else None
+            )
+            adapter_version = (
+                EVALUATION_QUERY_PROJECTION_ADAPTER_VERSION
+                if evaluation_query is not None and engine == "native"
+                else None
+            )
             result_digest = result_digest_for(
                 result_id=result_id,
                 run_id=run_id,
@@ -3498,8 +3512,8 @@ class SDKStore:
                 head_id=head.id,
                 head_content_digest=head.content_digest,
                 engine=engine,
-                engine_version=None,
-                adapter_version=None,
+                engine_version=engine_version,
+                adapter_version=adapter_version,
                 expr_digest=expr_digest,
                 rule_set_digest=rule_set_digest,
                 view_snapshot_digest=view_snapshot_digest,
@@ -3539,7 +3553,10 @@ class SDKStore:
                 engine=engine,
                 evaluated_at=datetime.now(timezone.utc),
                 fingerprint=fingerprint,
-                engine_meta={"engine_version": None, "adapter_version": None},
+                engine_meta={
+                    "engine_version": engine_version,
+                    "adapter_version": adapter_version,
+                },
                 _schema_index=self._application_schema_index,
                 _row_close_builder=row_close_builder,
                 _row_graph_builder=row_graph_builder,

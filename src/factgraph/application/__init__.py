@@ -137,6 +137,7 @@ from .evaluation_run_bundle_runtime import (
     evaluation_run_bundle_bytes,
     evaluation_run_bundle_from_bytes,
 )
+from .evaluation_run_verification_runtime import verify_evaluation_run_bundle
 from .authoring_runtime import AuthoringRuntimeError
 from .why_not_runtime import (
     WhyNotRuntimeError,
@@ -215,6 +216,7 @@ __all__ = [
     "compile_evaluation_query",
     "evaluation_run_bundle_bytes",
     "evaluation_run_bundle_from_bytes",
+    "verify_evaluation_run_bundle",
     "copy_ledger_to_workspace",
     "diagnose_derivation_binding",
     "encode_entity_ref",

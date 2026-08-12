@@ -13,6 +13,10 @@ from .protocol.evaluation_run import (
 )
 
 
+NATIVE_WHERE_SEMANTICS_VERSION = "native_where_v1"
+EVALUATION_QUERY_PROJECTION_ADAPTER_VERSION = "evaluation_query_projection_v0"
+
+
 def build_evaluation_run_anchor_v0(
     compiled_query: CompiledEvaluationQueryV0,
     result: EvaluateResult,

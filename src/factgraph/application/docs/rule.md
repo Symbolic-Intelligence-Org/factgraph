@@ -423,8 +423,34 @@ seals, row/anchor agreement, receipt structure and witness resolution. The
 bundle is sensitive cleartext with caller-managed custody, declares
 `authenticity="unverified"` and `replay_availability="not_implemented"`, and
 has no `replay()` or detached `explain()` method. In particular, F4B1 does not
-re-evaluate non-fact conditions; isolated logical verification is a later
-slice.
+re-evaluate non-fact conditions.
+
+F4B2 adds a separate, Store-independent verification operation:
+
+```python
+verification = verify_evaluation_run_bundle(bundle)
+```
+
+It validates the complete bundle, checks the captured native/Query semantic
+contract pins, rejects a conservative work estimate above 100,000, executes
+the captured native plan once over only the captured effective relation, and
+compares both semantic-row and ProofReceipt multisets. The returned
+`EvaluationRunVerificationV0` is a deterministic content-sealed verification
+record, not an `EvaluateResult`: it has no source `run_id`, `result_id` or
+`row_id` and never recreates the old Run. A matching record means only that the
+current verifier reproduced the bundle's captured input; source authenticity
+and business truth remain unverified.
+
+New compiled EvaluationQuery runs publish semantic pins `native_where_v1` and
+`evaluation_query_projection_v0`. Older bundles whose engine/adapter pins are
+absent can still produce `matched_unpinned_runtime`, explicitly a weaker,
+provisional match. A declared pin, config, engine or Where-AST-gate mismatch
+returns `runtime_incompatible` without evaluator execution; oversized work is
+similarly `resource_rejected`. Zero rows remain an empty semantic multiset, not
+false. The verifier grammar and work estimator handle the captured native IR
+forms, including negation and aggregates, but current Policy v0 admission does
+not expose every such form through public EvaluationQuery authoring; this is
+not a claim that those authoring restrictions were widened.
 
 The older ad-hoc `QueryRuntimeRequest` and SDK `Query` remain unchanged.
 Non-native engines, standalone Query explain, candidate acceptance,
