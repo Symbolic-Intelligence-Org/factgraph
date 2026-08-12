@@ -11,7 +11,7 @@
   - [`2026-08-11_meander-factgraph-post-probe-session.md`](../../../memory/session_handoffs/2026-08-11_meander-factgraph-post-probe-session.md) §§3.2, 8.2, 10
   - [`meander-factgraph-unified-design-review-candidate-v0-1-1.zh.md`](../../design-points/active/meander-factgraph-unified-design-review-candidate-v0-1-1.zh.md) §§6.2–6.3; non-authoritative target direction only
 - Outputs / Downstream:
-  - [`2026-08-12_factgraph-managed-occurrence-address.md`](../../../blueprints/active/2026-08-12_factgraph-managed-occurrence-address.md)
+  - [`2026-08-12_factgraph-managed-occurrence-address.md`](../../../blueprints/archive/2026-08-12_factgraph-managed-occurrence-address.md)
 - Related:
   - [`2026-08-11_q2-meander-agent-query-validation-vertical-probe-decision.md`](./2026-08-11_q2-meander-agent-query-validation-vertical-probe-decision.md) §§4.5, 5
 - Branch: `codex/v0.3.0-f2a-policy-occurrence-address-2026-08-12`
