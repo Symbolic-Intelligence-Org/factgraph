@@ -68,7 +68,10 @@ where compatibility or persisted protocol requires it.
 
 `CandidateSet` is a direct type alias, not a subclass, wrapper, second DTO, or
 conversion boundary. Existing construction, `isinstance`, equality, digests
-and serialization therefore remain unchanged.
+and the v2 payload/wire/ledger serialization therefore remain unchanged. Old
+Python pickles that name `...candidates.CandidateSet` resolve through the alias;
+new pickles name `DerivationOutput` and are not claimed readable by a pre-F3C
+runtime. Python pickle is not a durable protocol of this repository.
 
 ### 4.2 The public compatibility seam is acknowledged, not legitimized
 

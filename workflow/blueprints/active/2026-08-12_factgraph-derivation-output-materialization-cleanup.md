@@ -101,8 +101,10 @@ shipped Meander and therefore cannot be deleted safely in this local slice.
 - No new public export of `DerivationOutput`; it remains core/application
   substrate in this slice.
 - Batch A and B are separate implementation commits and independently tested.
-- Stop if the alias changes serialization/identity, requires a datastore
-  migration, or forces Meander changes.
+- Stop if the alias changes v2 payload/wire/ledger serialization or runtime
+  class identity, requires a datastore migration, or forces Meander changes.
+  Old `CandidateSet` pickle globals must remain readable; reverse compatibility
+  for newly emitted `DerivationOutput` pickles is not a durable contract.
 - Wrapper fixes preserve Store accept-time digest enrichment and fail closed
   rather than simulate unsupported batch dry-run/override semantics. These
   digests do not claim to be an evaluation-time snapshot; F4 owns that boundary.
@@ -113,16 +115,16 @@ shipped Meander and therefore cannot be deleted safely in this local slice.
 
 ## 7. Acceptance
 
-- [ ] Five primary service codecs and their four-helper-only chain have no residue.
-- [ ] Meander-dependent `evaluate_candidates` remains behaviorally compatible.
-- [ ] `CandidateSet is DerivationOutput` and existing constructors still work.
-- [ ] Active read-only chains use canonical terminology.
-- [ ] Candidate protocol and materialization regression cohorts are unchanged.
-- [ ] Single/batch wrapper P1 cases pass focused regression tests, including a
+- [x] Five primary service codecs and their four-helper-only chain have no residue.
+- [x] Meander-dependent `evaluate_candidates` remains behaviorally compatible.
+- [x] `CandidateSet is DerivationOutput` and existing constructors still work.
+- [x] Active read-only chains use canonical terminology.
+- [x] Candidate protocol and materialization regression cohorts are unchanged.
+- [x] Single/batch wrapper P1 cases pass focused regression tests, including a
   synthetic-output/business-rule identity mismatch and the unchanged strict
   `Store.accept` guard.
-- [ ] F3A/F3B Query/evaluate/explain cohorts and static checks pass.
-- [ ] Current docs state the temporary debt and F4 fingerprint boundary.
+- [x] F3A/F3B Query/evaluate/explain cohorts and static checks pass.
+- [x] Current docs state the temporary debt and F4 fingerprint boundary.
 
 ## 8. Implementation Plan
 
@@ -147,4 +149,18 @@ shipped Meander and therefore cannot be deleted safely in this local slice.
 
 ## 10. Outcome / Deviations
 
-To be completed after implementation and the single cumulative review.
+- Batch A implementation: `8b307f1c`; Batch B implementation and current-truth
+  docs: `9498ac2b`.
+- The cumulative FactGraph cohort passed 645 tests plus 96 subtests; the focused
+  Meander compatibility cohort passed 27 tests. Ruff and diff checks passed.
+  Mypy reported the same 107 existing errors as the F3B base comparison.
+- Cross-repository testing corrected one proposed implementation detail: direct
+  `Store.accept` cannot represent Meander's legitimate compiler-output versus
+  business-rule attribution split. The final private enrichment helper preserves
+  both identities while direct Store acceptance stays strict.
+- One bounded independent review returned CLEAR with zero P0/P1 and one
+  non-blocking pickle boundary: old `CandidateSet` pickles remain readable by
+  F3C, while newly emitted `DerivationOutput` pickles are not promised readable
+  by pre-F3C runtimes. Durable v2 payload/wire/ledger compatibility is unchanged.
+- Status remains `implementing` until the user-side read-only review is returned;
+  this pair is not archived and no Meander migration starts automatically.

@@ -24,6 +24,7 @@
 | 2026-08-12 | implementing | Batch B introduced canonical `DerivationOutput` vocabulary | The class remains in the historical module with a direct `CandidateSet` alias; active read-only producers/consumers migrated while persisted identifiers and wire keys stayed unchanged. |
 | 2026-08-12 | corrected | Meander regression refined the single-item write seam | Cross-repository tests proved compiler derivation identity and authored/business attribution are legitimately distinct. A private Store-owned accept-time enrichment helper preserves both; direct `Store.accept` remains strict. |
 | 2026-08-12 | verified | Cumulative local and cross-repository cohorts passed | FactGraph: 645 tests + 96 subtests; Meander: 27 focused compatibility tests; Ruff and diff checks clear. Mypy reports the same 107 pre-existing errors as the F3B base comparison. |
+| 2026-08-12 | review | Bounded independent review returned CLEAR | Review repeated 153 tests + 7 subtests, six Meander surface tests, Ruff and diff checks; P0/P1=0. One non-blocking note narrowed serialization claims to durable v2 wire/ledger compatibility and one-way old-pickle readability. User-side review remains pending. |
 
 ## Decision Notes
 
