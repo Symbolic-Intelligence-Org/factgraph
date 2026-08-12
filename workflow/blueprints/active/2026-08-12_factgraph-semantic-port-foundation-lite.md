@@ -1,6 +1,6 @@
 # Task Blueprint: FactGraph semantic-port foundation lite
 
-- Status: implementing
+- Status: implemented
 - Created: 2026-08-12
 - Last Updated: 2026-08-12
 - Authority: task-scoped implementation contract for the F1-lite integration branch.
@@ -100,18 +100,18 @@ name/origin, and typed endpoint kind/coordinates.
 
 ## 7. Acceptance
 
-- [ ] Happy path covers entity identity and scalar field bindings.
-- [ ] Coverage, Var, endpoint, type, and witness failures are tested.
-- [ ] Same-endpoint/different-Var behavior is tested.
-- [ ] Same-Var/conflicting-endpoint behavior is rejected using Var value equality.
-- [ ] Contract digest is order-stable and changes with Rule/schema/endpoint.
-- [ ] Contract copy/freeze survives mutation of the input mapping.
-- [ ] Lightweight Rule drift detection is tested.
-- [ ] Same-endpoint resolution leaves Rule body/digest and both Vars unchanged.
-- [ ] Legacy Rule digest, focused RuleExpr/evaluate compatibility, and an
+- [x] Happy path covers entity identity and scalar field bindings.
+- [x] Coverage, Var, endpoint, type, and witness failures are tested.
+- [x] Same-endpoint/different-Var behavior is tested.
+- [x] Same-Var/conflicting-endpoint behavior is rejected using Var value equality.
+- [x] Contract digest is order-stable and changes with Rule/schema/endpoint.
+- [x] Contract copy/freeze survives mutation of the input mapping.
+- [x] Lightweight Rule drift detection is tested.
+- [x] Same-endpoint resolution leaves Rule body/digest and both Vars unchanged.
+- [x] Legacy Rule digest, focused RuleExpr/evaluate compatibility, and an
       existing evaluate→row→`row.explain()` regression pass.
-- [ ] Production addition stays within the Q3A budget.
-- [ ] Application module docs state current behavior and deferred boundaries.
+- [x] Production addition stays within the Q3A budget.
+- [x] Application module docs state current behavior and deferred boundaries.
 
 ## 8. Implementation Plan
 
@@ -130,4 +130,20 @@ name/origin, and typed endpoint kind/coordinates.
 
 ## 10. Outcome / Deviations
 
-To be completed after implementation.
+- Final implementation: `490ab2bd` adds two small production modules, two
+  export edits, one focused test file, and current-truth application docs.
+- Production denominator: 403 added Python lines (178 protocol + 195 runtime +
+  18 protocol exports + 12 application exports), under the 450 cap. The full
+  defensive reference remains unchanged at `9487b930`.
+- Verification: focused semantic/RuleExpr/lowering/Explain chain is 91 passed
+  plus 8 subtests; Ruff passed; targeted mypy passed for both new source files.
+  Full `tests/` is 2,897 passed / 32 skipped / 1 failure. The sole failure is
+  the pre-existing `service.static_ui` import of absent
+  `render_evidence_graph_html`, independently reproduced by the full candidate.
+- Two independent final reviews returned CLEAR with zero P0/P1. No Policy,
+  Query, SDK sugar, persistence, schema reconstruction, or untrusted verifier
+  was introduced.
+- Deviation: the preflight remained an independent commit (`1e6e16e7`) rather
+  than being merged into the implementation lineage; all findings and actions
+  are durably summarized in the paired audit.
+- Archive intent: move this blueprint and audit pair together after closure.

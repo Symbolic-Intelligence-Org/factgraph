@@ -166,15 +166,15 @@ not add `DerivedEndpoint`, partial coverage, or automatic endpoint inference.
 
 ## 8. Acceptance Criteria
 
-- [ ] Three-coordinate binding and exact coverage are enforced.
-- [ ] Endpoint/type/positive-position mismatches fail with typed errors.
-- [ ] Same endpoint does not merge Vars or create joins.
-- [ ] One stable whole-contract digest binds Rule, schema, and endpoints.
-- [ ] Contract ports are copied then frozen and input-map mutation cannot alter
+- [x] Three-coordinate binding and exact coverage are enforced.
+- [x] Endpoint/type/positive-position mismatches fail with typed errors.
+- [x] Same endpoint does not merge Vars or create joins.
+- [x] One stable whole-contract digest binds Rule, schema, and endpoints.
+- [x] Contract ports are copied then frozen and input-map mutation cannot alter
       the contract or derived digest.
-- [ ] Shipped Rule behavior and digest bytes remain unchanged.
-- [ ] A focused existing evaluate-to-row-to-Explain path remains green.
-- [ ] Relative to `ca962dba`, added lines under
+- [x] Shipped Rule behavior and digest bytes remain unchanged.
+- [x] A focused existing evaluate-to-row-to-Explain path remains green.
+- [x] Relative to `ca962dba`, added lines under
       `src/factgraph/application/**/*.py` (including export edits, excluding
       tests/docs, with deletions not offsetting additions) remain at or below
       450 unless this decision is explicitly amended.
@@ -186,3 +186,4 @@ not add `DerivedEndpoint`, partial coverage, or automatic endpoint inference.
 | 2026-08-12 | proposed | Minimum contract extracted | Full candidate retained as a defensive reference. |
 | 2026-08-12 | adopted | User approved F1-lite | Authorized an isolated subtractive implementation before Policy work. |
 | 2026-08-12 | adopted | Preflight amendments applied | PF-R1..R5 and PF-Rec1..Rec3 from independent preflight `1e6e16e7` narrowed executable semantics and the size denominator. |
+| 2026-08-12 | adopted | Contract implemented | `490ab2bd` implements the minimum contract in 403 production added lines; two independent reviews returned CLEAR. |
