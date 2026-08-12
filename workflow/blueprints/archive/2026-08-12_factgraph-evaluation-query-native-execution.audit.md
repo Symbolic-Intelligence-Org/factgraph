@@ -1,6 +1,6 @@
 # Task Blueprint Audit: FactGraph EvaluationQuery native execution
 
-- Status: implementing
+- Status: archived
 - Created: 2026-08-12
 - Last Updated: 2026-08-12
 - Authority: paired blueprint audit log
@@ -18,6 +18,9 @@
 | 2026-08-12 | scoped | Runtime, result, Explain and compatibility audits converged | CandidateSet remains internal; exact native execution returns EvaluateResult with Query anchors and unchanged-live-view guards. |
 | 2026-08-12 | implementing | User authorized continuing F3B | Work is confined to the isolated F3B branch and the 320-line/no-F4 stops. |
 | 2026-08-12 | review | Implementation and internal independent review completed | Implementation `c94c5bf9`; three reviews returned CLEAR, the full application/SDK cohort passed 458 tests plus 96 subtests, and production growth is 317/320 lines. User-side read-only review remains pending. |
+| 2026-08-12 | review | User-side independent review cleared F3B | The read-only review repeated 458 tests and static checks, added 33 passing adversarial probes, and reported zero P0/P1/P2. It clarified the existing close-versus-explain stale-error envelope without finding a semantic defect. |
+| 2026-08-12 | implemented | Scoped native Query execution landed | Implementation `c94c5bf9` plus current-truth documentation `9f465628`; all acceptance criteria passed without crossing the F4 boundary. |
+| 2026-08-12 | archived | Blueprint pair archived | Outcome is complete; current behavior is owned by the application and SDK module docs. |
 
 ## Decision Notes
 

@@ -1,6 +1,6 @@
 # Task Blueprint: FactGraph EvaluationQuery native execution
 
-- Status: implementing
+- Status: archived
 - Created: 2026-08-12
 - Last Updated: 2026-08-12
 - Authority: task-scoped implementation contract for F3B only.
@@ -72,10 +72,16 @@ boundary before F4 snapshot/replay semantics.
 - Production Python is 317 gross additions relative to `5a6f4a55`, within the
   320-line stop. The remaining margin is intentionally unused.
 - Three internal independent reviews returned CLEAR with zero blocking
-  findings. User-side read-only review remains pending, so lifecycle status
-  remains `implementing` and this pair is not archived.
+  findings. The user-side read-only review independently repeated 458 tests,
+  static checks and 33 adversarial probes and returned CLEAR with zero P0/P1/P2.
+- The independent review clarified one non-finding boundary: stale
+  `row.close()` raises while stale `row.explain()` returns an unsupported
+  Explanation under the shipped error-envelope contract. Both paths fail
+  closed and neither emits stale evidence.
 - Candidate identity is not a durable Query identity. F4 must bind any bundle
   or replay anchor to the Query/result fingerprints rather than CandidateSet IDs.
 - The base interpreter still exits 139 during broad pytest startup; the pinned
   `factpy` environment completes the stated cohorts. No engine parity beyond
   native, immutable replay, expectations or completeness is claimed.
+- This blueprint and its paired audit are archived together after the external
+  CLEAR review; current implementation truth remains in the module docs.

@@ -9,7 +9,7 @@
   - [`2026-08-12_q5a-evaluation-query-projection-v0-decision.md`](./2026-08-12_q5a-evaluation-query-projection-v0-decision.md)
   - [`2026-05-25_t5-d18-return-shape-transition.md`](./2026-05-25_t5-d18-return-shape-transition.md)
 - Outputs / Downstream:
-  - [`2026-08-12_factgraph-evaluation-query-native-execution.md`](../../../blueprints/active/2026-08-12_factgraph-evaluation-query-native-execution.md)
+  - [`2026-08-12_factgraph-evaluation-query-native-execution.md`](../../../blueprints/archive/2026-08-12_factgraph-evaluation-query-native-execution.md)
 - Branch: `codex/v0.3.0-f3b-evaluation-query-execution-2026-08-12`
 - Base: `5a6f4a55`
 - Depends on: Q5A / F3A
