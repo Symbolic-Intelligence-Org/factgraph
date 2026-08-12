@@ -95,6 +95,17 @@ from .semantic_address import (
     SemanticAddressShapeError,
     SemanticPortAddress,
 )
+from .policy import (
+    Policy,
+    PolicyAll,
+    PolicyAny,
+    PolicyError,
+    PolicyLineage,
+    PolicyLoweredRef,
+    PolicyNodeLineage,
+    PolicyOccurrence,
+    PolicyUnify,
+)
 from .rule_expr import ExplicitBoolError, RuleExpr, RuleExprError, RuleJoinConstraint
 from .rule_expr_inspect import ConditionDescriptor, OccurrenceInspect, PortInspect, RuleExprInspect
 from .rule_expr_lowering import compile_derivation_plan
@@ -226,6 +237,15 @@ __all__ = [
     "OverlayCheckStatus",
     "OccurrenceInspect",
     "PlannedOpDTO",
+    "Policy",
+    "PolicyAll",
+    "PolicyAny",
+    "PolicyError",
+    "PolicyLineage",
+    "PolicyLoweredRef",
+    "PolicyNodeLineage",
+    "PolicyOccurrence",
+    "PolicyUnify",
     "PortInspect",
     "ProofFrameConditionVerdict",
     "ProofFrameRecheckRequest",

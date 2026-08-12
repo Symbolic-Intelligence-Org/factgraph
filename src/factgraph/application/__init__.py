@@ -123,6 +123,12 @@ from .semantic_address_runtime import (
     SemanticAddressSpace,
     manage_rule_occurrence,
 )
+from .policy_runtime import (
+    CompiledPolicyV0,
+    PolicyCompiledBranch,
+    PolicyRulePin,
+    compile_policy,
+)
 from .authoring_runtime import AuthoringRuntimeError
 from .why_not_runtime import (
     WhyNotRuntimeError,
@@ -134,6 +140,7 @@ __all__ = [
     "ConditionKeyView",
     "AuthoringRuntimeError",
     "CheckRuntimeError",
+    "CompiledPolicyV0",
     "CapabilityHelperError",
     "DerivationRuntimeError",
     "DiagnoseRuntimeError",
@@ -149,6 +156,8 @@ __all__ = [
     "OriginPackageError",
     "ManagedRuleOccurrence",
     "PredicateInfo",
+    "PolicyCompiledBranch",
+    "PolicyRulePin",
     "ProofFrameDiffView",
     "ProofFrameView",
     "QueryRuntimeError",
@@ -193,6 +202,7 @@ __all__ = [
     "check_rule_disable_action",
     "check_rule_literal_replace_action",
     "check_why_not_universe",
+    "compile_policy",
     "copy_ledger_to_workspace",
     "diagnose_derivation_binding",
     "encode_entity_ref",

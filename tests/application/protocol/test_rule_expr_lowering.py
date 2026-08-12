@@ -14,6 +14,7 @@ from factgraph.application.protocol.rule_expr_lowering import (
     _evaluate_rule_expr_native_for_tests,
     _lower_application_rule,
     _lower_rule_expr,
+    _lower_rule_expr_body,
     _materialize_native_derivation_plan,
     probe_seed_vars_by_head_port,
 )
@@ -154,6 +155,64 @@ class RuleExprLoweringPlanTests(unittest.TestCase):
 
         self.assertEqual(tuple(branch.branch_id for branch in plan.branches), ("c0", "c1"))
         self.assertEqual(tuple(branch.occurrence_aliases for branch in plan.branches), (("a", "b"), ("c",)))
+
+    def test_head_independent_plan_is_exact_prefix_of_legacy_plan(self) -> None:
+        left, right = _person_exists_rule(), _person_region_rule()
+        expr = left.as_("left") | right.as_("right")
+        head = Rule.projection("person")
+
+        body = _lower_rule_expr_body(expr)
+        legacy = _lower_rule_expr(expr, head=head)
+
+        self.assertEqual(body.branches, legacy.branches)
+        self.assertEqual(body.occurrence_map, legacy.occurrence_map)
+        self.assertEqual(
+            legacy.canonical_key,
+            (*body.canonical_key, legacy.head_binding.kind, head.id, head.content_digest),
+        )
+        self.assertFalse(hasattr(body, "head"))
+
+    def test_dnf_alias_rewrite_retains_authored_alias_and_avoids_collision(self) -> None:
+        shared = Rule(id="shared", when=(PredAtom("Shared", [Var("$u")]),), ports={"user": Var("$u")})
+        collision = Rule(id="collision", when=(PredAtom("Collision", [Var("$u")]),), ports={"user": Var("$u")})
+        other = Rule(id="other", when=(PredAtom("Other", [Var("$u")]),), ports={"user": Var("$u")})
+        body = _lower_rule_expr_body(
+            shared.as_("d") & (collision.as_("d__c0") | other.as_("other"))
+        )
+
+        copies = [binding for binding in body.occurrence_map if binding.authored_alias == "d"]
+        self.assertEqual(len(copies), 2)
+        self.assertNotIn("d__c0", {binding.alias for binding in copies})
+        self.assertEqual(
+            next(binding for binding in body.occurrence_map if binding.alias == "d__c0").authored_alias,
+            None,
+        )
+
+    def test_legacy_asymmetric_join_filtering_remains_unchanged(self) -> None:
+        rules = [
+            Rule(id=name, when=(PredAtom(name, [Var("$u")]),), ports={"user": Var("$u")})
+            for name in ("a", "b", "c")
+        ]
+        a, b, c = rules
+        expr = (a.as_("a") & (b.as_("b") | c.as_("c"))).join(
+            a.as_("a").user.eq(b.as_("b").user)
+        )
+
+        body = _lower_rule_expr_body(expr)
+
+        joins_by_authored_aliases = {
+            frozenset(
+                next(
+                    binding.authored_alias or binding.alias
+                    for binding in body.occurrence_map
+                    if binding.alias == alias
+                )
+                for alias in branch.occurrence_aliases
+            ): len(branch.pending_joins)
+            for branch in body.branches
+        }
+        self.assertEqual(joins_by_authored_aliases[frozenset(("a", "b"))], 1)
+        self.assertEqual(joins_by_authored_aliases[frozenset(("a", "c"))], 0)
 
     def test_nested_and_or_normalizes_to_dnf_with_branch_local_aliases_and_joins(self) -> None:
         a = Rule(id="a", when=(PredAtom("A", [Var("$u")]),), ports={"user": Var("$u")})

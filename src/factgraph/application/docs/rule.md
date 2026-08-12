@@ -244,11 +244,75 @@ contract digests. Input order is irrelevant, while renaming an alias changes
 the address-space identity. Construction and resolution repeat the lightweight
 Rule/contract staleness check.
 
-This is only the direct-port addressing substrate. It does not implement a
-Policy AST, Boolean composition, joins, field navigation, Query `bind/select`,
-synthetic projection heads, Evaluate, Explain, persistence, or an SDK/Agent
-wire format. Existing Rule and RuleExpr callers do not need a semantic address
-space and remain unchanged.
+Existing Rule and RuleExpr callers do not need a semantic address space and
+remain unchanged.
+
+## Managed Policy v0
+
+The application layer now has a deliberately narrow, head-independent Policy
+compiler. A Policy names the occurrences in one exact `SemanticAddressSpace`,
+combines them with `PolicyAll` / `PolicyAny`, and may explicitly equate two
+direct semantic ports with `PolicyUnify`:
+
+```python
+from factgraph.application import compile_policy
+from factgraph.application.protocol import (
+    Policy,
+    PolicyAll,
+    PolicyOccurrence,
+    PolicyUnify,
+    SemanticPortAddress,
+)
+
+policy = Policy(
+    id="same_age",
+    version="1",
+    when=PolicyAll(
+        (
+            PolicyOccurrence("person1"),
+            PolicyOccurrence("person2"),
+            PolicyUnify(
+                SemanticPortAddress("person1", "age"),
+                SemanticPortAddress("person2", "age"),
+            ),
+        )
+    ),
+)
+compiled = compile_policy(policy, address_space=addresses)
+```
+
+Policy occurrence aliases must exactly cover the address space; unused or
+ambient Rules are rejected. Each occurrence appears once, although the same
+Rule may be reused under different aliases. All contracts must pin the same
+schema digest and still match their Rules when compilation starts.
+
+`PolicyUnify` is equality-only. Its addresses must resolve to the exact same
+semantic endpoint on two different occurrences, and it must be scoped directly
+inside a `PolicyAll` whose every local DNF branch contains both endpoints. Thus
+`a AND (b OR c)` with a Unify between `a` and `b` fails with
+`PARTIAL_BRANCH_CONSTRAINT`; placing the Unify inside an explicit
+`PolicyAll(a, b, ...)` branch is accepted. This rule applies only to managed
+Policy. The existing RuleExpr partial-join lowering remains unchanged.
+
+Compilation accepts only managed Rules whose top-level bodies contain
+`PredAtom` and non-aggregate `CmpAtom(eq/ne/gt/ge/lt/le)`. `NotAtom`, `InAtom`,
+`BuiltinAtom`, aggregate terms, stale contracts, mixed schema digests, and
+compiler-reserved Rule IDs fail with typed `PolicyError` codes. DNF expansion
+is checked statically: at most 32 branches compile and larger projections fail
+before structural lowering or engine execution.
+
+`CompiledPolicyV0` pins Policy, address-space, Rule, and semantic-contract
+identity and contains deterministic branch inventory plus bidirectional
+structural lineage. DNF-generated aliases retain their authored occurrence
+alias explicitly; lineage does not parse generated names or `repr`. It covers
+each authored node and every emitted branch, occurrence, Rule-body atom, and
+Unify coordinate.
+
+This artifact is intentionally not executable. It has no result head,
+selection, bindings, assumptions, engine configuration, rows, or explanation.
+Compare/literals, field navigation, Query `bind/select/expect`, a synthetic
+projection head, Evaluate/Explain integration, persistence, Package, SDK, and
+Agent/Meander wire formats remain later slices.
 
 ## Bridge Rejections
 

@@ -89,6 +89,7 @@ class _RuleOperand(_RuleExpr):
     rule: Rule
     alias: str
     explicit_alias: bool
+    authored_alias: str | None = None
 
     def _canonical(self) -> CanonicalExpr:
         return ("rule", _rule_identity(self.rule), self.alias)

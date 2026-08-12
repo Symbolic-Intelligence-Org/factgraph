@@ -74,6 +74,7 @@ class RuleExprOccurrenceBinding:
     content_digest: str
     port_bindings: tuple[RuleExprPortBinding, ...]
     rule_version: str | None = None
+    authored_alias: str | None = None
 
     def __post_init__(self) -> None:
         _require_non_empty_str(self.alias, field_name="alias")
@@ -81,6 +82,27 @@ class RuleExprOccurrenceBinding:
         _require_non_empty_str(self.content_digest, field_name="content_digest")
         _require_tuple(self.port_bindings, field_name="port_bindings", item_type=RuleExprPortBinding)
         _require_optional_str(self.rule_version, field_name="rule_version")
+        _require_optional_str(self.authored_alias, field_name="authored_alias")
+
+
+@dataclass(frozen=True)
+class _RuleExprBodyPlan:
+    """Head-independent exact structural lowering used by the Policy compiler."""
+
+    source_kind: Literal["rule", "rule_expr"]
+    branches: tuple[RuleExprLoweringBranch, ...]
+    occurrence_map: tuple[RuleExprOccurrenceBinding, ...]
+    canonical_key: tuple[object, ...]
+
+    def __post_init__(self) -> None:
+        if self.source_kind not in {"rule", "rule_expr"}:
+            raise RuleExprError("_RuleExprBodyPlan.source_kind must be 'rule' or 'rule_expr'")
+        _require_tuple(self.branches, field_name="branches", item_type=RuleExprLoweringBranch)
+        if not self.branches:
+            raise RuleExprError("_RuleExprBodyPlan.branches must not be empty")
+        _require_tuple(self.occurrence_map, field_name="occurrence_map", item_type=RuleExprOccurrenceBinding)
+        if not isinstance(self.canonical_key, tuple) or not self.canonical_key:
+            raise RuleExprError("_RuleExprBodyPlan.canonical_key must be non-empty tuple")
 
 
 @dataclass(frozen=True)
@@ -348,14 +370,21 @@ def compile_derivation_plan(
 def _lower_application_rule(rule: Rule, *, head: Rule) -> RuleExprLoweringPlan:
     if not isinstance(rule, Rule):
         raise RuleExprError("rule must be application protocol Rule")
-    return _build_lowering_plan(_coerce_rule_expr_operand(rule), head=head, source_kind="rule")
+    body = _build_body_plan(_coerce_rule_expr_operand(rule), source_kind="rule")
+    return _attach_head(body, head=head)
 
 
 def _lower_rule_expr(expr: _RuleExpr, *, head: Rule) -> RuleExprLoweringPlan:
+    return _attach_head(_lower_rule_expr_body(expr), head=head)
+
+
+def _lower_rule_expr_body(expr: _RuleExpr) -> _RuleExprBodyPlan:
+    """Normalize and lower one RuleExpr without inventing a result head."""
+
     if not isinstance(expr, _RuleExpr):
         raise RuleExprError("expr must be RuleExpr")
     expr = _normalize_to_dnf(expr)
-    return _build_lowering_plan(expr, head=head, source_kind="rule_expr")
+    return _build_body_plan(expr, source_kind="rule_expr")
 
 
 def _materialize_native_derivation_plan(
@@ -814,14 +843,17 @@ def _rewrite_dnf_aliases(branches: tuple[_DNFBranch, ...]) -> tuple[_DNFBranch, 
         operands: list[_RuleOperand] = []
         for operand in branch.operands:
             alias = operand.alias
+            authored_alias = operand.authored_alias
             if alias in repeated:
                 alias = _generated_branch_alias(operand.alias, branch_index, used_aliases)
                 alias_map[operand.alias] = alias
+                authored_alias = operand.authored_alias or operand.alias
             operands.append(
                 _RuleOperand(
                     rule=operand.rule,
                     alias=alias,
                     explicit_alias=True if operand.alias in repeated else operand.explicit_alias,
+                    authored_alias=authored_alias,
                 )
             )
         joins = tuple(_rewrite_join_aliases(join, alias_map) for join in branch.joins)
@@ -870,21 +902,47 @@ def _branch_to_expr(branch: _DNFBranch) -> _RuleExpr:
     return _AndGroup(children=branch.operands, joins=branch.joins)
 
 
-def _build_lowering_plan(expr: _RuleExpr, *, head: Rule, source_kind: Literal["rule", "rule_expr"]) -> RuleExprLoweringPlan:
-    if not isinstance(head, Rule):
-        raise RuleExprError("head must be application protocol Rule")
+def _build_body_plan(
+    expr: _RuleExpr,
+    *,
+    source_kind: Literal["rule", "rule_expr"],
+) -> _RuleExprBodyPlan:
     occurrence_map_by_alias: dict[str, RuleExprOccurrenceBinding] = {}
     branches = _assign_branch_ids(_lower_expr(expr, occurrence_map_by_alias, path=()))
     occurrence_map = tuple(occurrence_map_by_alias[alias] for alias in sorted(occurrence_map_by_alias))
-    head_binding = _head_binding(head, occurrence_map)
-    return RuleExprLoweringPlan(
+    return _RuleExprBodyPlan(
         source_kind=source_kind,
-        head=head,
-        head_binding=head_binding,
         branches=branches,
         occurrence_map=occurrence_map,
-        canonical_key=(source_kind, expr._canonical(), head_binding.kind, head.id, head.content_digest),
+        canonical_key=(source_kind, expr._canonical()),
     )
+
+
+def _attach_head(body: _RuleExprBodyPlan, *, head: Rule) -> RuleExprLoweringPlan:
+    if not isinstance(body, _RuleExprBodyPlan):
+        raise RuleExprError("body must be _RuleExprBodyPlan")
+    if not isinstance(head, Rule):
+        raise RuleExprError("head must be application protocol Rule")
+    head_binding = _head_binding(head, body.occurrence_map)
+    return RuleExprLoweringPlan(
+        source_kind=body.source_kind,
+        head=head,
+        head_binding=head_binding,
+        branches=body.branches,
+        occurrence_map=body.occurrence_map,
+        canonical_key=(*body.canonical_key, head_binding.kind, head.id, head.content_digest),
+    )
+
+
+def _build_lowering_plan(
+    expr: _RuleExpr,
+    *,
+    head: Rule,
+    source_kind: Literal["rule", "rule_expr"],
+) -> RuleExprLoweringPlan:
+    """Compatibility helper for internal callers that already provide normalized input."""
+
+    return _attach_head(_build_body_plan(expr, source_kind=source_kind), head=head)
 
 
 def _lower_expr(
@@ -926,6 +984,7 @@ def _lower_operand(
         content_digest=operand.rule.content_digest,
         port_bindings=port_bindings,
         rule_version=operand.rule.version,
+        authored_alias=operand.authored_alias,
     )
     existing = occurrence_map_by_alias.get(operand.alias)
     if existing is not None and existing != binding:
