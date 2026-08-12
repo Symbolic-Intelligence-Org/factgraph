@@ -1,6 +1,6 @@
 # Task Blueprint Audit: FactGraph EvaluationRun anchors
 
-- Status: active
+- Status: implemented
 - Created: 2026-08-12
 - Last Updated: 2026-08-12
 - Authority: paired blueprint audit log
@@ -21,6 +21,8 @@
 | 2026-08-12 | implementing | Scoped contract entered implementation | The only production goals are canonical authored Policy structure and in-process immutable Run anchors. |
 | 2026-08-12 | implementing | Production cap amended from 500 to 720 | The initial count omitted strict splice guards and canonical authored-tree validation; independent red-team probes then required cross-object result matching, non-resealable digest fields, strict protocol shapes and honest head-scope naming. No new feature or downstream scope was admitted; unused margin is not implementation authority. |
 | 2026-08-12 | review | Internal fixed-state review returned CLEAR | Two independent reviews reported zero P0/P1; their two non-blocking P2 observations were resolved by narrowing the legacy-compatibility claim and pinning self-consistently resealed cross-object mismatch guards in a repository regression test. User-side review remains pending. |
+| 2026-08-12 | review | User-side independent review returned CLEAR | The reviewer repeated 464 application/SDK tests and static checks, added 27 passing adversarial probes, independently confirmed 708/720 production additions and reported zero P0/P1/P2. |
+| 2026-08-12 | implemented | F4A acceptance criteria closed | Implementation `ab1e34b0` ships authored Policy topology and identity-only Run anchors while leaving snapshot/replay to F4B and Policy-aware Explain projection to F4C. |
 
 ## Decision Notes
 

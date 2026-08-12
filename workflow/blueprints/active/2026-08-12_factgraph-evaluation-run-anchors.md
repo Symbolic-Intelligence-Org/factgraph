@@ -1,6 +1,6 @@
 # Task Blueprint: FactGraph EvaluationRun anchors
 
-- Status: implementing
+- Status: implemented
 - Created: 2026-08-12
 - Last Updated: 2026-08-12
 - Authority: task-scoped implementation contract for F4A only.
@@ -70,17 +70,17 @@ preserve authored Policy topology needed by later Policy-aware Explain.
 
 ## 4. Acceptance
 
-- [ ] `PolicyStructureV0` exactly represents authored root/children/aliases/Unify endpoints.
-- [ ] Policy structure and total lineage are both digest-bound and splice-checked.
-- [ ] Query `EvaluateResult.run_anchor` is present, pure, self-checking and result-matched.
-- [ ] Legacy `EvaluateResult.run_anchor` remains `None`.
-- [ ] Row anchors are stable across repeated equivalent runs while run IDs differ.
-- [ ] Duplicate rows do not acquire false uniqueness; ordinal is observational only.
-- [ ] Empty results have a stable summary anchor, zero row anchors and no false claim.
-- [ ] Target/query/policy/profile/view/result/row mutations fail closed.
-- [ ] Row Explain checked scope names the exact Run anchor.
-- [ ] No replay/codec/registry/What-if/Policy-overlay surface is added.
-- [ ] Focused and legacy test/static cohorts pass within the line cap.
+- [x] `PolicyStructureV0` exactly represents authored root/children/aliases/Unify endpoints.
+- [x] Policy structure and total lineage are both digest-bound and splice-checked.
+- [x] Query `EvaluateResult.run_anchor` is present, pure, self-checking and result-matched.
+- [x] Legacy `EvaluateResult.run_anchor` remains `None`.
+- [x] Row anchors are stable across repeated equivalent runs while run IDs differ.
+- [x] Duplicate rows do not acquire false uniqueness; ordinal is observational only.
+- [x] Empty results have a stable summary anchor, zero row anchors and no false claim.
+- [x] Target/query/policy/profile/view/result/row mutations fail closed.
+- [x] Row Explain checked scope names the exact Run anchor.
+- [x] No replay/codec/registry/What-if/Policy-overlay surface is added.
+- [x] Focused and legacy test/static cohorts pass within the line cap.
 
 ## 5. Preflight And Review Basis
 
@@ -92,4 +92,22 @@ final independent review.
 
 ## 6. Outcome / Deviations
 
-- Pending implementation.
+- Implementation `ab1e34b0` adds canonical authored `PolicyStructureV0`, binds
+  it into compiled Policy integrity, and attaches an identity-only
+  `EvaluationRunAnchorV0` to the existing native Query result envelope.
+- Stable semantic row anchors exclude random run-local IDs; summary anchors
+  preserve duplicate-row multiplicity and represent zero rows without a truth
+  or completeness claim.
+- Result construction independently matches the sealed anchor against the
+  actual result, execution profile, timestamp, projection head and complete row
+  semantics. Repository tests cover self-consistently resealed mismatch attacks.
+- The application/SDK cohort passed **464 tests + 104 subtests**. Ruff, targeted
+  mypy for the four F4A/Policy modules and `git diff --check` passed.
+- Production Python growth is **708 gross additions / 720 allowed** relative to
+  `ca12b208`. The remaining margin is intentionally unused.
+- Two internal fixed-state reviews and the user-side independent review returned
+  CLEAR with zero P0/P1/P2 after 27 additional attack probes.
+- No durable codec, snapshot contents, replay, repository, registry, Scenario,
+  Meander integration or Policy-aware Evidence overlay was introduced. Digest
+  seals establish in-process consistency rather than cross-trust authentication;
+  F4B and F4C retain those downstream responsibilities.
