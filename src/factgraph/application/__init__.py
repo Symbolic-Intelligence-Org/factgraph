@@ -117,6 +117,12 @@ from .semantic_port_runtime import (
     build_resolved_rule,
     resolve_rule_contract,
 )
+from .semantic_address_runtime import (
+    ManagedRuleOccurrence,
+    SemanticAddressResolutionError,
+    SemanticAddressSpace,
+    manage_rule_occurrence,
+)
 from .authoring_runtime import AuthoringRuntimeError
 from .why_not_runtime import (
     WhyNotRuntimeError,
@@ -141,6 +147,7 @@ __all__ = [
     "IRAtomView",
     "IRBodyWalker",
     "OriginPackageError",
+    "ManagedRuleOccurrence",
     "PredicateInfo",
     "ProofFrameDiffView",
     "ProofFrameView",
@@ -149,6 +156,8 @@ __all__ = [
     "SchemaIndex",
     "SchemaResolutionError",
     "SemanticPortResolutionError",
+    "SemanticAddressResolutionError",
+    "SemanticAddressSpace",
     "SupportArtifactView",
     "WORKSPACE_LEDGER",
     "WORKSPACE_MANIFEST_NAME",
@@ -200,6 +209,7 @@ __all__ = [
     "is_entity_identity_bundle_active",
     "load_workspace",
     "materialize_identity",
+    "manage_rule_occurrence",
     "parse_condition_key",
     "planned_ops_to_inputs",
     "plan_create_command",

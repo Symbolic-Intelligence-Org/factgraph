@@ -91,6 +91,10 @@ from .semantic_port import (
     entity_identity,
     field_endpoint,
 )
+from .semantic_address import (
+    SemanticAddressShapeError,
+    SemanticPortAddress,
+)
 from .rule_expr import ExplicitBoolError, RuleExpr, RuleExprError, RuleJoinConstraint
 from .rule_expr_inspect import ConditionDescriptor, OccurrenceInspect, PortInspect, RuleExprInspect
 from .rule_expr_lowering import compile_derivation_plan
@@ -261,6 +265,8 @@ __all__ = [
     "RuleStructure",
     "RuleValidationError",
     "ResolvedRuleContract",
+    "SemanticAddressShapeError",
+    "SemanticPortAddress",
     "SemanticEndpoint",
     "SemanticPortShapeError",
     "SemanticRulePort",

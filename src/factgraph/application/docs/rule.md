@@ -207,6 +207,49 @@ values to `EntityIdentityEndpoint("Person")` or
 `FieldEndpoint(FieldPath("Person", "age"))` before calling this layer. That
 ergonomic API is not shipped in F1-lite.
 
+## Managed Occurrences And Direct-Port Addresses
+
+A resolved Rule can be used more than once without losing its semantic
+contract. Each use receives an authored alias and therefore a distinct direct-
+port address:
+
+```python
+from factgraph.application import SemanticAddressSpace, manage_rule_occurrence
+from factgraph.application.protocol import SemanticPortAddress
+
+pair1 = manage_rule_occurrence(resolved, "pair1")
+pair2 = manage_rule_occurrence(resolved, "pair2")
+addresses = SemanticAddressSpace((pair1, pair2))
+
+person = addresses.resolve(
+    SemanticPortAddress(occurrence_alias="pair1", port_name="person")
+)
+```
+
+`person.execution_ref` is the existing RuleExpr `RulePortRef` created from the
+stored occurrence. `person.endpoint` and `person.semantic_contract_digest` come
+from that occurrence's exact F1-lite contract. The resolved value is a private
+runtime carrier, not a publicly constructible protocol DTO: callers provide
+only the structured address and cannot submit an execution ref for decoration.
+
+The canonical address is the structured pair `(occurrence_alias, port_name)`.
+It is not a dotted string: current Rule port names may themselves contain dots,
+so parsing `"pair.person"` would need a future identifier/escaping contract.
+Lowered aliases created for DNF branches are compiler-private and never become
+authored addresses.
+
+The address space copies, sorts, and freezes its occurrence collection. Its
+derived digest binds every authored alias to the exact Rule and semantic-
+contract digests. Input order is irrelevant, while renaming an alias changes
+the address-space identity. Construction and resolution repeat the lightweight
+Rule/contract staleness check.
+
+This is only the direct-port addressing substrate. It does not implement a
+Policy AST, Boolean composition, joins, field navigation, Query `bind/select`,
+synthetic projection heads, Evaluate, Explain, persistence, or an SDK/Agent
+wire format. Existing Rule and RuleExpr callers do not need a semantic address
+space and remain unchanged.
+
 ## Bridge Rejections
 
 The new application Rule path rejects legacy SDK authoring forms that are still

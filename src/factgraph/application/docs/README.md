@@ -27,7 +27,8 @@ compatibility.
 - `src/factgraph/application/docs/rule.md`
   - Application-layer Rule DTO contract. Stores core rule AST atoms directly
     and remains below SDK ergonomic authoring. Also records the optional
-    in-process semantic-port binding used by managed Rule consumers.
+    in-process semantic-port binding and authored occurrence/direct-port
+    address space used by managed Rule consumers.
 - `src/factgraph/application/explain/docs/README.md`
   - Paths-model evidence tree types (`EvidenceGraph`, `EvidenceTree`,
     `EvidenceRule`, `EvidenceAtom`, `Certainty`, `AtomForm`, `Verdict`) and
