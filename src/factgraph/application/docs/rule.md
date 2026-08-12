@@ -452,6 +452,26 @@ forms, including negation and aggregates, but current Policy v0 admission does
 not expose every such form through public EvaluationQuery authoring; this is
 not a claim that those authoring restrictions were widened.
 
+F4B3 can separately play back the captured evidence for exactly one positive
+row, without consulting the originating Store:
+
+```python
+evidence = evaluation_run_bundle_evidence(
+    bundle,
+    row_capture_digest=bundle.rows[0].row_capture_digest,
+)
+```
+
+This returns one engine-centric `EvidenceGraph` for the ProofReceipt-selected
+branch. Predicate support uses captured assertion IDs, while Query binding and
+projection-head atoms are explicitly marked as outside authored Policy lineage.
+It reports captured evidence only: authenticity remains unverified and logical
+verification is not performed. It does not call an evaluator, fabricate evidence
+for empty results, inspect unselected OR branches, or produce an `Explanation`.
+Callers that need a current-runtime semantic check may independently pair it with
+`verify_evaluation_run_bundle(...)`; the playback operation does not depend on or
+consume that verification record.
+
 The older ad-hoc `QueryRuntimeRequest` and SDK `Query` remain unchanged.
 Non-native engines, standalone Query explain, candidate acceptance,
 Compare/literals, field navigation, `expect`, completeness, What-if, bundle
