@@ -1,6 +1,6 @@
 # Task Blueprint: FactGraph EvaluationRun anchors
 
-- Status: implemented
+- Status: archived
 - Created: 2026-08-12
 - Last Updated: 2026-08-12
 - Authority: task-scoped implementation contract for F4A only.
@@ -111,3 +111,5 @@ final independent review.
   Meander integration or Policy-aware Evidence overlay was introduced. Digest
   seals establish in-process consistency rather than cross-trust authentication;
   F4B and F4C retain those downstream responsibilities.
+- This blueprint and its paired audit are archived together after the external
+  CLEAR review; current behavior is owned by the application and SDK docs.

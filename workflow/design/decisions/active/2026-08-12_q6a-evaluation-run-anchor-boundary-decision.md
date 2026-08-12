@@ -9,7 +9,7 @@
   - Q5A / Q5B / Q5C and their independently reviewed implementations
   - 2026-08-12 three-way read-only F4 entry audit
 - Outputs / Downstream:
-  - [`2026-08-12_factgraph-evaluation-run-anchors.md`](../../../blueprints/active/2026-08-12_factgraph-evaluation-run-anchors.md)
+  - [`2026-08-12_factgraph-evaluation-run-anchors.md`](../../../blueprints/archive/2026-08-12_factgraph-evaluation-run-anchors.md)
   - F4B snapshot/support capture and detached replay
   - F4C Policy-aware explanation overlay
 - Branch: `codex/v0.3.0-f4a-evaluation-run-anchors-2026-08-12`
