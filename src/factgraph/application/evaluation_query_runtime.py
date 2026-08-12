@@ -99,6 +99,12 @@ class CompiledEvaluationQueryV0:
         if self._lowering_plan != expected_plan:
             raise ValueError("compiled EvaluationQuery lowering plan is not compiler-derived")
 
+
+def _assert_compiled_evaluation_query_current(compiled_query: CompiledEvaluationQueryV0) -> None:
+    if not isinstance(compiled_query, CompiledEvaluationQueryV0):
+        raise ValueError("compiled_query must be CompiledEvaluationQueryV0")
+    CompiledEvaluationQueryV0.__post_init__(compiled_query)
+
 def compile_evaluation_query(
     query: EvaluationQuery, *, compiled_policy: CompiledPolicyV0,
     address_space: SemanticAddressSpace, schema_index: SchemaIndex,

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
+import base64
+import binascii
 from dataclasses import dataclass, field, replace
 from datetime import date, datetime
 import json
@@ -25,6 +27,7 @@ from factgraph.application.protocol.rule_expr_inspect import _inspect_closed_hea
 from factgraph.application.protocol.schema_runtime import EntityRef
 from factgraph.core.derivation.candidates import CandidateSet
 from factgraph.core.protocol.digests import sha256_hex, sha256_token
+from factgraph.core.protocol.tup_v1 import claim_args_from_rest_terms
 from factgraph.core.rules.where_ast import CmpAtom, Const, PredAtom
 from factgraph.core.semantics.profile import SemanticsProfile
 from factgraph.core.store.database import view_digest_for
@@ -689,6 +692,7 @@ def _candidate_set_to_evaluate_row(
     closed_head_digest: str,
     claim_kind: ClaimKind = "fact_triple",
     claim_name: str | None = None,
+    binding_types: Mapping[str, str] | None = None,
 ) -> EvaluateRow:
     if not isinstance(candidate, CandidateSet):
         raise ProtocolShapeError("candidate must be CandidateSet")
@@ -697,7 +701,15 @@ def _candidate_set_to_evaluate_row(
     _require_token_prefix(result_id, prefix=_RESULT_ID_PREFIX, field_name="result_id")
     _require_token_prefix(run_id, prefix=_RUN_ID_PREFIX, field_name="run_id")
     _require_sha256_token(closed_head_digest, field_name="closed_head_digest")
+    if binding_types is not None:
+        if candidate.candidate_kind != "fact" or candidate.target != head.id or candidate.payload.get("pred_id") != head.id:
+            raise ProtocolShapeError("candidate projection target must exactly match its query head")
+        terms = candidate.payload.get("terms")
+        if not isinstance(terms, Sequence) or isinstance(terms, (str, bytes)) or len(terms) != len(head.ports):
+            raise ProtocolShapeError("candidate projection terms must exactly align with head ports")
     bindings = _bindings_from_candidate(candidate, head=head)
+    if binding_types is not None:
+        bindings = _typed_projection_bindings(bindings, head=head, binding_types=binding_types)
     effective_claim_name = candidate.target if claim_name is None else claim_name
     digest = claim_digest_for(claim_kind, effective_claim_name, bindings)
     row_id = row_id_for(run_id, bindings)
@@ -1128,6 +1140,50 @@ def _bindings_from_candidate(candidate: CandidateSet, *, head: Rule) -> Mapping[
     if isinstance(maybe_bindings, Mapping):
         return _freeze_mapping(maybe_bindings, field_name="candidate.payload.bindings")
     return _freeze_mapping(payload, field_name="candidate.payload")
+
+
+def _typed_projection_bindings(
+    bindings: Mapping[str, Any], *, head: Rule, binding_types: Mapping[str, str],
+) -> Mapping[str, Any]:
+    port_names = tuple(head.ports)
+    if tuple(binding_types) != port_names:
+        raise ProtocolShapeError("typed projection domains must follow the exact head-port order")
+    if set(bindings) != set(port_names):
+        raise ProtocolShapeError("candidate projection bindings must exactly match head ports")
+    typed: dict[str, Any] = {}
+    for port_name in port_names:
+        value_type = binding_types[port_name]
+        source = bindings[port_name]
+        if not isinstance(source, Mapping):
+            raise ProtocolShapeError(f"candidate projection term for {port_name!r} must be typed")
+        source_kind = source.get("kind")
+        source_type = "entity_ref" if source_kind == "entity_ref" else source.get("tag")
+        if source_kind not in {"entity_ref", "literal"} or not isinstance(source_type, str):
+            raise ProtocolShapeError(f"candidate projection term for {port_name!r} is malformed")
+        value = _public_term_value(source)
+        try:
+            claim_args_from_rest_terms([(source_type, value)])
+        except ValueError as exc:
+            raise ProtocolShapeError(f"candidate projection term for {port_name!r} contradicts its runtime tag") from exc
+        if value_type == "bytes" and isinstance(value, str):
+            try:
+                encoded_value = value.encode("ascii")
+                value = base64.b64decode(encoded_value + b"=" * (-len(encoded_value) % 4), altchars=b"-_", validate=True)
+                if base64.urlsafe_b64encode(value).rstrip(b"=") != encoded_value:
+                    raise ValueError("bytes value is not canonical base64url")
+            except (ValueError, UnicodeEncodeError, binascii.Error) as exc:
+                raise ProtocolShapeError(f"candidate projection value for {port_name!r} is not canonical bytes") from exc
+        try:
+            _idx, canonical, canonical_type = claim_args_from_rest_terms([(value_type, value)])[0]
+        except ValueError as exc:
+            raise ProtocolShapeError(f"candidate projection value for {port_name!r} is not {value_type!r}") from exc
+        term = (
+            {"kind": "entity_ref", "value": canonical}
+            if canonical_type == "entity_ref"
+            else {"kind": "literal", "tag": canonical_type, "value": canonical}
+        )
+        typed[port_name] = _freeze_mapping(term, field_name=f"candidate.typed_projection.{port_name}")
+    return _freeze_mapping(typed, field_name="candidate.typed_projection")
 
 
 def _certainty_from_candidate(candidate: CandidateSet) -> Certainty | None:

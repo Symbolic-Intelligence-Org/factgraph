@@ -17,6 +17,10 @@ from factgraph.application.schema_mutation_runtime import (
 )
 from factgraph.application.workspace_runtime import resolve_workspace_paths
 from factgraph.application.derivation_runtime import evaluate_derivation_plans
+from factgraph.application.evaluation_query_runtime import (
+    CompiledEvaluationQueryV0,
+    _assert_compiled_evaluation_query_current,
+)
 from factgraph.application.explain import EvidenceGraph, probe_native
 from factgraph.application.explain.evidence_tree import (
     Const,
@@ -57,6 +61,7 @@ from factgraph.application.protocol import (
 )
 from factgraph.application.protocol.certainty import BOOLEAN_CERTAINTY, Certainty
 from factgraph.application.protocol.evaluate_result import (
+    ClaimKind,
     EvaluateResult,
     ResultFingerprint,
     _FORM1_ROW_SUPPORT_KINDS,
@@ -1507,7 +1512,7 @@ class _SDKEvalManager:
         raise FrozenSnapshotError("FactGraph.eval namespace is read-only")
 
     def evaluate(self, *args: Any, **kwargs: Any) -> Any:
-        """Evaluate an `Inference`, application `Rule`, or RuleExpr."""
+        """Evaluate an Inference, application Rule/RuleExpr, or compiled EvaluationQuery."""
         return self._sdk._evaluate(*args, **kwargs)
 
     def evaluate_candidates(self, *args: Any, **kwargs: Any) -> Any:
@@ -2903,6 +2908,13 @@ class SDKStore:
             raise SDKStoreError(
                 "string derivation DSL is not supported in SDK v1; use Inference object or structured derivation dict"
             )
+        if args and isinstance(args[0], CompiledEvaluationQueryV0):
+            return self._evaluate_compiled_evaluation_query_input(
+                args,
+                kwargs,
+                raw_engine=raw_engine,
+                raw_config=raw_config,
+            )
         if args and isinstance(args[0], (ApplicationRule, _RuleExpr)):
             return self._evaluate_rule_expr_input(
                 args,
@@ -2972,6 +2984,11 @@ class SDKStore:
             raise SDKStoreError(
                 "string derivation DSL is not supported in SDK v1; use Inference object or structured derivation dict"
             )
+        if args and isinstance(args[0], CompiledEvaluationQueryV0):
+            raise SDKStoreError(
+                "evaluate_candidates() does not accept CompiledEvaluationQueryV0; "
+                "use evaluate(compiled_query) and consume its projection rows"
+            )
         if args and isinstance(args[0], (ApplicationRule, _RuleExpr)):
             # RuleExpr/Rule candidates come from the SAME lowering + evaluation as
             # evaluate(rule_expr, head=): the returned CandidateSets are exactly the
@@ -3018,6 +3035,11 @@ class SDKStore:
         )
 
     def _explain(self, *args: Any, **kwargs: Any) -> Explanation:
+        if args and isinstance(args[0], CompiledEvaluationQueryV0):
+            raise SDKStoreError(
+                "eval.explain() does not accept CompiledEvaluationQueryV0; "
+                "evaluate it first and call row.explain()"
+            )
         if len(args) != 1:
             raise SDKStoreError("eval.explain(expr, ...) accepts exactly one RuleExpr or Rule input")
         if "head" not in kwargs:
@@ -3164,6 +3186,101 @@ class SDKStore:
             registry=registry,
         )
 
+    def _evaluate_compiled_evaluation_query_input(
+        self,
+        args: tuple[Any, ...],
+        kwargs: dict[str, Any],
+        *,
+        raw_engine: Any,
+        raw_config: Any,
+    ) -> EvaluateResult:
+        if len(args) != 1:
+            raise SDKStoreError(
+                "evaluate(compiled_query) accepts exactly one CompiledEvaluationQueryV0"
+            )
+        if kwargs:
+            unknown = ", ".join(sorted(kwargs))
+            raise SDKStoreError(
+                f"unknown evaluate(compiled_query) keyword(s): {unknown}"
+            )
+        if raw_config is not None:
+            raise SDKStoreError(
+                "evaluate(compiled_query) is native-only in v0 and does not accept config="
+            )
+        engine = self._resolve_public_engine(
+            raw_engine,
+            api_path="evaluate(compiled_query)",
+        )
+        if engine != "native":
+            raise SDKStoreError(
+                "evaluate(compiled_query) supports only engine='native' in v0"
+            )
+
+        compiled_query = args[0]
+        self._assert_evaluation_query_artifact_current(compiled_query)
+        if compiled_query.schema_digest != self._application_schema_index.schema_digest:
+            raise SDKStoreError(
+                "compiled EvaluationQuery schema does not match this FactGraph"
+            )
+        if (
+            self._store.premise_exclusions
+            or self._store.premise_allowances
+            or self._store.premise_blocks
+        ):
+            raise SDKStoreError(
+                "evaluate(compiled_query) does not yet support premise-filtered execution"
+            )
+
+        view_snapshot_digest = self._view_snapshot_digest(query_typed_values=True)
+        try:
+            compiled_plan, _traces = _materialize_adapter_derivation_plan(
+                compiled_query._lowering_plan,
+                engine="native",
+            )
+        except (RuleExprError, ValueError) as exc:
+            raise SDKStoreError(
+                "compiled EvaluationQuery could not be materialized for native execution"
+            ) from exc
+        candidates = evaluate_derivation_plans(
+            DerivationEvaluateRequest(plans=(compiled_plan,), engine="native"),
+            store=self._store,
+            registry=None,
+        )
+        self._assert_evaluation_query_execution_current(compiled_query, view_snapshot_digest)
+
+        result = self._candidate_sets_to_evaluate_result(
+            candidates,
+            compiled_plans=[compiled_plan],
+            head=compiled_query.projection_head,
+            engine="native",
+            semantics_profile=None,
+            lowering_plan=compiled_query._lowering_plan,
+            lowering_rules_by_id=_rule_expr_rules_by_id(
+                compiled_query.compiled_policy.rule_expr,
+                head=compiled_query.projection_head,
+            ),
+            evaluation_query=compiled_query,
+            view_snapshot_digest_override=view_snapshot_digest,
+        )
+        self._assert_evaluation_query_execution_current(compiled_query, view_snapshot_digest)
+        return result
+
+    @staticmethod
+    def _assert_evaluation_query_artifact_current(
+        compiled_query: CompiledEvaluationQueryV0,
+    ) -> None:
+        try:
+            _assert_compiled_evaluation_query_current(compiled_query)
+        except ValueError as exc:
+            raise SDKStoreError("compiled EvaluationQuery failed its execution-time integrity check") from exc
+
+    def _assert_evaluation_query_execution_current(self, query: CompiledEvaluationQueryV0, digest: str) -> None:
+        self._assert_evaluation_query_artifact_current(query)
+        if self._evaluation_query_has_premise_filters():
+            raise SDKStoreError("FactGraph premise policy changed during EvaluationQuery execution")
+        if self._view_snapshot_digest(query_typed_values=True) != digest:
+            raise SDKStoreError("FactGraph view changed during EvaluationQuery execution")
+
     def _evaluate_rule_expr_input(
         self,
         args: tuple[Any, ...],
@@ -3271,14 +3388,38 @@ class SDKStore:
         semantics_profile: SemanticsProfile | None,
         lowering_plan: RuleExprLoweringPlan | None = None,
         lowering_rules_by_id: Mapping[str, ApplicationRule] | None = None,
+        evaluation_query: CompiledEvaluationQueryV0 | None = None,
+        view_snapshot_digest_override: str | None = None,
     ) -> EvaluateResult:
         run_id = new_run_id()
-        expr_digest = expr_digest_for_payload(
-            "compiled_derivation_plans",
-            {"plans": [_compiled_plan_digest_payload(plan) for plan in compiled_plans]},
-        )
-        rule_set_digest = rule_set_digest_for_entries(_rule_set_entries_for_result(compiled_plans, head=head))
-        view_snapshot_digest = self._view_snapshot_digest()
+        if evaluation_query is None:
+            if view_snapshot_digest_override is not None:
+                raise SDKStoreError(
+                    "view snapshot override is reserved for compiled EvaluationQuery results"
+                )
+            expr_digest = expr_digest_for_payload(
+                "compiled_derivation_plans",
+                {"plans": [_compiled_plan_digest_payload(plan) for plan in compiled_plans]},
+            )
+            rule_set_digest = rule_set_digest_for_entries(
+                _rule_set_entries_for_result(compiled_plans, head=head)
+            )
+            view_snapshot_digest = self._view_snapshot_digest()
+            claim_kind: ClaimKind = "fact_triple"
+            binding_types = None
+        else:
+            if view_snapshot_digest_override is None:
+                raise SDKStoreError("compiled EvaluationQuery result requires its evaluated view digest")
+            expr_digest = f"sha256:{evaluation_query.query_digest}"
+            rule_set_digest = rule_set_digest_for_entries(
+                (
+                    (f"compiled-policy:{evaluation_query.compiled_policy.policy_id}", evaluation_query.policy_digest),
+                    (f"query-projection:{head.id}", head.content_digest),
+                )
+            )
+            view_snapshot_digest = view_snapshot_digest_override
+            claim_kind = "projection"
+            binding_types = {selection.alias: selection.value_type for selection in evaluation_query.selections}
         config_digest = config_digest_for(semantics_profile)
         result_id = result_id_for(
             run_id=run_id,
@@ -3299,7 +3440,9 @@ class SDKStore:
                     result_id=result_id,
                     run_id=run_id,
                     closed_head_digest=closed_head_digest,
+                    claim_kind=claim_kind,
                     claim_name=head.id,
+                    binding_types=binding_types,
                 )
                 for candidate in candidates
             )
@@ -3328,6 +3471,25 @@ class SDKStore:
                 result_digest=result_digest,
                 run_id=run_id,
             )
+            row_graph_builder = self._row_graph_builder_for_engine(
+                engine=engine,
+                lowering_plan=lowering_plan,
+                lowering_rules_by_id=lowering_rules_by_id,
+                semantics_profile=semantics_profile,
+                row_support_artifacts=row_support_artifacts,
+                row_provenance_envelopes=row_provenance_envelopes,
+            )
+            row_close_builder = self._close_evaluate_row
+            if evaluation_query is not None:
+                row_close_builder = self._evaluation_query_row_close_builder(
+                    evaluation_query,
+                    view_snapshot_digest,
+                )
+                row_graph_builder = self._evaluation_query_row_graph_builder(
+                    evaluation_query,
+                    view_snapshot_digest,
+                    row_graph_builder,
+                )
             return EvaluateResult(
                 result_id=result_id,
                 rows=rows,
@@ -3337,15 +3499,8 @@ class SDKStore:
                 fingerprint=fingerprint,
                 engine_meta={"engine_version": None, "adapter_version": None},
                 _schema_index=self._application_schema_index,
-                _row_close_builder=self._close_evaluate_row,
-                _row_graph_builder=self._row_graph_builder_for_engine(
-                    engine=engine,
-                    lowering_plan=lowering_plan,
-                    lowering_rules_by_id=lowering_rules_by_id,
-                    semantics_profile=semantics_profile,
-                    row_support_artifacts=row_support_artifacts,
-                    row_provenance_envelopes=row_provenance_envelopes,
-                ),
+                _row_close_builder=row_close_builder,
+                _row_graph_builder=row_graph_builder,
                 _row_support_artifacts=row_support_artifacts,
                 _row_provenance_envelopes=row_provenance_envelopes,
             )
@@ -3353,6 +3508,66 @@ class SDKStore:
             if isinstance(exc, SDKStoreError):
                 raise
             raise SDKStoreError(f"failed to build EvaluateResult: {exc}") from exc
+
+    def _evaluation_query_row_close_builder(
+        self,
+        compiled_query: CompiledEvaluationQueryV0,
+        view_snapshot_digest: str,
+    ):
+        def _builder(row: Any, result: EvaluateResult) -> ApplicationRule:
+            self._assert_evaluation_query_live_current(compiled_query, view_snapshot_digest)
+            closed = self._close_evaluate_row(row, result)
+            self._assert_evaluation_query_live_current(compiled_query, view_snapshot_digest)
+            return closed
+
+        return _builder
+
+    def _evaluation_query_row_graph_builder(
+        self,
+        compiled_query: CompiledEvaluationQueryV0,
+        view_snapshot_digest: str,
+        delegate: Any,
+    ):
+        graph_builder = delegate or _build_minimal_row_evidence_graph
+
+        def _builder(row: Any, result: EvaluateResult, metadata: Mapping[str, Any]) -> EvidenceGraph:
+            self._assert_evaluation_query_live_current(compiled_query, view_snapshot_digest)
+            graph = graph_builder(row, result, metadata)
+            self._assert_evaluation_query_live_current(compiled_query, view_snapshot_digest)
+            if not any(getattr(path, "status", None) == "holds" for path in graph.paths):
+                raise ValueError("EvaluationQuery explanation has no holding evidence path")
+            return graph
+
+        return _builder
+
+    def _assert_evaluation_query_live_current(
+        self,
+        compiled_query: CompiledEvaluationQueryV0,
+        view_snapshot_digest: str,
+    ) -> None:
+        try:
+            _assert_compiled_evaluation_query_current(compiled_query)
+        except ValueError as exc:
+            raise ValueError("compiled EvaluationQuery failed its live integrity check") from exc
+        if self._evaluation_query_has_premise_filters():
+            raise ValueError("EvaluationQuery result premise policy is stale")
+        self._assert_evaluation_query_view_current(view_snapshot_digest)
+
+    def _evaluation_query_has_premise_filters(self) -> bool:
+        return bool(
+            self._store.premise_exclusions
+            or self._store.premise_allowances
+            or self._store.premise_blocks
+        )
+
+    def _assert_evaluation_query_view_current(
+        self,
+        expected_view_snapshot_digest: str,
+    ) -> None:
+        if self._view_snapshot_digest(query_typed_values=True) != expected_view_snapshot_digest:
+            raise ValueError(
+                "EvaluationQuery result view is stale; re-evaluate before close() or explain()"
+            )
 
     def _row_graph_builder_for_engine(
         self,
@@ -3504,8 +3719,14 @@ class SDKStore:
 
     def _display_bindings_for_row(self, row: Any) -> dict[str, Any]:
         out: dict[str, Any] = {}
-        for key, value in _public_bindings_for_row(row).items():
-            out[key] = self._display_binding_value(value)
+        for key, value in getattr(row, "bindings", {}).items():
+            out[str(key)] = (
+                value.get("value")
+                if getattr(row, "kind", None) == "projection"
+                and isinstance(value, Mapping)
+                and value.get("kind") == "literal"
+                else self._display_binding_value(_public_term_value(value))
+            )
         return out
 
     def _display_binding_value(self, value: Any) -> Any:
@@ -3793,7 +4014,7 @@ class SDKStore:
             identity[field_name] = rest_terms[0][1]
         return identity
 
-    def _view_snapshot_digest(self) -> str:
+    def _view_snapshot_digest(self, *, query_typed_values: bool = False) -> str:
         schema_token = self._schema_digest
         ledger = self.ledger
         db_id = ledger.get_ledger_meta("db_id")
@@ -3810,7 +4031,11 @@ class SDKStore:
                                 "asrt_id": claim.asrt_id,
                                 "e_ref": claim.e_ref,
                                 "pred_id": claim.pred_id,
-                                "rest_terms": claim.rest_terms,
+                                "rest_terms": (
+                                    _evaluation_query_digest_safe(claim.rest_terms)
+                                    if query_typed_values
+                                    else claim.rest_terms
+                                ),
                             }
                             for claim in sorted(ledger.find_claims(), key=lambda claim: claim.asrt_id)
                         ],
@@ -5099,6 +5324,16 @@ def _evaluate_digest_safe(value: Any) -> Any:
             for key, item in sorted(value.items(), key=lambda item: str(item[0]))
         }
     return repr(value)
+
+
+def _evaluation_query_digest_safe(value: Any) -> Any:
+    if isinstance(value, (bytes, bytearray, memoryview)):
+        return {"__bytes_hex__": bytes(value).hex()}
+    if isinstance(value, (tuple, list)):
+        return tuple(_evaluation_query_digest_safe(item) for item in value)
+    if value is None or isinstance(value, (str, bool, int, float)):
+        return value
+    raise SDKStoreError("unsupported EvaluationQuery view value")
 
 
 def _view_snapshot_asrt_id_for_claim(claim: Any) -> str:
