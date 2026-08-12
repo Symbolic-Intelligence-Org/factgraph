@@ -1,6 +1,6 @@
 # Task Blueprint: FactGraph semantic-port foundation lite
 
-- Status: draft
+- Status: scoped
 - Created: 2026-08-12
 - Last Updated: 2026-08-12
 - Authority: task-scoped implementation contract for the F1-lite integration branch.
