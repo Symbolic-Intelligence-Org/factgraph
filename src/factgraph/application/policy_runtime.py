@@ -24,8 +24,6 @@ from .semantic_address_runtime import ManagedRuleOccurrence, SemanticAddressReso
 from .semantic_port_runtime import SemanticPortResolutionError, assert_rule_contract_current
 
 _CMP_OPS = frozenset({"eq", "ne", "gt", "ge", "lt", "le"})
-
-
 @dataclass(frozen=True)
 class PolicyRulePin:
     occurrence_alias: str
@@ -33,15 +31,24 @@ class PolicyRulePin:
     rule_version: str | None
     rule_content_digest: str
     semantic_contract_digest: str
-
-
+    def __post_init__(self) -> None:
+        for name in ("occurrence_alias", "rule_id", "rule_content_digest", "semantic_contract_digest"):
+            _runtime_text(getattr(self, name), name)
+        if self.rule_version is not None:
+            _runtime_text(self.rule_version, "rule_version")
 @dataclass(frozen=True)
 class PolicyCompiledBranch:
     branch_id: str
     authored_occurrence_aliases: tuple[str, ...]
     lowered_occurrence_aliases: tuple[str, ...]
-
-
+    def __post_init__(self) -> None:
+        _runtime_text(self.branch_id, "branch_id")
+        for name in ("authored_occurrence_aliases", "lowered_occurrence_aliases"):
+            value = getattr(self, name)
+            if not isinstance(value, tuple) or not value or not all(isinstance(alias, str) and alias for alias in value):
+                raise ValueError(f"{name} must be a non-empty string tuple")
+        if len(self.authored_occurrence_aliases) != len(self.lowered_occurrence_aliases):
+            raise ValueError("authored and lowered occurrence inventories must align")
 @dataclass(frozen=True)
 class CompiledPolicyV0:
     policy_id: str
@@ -53,8 +60,17 @@ class CompiledPolicyV0:
     branches: tuple[PolicyCompiledBranch, ...]
     lineage: PolicyLineage
     _body_plan: _RuleExprBodyPlan = field(repr=False, compare=False)
-
-
+    def __post_init__(self) -> None:
+        for name in ("policy_id", "policy_digest", "address_space_digest"):
+            _runtime_text(getattr(self, name), name)
+        if self.policy_version is not None:
+            _runtime_text(self.policy_version, "policy_version")
+        if not isinstance(self.rule_pins, tuple) or not self.rule_pins or not all(isinstance(pin, PolicyRulePin) for pin in self.rule_pins):
+            raise ValueError("rule_pins must be a non-empty PolicyRulePin tuple")
+        if not isinstance(self.branches, tuple) or not self.branches or not all(isinstance(branch, PolicyCompiledBranch) for branch in self.branches):
+            raise ValueError("branches must be a non-empty PolicyCompiledBranch tuple")
+        if not isinstance(self.rule_expr, _RuleExpr) or not isinstance(self.lineage, PolicyLineage) or not isinstance(self._body_plan, _RuleExprBodyPlan):
+            raise ValueError("compiled Policy structure has invalid runtime types")
 def compile_policy(policy: Policy, *, address_space: SemanticAddressSpace) -> CompiledPolicyV0:
     if not isinstance(policy, Policy):
         raise _error("policy must be Policy", "INVALID_POLICY", "policy_compile", ("policy",))
@@ -116,8 +132,6 @@ def compile_policy(policy: Policy, *, address_space: SemanticAddressSpace) -> Co
         lineage,
         body_plan,
     )
-
-
 def _validate_structure(nodes: tuple[PolicyNode, ...], managed: dict[str, ManagedRuleOccurrence]) -> None:
     aliases = [node.alias for node in nodes if isinstance(node, PolicyOccurrence)]
     duplicates = sorted(alias for alias, count in Counter(aliases).items() if count > 1)
@@ -149,8 +163,6 @@ def _validate_structure(nodes: tuple[PolicyNode, ...], managed: dict[str, Manage
             ("policy", "when"),
             {"node_ids": duplicate_nodes},
         )
-
-
 def _admit(managed: dict[str, ManagedRuleOccurrence]) -> None:
     schema_digests = {item.contract.schema_digest for item in managed.values()}
     if len(schema_digests) != 1:
@@ -197,8 +209,6 @@ def _admit(managed: dict[str, ManagedRuleOccurrence]) -> None:
                     ("address_space", alias, "rule", "when", str(index)),
                     {"atom_kind": type(atom).__name__},
                 )
-
-
 def _validate_unifies(
     node: PolicyExpression,
     address_space: SemanticAddressSpace,
@@ -225,8 +235,6 @@ def _validate_unifies(
                 {"not_guaranteed_aliases": sorted(required - guaranteed)},
             )
         joins[item.node_id] = _resolve_unify(item, address_space)
-
-
 def _resolve_unify(unify: PolicyUnify, address_space: SemanticAddressSpace) -> RuleJoinConstraint:
     path = ("policy", "when", unify.node_id)
     if unify.left.occurrence_alias == unify.right.occurrence_alias:
@@ -252,8 +260,6 @@ def _resolve_unify(unify: PolicyUnify, address_space: SemanticAddressSpace) -> R
         return left.execution_ref.eq(right.execution_ref)
     except RuleExprError as exc:
         raise _error(str(exc), "INVALID_UNIFY", "policy_compile", path) from exc
-
-
 def _compile_expr(
     node: PolicyExpression,
     managed: dict[str, ManagedRuleOccurrence],
@@ -272,8 +278,6 @@ def _compile_expr(
             raise _error("All did not compile to AND", "POLICY_COMPILER_INVARIANT", "policy_compiler_invariant")
         compiled = compiled.join(*constraints)
     return compiled
-
-
 def _branch_count(node: PolicyExpression) -> int:
     if isinstance(node, PolicyOccurrence):
         return 1
@@ -285,8 +289,6 @@ def _branch_count(node: PolicyExpression) -> int:
     for count in counts:
         result *= count
     return result
-
-
 def _guaranteed_aliases(node: PolicyExpression) -> frozenset[str]:
     if isinstance(node, PolicyOccurrence):
         return frozenset((node.alias,))
@@ -294,22 +296,16 @@ def _guaranteed_aliases(node: PolicyExpression) -> frozenset[str]:
     if isinstance(node, PolicyAny):
         return frozenset.intersection(*map(_guaranteed_aliases, structural))
     return frozenset().union(*map(_guaranteed_aliases, structural))
-
-
 def _occurrence_aliases(node: PolicyNode) -> frozenset[str]:
     if isinstance(node, PolicyOccurrence):
         return frozenset((node.alias,))
     if isinstance(node, PolicyUnify):
         return frozenset()
     return frozenset().union(*map(_occurrence_aliases, node.children))
-
-
 def _nodes(node: PolicyNode) -> tuple[PolicyNode, ...]:
     if isinstance(node, (PolicyOccurrence, PolicyUnify)):
         return (node,)
     return (node, *(nested for child in node.children for nested in _nodes(child)))
-
-
 def _lineage(
     nodes: tuple[PolicyNode, ...],
     plan: _RuleExprBodyPlan,
@@ -384,8 +380,6 @@ def _lineage(
         raise _invariant("lowered structure has an orphan lineage reference")
     origins = tuple((target, tuple(sorted(reverse[target]))) for target in sorted(reverse))
     return tuple(branches), PolicyLineage(tuple(forward), origins)
-
-
 def _kind(node: PolicyNode) -> Literal["occurrence", "all", "any", "unify"]:
     if isinstance(node, PolicyOccurrence):
         return "occurrence"
@@ -394,16 +388,12 @@ def _kind(node: PolicyNode) -> Literal["occurrence", "all", "any", "unify"]:
     if isinstance(node, PolicyAny):
         return "any"
     return "unify"
-
-
 def _unify_key(
     left: SemanticPortAddress,
     right: SemanticPortAddress,
 ) -> tuple[tuple[str, str], tuple[str, str]]:
     ends = sorted(((left.occurrence_alias, left.port_name), (right.occurrence_alias, right.port_name)))
     return ends[0], ends[1]
-
-
 def _digest(policy: Policy, address_space_digest: str) -> str:
     payload = {
         "format": "compiled_policy_v0",
@@ -414,12 +404,11 @@ def _digest(policy: Policy, address_space_digest: str) -> str:
     }
     raw = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False).encode()
     return sha256_hex(raw)
-
-
 def _invariant(message: str, *path: str) -> PolicyError:
     return _error(message, "POLICY_LINEAGE_NOT_TOTAL", "policy_compiler_invariant", ("lineage", *path))
-
-
+def _runtime_text(value: object, name: str) -> None:
+    if not isinstance(value, str) or not value:
+        raise ValueError(f"{name} must be a non-empty string")
 def _error(
     message: str,
     code: str,
@@ -428,6 +417,4 @@ def _error(
     details: dict[str, Any] | None = None,
 ) -> PolicyError:
     return PolicyError(message, code=code, stage=stage, path=path, details=details)
-
-
 __all__ = ["CompiledPolicyV0", "PolicyCompiledBranch", "PolicyRulePin", "compile_policy"]

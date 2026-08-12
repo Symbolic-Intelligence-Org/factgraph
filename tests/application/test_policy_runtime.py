@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import unittest
+from dataclasses import replace
 
 from factgraph.application import (
+    PolicyCompiledBranch,
+    PolicyRulePin,
     SemanticAddressSpace,
     build_resolved_rule,
     build_schema_index,
@@ -14,6 +17,9 @@ from factgraph.application.protocol import (
     PolicyAll,
     PolicyAny,
     PolicyError,
+    PolicyLineage,
+    PolicyLoweredRef,
+    PolicyNodeLineage,
     PolicyOccurrence,
     PolicyUnify,
     SemanticPortAddress,
@@ -285,6 +291,45 @@ class PolicyAdmissionTests(unittest.TestCase):
 
 
 class PolicyLineageTests(unittest.TestCase):
+    def test_public_lineage_dtos_reject_malformed_or_non_total_shapes(self) -> None:
+        invalid_refs = (
+            lambda: PolicyLoweredRef("bogus", "c0"),  # type: ignore[arg-type]
+            lambda: PolicyLoweredRef("branch", ""),
+            lambda: PolicyLoweredRef("branch", "c0", occurrence_alias="extra"),
+            lambda: PolicyLoweredRef(
+                "body_atom", "c0", "a", source_index=-1, lowered_index=0
+            ),
+            lambda: PolicyLoweredRef("unify", "c0"),
+        )
+        for factory in invalid_refs:
+            with self.subTest(factory=factory):
+                with self.assertRaises(PolicyError) as ctx:
+                    factory()
+                self.assertEqual(ctx.exception.code, "INVALID_POLICY_LINEAGE")
+
+        branch = PolicyLoweredRef("branch", "c0")
+        with self.assertRaises(PolicyError):
+            PolicyNodeLineage("", "occurrence", (branch,))
+        with self.assertRaises(PolicyError):
+            PolicyNodeLineage("pn:x", "bogus", (branch,))  # type: ignore[arg-type]
+        with self.assertRaises(PolicyError):
+            PolicyNodeLineage("pn:x", "occurrence", ())
+        node = PolicyNodeLineage("pn:x", "occurrence", (branch,))
+        with self.assertRaises(PolicyError):
+            PolicyLineage((), ())
+        with self.assertRaises(PolicyError):
+            PolicyLineage((node,), ((PolicyLoweredRef("branch", "c1"), ("pn:x",)),))
+
+    def test_runtime_artifact_dtos_reject_empty_inventory(self) -> None:
+        with self.assertRaises(ValueError):
+            PolicyRulePin("", "rule", None, "digest", "contract")
+        with self.assertRaises(ValueError):
+            PolicyCompiledBranch("c0", (), ())
+        bundle = _person_bundle()
+        compiled = compile_policy(Policy("p", _occ("a")), address_space=_space(bundle, "a"))
+        with self.assertRaises(ValueError):
+            replace(compiled, branches=())
+
     def test_alias_rewrite_survives_generated_name_collision(self) -> None:
         bundle = _person_bundle()
         aliases = ("d", "d__c0", "other")
