@@ -68,8 +68,9 @@ managed occurrences
 
 Use one small protocol module for canonical address/reference DTOs and one
 application module for managed occurrence/address-space construction and
-resolution. A small `ResolvedRuleBundle.as_(...)` convenience may delegate to
-the same runtime function; it must not duplicate validation.
+resolution. Do not add `ResolvedRuleBundle.as_(...)` sugar in this slice; the
+runtime constructor remains the single dependency direction and validation
+point.
 
 ## 6. Boundaries And Invariants
 
@@ -77,9 +78,17 @@ the same runtime function; it must not duplicate validation.
 - Canonical paths are two-part values, never parsed dotted strings.
 - Only direct managed Rule ports are addressable.
 - Duplicate occurrence aliases reject; occurrence input order is irrelevant.
+- The input occurrence collection is copied, sorted and frozen; caller mutation
+  cannot change the space or its derived identity.
 - Alias rename changes address-space digest.
 - Same endpoint does not merge addresses, Vars or occurrences.
-- Resolution checks the Rule still matches its semantic contract.
+- Construction and resolution check that each occurrence Rule still exactly
+  matches its semantic contract. Resolved `RulePortRef` values are produced
+  internally, never accepted from the caller.
+- The caller-inaccessible digest uses a typed/versioned payload containing each
+  sorted alias, Rule id/version/content digest and semantic-contract digest.
+- Resolution requires the port in both Rule and contract with the same Var;
+  unknown alias and unknown port have distinct typed errors.
 - Production additions under `src/factgraph/application/**/*.py`, including
   export edits and excluding tests/docs, are capped at 350 lines relative to
   `8e480daf`; deletions do not offset additions.
@@ -89,6 +98,7 @@ the same runtime function; it must not duplicate validation.
 - [ ] Same Rule under two aliases has distinct addresses and unchanged contract identity.
 - [ ] Address resolution returns exact Rule-owned Var, endpoint and contract digest.
 - [ ] Duplicate alias, unknown alias and unknown port fail distinctly.
+- [ ] Mismatched Rule/contract and caller collection mutation fail or remain isolated.
 - [ ] Same-endpoint/different-Var ports remain separate and create no join.
 - [ ] Address-space identity is order-stable and alias-sensitive.
 - [ ] Stale Rule/contract is rejected at construction and resolution.

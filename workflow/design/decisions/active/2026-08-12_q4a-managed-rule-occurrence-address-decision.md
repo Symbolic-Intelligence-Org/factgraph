@@ -67,6 +67,12 @@ A managed occurrence wraps the existing `RuleOccurrence` and the exact
 come from `Rule.as_(...)` and `RuleOccurrence.port(...)`; no parallel alias or
 Var implementation is introduced.
 
+Construction and every later resolution verify that the occurrence's Rule
+still exactly matches the contract's Rule id, version, content digest and port
+Vars. A resolved reference is always generated from the address space's own
+occurrence and contract; callers cannot supply a `RulePortRef` to be decorated
+with unrelated semantic metadata.
+
 The same resolved Rule may appear more than once under different aliases. Those
 occurrences share a semantic contract but have distinct public addresses and
 remain distinct execution occurrences. No equality or join is inferred.
@@ -102,11 +108,14 @@ managed address space, while its existing RuleExpr behavior remains unchanged.
 
 ### 4.4 Freeze one address-space identity
 
-The address space copies and sorts occurrences by authored alias. A typed,
-versioned digest binds each alias to the Rule id/version/content digest and
-semantic-contract digest. Input order does not change the digest; renaming an
-alias does. Endpoint details are not duplicated because the semantic-contract
-digest already commits to them.
+The address space copies the input collection, rejects aliases duplicated by
+string value equality across the whole space, and freezes occurrences sorted by
+authored alias. Its digest is caller-inaccessible and derived from a typed,
+versioned canonical payload containing a format tag and, for each occurrence,
+the alias, Rule id/version/content digest and semantic-contract digest. Input
+order and later mutation of the caller collection do not change the space or
+digest; renaming an alias does. Endpoint details are not duplicated because the
+semantic-contract digest already commits to them.
 
 This is an in-process authored-address identity, not yet a Policy digest,
 authorization credential, persistence format or compatibility promise.
@@ -116,6 +125,13 @@ authorization credential, persistence format or compatibility promise.
 Building an occurrence and resolving an address reuses F1-lite's exact Rule ↔
 contract staleness check. No Schema reconstruction, deep AST audit or external
 contract verification is added.
+
+Address resolution requires the authored alias to identify exactly one stored
+occurrence and the port to exist in both that occurrence's Rule and semantic
+contract with the same Var. Unknown alias and unknown port are separate typed
+failures. The resulting reference contains only the address, internally derived
+`RulePortRef`, endpoint and semantic-contract digest; it does not duplicate
+Rule or Schema records.
 
 ## 5. Rejected Alternatives
 
@@ -173,6 +189,8 @@ Before F2B implements `Policy/All/Any/Unify/Compare`, a separate decision must:
 - [ ] Canonical resolution returns the Rule-owned Var, exact endpoint and
       semantic-contract digest.
 - [ ] Duplicate aliases and unknown alias/port fail with typed errors.
+- [ ] Occurrence/contract mismatch and caller-side collection mutation cannot
+      splice or alter resolved identity.
 - [ ] Address-space digest is input-order stable and alias-sensitive.
 - [ ] Legacy Rule/RuleExpr behavior is unchanged.
 - [ ] No Policy AST, lowering, Query, Evaluate, Explain or SDK surface is added.
