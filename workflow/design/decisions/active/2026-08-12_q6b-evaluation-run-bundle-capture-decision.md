@@ -155,3 +155,4 @@ to infer one from live SDK behavior.
 | 2026-08-12 | proposed | F4B entry audit completed | Snapshot, Explain and red-team audits independently rejected digest-only pseudo replay. |
 | 2026-08-12 | adopted | User authorized continuation after F4A CLEAR | F4B is split into capture/codec, isolated verification and detached Explain; this decision authorizes F4B1 only. |
 | 2026-08-12 | clarified | ProofReceipt validation boundary made explicit | F4B1 validates canonical structural reconstruction and witness resolution; it does not execute non-fact truth verification reserved for F4B2. |
+| 2026-08-12 | verified | User-side independent review returned CLEAR | The implementation passed 480 application/SDK tests plus 108 subtests, static checks and approximately 40 independent adversarial checks with zero P0/P1/P2. F4B1 closes without consuming F4B2/F4B3/F4C. |
