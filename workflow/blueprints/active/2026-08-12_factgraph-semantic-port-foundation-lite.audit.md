@@ -1,6 +1,6 @@
 # Task Blueprint Audit: FactGraph semantic-port foundation lite
 
-- Status: scoped
+- Status: implementing
 - Created: 2026-08-12
 - Last Updated: 2026-08-12
 - Authority: paired blueprint audit log
@@ -20,6 +20,7 @@
 | 2026-08-12 | draft | Independent preflight completed | `1e6e16e7`: 5 Required / 3 Recommended / 7 Verified / 0 Abandonment. |
 | 2026-08-12 | draft | Preflight amendments applied | PF-R1..R5 and PF-Rec1..Rec3 folded into Q3A and blueprint. |
 | 2026-08-12 | scoped | Preflight amendments and self-check passed | Two independent checks returned CLEAR at `5a282d48`; bounded implementation may begin. |
+| 2026-08-12 | implementing | F1-lite implementation started | Only semantic DTO/resolver/tests/docs are in flight; full F1 remains untouched. |
 
 ## Decision Notes
 
