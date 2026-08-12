@@ -309,11 +309,76 @@ alias explicitly; lineage does not parse generated names or `repr`. It covers
 each authored node and every emitted branch, occurrence, Rule-body atom, and
 Unify coordinate.
 
-This artifact is intentionally not executable. It has no result head,
-selection, bindings, assumptions, engine configuration, rows, or explanation.
-Compare/literals, field navigation, Query `bind/select/expect`, a synthetic
-projection head, Evaluate/Explain integration, persistence, Package, SDK, and
+This artifact is intentionally not executable by itself. It has no result
+head, bindings, assumptions, engine configuration, rows, or explanation. The
+following `EvaluationQuery` compiler may attach typed bindings and a synthetic
+projection head; execution still remains a later slice.
+
+## EvaluationQuery v0 projection
+
+`EvaluationQuery` describes exact Policy-owned direct-port bindings and ordered
+named selections:
+
+```python
+from factgraph.application import compile_evaluation_query
+from factgraph.application.protocol import (
+    EntityRef,
+    EvaluationQuery,
+    EvaluationQueryBinding,
+    EvaluationQuerySelection,
+    SemanticPortAddress,
+)
+
+query = EvaluationQuery(
+    policy_digest=compiled.policy_digest,
+    bindings=(
+        EvaluationQueryBinding(
+            SemanticPortAddress("person1", "person"),
+            EntityRef("Person", {"employee_id": "alice"}),
+        ),
+    ),
+    selections=(
+        EvaluationQuerySelection(
+            "other_age", SemanticPortAddress("person2", "age")
+        ),
+    ),
+)
+compiled_query = compile_evaluation_query(
+    query,
+    compiled_policy=compiled,
+    address_space=addresses,
+    schema_index=schema_index,
+)
+```
+
+`bind` is compiled into a typed equality inside every DNF branch; it is not an
+assertion, write, or post-filter. `select` maps an output alias to one exact
+occurrence port and changes only projection. Both sources must exist in every
+Policy branch. Branch-local sources fail with
+`PARTIAL_BRANCH_QUERY_ADDRESS` instead of being ignored or filled with null.
+
+Identity bindings are re-encoded from their identity fields with the trusted
+schema; a caller-supplied `EntityRef.encoded_ref` is not trusted. Field bindings
+are validated and converted to the canonical storage atom for their schema
+domain. Binding order is canonical; selection order remains the output-column
+contract and therefore contributes to `query_digest`.
+
+Because shipped Where IR reserves `$`-prefixed strings as variables, v0 rejects
+such direct string-field bindings with `QUERY_BINDING_TYPE_MISMATCH`. Identity
+strings inside `EntityRef` are safe because they are encoded to an idref first.
+
+`CompiledEvaluationQueryV0` contains the synthetic projection Rule, explicit
+per-branch source mappings, normalized bindings and an engine-neutral lowering
+plan. It does not execute, return rows, accept config, or promise snapshot-
+stable Explain. The older ad-hoc `QueryRuntimeRequest` and SDK `Query` remain
+unchanged. Compare/literals, field navigation, `expect`, completeness,
+What-if, Evaluate/Explain integration, persistence, Package, SDK, and
 Agent/Meander wire formats remain later slices.
+
+Compiled Policy/Query values are compiler-issued, in-process artifacts. Their
+integrity checks detect inconsistent splicing; they are not authentication or
+a MAC. Any future codec or rehydration path must recompile from authenticated
+source inputs or add an explicit artifact-authentication contract.
 
 ## Bridge Rejections
 
