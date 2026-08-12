@@ -1,6 +1,6 @@
 # Task Blueprint: FactGraph EvaluationQuery projection
 
-- Status: implementing
+- Status: implemented
 - Created: 2026-08-12
 - Last Updated: 2026-08-12
 - Authority: task-scoped implementation contract for F3A only.
@@ -48,17 +48,38 @@ result model.
 
 ## 4. Acceptance
 
-- [ ] Protocol shape, duplicate and ordering behavior is tested.
-- [ ] Policy/address/schema/staleness checks are fail-closed.
-- [ ] Identity encoding ignores caller-supplied encoded refs; scalar values are canonical.
-- [ ] DNF copies receive exact bind and projection sources; partial sources reject.
-- [ ] Explicit alias projection and query-aware probe seeds are tested.
-- [ ] Query materialization is inspectable but performs no engine call.
-- [ ] F1/F2A/F2B and legacy RuleExpr/evaluate/Explain tests remain green.
-- [ ] Static checks and 650-line production cap pass.
+- [x] Protocol shape, duplicate and ordering behavior is tested.
+- [x] Policy/address/schema/staleness checks are fail-closed.
+- [x] Identity encoding ignores caller-supplied encoded refs; scalar values are canonical.
+- [x] DNF copies receive exact bind and projection sources; partial sources reject.
+- [x] Explicit alias projection and query-aware probe seeds are tested.
+- [x] Query materialization is inspectable but performs no engine call.
+- [x] F1/F2A/F2B and legacy RuleExpr/evaluate/Explain tests remain green.
+- [x] Static checks and 650-line production cap pass.
 
 ## 5. Outcome / Deviations
 
-- Implementation is in progress. Internal adversarial review found required
-  compiled-artifact integrity and namespace-collision guards; no execution or
-  product-facing scope was added.
+- Implementation `a8d91871` and current-truth docs `c0d2face` add the typed
+  `EvaluationQuery` protocol, deterministic compiler and exact branch-local
+  bind/projection metadata without entering engine execution.
+- Production Python is 649 gross additions relative to `afdd9e7e`, within the
+  amended 650-line stop. The 500-to-650 amendment `7f68d5e8` was consumed only
+  by review-required artifact-integrity, generated-variable-collision and
+  projection-namespace guards; no wider product surface was added.
+- The final internal focused cohort is 310 tests passing. Ruff, targeted mypy
+  and `git diff --check` pass. Broad discovery retains the unchanged
+  `service.static_ui` import of absent `render_evidence_graph_html`; it is
+  outside this slice and was present at the base commit.
+- Three internal adversarial reviews returned CLEAR. The user's independent
+  read-only review repeated a 251-test project cohort and static checks, added
+  32 passing adversarial probes, and returned CLEAR with zero P0/P1 and one
+  non-blocking P2 boundary note.
+- That P2 does not identify an inconsistent splice: compiler-issued digests
+  detect inconsistent in-process artifacts but are not authentication or a
+  MAC. Current-truth docs now state that any future cross-trust codec must
+  recompile authenticated source inputs or add explicit authentication.
+- No contract deviation remains. Existing Query surfaces, engine execution,
+  config/snapshot, rows, expectations, What-if, SDK and Meander remain
+  explicitly deferred.
+- Archive intent: move this blueprint and its paired audit together after this
+  closure commit.
