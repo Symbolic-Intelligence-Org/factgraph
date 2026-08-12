@@ -34,7 +34,10 @@ from factgraph.core.derivation.accept import (
 )
 from factgraph.core.derivation.candidates import CandidateSet, DerivationOutput
 from factgraph.core.store import _accept as _store_accept
-from factgraph.core.store._evaluate import evaluate_store
+from factgraph.core.store._evaluate import (
+    NativeEffectiveRelationObserver,
+    evaluate_store,
+)
 from factgraph.core.store.runtime import Store
 
 from .protocol import (
@@ -73,6 +76,7 @@ def evaluate_derivation_plans(
     *,
     store: Store,
     registry: Any | None = None,
+    native_effective_relation_observer: NativeEffectiveRelationObserver | None = None,
 ) -> list[DerivationOutput]:
     """Evaluate compiled derivation plans against the store.
 
@@ -84,7 +88,13 @@ def evaluate_derivation_plans(
     outputs: list[DerivationOutput] = []
     for plan in request.plans:
         outputs.extend(
-            _evaluate_plan(plan, request=request, store=store, registry=registry)
+            _evaluate_plan(
+                plan,
+                request=request,
+                store=store,
+                registry=registry,
+                native_effective_relation_observer=native_effective_relation_observer,
+            )
         )
     if request.run_id is not None and len(request.plans) > 1:
         outputs = _attach_run_id(outputs, run_id=request.run_id)
@@ -97,6 +107,7 @@ def _evaluate_plan(
     request: DerivationEvaluateRequest,
     store: Store,
     registry: Any | None,
+    native_effective_relation_observer: NativeEffectiveRelationObserver | None,
 ) -> list[DerivationOutput]:
     engine_options = dict(plan.engine_options) if plan.engine_options else None
     if plan.head_spec is not None:
@@ -118,6 +129,7 @@ def _evaluate_plan(
                 engine_ext=plan.engine_ext,
                 engine_options=engine_options,
                 semantics_profile=request.semantics_profile,
+                native_effective_relation_observer=native_effective_relation_observer,
             )
         )
 
@@ -136,6 +148,7 @@ def _evaluate_plan(
             engine_ext=plan.engine_ext,
             engine_options=engine_options,
             semantics_profile=request.semantics_profile,
+            native_effective_relation_observer=native_effective_relation_observer,
         )
         results.extend(head_results)
     return results

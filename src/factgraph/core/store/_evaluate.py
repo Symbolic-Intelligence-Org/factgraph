@@ -1,13 +1,32 @@
 from __future__ import annotations
 
-from typing import Any
+from collections.abc import Callable, Mapping, Sequence
+from types import MappingProxyType
+from typing import Any, TypeAlias
 
 from factgraph.core.rules.ruleref_substrate import evaluate_native_where
+from factgraph.core.rules.where_ast import (
+    AggregateAtom,
+    Atom,
+    BuiltinAtom,
+    CmpAtom,
+    Const,
+    InAtom,
+    NotAtom,
+    OrExpr,
+    PredAtom,
+    RuleRefAtom,
+    Term,
+    Var,
+    WhereExpr,
+    parse_where_ir_to_ast,
+)
 from factgraph.core.store._support import (
     _DEGRADED_SUPPORT_KINDS,
     _PROVENANCE_BEARING_SUPPORT_KINDS,
     _WITNESS_BEARING_SUPPORT_KINDS,
     BindingSupportCapture,
+    ProjectedFact,
     compute_support_digest,
 )
 from factgraph.core.store._support_capture import (
@@ -31,6 +50,14 @@ from factgraph.core.store.types import (
 from factgraph.core.view.projector import project_view_facts, project_view_facts_with_witness
 
 
+NativeEffectiveRelationSnapshot: TypeAlias = Mapping[
+    str, tuple[ProjectedFact, ...]
+]
+NativeEffectiveRelationObserver: TypeAlias = Callable[
+    [NativeEffectiveRelationSnapshot], None
+]
+
+
 def evaluate_store(
     store: Any,
     *,
@@ -47,6 +74,7 @@ def evaluate_store(
     engine_ext: EngineExtBase | None = None,
     engine_options: EngineOptionsIR = None,
     semantics_profile: Any | None = None,
+    native_effective_relation_observer: NativeEffectiveRelationObserver | None = None,
 ) -> list[DerivationOutput]:
     if mode == "python":
         raise ValueError("mode='python' is removed; use mode='native'")
@@ -76,6 +104,17 @@ def evaluate_store(
             )
     if mode == "native" and engine_options:
         raise ValueError("engine_options are not supported for mode='native'")
+    if native_effective_relation_observer is not None:
+        if not callable(native_effective_relation_observer):
+            raise TypeError("native_effective_relation_observer must be callable or None")
+        if mode != "native":
+            raise ValueError(
+                "native_effective_relation_observer is only supported for mode='native'"
+            )
+        if registry is not None:
+            raise ValueError(
+                "native_effective_relation_observer does not support registry-backed evaluation"
+            )
 
     if isinstance(head, dict) and head.get("callee_kind") == "entity_type":
         if mode in {"souffle", "problog", "pyreason"}:
@@ -110,6 +149,7 @@ def evaluate_store(
             where,
             root_result_kind="entity",
             registry=registry,
+            native_effective_relation_observer=native_effective_relation_observer,
         )
         if not captures:
             return []
@@ -162,6 +202,7 @@ def evaluate_store(
         where,
         root_result_kind="fact",
         registry=registry,
+        native_effective_relation_observer=native_effective_relation_observer,
     )
     if not captures:
         return []
@@ -211,9 +252,10 @@ def _evaluate_where_over_view(
             getattr(store, "premise_allowances", ()),
             getattr(store, "premise_blocks", ()),
         )
-    view_facts = project_view_facts(
-        ledger,
-        store.schema_ir,
+    view_facts = (
+        project_view_facts(ledger, store.schema_ir)
+        if witness_facts is None
+        else _view_facts_from_projected_relation(witness_facts)
     )
     return evaluate_native_where(
         view_facts,
@@ -230,7 +272,12 @@ def _evaluate_where_over_view_with_support(
     *,
     root_result_kind: str,
     registry: Any | None = None,
+    native_effective_relation_observer: NativeEffectiveRelationObserver | None = None,
 ) -> list[BindingSupportCapture]:
+    if native_effective_relation_observer is not None and registry is not None:
+        raise ValueError(
+            "native_effective_relation_observer does not support registry-backed evaluation"
+        )
     # One premise-scoped view per evaluate call, shared between the witness
     # projection and the native where evaluation; visibility is decided live
     # per access inside the view (see premise_filter.py).
@@ -244,6 +291,26 @@ def _evaluate_where_over_view_with_support(
         ledger,
         store.schema_ir,
     )
+    if native_effective_relation_observer is not None:
+        dependency_predicates = _native_where_dependency_predicates(where)
+        witness_facts = {
+            pred_id: witness_facts[pred_id]
+            for pred_id in dependency_predicates
+            if pred_id in witness_facts
+        }
+        missing_dependencies = tuple(
+            pred_id
+            for pred_id in dependency_predicates
+            if pred_id not in witness_facts
+        )
+        if missing_dependencies:
+            raise ValueError(
+                "native effective relation dependencies are absent from schema projection: "
+                + ", ".join(missing_dependencies)
+            )
+        native_effective_relation_observer(
+            _immutable_effective_relation_copy(witness_facts)
+        )
     evaluation = _evaluate_where_over_view(
         store,
         where,
@@ -288,6 +355,102 @@ def _evaluate_where_over_view_with_support(
         )
     captures.sort(key=lambda row: (row.binding_items, row.support_digest, row.support_kind))
     return captures
+
+
+def _view_facts_from_projected_relation(
+    projected_relation: Mapping[str, Sequence[ProjectedFact]],
+) -> dict[str, list[tuple[Any, ...]]]:
+    """Derive the evaluator input from the already-projected witness relation."""
+
+    return {
+        pred_id: [row.fact_tuple for row in rows]
+        for pred_id, rows in projected_relation.items()
+    }
+
+
+def _immutable_effective_relation_copy(
+    projected_relation: Mapping[str, Sequence[ProjectedFact]],
+) -> NativeEffectiveRelationSnapshot:
+    """Copy a projected native relation into a callback-safe immutable shape."""
+
+    return MappingProxyType(
+        {
+            pred_id: tuple(
+                ProjectedFact(asrt_id=row.asrt_id, fact_tuple=tuple(row.fact_tuple))
+                for row in rows
+            )
+            for pred_id, rows in projected_relation.items()
+        }
+    )
+
+
+def _native_where_dependency_predicates(where: WhereIR) -> tuple[str, ...]:
+    """Return the exact predicate dependency set for supported native WhereIR."""
+
+    expression = parse_where_ir_to_ast(where)
+    predicates: set[str] = set()
+    _collect_where_expr_predicates(expression, predicates)
+    return tuple(sorted(predicates))
+
+
+def _collect_where_expr_predicates(
+    expression: WhereExpr,
+    predicates: set[str],
+) -> None:
+    branches = expression.branches if isinstance(expression, OrExpr) else (expression,)
+    for branch in branches:
+        for atom in branch.atoms:
+            _collect_atom_predicates(atom, predicates)
+
+
+def _collect_atom_predicates(atom: Atom, predicates: set[str]) -> None:
+    if isinstance(atom, PredAtom):
+        if not isinstance(atom.pred_id, str) or not atom.pred_id:
+            raise ValueError("native effective relation predicate id must be non-empty string")
+        predicates.add(atom.pred_id)
+        for term in atom.terms:
+            _collect_term_predicates(term, predicates)
+        return
+    if isinstance(atom, NotAtom):
+        _collect_where_expr_predicates(atom.body, predicates)
+        return
+    if isinstance(atom, RuleRefAtom):
+        raise ValueError(
+            "native effective relation capture requires materialized where without ruleref atoms"
+        )
+    if isinstance(atom, CmpAtom):
+        _collect_term_predicates(atom.lhs, predicates)
+        _collect_term_predicates(atom.rhs, predicates)
+        return
+    if isinstance(atom, InAtom):
+        _collect_term_predicates(atom.var, predicates)
+        for value in atom.values:
+            _collect_term_predicates(value, predicates)
+        return
+    if isinstance(atom, BuiltinAtom):
+        for term in atom.args:
+            _collect_term_predicates(term, predicates)
+        return
+    raise ValueError(
+        "native effective relation dependency analysis does not support "
+        f"{type(atom).__name__}"
+    )
+
+
+def _collect_term_predicates(term: Term, predicates: set[str]) -> None:
+    if isinstance(term, AggregateAtom):
+        if term.target is not None:
+            _collect_term_predicates(term.target, predicates)
+        for atom in term.filter:
+            _collect_atom_predicates(atom, predicates)
+        return
+    if isinstance(term, (Var, Const)):
+        return
+    raise ValueError(
+        "native effective relation dependency analysis does not support "
+        f"{type(term).__name__}"
+    )
+
 
 def _remember_output_support_backrefs(
     store: Any,
