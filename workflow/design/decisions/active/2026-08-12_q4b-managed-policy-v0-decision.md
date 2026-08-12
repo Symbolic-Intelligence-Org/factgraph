@@ -10,7 +10,7 @@
   - [`2026-08-11_meander-factgraph-post-probe-session.md`](../../../memory/session_handoffs/2026-08-11_meander-factgraph-post-probe-session.md) §§3.2–3.3, 6.4, 8.2
   - [`meander-factgraph-unified-design-adversarial-review-disposition.zh.md`](../../design-points/active/meander-factgraph-unified-design-adversarial-review-disposition.zh.md) SC-01/02/03/12 and AC-21
 - Outputs / Downstream:
-  - [`2026-08-12_factgraph-managed-policy-compiler-lineage.md`](../../../blueprints/active/2026-08-12_factgraph-managed-policy-compiler-lineage.md)
+  - [`2026-08-12_factgraph-managed-policy-compiler-lineage.md`](../../../blueprints/archive/2026-08-12_factgraph-managed-policy-compiler-lineage.md)
 - Branch: `codex/v0.3.0-f2b-policy-compiler-lineage-2026-08-12`
 - Base: `9418d6dc`
 - Depends on: Q3A and Q4A
