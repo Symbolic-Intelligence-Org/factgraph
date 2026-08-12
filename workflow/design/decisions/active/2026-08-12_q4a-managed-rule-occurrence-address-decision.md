@@ -202,3 +202,4 @@ Before F2B implements `Policy/All/Any/Unify/Compare`, a separate decision must:
 |---|---|---|---|
 | 2026-08-12 | proposed | F2 source review completed | Three independent reviews found that shipped occurrence mechanics should be reused and full Policy compilation is premature. |
 | 2026-08-12 | adopted | User authorized the next bounded implementation | Scope narrowed to F2A occurrence/address substrate; F2B remains separately gated. |
+| 2026-08-12 | adopted | Independent contract amendments incorporated | Exact occurrence/contract consistency, internally derived refs, copy/freeze identity and unique typed resolution were added before scoping. |
