@@ -133,6 +133,10 @@ from .evaluation_query_runtime import (
     CompiledEvaluationQueryV0,
     compile_evaluation_query,
 )
+from .evaluation_run_bundle_runtime import (
+    evaluation_run_bundle_bytes,
+    evaluation_run_bundle_from_bytes,
+)
 from .authoring_runtime import AuthoringRuntimeError
 from .why_not_runtime import (
     WhyNotRuntimeError,
@@ -209,6 +213,8 @@ __all__ = [
     "check_why_not_universe",
     "compile_policy",
     "compile_evaluation_query",
+    "evaluation_run_bundle_bytes",
+    "evaluation_run_bundle_from_bytes",
     "copy_ledger_to_workspace",
     "diagnose_derivation_binding",
     "encode_entity_ref",

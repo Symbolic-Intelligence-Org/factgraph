@@ -438,10 +438,29 @@ zero-row result without interpreting it as false. `row.explain()` includes the
 Run anchor digest in `checked_scope`.
 
 The anchor explicitly reports identity-only capture, digest-only live-view
-guarding and replay unavailable. It contains no detached snapshot or support
-material and does not add a codec, repository or `replay()` method. Thus the
-guard still does not provide an immutable replay bundle, historical replay,
-completeness, truncation or expectation semantics; those remain later slices.
+guarding and replay unavailable. By default it contains no detached snapshot
+or support material. A native compiled Query may opt in atomically:
+
+```python
+from factgraph.application import (
+    evaluation_run_bundle_bytes,
+    evaluation_run_bundle_from_bytes,
+)
+
+result = fg.eval.evaluate(compiled_query, capture="run_bundle_v0")
+assert result.run_bundle is not None
+payload = evaluation_run_bundle_bytes(result.run_bundle)
+detached_bundle = evaluation_run_bundle_from_bytes(payload)
+```
+
+The bounded canonical bundle contains the exact native plan, schema, Query
+values, dependency-complete effective relation, typed rows, F4A anchor and
+canonical ProofReceipts. It is sensitive cleartext under caller-managed
+custody, with unverified authenticity. Decode and inspection do not consult the
+Store, but the artifact deliberately has no `replay()` or detached `explain()`
+method and reports replay not implemented. Non-fact logical verification,
+historical replay, persistence, completeness, truncation and expectation
+semantics remain later slices.
 
 ### Rule and RuleExpr snapshot matching
 

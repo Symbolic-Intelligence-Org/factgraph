@@ -21,6 +21,7 @@ from factgraph.application.explain.evidence_tree import (
 from factgraph.application.protocol.common import ErrorDTO, ProtocolShapeError, WarningDTO
 from factgraph.application.protocol.certainty import BOOLEAN_CERTAINTY, Certainty
 from factgraph.application.protocol.evaluation_run import EvaluationRunAnchorV0
+from factgraph.application.protocol.evaluation_run_bundle import EvaluationRunBundleV0
 from factgraph.application.protocol.explanation_render import narrate_evidence, walk_evidence
 from factgraph.application.protocol.rule import Rule, _is_projection_rule
 from factgraph.application.protocol.rule_expr import RuleExprError
@@ -146,6 +147,7 @@ class EvaluateResult:
     fingerprint: ResultFingerprint
     engine_meta: Mapping[str, Any]
     run_anchor: EvaluationRunAnchorV0 | None = field(default=None, kw_only=True)
+    run_bundle: EvaluationRunBundleV0 | None = field(default=None, kw_only=True, repr=False)
     _schema_index: object | None = field(default=None, repr=False, compare=False, hash=False)
     _row_close_builder: Callable[[EvaluateRow, EvaluateResult], Rule] | None = field(
         default=None,
@@ -212,6 +214,7 @@ class EvaluateResult:
         object.__setattr__(self, "_row_provenance_envelopes", row_provenance_envelopes)
         object.__setattr__(self, "rows", tuple(bound_rows))
         _validate_run_anchor(self)
+        _validate_run_bundle(self)
 
     @property
     def run_id(self) -> str:
@@ -1169,6 +1172,23 @@ def _validate_run_anchor(result: EvaluateResult) -> None:
         or fingerprint.rule_set_digest != anchored_rule_set
     ):
         raise ProtocolShapeError("EvaluateResult.run_anchor does not match this result")
+
+
+def _validate_run_bundle(result: EvaluateResult) -> None:
+    bundle = result.run_bundle
+    if bundle is None:
+        return
+    # Keep the codec import local: EvaluateResult is also used while the bundle
+    # protocol itself initializes.
+    from factgraph.application.evaluation_run_bundle_runtime import (
+        _assert_evaluation_run_bundle_current,
+    )
+
+    if not isinstance(bundle, EvaluationRunBundleV0):
+        raise ProtocolShapeError("EvaluateResult.run_bundle must be EvaluationRunBundleV0 or None")
+    _assert_evaluation_run_bundle_current(bundle)
+    if result.run_anchor is None or bundle.run_anchor != result.run_anchor:
+        raise ProtocolShapeError("EvaluateResult.run_bundle does not match this result")
 
 
 def _metadata_value(value: Any) -> Any:

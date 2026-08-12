@@ -2,10 +2,14 @@ from __future__ import annotations
 
 import unittest
 from dataclasses import FrozenInstanceError
+import inspect
 from types import MappingProxyType
 from unittest.mock import patch
 
 from factgraph.application import evaluate_derivation_plans
+from factgraph.application.derivation_runtime import (
+    _evaluate_derivation_plans_with_native_relation_capture,
+)
 from factgraph.application.protocol import (
     CompiledDerivationPlan,
     CompiledHeadCall,
@@ -69,6 +73,17 @@ def _stable_outputs(outputs: list[object]) -> list[tuple[object, ...]]:
 
 
 class NativeEffectiveRelationCoreTests(unittest.TestCase):
+    def test_dependency_scan_does_not_treat_tuple_constants_as_atoms(self) -> None:
+        self.assertEqual(
+            evaluate_module._native_where_dependency_predicates(
+                [
+                    ("eq", ("pred", "not-a-dependency", ()), ("pred", "not-a-dependency", ())),
+                    ("eq", ("ruleref", "constant"), ("ruleref", "constant")),
+                ]
+            ),
+            (),
+        )
+
     def test_observer_sees_the_single_projection_used_by_the_evaluator(self) -> None:
         store = _store_with_people("bob", "alice")
         projected = project_view_facts_with_witness(store.ledger, store.schema_ir)
@@ -91,7 +106,7 @@ class NativeEffectiveRelationCoreTests(unittest.TestCase):
                 wraps=evaluate_module.evaluate_native_where,
             ) as evaluator,
         ):
-            outputs = evaluate_module.evaluate_store(
+            outputs = evaluate_module._evaluate_store(
                 store,
                 derivation_id="capture",
                 version="1",
@@ -100,7 +115,7 @@ class NativeEffectiveRelationCoreTests(unittest.TestCase):
                 where=[("pred", "Person:exists", ["$x"])],
                 mode="native",
                 engine_evaluate=store.evaluate_engine,
-                native_effective_relation_observer=observed.append,
+                _native_effective_relation_observer=observed.append,
             )
 
         self.assertEqual(len(outputs), 2)
@@ -117,7 +132,6 @@ class NativeEffectiveRelationCoreTests(unittest.TestCase):
         self.assertNotIn("person:unused", snapshot)
         self.assertEqual(snapshot["Person:exists"], tuple(projected["Person:exists"]))
         self.assertIsNot(snapshot["Person:exists"][0], projected["Person:exists"][0])
-
         evaluator_view = evaluator.call_args.args[0]
         self.assertEqual(
             evaluator_view,
@@ -137,25 +151,25 @@ class NativeEffectiveRelationCoreTests(unittest.TestCase):
         with self.assertRaises(FrozenInstanceError):
             snapshot["Person:exists"][0].asrt_id = "changed"  # type: ignore[misc]
 
-    def test_observer_is_rejected_for_registry_and_non_native_paths(self) -> None:
+    def test_capture_seam_is_private_and_public_signatures_have_no_observer(self) -> None:
         store = _store_with_people("alice")
         plan = _plan([("pred", "Person:exists", ["$x"])])
-        observed: list[object] = []
+        self.assertNotIn("observer", str(inspect.signature(evaluate_derivation_plans)))
+        self.assertNotIn("observer", str(inspect.signature(evaluate_module.evaluate_store)))
 
-        with self.assertRaisesRegex(ValueError, "only supported for mode='native'"):
-            evaluate_derivation_plans(
+        outputs, snapshot = _evaluate_derivation_plans_with_native_relation_capture(
+            DerivationEvaluateRequest(plans=(plan,), engine="native"),
+            store=store,
+        )
+        self.assertEqual(len(outputs), 1)
+        self.assertEqual(tuple(snapshot), ("Person:exists",))
+        with self.assertRaisesRegex(
+            ValueError, "one native plan with one head"
+        ):
+            _evaluate_derivation_plans_with_native_relation_capture(
                 DerivationEvaluateRequest(plans=(plan,), engine="souffle"),
                 store=store,
-                native_effective_relation_observer=observed.append,
             )
-        with self.assertRaisesRegex(ValueError, "registry-backed"):
-            evaluate_derivation_plans(
-                DerivationEvaluateRequest(plans=(plan,), engine="native"),
-                store=store,
-                registry=object(),
-                native_effective_relation_observer=observed.append,
-            )
-        self.assertEqual(observed, [])
 
 
 class NativeEffectiveRelationApplicationTests(unittest.TestCase):
@@ -167,11 +181,11 @@ class NativeEffectiveRelationApplicationTests(unittest.TestCase):
         )
         observed: list[object] = []
 
-        outputs = evaluate_derivation_plans(
+        outputs, snapshot = _evaluate_derivation_plans_with_native_relation_capture(
             DerivationEvaluateRequest(plans=(plan,)),
             store=store,
-            native_effective_relation_observer=observed.append,
         )
+        observed.append(snapshot)
 
         self.assertEqual(outputs, [])
         self.assertEqual(len(observed), 1)
@@ -189,11 +203,11 @@ class NativeEffectiveRelationApplicationTests(unittest.TestCase):
         )
         observed: list[object] = []
 
-        outputs = evaluate_derivation_plans(
+        outputs, snapshot = _evaluate_derivation_plans_with_native_relation_capture(
             DerivationEvaluateRequest(plans=(plan,)),
             store=store,
-            native_effective_relation_observer=observed.append,
         )
+        observed.append(snapshot)
 
         self.assertEqual(len(outputs), 1)
         self.assertEqual(len(observed), 1)
@@ -223,11 +237,11 @@ class NativeEffectiveRelationApplicationTests(unittest.TestCase):
         )
         observed: list[object] = []
 
-        outputs = evaluate_derivation_plans(
+        outputs, snapshot = _evaluate_derivation_plans_with_native_relation_capture(
             DerivationEvaluateRequest(plans=(plan,)),
             store=store,
-            native_effective_relation_observer=observed.append,
         )
+        observed.append(snapshot)
 
         self.assertEqual(len(outputs), 1)
         self.assertEqual(len(observed), 1)
@@ -247,11 +261,11 @@ class NativeEffectiveRelationApplicationTests(unittest.TestCase):
 
         legacy = evaluate_derivation_plans(request, store=store)
         observed: list[object] = []
-        captured = evaluate_derivation_plans(
+        captured, snapshot = _evaluate_derivation_plans_with_native_relation_capture(
             request,
             store=store,
-            native_effective_relation_observer=observed.append,
         )
+        observed.append(snapshot)
 
         self.assertEqual(_stable_outputs(legacy), _stable_outputs(captured))
         self.assertEqual(len(observed), 1)

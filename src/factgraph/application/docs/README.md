@@ -30,7 +30,8 @@ compatibility.
     in-process semantic-port binding and authored occurrence/direct-port
     address space used by managed Rule consumers, the head-independent managed
     Policy v0 compiler and structural-lineage boundary, and the compile-only
-    `EvaluationQuery` typed bind/select projection contract.
+    `EvaluationQuery` typed bind/select projection contract plus opt-in,
+    detached `EvaluationRunBundleV0` capture/codec semantics.
 - `src/factgraph/application/explain/docs/README.md`
   - Paths-model evidence tree types (`EvidenceGraph`, `EvidenceTree`,
     `EvidenceRule`, `EvidenceAtom`, `Certainty`, `AtomForm`, `Verdict`) and
@@ -42,7 +43,8 @@ compatibility.
   - `EvaluateResult` / `EvaluateRow` / `Explanation` / `ResultFingerprint`
     protocol contract; `EvaluateRow.explain()` dispatch; S5 evidence invariant
     (`{passed,failed} ↔ evidence is not None`); ProbLog/PyReason rich evidence
-    builder dispatch; `walk_evidence` text renderer.
+    builder dispatch; `walk_evidence` text renderer; optional F4A Run anchors
+    and strict F4B1 detached bundle attachment.
 - `src/factgraph/application/walker/docs/README.md`
   - Current implementation contract for the application-layer walker
     module.

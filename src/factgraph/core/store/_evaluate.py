@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
 from types import MappingProxyType
-from typing import Any, TypeAlias
+from typing import Any, TypeAlias, cast
 
 from factgraph.core.rules.ruleref_substrate import evaluate_native_where
 from factgraph.core.rules.where_ast import (
@@ -50,11 +50,11 @@ from factgraph.core.store.types import (
 from factgraph.core.view.projector import project_view_facts, project_view_facts_with_witness
 
 
-NativeEffectiveRelationSnapshot: TypeAlias = Mapping[
+_NativeEffectiveRelationSnapshot: TypeAlias = Mapping[
     str, tuple[ProjectedFact, ...]
 ]
-NativeEffectiveRelationObserver: TypeAlias = Callable[
-    [NativeEffectiveRelationSnapshot], None
+_NativeEffectiveRelationObserver: TypeAlias = Callable[
+    [_NativeEffectiveRelationSnapshot], None
 ]
 
 
@@ -74,7 +74,44 @@ def evaluate_store(
     engine_ext: EngineExtBase | None = None,
     engine_options: EngineOptionsIR = None,
     semantics_profile: Any | None = None,
-    native_effective_relation_observer: NativeEffectiveRelationObserver | None = None,
+) -> list[DerivationOutput]:
+    """Public evaluation entrypoint; native relation capture is not exposed here."""
+    return _evaluate_store(
+        store,
+        derivation_id=derivation_id,
+        version=version,
+        target_pred_id=target_pred_id,
+        head_vars=head_vars,
+        where=where,
+        mode=mode,
+        head=head,
+        engine_evaluate=engine_evaluate,
+        registry=registry,
+        confidence_kind_resolver=confidence_kind_resolver,
+        engine_ext=engine_ext,
+        engine_options=engine_options,
+        semantics_profile=semantics_profile,
+        _native_effective_relation_observer=None,
+    )
+
+
+def _evaluate_store(
+    store: Any,
+    *,
+    derivation_id: str,
+    version: str,
+    target_pred_id: str,
+    head_vars: HeadVarsIR,
+    where: WhereIR,
+    mode: EvaluateMode = "native",
+    head: HeadSpecIR | None = None,
+    engine_evaluate: EngineEvaluatorFn,
+    registry: Any | None = None,
+    confidence_kind_resolver: Any | None = None,
+    engine_ext: EngineExtBase | None = None,
+    engine_options: EngineOptionsIR = None,
+    semantics_profile: Any | None = None,
+    _native_effective_relation_observer: _NativeEffectiveRelationObserver | None = None,
 ) -> list[DerivationOutput]:
     if mode == "python":
         raise ValueError("mode='python' is removed; use mode='native'")
@@ -104,16 +141,16 @@ def evaluate_store(
             )
     if mode == "native" and engine_options:
         raise ValueError("engine_options are not supported for mode='native'")
-    if native_effective_relation_observer is not None:
-        if not callable(native_effective_relation_observer):
-            raise TypeError("native_effective_relation_observer must be callable or None")
+    if _native_effective_relation_observer is not None:
+        if not callable(_native_effective_relation_observer):
+            raise TypeError("_native_effective_relation_observer must be callable or None")
         if mode != "native":
             raise ValueError(
-                "native_effective_relation_observer is only supported for mode='native'"
+                "_native_effective_relation_observer is only supported for mode='native'"
             )
         if registry is not None:
             raise ValueError(
-                "native_effective_relation_observer does not support registry-backed evaluation"
+                "_native_effective_relation_observer does not support registry-backed evaluation"
             )
 
     if isinstance(head, dict) and head.get("callee_kind") == "entity_type":
@@ -149,7 +186,7 @@ def evaluate_store(
             where,
             root_result_kind="entity",
             registry=registry,
-            native_effective_relation_observer=native_effective_relation_observer,
+            _native_effective_relation_observer=_native_effective_relation_observer,
         )
         if not captures:
             return []
@@ -202,7 +239,7 @@ def evaluate_store(
         where,
         root_result_kind="fact",
         registry=registry,
-        native_effective_relation_observer=native_effective_relation_observer,
+        _native_effective_relation_observer=_native_effective_relation_observer,
     )
     if not captures:
         return []
@@ -238,7 +275,7 @@ def _evaluate_where_over_view(
     where: WhereIR,
     *,
     registry: Any | None = None,
-    witness_facts: dict[str, list[Any]] | None = None,
+    witness_facts: Mapping[str, Sequence[ProjectedFact]] | None = None,
     ledger: Any | None = None,
 ) -> Any:
     if ledger is None:
@@ -261,7 +298,7 @@ def _evaluate_where_over_view(
         view_facts,
         where,
         registry=registry,
-        witness_facts=witness_facts,
+        witness_facts=cast(Any, witness_facts),
         remember_support_artifact=store._remember_support_artifact if witness_facts is not None else None,
     )
 
@@ -272,11 +309,11 @@ def _evaluate_where_over_view_with_support(
     *,
     root_result_kind: str,
     registry: Any | None = None,
-    native_effective_relation_observer: NativeEffectiveRelationObserver | None = None,
+    _native_effective_relation_observer: _NativeEffectiveRelationObserver | None = None,
 ) -> list[BindingSupportCapture]:
-    if native_effective_relation_observer is not None and registry is not None:
+    if _native_effective_relation_observer is not None and registry is not None:
         raise ValueError(
-            "native_effective_relation_observer does not support registry-backed evaluation"
+            "_native_effective_relation_observer does not support registry-backed evaluation"
         )
     # One premise-scoped view per evaluate call, shared between the witness
     # projection and the native where evaluation; visibility is decided live
@@ -291,7 +328,7 @@ def _evaluate_where_over_view_with_support(
         ledger,
         store.schema_ir,
     )
-    if native_effective_relation_observer is not None:
+    if _native_effective_relation_observer is not None:
         dependency_predicates = _native_where_dependency_predicates(where)
         reduced_relation = {
             pred_id: witness_facts[pred_id]
@@ -311,7 +348,7 @@ def _evaluate_where_over_view_with_support(
         # Freeze once: capture and evaluator consume the exact same relation
         # object rather than independently copied/filterable representations.
         witness_facts = _immutable_effective_relation_copy(reduced_relation)
-        native_effective_relation_observer(witness_facts)
+        _native_effective_relation_observer(witness_facts)
     evaluation = _evaluate_where_over_view(
         store,
         where,
@@ -328,7 +365,7 @@ def _evaluate_where_over_view_with_support(
         selected_case_index = find_winning_case_index(
             where=where,
             binding=binding,
-            witness_facts=witness_facts,
+            witness_facts=cast(Any, witness_facts),
             rule_ref_resolutions=evaluation.rule_ref_resolutions,
         )
         rule_ref_edges = derive_rule_ref_edges_for_binding(
@@ -340,7 +377,7 @@ def _evaluate_where_over_view_with_support(
         artifact = build_support_artifact_for_binding(
             where=where,
             binding=binding,
-            witness_facts=witness_facts,
+            witness_facts=cast(Any, witness_facts),
             root_result_kind=root_result_kind,
             selected_case_index=selected_case_index,
             rule_ref_edges=rule_ref_edges,
@@ -371,7 +408,7 @@ def _view_facts_from_projected_relation(
 
 def _immutable_effective_relation_copy(
     projected_relation: Mapping[str, Sequence[ProjectedFact]],
-) -> NativeEffectiveRelationSnapshot:
+) -> _NativeEffectiveRelationSnapshot:
     """Copy a projected native relation into a callback-safe immutable shape."""
 
     return MappingProxyType(

@@ -49,8 +49,8 @@ inspectable without the originating Store. Do not execute replay yet.
 - F4B1 adds no evaluator, replay comparison, detached Explain, Policy overlay,
   What-if or repository.
 - Gross added production Python is hard-capped at 1,750 lines relative to
-  `b7eea261`. The review-ready implementation is 1,705 lines; the remaining
-  45 lines are reserved only for review fixes, not new behavior.
+  `b7eea261`. The review-ready implementation is 1,692 lines; the remaining
+  58 lines are reserved only for review fixes, not new behavior.
 
 ## 3. Implementation Plan
 

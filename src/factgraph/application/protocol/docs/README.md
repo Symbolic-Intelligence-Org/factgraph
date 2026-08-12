@@ -1,7 +1,7 @@
 # Application Protocol — EvaluateResult & Explain Surface
 
 - Scope: `src/factgraph/application/protocol/evaluate_result.py` + `explanation_render.py`
-- Last updated: 2026-06-10
+- Last updated: 2026-08-12
 - Audience: SDK layer maintainers, adapter writers, and test authors
 
 This document covers the evaluate-result / explain slice of `protocol/`.
@@ -87,6 +87,8 @@ class EvaluateResult:
     evaluated_at: object
     fingerprint: ResultFingerprint
     engine_meta: Mapping[str, Any]
+    run_anchor: EvaluationRunAnchorV0 | None = None
+    run_bundle: EvaluationRunBundleV0 | None = None
 ```
 
 Private fields (not compared / not repr'd):
@@ -115,6 +117,15 @@ Iteration / indexing:
 | `result.result_digest` | `result.fingerprint.result_digest` |
 
 `result.expr_digest` was removed entirely in Cleanup-β (2026-06-08) — use `result.fingerprint.expr_digest`.
+
+Compiled native `EvaluationQuery` execution always attaches the identity-only
+`run_anchor`. With the explicit `capture="run_bundle_v0"` option it also
+attaches `run_bundle`, a strict canonical and size-bounded detached audit
+artifact. The bundle captures sensitive typed values, exact plan/schema,
+effective dependency relations, rows and ProofReceipts. It is integrity-sealed
+but not authenticated, has caller-managed custody, and exposes neither replay
+nor detached Explain. Ordinary evaluation leaves `run_bundle=None`; capture
+cannot be added post hoc.
 
 ---
 

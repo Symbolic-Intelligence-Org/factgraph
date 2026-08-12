@@ -41,6 +41,9 @@ from .evaluation_run import (
     EvaluationRunSummaryAnchorV0,
     EvaluationRunTargetV0,
 )
+from .evaluation_run_bundle import (
+    EvaluationRunBundleV0,
+)
 from .explanation_render import walk_evidence
 from .derivation_fact_overlay import (
     FactOverlay,
@@ -236,6 +239,7 @@ __all__ = [
     "EvaluationRunSelectionV0",
     "EvaluationRunSummaryAnchorV0",
     "EvaluationRunTargetV0",
+    "EvaluationRunBundleV0",
     "Explanation",
     "ResultFingerprint",
     "FactOverlay",

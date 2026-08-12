@@ -3,7 +3,9 @@ from __future__ import annotations
 import unittest
 from dataclasses import asdict, replace
 from datetime import datetime
+import inspect
 import json
+from typing import get_type_hints
 from unittest.mock import patch
 from uuid import UUID
 
@@ -14,6 +16,8 @@ from factgraph.application import (
     compile_evaluation_query,
     compile_policy,
     entity_info,
+    evaluation_run_bundle_bytes,
+    evaluation_run_bundle_from_bytes,
     field_predicate,
     manage_rule_occurrence,
     resolve_selector,
@@ -25,6 +29,7 @@ from factgraph.application.protocol import (
     EvaluationQuery,
     EvaluationQueryBinding,
     EvaluationQuerySelection,
+    EvaluationRunBundleV0,
     Policy,
     PolicyOccurrence,
     ProtocolShapeError,
@@ -35,6 +40,7 @@ from factgraph.application.protocol import (
     field_endpoint,
 )
 from factgraph.application.protocol.evaluation_run import _plain, _token
+from factgraph.application.protocol.evaluation_run_bundle import _token as _bundle_token
 from factgraph.core.evidence.write_protocol import set_field
 from factgraph.core.rules.where_ast import PredAtom, Var
 from factgraph.core.semantics import SemanticsProfile
@@ -196,6 +202,11 @@ class EvaluationQueryNativeEvaluateTests(unittest.TestCase):
         self.assertIs(materializer.call_args.args[0], compiled._lowering_plan)
         self.assertEqual(materializer.call_args.kwargs, {"engine": "native"})
         self.assertEqual(evaluator.call_count, 1)
+        self.assertNotIn(
+            "capture",
+            evaluator.call_args.kwargs,
+        )
+        self.assertIsNone(result.run_bundle)
         self.assertIsInstance(result, EvaluateResult)
         self.assertEqual(tuple(graph.ledger.find_claims()), before)
         self.assertEqual(len(result), 1)
@@ -228,6 +239,176 @@ class EvaluationQueryNativeEvaluateTests(unittest.TestCase):
         self.assertIsInstance(row.close(), Rule)
         with self.assertRaises(TypeError):
             row.bindings["selected_age"]["value"] = 99
+
+    def test_run_bundle_capture_is_opt_in_strict_and_detached(self) -> None:
+        graph = SDKStore([Person])
+        alice_ref = _seed_person(graph, "alice", age=22, score=9)
+        compiled, _bundle = _compiled_person_query(
+            graph,
+            employee_id="alice",
+            selections=(("person", "person"), ("age", "age")),
+        )
+
+        ordinary = graph.eval.evaluate(compiled)
+        import factgraph.sdk.store as store_module
+
+        observed_relations = []
+        original_evaluate = store_module._evaluate_derivation_plans_with_native_relation_capture
+
+        def observe_relation(*args, **kwargs):
+            outputs, snapshot = original_evaluate(*args, **kwargs)
+            observed_relations.append(snapshot)
+            return outputs, snapshot
+
+        with patch(
+            "factgraph.sdk.store._evaluate_derivation_plans_with_native_relation_capture",
+            side_effect=observe_relation,
+        ), patch(
+            "factgraph.sdk.store._build_evaluation_run_bundle_v0",
+            wraps=store_module._build_evaluation_run_bundle_v0,
+        ) as builder:
+            captured = graph.eval.evaluate(compiled, capture="run_bundle_v0")
+
+        self.assertEqual(builder.call_count, 1)
+        self.assertEqual(len(observed_relations), 1)
+        self.assertIs(
+            builder.call_args.kwargs["effective_relations"],
+            observed_relations[0],
+        )
+        self.assertIsNone(ordinary.run_bundle)
+        self.assertIsNotNone(captured.run_bundle)
+        assert captured.run_bundle is not None
+        payload = evaluation_run_bundle_bytes(captured.run_bundle)
+        detached = evaluation_run_bundle_from_bytes(payload)
+
+        self.assertEqual(detached, captured.run_bundle)
+        self.assertEqual(detached.run_anchor, captured.run_anchor)
+        self.assertIn(alice_ref.encode("utf-8"), payload)
+        self.assertNotIn(alice_ref, repr(captured.run_bundle))
+        self.assertFalse(hasattr(detached, "replay"))
+        self.assertFalse(hasattr(detached, "explain"))
+
+        _seed_person(graph, "bob", age=19, score=7)
+        self.assertEqual(evaluation_run_bundle_from_bytes(payload), detached)
+
+        for invalid in (True, False, "unknown", 1):
+            with self.subTest(capture=invalid):
+                with self.assertRaisesRegex(SDKStoreError, "capture"):
+                    graph.eval.evaluate(compiled, capture=invalid)
+
+        with self.assertRaisesRegex(SDKStoreError, "only accepted for CompiledEvaluationQueryV0"):
+            graph.eval.evaluate({"derivation_id": "not-a-query"}, capture="run_bundle_v0")
+
+    def test_bundle_annotation_and_public_evaluate_signatures_are_reflectable(self) -> None:
+        import factgraph.application.derivation_runtime as runtime
+        import factgraph.core.store.evaluation as core_evaluation
+
+        self.assertEqual(
+            get_type_hints(EvaluateResult)["run_bundle"],
+            EvaluationRunBundleV0 | None,
+        )
+        self.assertNotIn("observer", str(inspect.signature(runtime.evaluate_derivation_plans)))
+        self.assertNotIn("observer", str(inspect.signature(core_evaluation.evaluate_store)))
+
+    def test_zero_row_bundle_preserves_dependency_relations_without_asserting_false(self) -> None:
+        graph = SDKStore([Person])
+        _seed_person(graph, "alice", age=22, score=9)
+        compiled, _bundle = _compiled_person_query(graph, score=999)
+
+        result = graph.eval.evaluate(compiled, capture="run_bundle_v0")
+
+        assert result.run_bundle is not None
+        self.assertEqual(result.run_bundle.rows, ())
+        self.assertGreater(len(result.run_bundle.relations), 0)
+        self.assertEqual(result.run_bundle.run_anchor.summary.truth_interpretation, "not_asserted")
+
+    def test_run_bundle_capture_is_atomic_with_the_live_view_guard(self) -> None:
+        graph = SDKStore([Person])
+        _seed_person(graph, "alice", age=22, score=9)
+        compiled, _bundle = _compiled_person_query(graph)
+        import factgraph.sdk.store as store_module
+
+        original = store_module._build_evaluation_run_bundle_v0
+
+        def mutate_after_capture(*args, **kwargs):
+            bundle = original(*args, **kwargs)
+            _seed_person(graph, "bob", age=19, score=7)
+            return bundle
+
+        with patch(
+            "factgraph.sdk.store._build_evaluation_run_bundle_v0",
+            side_effect=mutate_after_capture,
+        ):
+            with self.assertRaisesRegex(SDKStoreError, "view changed"):
+                graph.eval.evaluate(compiled, capture="run_bundle_v0")
+
+    def test_run_bundle_cannot_be_attached_to_another_result(self) -> None:
+        graph = SDKStore([Person])
+        _seed_person(graph, "alice", age=22, score=9)
+        compiled, _bundle = _compiled_person_query(graph)
+        first = graph.eval.evaluate(compiled, capture="run_bundle_v0")
+        second = graph.eval.evaluate(compiled, capture="run_bundle_v0")
+
+        assert second.run_bundle is not None
+        with self.assertRaises(ProtocolShapeError):
+            replace(first, run_bundle=second.run_bundle)
+
+    def test_self_consistent_receipt_splice_cannot_be_attached(self) -> None:
+        graph = SDKStore([Person])
+        _seed_person(graph, "alice", age=22, score=9)
+        _seed_person(graph, "bob", age=19, score=7)
+        compiled, _bundle = _compiled_person_query(graph)
+        result = graph.eval.evaluate(compiled, capture="run_bundle_v0")
+        bundle = result.run_bundle
+        assert bundle is not None and len(bundle.rows) == 2
+        first, second = bundle.rows
+        row_payload = (
+            first.ordinal,
+            first.row_id,
+            first.claim_digest,
+            first.head_scope_digest,
+            first.certainty,
+            first.certainty_digest,
+            first.values,
+            second.proof_receipt_digest,
+        )
+        forged_row = replace(
+            first,
+            proof_receipt_bytes=second.proof_receipt_bytes,
+            proof_receipt_digest=second.proof_receipt_digest,
+            row_capture_digest=_bundle_token(
+                "evaluation_run_projection_row_v0", row_payload
+            ),
+        )
+        forged_rows = (forged_row, second)
+        rows_digest = _bundle_token(
+            "evaluation_run_rows_capture_v0",
+            tuple(row.row_capture_digest for row in forged_rows),
+        )
+        bundle_payload = (
+            bundle.run_anchor.anchor_digest,
+            bundle.query_capture_digest,
+            bundle.native_plan.plan_digest,
+            bundle.schema_capture_digest,
+            bundle.relations_capture_digest,
+            rows_digest,
+            bundle.execution_contract,
+            bundle.integrity,
+            bundle.authenticity,
+            bundle.privacy,
+            bundle.custody,
+            bundle.playback,
+            bundle.replay_availability,
+        )
+        forged_bundle = replace(
+            bundle,
+            rows=forged_rows,
+            rows_capture_digest=rows_digest,
+            bundle_digest=_bundle_token("evaluation_run_bundle_v0", bundle_payload),
+        )
+
+        with self.assertRaisesRegex(ProtocolShapeError, "ProofReceipt"):
+            replace(result, run_bundle=forged_bundle)
 
     def test_non_matching_bind_returns_valid_empty_result(self) -> None:
         graph = SDKStore([Person])

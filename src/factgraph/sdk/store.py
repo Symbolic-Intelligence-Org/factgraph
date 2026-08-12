@@ -16,11 +16,15 @@ from factgraph.application.schema_mutation_runtime import (
     add_schema_classes as app_add_schema_classes,
 )
 from factgraph.application.workspace_runtime import resolve_workspace_paths
-from factgraph.application.derivation_runtime import evaluate_derivation_plans
+from factgraph.application.derivation_runtime import (
+    _evaluate_derivation_plans_with_native_relation_capture,
+    evaluate_derivation_plans,
+)
 from factgraph.application.evaluation_query_runtime import (
     CompiledEvaluationQueryV0,
     _assert_compiled_evaluation_query_current,
 )
+from factgraph.application.evaluation_run_bundle_runtime import _build_evaluation_run_bundle_v0
 from factgraph.application.evaluation_run_runtime import build_evaluation_run_anchor_v0
 from factgraph.application.explain import EvidenceGraph, probe_native
 from factgraph.application.explain.evidence_tree import (
@@ -2920,6 +2924,10 @@ class SDKStore:
                 raw_engine=raw_engine,
                 raw_config=raw_config,
             )
+        if "capture" in kwargs:
+            raise SDKStoreError(
+                "evaluate() capture= is only accepted for CompiledEvaluationQueryV0"
+            )
         if args and isinstance(args[0], (ApplicationRule, _RuleExpr)):
             return self._evaluate_rule_expr_input(
                 args,
@@ -3203,6 +3211,13 @@ class SDKStore:
             raise SDKStoreError(
                 "evaluate(compiled_query) accepts exactly one CompiledEvaluationQueryV0"
             )
+        capture = kwargs.pop("capture", None)
+        if capture is not None and (
+            type(capture) is not str or capture != "run_bundle_v0"
+        ):
+            raise SDKStoreError(
+                "evaluate(compiled_query) capture= accepts only 'run_bundle_v0'"
+            )
         if kwargs:
             unknown = ", ".join(sorted(kwargs))
             raise SDKStoreError(
@@ -3246,11 +3261,17 @@ class SDKStore:
             raise SDKStoreError(
                 "compiled EvaluationQuery could not be materialized for native execution"
             ) from exc
-        outputs = evaluate_derivation_plans(
-            DerivationEvaluateRequest(plans=(compiled_plan,), engine="native"),
-            store=self._store,
-            registry=None,
-        )
+        if capture == "run_bundle_v0":
+            outputs, effective_relation = _evaluate_derivation_plans_with_native_relation_capture(
+                DerivationEvaluateRequest(plans=(compiled_plan,), engine="native"),
+                store=self._store,
+            )
+        else:
+            outputs = evaluate_derivation_plans(
+                DerivationEvaluateRequest(plans=(compiled_plan,), engine="native"),
+                store=self._store,
+                registry=None,
+            )
         self._assert_evaluation_query_execution_current(compiled_query, view_snapshot_digest)
 
         result = self._derivation_outputs_to_evaluate_result(
@@ -3268,6 +3289,22 @@ class SDKStore:
             view_snapshot_digest_override=view_snapshot_digest,
         )
         self._assert_evaluation_query_execution_current(compiled_query, view_snapshot_digest)
+        if capture == "run_bundle_v0":
+            if result._row_support_artifacts is None:
+                raise SDKStoreError("native EvaluationQuery capture did not produce one complete execution record")
+            try:
+                bundle = _build_evaluation_run_bundle_v0(
+                    compiled_query,
+                    result,
+                    materialized_plan=compiled_plan,
+                    schema_ir=self._schema_ir,
+                    effective_relations=effective_relation,
+                    proof_receipts=result._row_support_artifacts,
+                )
+                result = replace(result, run_bundle=bundle)
+            except (TypeError, ValueError) as exc:
+                raise SDKStoreError(f"failed to capture EvaluationRun bundle: {exc}") from exc
+            self._assert_evaluation_query_execution_current(compiled_query, view_snapshot_digest)
         return result
 
     @staticmethod

@@ -386,7 +386,7 @@ Identity Claim retracts raise `INV_7C_IDENTITY_PROTECTED`; legacy
 
 | Method | One-liner |
 |---|---|
-| `evaluate(inference_or_expr_or_compiled_query, *, head=None, engine=None, config=None)` | Evaluate an `Inference`, `Rule`, `RuleExpr`, or application-compiled `CompiledEvaluationQueryV0`; returns `EvaluateResult`. Query v0 consumes its own projection head, is native-only, rejects `config=`, and adds an identity-only, non-replayable `run_anchor`. Other inputs retain their documented engine/config behavior and leave `run_anchor=None`. |
+| `evaluate(inference_or_expr_or_compiled_query, *, head=None, engine=None, config=None, capture=None)` | Evaluate an `Inference`, `Rule`, `RuleExpr`, or application-compiled `CompiledEvaluationQueryV0`; returns `EvaluateResult`. Query v0 consumes its own projection head, is native-only, rejects `config=`, and adds an identity-only `run_anchor`. It alone accepts `capture="run_bundle_v0"`, which atomically attaches a detached, strict-codec `run_bundle`; this artifact is not replay and contains sensitive cleartext under caller-managed custody. Other inputs reject `capture` and retain their documented engine/config behavior with `run_anchor=None` and `run_bundle=None`. |
 | `explain(expr, *, head, engine=None, config=None)` | Replay a closed-head explanation; `head=` is required (no default). `engine=` resolves the same way as `evaluate`. Returns `Explanation`. |
 | `preview_config(profile)` | Inspect public semantics wrappers or canonical `SemanticsProfile`. |
 

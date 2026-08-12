@@ -408,11 +408,28 @@ closed Rule produced later by `row.close()`.
 
 This anchor is `identity_only`, uses a `digest_only_live_guard`, and declares
 replay `not_available`. It contains no Store callback, schema object, support
-carrier or derivation/candidate identity, and has no codec or `replay()` API.
-The older ad-hoc `QueryRuntimeRequest` and SDK `Query` remain unchanged. Non-native engines,
-standalone Query explain, candidate acceptance, Compare/literals, field
-navigation, `expect`, completeness, What-if, durable replay bundles, persistence,
-Package, and Agent/Meander wire formats remain later slices.
+carrier or derivation/candidate identity, and has no `replay()` API. A caller
+may instead opt in during execution with `capture="run_bundle_v0"`. The result's
+`run_bundle` then contains the exact native plan, canonical schema, normalized
+Query values, dependency-complete effective relation (including empty
+relations), typed rows and canonical ProofReceipts. The evaluator and capture
+path share one privately captured immutable relation; public evaluation APIs
+do not expose that raw relation or a callback.
+
+`evaluation_run_bundle_bytes(...)` and
+`evaluation_run_bundle_from_bytes(...)` provide a strict, bounded canonical
+codec. Decoding is detached from the originating Store and validates component
+seals, row/anchor agreement, receipt structure and witness resolution. The
+bundle is sensitive cleartext with caller-managed custody, declares
+`authenticity="unverified"` and `replay_availability="not_implemented"`, and
+has no `replay()` or detached `explain()` method. In particular, F4B1 does not
+re-evaluate non-fact conditions; isolated logical verification is a later
+slice.
+
+The older ad-hoc `QueryRuntimeRequest` and SDK `Query` remain unchanged.
+Non-native engines, standalone Query explain, candidate acceptance,
+Compare/literals, field navigation, `expect`, completeness, What-if, bundle
+persistence, Package, and Agent/Meander wire formats remain later slices.
 
 Compiled Policy/Query and Run-anchor values are compiler-issued, in-process
 artifacts. Their integrity checks detect inconsistent splicing; they are not

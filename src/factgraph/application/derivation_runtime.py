@@ -35,8 +35,9 @@ from factgraph.core.derivation.accept import (
 from factgraph.core.derivation.candidates import CandidateSet, DerivationOutput
 from factgraph.core.store import _accept as _store_accept
 from factgraph.core.store._evaluate import (
-    NativeEffectiveRelationObserver,
-    evaluate_store,
+    _NativeEffectiveRelationObserver,
+    _NativeEffectiveRelationSnapshot,
+    _evaluate_store,
 )
 from factgraph.core.store.runtime import Store
 
@@ -76,7 +77,6 @@ def evaluate_derivation_plans(
     *,
     store: Store,
     registry: Any | None = None,
-    native_effective_relation_observer: NativeEffectiveRelationObserver | None = None,
 ) -> list[DerivationOutput]:
     """Evaluate compiled derivation plans against the store.
 
@@ -85,6 +85,51 @@ def evaluate_derivation_plans(
     ``store.evaluate_engine`` as the EngineEvaluatorFn. The flattened list of
     DerivationOutput objects is returned to the caller (no application-side wrapping).
     """
+    return _evaluate_derivation_plans(
+        request,
+        store=store,
+        registry=registry,
+        _native_effective_relation_observer=None,
+    )
+
+
+def _evaluate_derivation_plans_with_native_relation_capture(
+    request: DerivationEvaluateRequest,
+    *,
+    store: Store,
+) -> tuple[list[DerivationOutput], _NativeEffectiveRelationSnapshot]:
+    """Private atomic-capture seam for the SDK EvaluationRun bundle path."""
+    if (
+        request.engine != "native"
+        or len(request.plans) != 1
+        or len(request.plans[0].heads) != 1
+    ):
+        raise DerivationRuntimeError(
+            "native relation capture requires one native plan with one head",
+            code="NATIVE_RELATION_CAPTURE_SCOPE",
+        )
+    observed: list[_NativeEffectiveRelationSnapshot] = []
+    outputs = _evaluate_derivation_plans(
+        request,
+        store=store,
+        registry=None,
+        _native_effective_relation_observer=observed.append,
+    )
+    if len(observed) != 1:
+        raise DerivationRuntimeError(
+            "native relation capture requires exactly one evaluated plan head",
+            code="NATIVE_RELATION_CAPTURE_CARDINALITY",
+        )
+    return outputs, observed[0]
+
+
+def _evaluate_derivation_plans(
+    request: DerivationEvaluateRequest,
+    *,
+    store: Store,
+    registry: Any | None,
+    _native_effective_relation_observer: _NativeEffectiveRelationObserver | None,
+) -> list[DerivationOutput]:
     outputs: list[DerivationOutput] = []
     for plan in request.plans:
         outputs.extend(
@@ -93,7 +138,7 @@ def evaluate_derivation_plans(
                 request=request,
                 store=store,
                 registry=registry,
-                native_effective_relation_observer=native_effective_relation_observer,
+                _native_effective_relation_observer=_native_effective_relation_observer,
             )
         )
     if request.run_id is not None and len(request.plans) > 1:
@@ -107,7 +152,7 @@ def _evaluate_plan(
     request: DerivationEvaluateRequest,
     store: Store,
     registry: Any | None,
-    native_effective_relation_observer: NativeEffectiveRelationObserver | None,
+    _native_effective_relation_observer: _NativeEffectiveRelationObserver | None,
 ) -> list[DerivationOutput]:
     engine_options = dict(plan.engine_options) if plan.engine_options else None
     if plan.head_spec is not None:
@@ -115,7 +160,7 @@ def _evaluate_plan(
         # is enforced at CompiledDerivationPlan __post_init__.
         primary = plan.heads[0]
         return list(
-            evaluate_store(
+            _evaluate_store(
                 store,
                 derivation_id=plan.derivation_id,
                 version=plan.version,
@@ -129,13 +174,13 @@ def _evaluate_plan(
                 engine_ext=plan.engine_ext,
                 engine_options=engine_options,
                 semantics_profile=request.semantics_profile,
-                native_effective_relation_observer=native_effective_relation_observer,
+                _native_effective_relation_observer=_native_effective_relation_observer,
             )
         )
 
     results: list[DerivationOutput] = []
     for head in plan.heads:
-        head_results = evaluate_store(
+        head_results = _evaluate_store(
             store,
             derivation_id=plan.derivation_id,
             version=plan.version,
@@ -148,7 +193,7 @@ def _evaluate_plan(
             engine_ext=plan.engine_ext,
             engine_options=engine_options,
             semantics_profile=request.semantics_profile,
-            native_effective_relation_observer=native_effective_relation_observer,
+            _native_effective_relation_observer=_native_effective_relation_observer,
         )
         results.extend(head_results)
     return results
