@@ -145,6 +145,68 @@ match C101 AggregateNoValue "comparison violated / no env pollution" semantics
 without exposing a separate sentinel value. PyReason aggregates are out of
 scope per parent essay §10.6.3.
 
+## Managed Semantic Ports
+
+Application Rules remain unchanged and executable without semantic metadata.
+Consumers that need stable Ontology addressing can separately resolve every
+public Rule port:
+
+```python
+from factgraph.application import build_resolved_rule, build_schema_index
+from factgraph.application.protocol import (
+    SemanticRulePort,
+    entity_identity,
+    field_endpoint,
+)
+from factgraph.core.rules.where_ast import PredAtom, Var
+
+person, age = Var("$person"), Var("$age")
+resolved = build_resolved_rule(
+    id="person_age",
+    when=(
+        PredAtom("Person:exists", [person]),
+        PredAtom("person:age", [person, age]),
+    ),
+    ports={
+        "person": SemanticRulePort(person, entity_identity("Person")),
+        "age": SemanticRulePort(age, field_endpoint("Person", "age")),
+    },
+    schema_index=build_schema_index(schema_ir),
+)
+```
+
+Each mapping entry carries three coordinates: its logical port name, exact
+internal Rule `Var`, and canonical endpoint. `resolved.rule` is an ordinary
+Rule whose ports are still Vars. `resolved.contract` is a copied and frozen
+in-process binding to that Rule content and the trusted `SchemaIndex` digest.
+
+Resolution requires exact coverage of `Rule.ports`. Entity identity endpoints
+need a top-level positive unary entity-exists predicate; scalar field endpoints
+need a top-level positive binary field predicate with the port Var in value
+position. Negative and aggregate-local predicates are not witnesses. Different
+Vars may target the same endpoint and remain distinct—resolution never inserts
+equality or a join.
+
+The managed subset currently supports complete entity identities and scalar
+fields only. Entity-reference fields, relationships, derived/intermediate
+ports, partial semantic coverage, and automatic endpoint inference are not
+supported. A legacy Rule using those forms is still valid; it simply cannot
+receive this semantic contract.
+
+The contract has one conservative digest over typed Rule, whole-schema, Var,
+and endpoint coordinates. Any schema-digest change invalidates it. It is not a
+persisted or externally authenticated contract, and this module does not
+rebuild Schema IR, verify untrusted rehydration, or define endpoint-local
+compatibility. `assert_rule_contract_current(...)` only detects subsequent
+in-process Rule drift.
+
+The application layer accepts symbolic endpoints, not SDK Entity classes or
+Field descriptors. A future SDK adapter may let authors write
+`endpoint=Person` or `endpoint=Person.age`, but must immediately lower those
+values to `EntityIdentityEndpoint("Person")` or
+`FieldEndpoint(FieldPath("Person", "age"))` before calling this layer. That
+ergonomic API is not shipped in F1-lite.
+
 ## Bridge Rejections
 
 The new application Rule path rejects legacy SDK authoring forms that are still

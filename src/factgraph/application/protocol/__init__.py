@@ -81,6 +81,16 @@ from .rule_literal_replace import (
     RuleLiteralReplaceStatus,
 )
 from .rule import Rule, RuleOccurrence, RulePortRef, RuleValidationError
+from .semantic_port import (
+    EntityIdentityEndpoint,
+    FieldEndpoint,
+    ResolvedRuleContract,
+    SemanticEndpoint,
+    SemanticPortShapeError,
+    SemanticRulePort,
+    entity_identity,
+    field_endpoint,
+)
 from .rule_expr import ExplicitBoolError, RuleExpr, RuleExprError, RuleJoinConstraint
 from .rule_expr_inspect import ConditionDescriptor, OccurrenceInspect, PortInspect, RuleExprInspect
 from .rule_expr_lowering import compile_derivation_plan
@@ -162,6 +172,7 @@ __all__ = [
     "DiagnoseStatus",
     "EntityReadRequest",
     "EntityReadResponse",
+    "EntityIdentityEndpoint",
     "EntityRef",
     "EntitySelector",
     "EntityCreateCommand",
@@ -189,6 +200,7 @@ __all__ = [
     "ReplaceFact",
     "FieldAssertionsDTO",
     "FieldFilterValue",
+    "FieldEndpoint",
     "FieldMutation",
     "FieldPath",
     "FieldValue",
@@ -248,6 +260,10 @@ __all__ = [
     "RuleJoinConstraint",
     "RuleStructure",
     "RuleValidationError",
+    "ResolvedRuleContract",
+    "SemanticEndpoint",
+    "SemanticPortShapeError",
+    "SemanticRulePort",
     "ExplicitBoolError",
     "SchemaCapability",
     "StructureAtom",
@@ -271,5 +287,7 @@ __all__ = [
     "WhyNotUniverseResult",
     "WriteValue",
     "aggregate_proof_frame_status",
+    "entity_identity",
+    "field_endpoint",
     "walk_evidence",
 ]

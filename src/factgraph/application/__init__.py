@@ -110,6 +110,13 @@ from .schema_runtime import (
     render_entity_repr,
     resolve_selector,
 )
+from .semantic_port_runtime import (
+    ResolvedRuleBundle,
+    SemanticPortResolutionError,
+    assert_rule_contract_current,
+    build_resolved_rule,
+    resolve_rule_contract,
+)
 from .authoring_runtime import AuthoringRuntimeError
 from .why_not_runtime import (
     WhyNotRuntimeError,
@@ -138,8 +145,10 @@ __all__ = [
     "ProofFrameDiffView",
     "ProofFrameView",
     "QueryRuntimeError",
+    "ResolvedRuleBundle",
     "SchemaIndex",
     "SchemaResolutionError",
+    "SemanticPortResolutionError",
     "SupportArtifactView",
     "WORKSPACE_LEDGER",
     "WORKSPACE_MANIFEST_NAME",
@@ -164,6 +173,7 @@ __all__ = [
     "build_frontier_view_facts",
     "build_proof_frame_recheck_request",
     "build_round_event_payload",
+    "build_resolved_rule",
     "build_rule_add_condition_request",
     "build_rule_disable_request",
     "build_rule_literal_replace_request",
@@ -197,11 +207,13 @@ __all__ = [
     "plan_write_command",
     "recheck_proof_frame",
     "render_entity_repr",
+    "resolve_rule_contract",
     "render_proof_frame_narrative",
     "resolve_workspace_paths",
     "save_workspace",
     "save_workspace_manifest",
     "resolve_selector",
+    "assert_rule_contract_current",
     "validate_workspace_manifest",
     "workspace_manifest_payload",
 ]
