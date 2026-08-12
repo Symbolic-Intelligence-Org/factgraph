@@ -1,6 +1,6 @@
 # Task Blueprint: FactGraph EvaluationRun bundle capture
 
-- Status: implemented
+- Status: archived
 - Created: 2026-08-12
 - Last Updated: 2026-08-12
 - Authority: task-scoped implementation contract for F4B1 only.
@@ -132,5 +132,5 @@ implementation tests or final independent review.
   detached Explain, What-if, Scenario, repository, Policy overlay or Meander
   integration was introduced; those remain separate downstream decisions.
 - Application, protocol and SDK current-truth docs were synchronized in
-  `6d32beb1`. This blueprint and its paired audit move together in a separate
-  archive commit; archival does not start F4B2 or F4B3.
+  `6d32beb1`. This blueprint and its paired audit are archived together;
+  archival does not start F4B2 or F4B3.

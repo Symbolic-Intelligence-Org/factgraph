@@ -9,7 +9,7 @@
   - Q6A / F4A identity-only Run anchors
   - 2026-08-12 three-way read-only F4B snapshot, Explain and red-team audit
 - Outputs / Downstream:
-  - [`2026-08-12_factgraph-evaluation-run-bundle-capture.md`](../../../blueprints/active/2026-08-12_factgraph-evaluation-run-bundle-capture.md)
+  - [`2026-08-12_factgraph-evaluation-run-bundle-capture.md`](../../../blueprints/archive/2026-08-12_factgraph-evaluation-run-bundle-capture.md)
   - F4B2 isolated replay verification
   - F4B3 detached inner Explain
   - F4C Policy-aware explanation overlay

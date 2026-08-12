@@ -1,6 +1,6 @@
 # Task Blueprint Audit: FactGraph EvaluationRun bundle capture
 
-- Status: implemented
+- Status: archived
 - Created: 2026-08-12
 - Last Updated: 2026-08-12
 - Authority: paired blueprint audit log
@@ -19,6 +19,7 @@
 | 2026-08-12 | review | Internal fixed-state reviews returned CLEAR | API-boundary, protocol red-team and scope/simplicity reviews closed all findings; final state has zero P0/P1/P2. |
 | 2026-08-12 | review | User-side independent review returned CLEAR | The reviewer repeated 480 application/SDK tests plus 108 subtests, static checks and approximately 40 adversarial checks, independently confirmed 1,692/1,750 production additions and reported zero P0/P1/P2. |
 | 2026-08-12 | implemented | F4B1 acceptance criteria closed | Implementation lineage `62655986`/`d6f70252`/`6d32beb1` ships opt-in atomic bundle capture, a strict codec and detached inspection while leaving isolated replay to F4B2, detached inner Explain to F4B3 and Policy overlay to F4C. |
+| 2026-08-12 | archived | Blueprint pair archived | Current implementation truth resides in the synchronized application, protocol and SDK docs; F4B2/F4B3 are not started by this transition. |
 
 ## Decision Notes
 
