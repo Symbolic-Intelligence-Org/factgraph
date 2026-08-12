@@ -26,6 +26,8 @@ from factgraph.core.store._support import (
     ProofReceipt,
     binding_dict_from_items,
     compute_support_digest,
+    normalize_binding_items,
+    normalize_detail_items,
     support_artifact_bytes,
     support_artifact_from_dict,
 )
@@ -483,11 +485,20 @@ def _assert_evaluation_run_bundle_current(
         for relation in bundle.relations
     }
     assertion_ids = {fact.asrt_id for facts in captured_relation.values() for fact in facts}
-    assertion_by_id = {
-        fact.asrt_id: (predicate_id, fact.fact_tuple)
-        for predicate_id, facts in captured_relation.items()
-        for fact in facts
-    }
+    assertion_by_id: dict[str, tuple[str, tuple[tuple[str, object], ...]]] = {}
+    assertion_ids_by_fact: dict[
+        tuple[str, tuple[tuple[str, object], ...]], tuple[str, ...]
+    ] = {}
+    for relation in bundle.relations:
+        grouped: dict[tuple[tuple[str, object], ...], list[str]] = {}
+        for asrt_id, values in relation.facts:
+            tagged_fact = tuple((value.tag, value.value) for value in values)
+            assertion_by_id[asrt_id] = (relation.predicate_id, tagged_fact)
+            grouped.setdefault(tagged_fact, []).append(asrt_id)
+        for tagged_fact, assertion_ids_for_fact in grouped.items():
+            assertion_ids_by_fact[(relation.predicate_id, tagged_fact)] = tuple(
+                sorted(assertion_ids_for_fact)
+            )
     for row, anchor in zip(bundle.rows, bundle.run_anchor.row_anchors, strict=True):
         if len(row.values) > MAX_EVALUATION_RUN_BUNDLE_VALUES:
             raise ProtocolShapeError("captured projection value limit is exceeded")
@@ -519,7 +530,7 @@ def _assert_evaluation_run_bundle_current(
             )
         try:
             bound_head = tuple(
-                _canonical_storage_value(value.tag, receipt_binding[name])
+                (value.tag, _canonical_storage_value(value.tag, receipt_binding[name]))
                 for name, (_alias, value) in zip(
                     bundle.native_plan.head_var_names,
                     row.values,
@@ -530,14 +541,16 @@ def _assert_evaluation_run_bundle_current(
             raise ProtocolShapeError(
                 "ProofReceipt does not bind the captured projection head"
             ) from exc
-        if bound_head != tuple(value.value for _alias, value in row.values):
+        if bound_head != tuple((value.tag, value.value) for _alias, value in row.values):
             raise ProtocolShapeError(
                 "ProofReceipt head bindings do not match the captured projection row"
             )
         selected_case = _validate_receipt_static_consistency(
             receipt,
             where=where,
+            value_types_by_predicate=specs,
             assertion_by_id=assertion_by_id,
+            assertion_ids_by_fact=assertion_ids_by_fact,
         )
         if rebuild_receipts:
             try:
@@ -591,7 +604,11 @@ def _validate_receipt_static_consistency(
     receipt: ProofReceipt,
     *,
     where: list[Any],
-    assertion_by_id: Mapping[str, tuple[str, tuple[Any, ...]]],
+    value_types_by_predicate: Mapping[str, tuple[str, ...]],
+    assertion_by_id: Mapping[str, tuple[str, tuple[tuple[str, object], ...]]],
+    assertion_ids_by_fact: Mapping[
+        tuple[str, tuple[tuple[str, object], ...]], tuple[str, ...]
+    ],
 ) -> int:
     """Check receipt-to-plan consistency without repeated relation scans.
 
@@ -605,26 +622,59 @@ def _validate_receipt_static_consistency(
     if selected_case >= len(branches):
         raise ProtocolShapeError("ProofReceipt selected branch is absent from the native plan")
     branch = branches[selected_case]
+    binding_keys = tuple(key for key, _value in receipt.binding_items)
+    if len(binding_keys) != len(set(binding_keys)):
+        raise ProtocolShapeError("ProofReceipt binding inventory contains duplicate keys")
     binding = binding_dict_from_items(receipt.binding_items)
-    expected_predicates: dict[str, tuple[str, tuple[Any, ...]]] = {}
-    expected_steps: dict[str, tuple[str, str]] = {}
+    expected_predicates: dict[str, tuple[str, tuple[tuple[str, object], ...]]] = {}
+    expected_steps: dict[str, tuple[str, str, tuple[tuple[str, Any], ...]]] = {}
     for condition_index, atom in enumerate(branch):
         kind = atom[0]
         if kind == "pred":
             if len(atom) != 3 or not isinstance(atom[1], str) or not isinstance(atom[2], list):
                 raise ProtocolShapeError("captured native predicate atom is malformed")
-            grounded = _ground_receipt_terms(atom[2], binding)
+            value_types = value_types_by_predicate.get(atom[1])
+            if value_types is None:
+                raise ProtocolShapeError("captured predicate is absent from the captured schema")
+            grounded = _ground_receipt_terms(atom[2], binding, value_types)
             key = f"c{selected_case}.c{condition_index}:{atom[1]}"
             expected_predicates[key] = (atom[1], grounded)
         else:
             key = f"c{selected_case}.c{condition_index}:{kind}"
-            expected_steps[key] = (str(kind), "no_match" if kind == "not" else "satisfied")
+            expected_steps[key] = (
+                str(kind),
+                "no_match" if kind == "not" else "satisfied",
+                normalize_detail_items(
+                    {
+                        "atom_repr": repr(atom),
+                        "binding": [
+                            [key, value]
+                            for key, value in normalize_binding_items(binding)
+                        ],
+                    }
+                ),
+            )
 
+    witness_keys = tuple(item.pred_condition_key for item in receipt.pred_witnesses)
+    if len(witness_keys) != len(set(witness_keys)):
+        raise ProtocolShapeError("ProofReceipt predicate condition keys are not unique")
     witnesses = {item.pred_condition_key: item for item in receipt.pred_witnesses}
     if set(witnesses) != set(expected_predicates):
         raise ProtocolShapeError("ProofReceipt predicate condition inventory does not match branch")
     for key, witness in witnesses.items():
         predicate_id, grounded = expected_predicates[key]
+        if not witness.asrt_ids:
+            raise ProtocolShapeError("ProofReceipt predicate witness has no captured assertion")
+        try:
+            expected_assertion_ids = assertion_ids_by_fact.get((predicate_id, grounded), ())
+        except TypeError as exc:
+            raise ProtocolShapeError(
+                "ProofReceipt predicate witness terms cannot be indexed"
+            ) from exc
+        if witness.asrt_ids != expected_assertion_ids:
+            raise ProtocolShapeError(
+                "ProofReceipt predicate witness inventory does not match captured branch relation"
+            )
         for assertion_id in witness.asrt_ids:
             actual = assertion_by_id.get(assertion_id)
             if actual != (predicate_id, grounded):
@@ -632,11 +682,19 @@ def _validate_receipt_static_consistency(
                     "ProofReceipt predicate witness does not match captured branch relation"
                 )
 
+    step_keys = tuple(item.step_key for item in receipt.non_fact_steps)
+    if len(step_keys) != len(set(step_keys)):
+        raise ProtocolShapeError("ProofReceipt non-fact condition keys are not unique")
     steps = {item.step_key: item for item in receipt.non_fact_steps}
     if set(steps) != set(expected_steps):
         raise ProtocolShapeError("ProofReceipt non-fact condition inventory does not match branch")
     for key, step in steps.items():
-        if (step.kind, step.status) != expected_steps[key]:
+        expected_kind, expected_status, expected_details = expected_steps[key]
+        if (
+            step.kind != expected_kind
+            or step.status != expected_status
+            or not _type_exact_equal(step.details, expected_details)
+        ):
             raise ProtocolShapeError("ProofReceipt non-fact step does not match captured branch")
     return selected_case
 
@@ -654,16 +712,53 @@ def _where_branches(where: list[Any]) -> tuple[list[tuple[Any, ...]], ...]:
     raise ProtocolShapeError("captured native plan branch shape is invalid")
 
 
-def _ground_receipt_terms(terms: list[Any], binding: Mapping[str, Any]) -> tuple[Any, ...]:
-    grounded: list[Any] = []
-    for term in terms:
+def _ground_receipt_terms(
+    terms: list[Any],
+    binding: Mapping[str, Any],
+    value_types: tuple[str, ...],
+) -> tuple[tuple[str, object], ...]:
+    if len(terms) != len(value_types):
+        raise ProtocolShapeError("captured predicate arity does not match captured schema")
+    grounded: list[tuple[str, object]] = []
+    for term, value_type in zip(terms, value_types, strict=True):
         if isinstance(term, str) and term.startswith("$"):
             if term not in binding:
                 raise ProtocolShapeError("ProofReceipt does not bind captured predicate term")
-            grounded.append(binding[term])
+            raw_value = binding[term]
         else:
-            grounded.append(term)
+            raw_value = term
+        try:
+            grounded.append((value_type, _canonical_storage_value(value_type, raw_value)))
+        except (TypeError, ValueError) as exc:
+            raise ProtocolShapeError(
+                "ProofReceipt predicate term is incompatible with captured schema"
+            ) from exc
     return tuple(grounded)
+
+
+def _type_exact_equal(left: object, right: object) -> bool:
+    """Compare receipt detail values without Python's bool/int coercion."""
+    if type(left) is not type(right):
+        return False
+    if isinstance(left, tuple):
+        return len(left) == len(right) and all(
+            _type_exact_equal(left_item, right_item)
+            for left_item, right_item in zip(left, right, strict=True)
+        )
+    if isinstance(left, list):
+        return len(left) == len(right) and all(
+            _type_exact_equal(left_item, right_item)
+            for left_item, right_item in zip(left, right, strict=True)
+        )
+    if isinstance(left, Mapping):
+        return (
+            len(left) == len(right)
+            and all(
+                key in right and _type_exact_equal(value, right[key])
+                for key, value in left.items()
+            )
+        )
+    return left == right
 
 
 def _validate_native_where_bytes(raw: bytes) -> list[Any]:

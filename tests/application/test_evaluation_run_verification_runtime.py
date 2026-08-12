@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import fields, replace
+from hashlib import sha256
 import json
 import unittest
 from unittest.mock import patch
@@ -200,30 +201,7 @@ def _with_self_sealed_inconsistent_row(bundle):
         row_capture_digest=_bundle_token("evaluation_run_projection_row_v0", row_payload),
     )
     rows = (changed_row, *bundle.rows[1:])
-    rows_capture_digest = _bundle_token(
-        "evaluation_run_rows_capture_v0", tuple(item.row_capture_digest for item in rows)
-    )
-    bundle_values = (
-        bundle.run_anchor.anchor_digest,
-        bundle.query_capture_digest,
-        bundle.native_plan.plan_digest,
-        bundle.schema_capture_digest,
-        bundle.relations_capture_digest,
-        rows_capture_digest,
-        bundle.execution_contract,
-        bundle.integrity,
-        bundle.authenticity,
-        bundle.privacy,
-        bundle.custody,
-        bundle.playback,
-        bundle.replay_availability,
-    )
-    return replace(
-        bundle,
-        rows=rows,
-        rows_capture_digest=rows_capture_digest,
-        bundle_digest=_bundle_token("evaluation_run_bundle_v0", bundle_values),
-    )
+    return _reseal_bundle(bundle, rows=rows)
 
 
 def _with_self_sealed_wrong_receipt_branch(bundle):
@@ -236,7 +214,7 @@ def _with_self_sealed_wrong_receipt_branch(bundle):
         step["step_key"] = step["step_key"].replace("c0.", "c999.")
     next_receipt = support_artifact_from_dict(receipt)
     receipt_bytes = support_artifact_bytes(next_receipt)
-    receipt_digest = "sha256:" + __import__("hashlib").sha256(receipt_bytes).hexdigest()
+    receipt_digest = "sha256:" + sha256(receipt_bytes).hexdigest()
     row_payload = (
         row.ordinal,
         row.row_id,
@@ -254,6 +232,85 @@ def _with_self_sealed_wrong_receipt_branch(bundle):
         row_capture_digest=_bundle_token("evaluation_run_projection_row_v0", row_payload),
     )
     rows = (changed_row, *bundle.rows[1:])
+    return _reseal_bundle(bundle, rows=rows)
+
+
+def _with_self_sealed_receipt_mutation(bundle, mutate):
+    """Apply a canonical receipt mutation and reseal the containing DTO graph."""
+    row = bundle.rows[0]
+    receipt = json.loads(row.proof_receipt_bytes.decode("utf-8"))
+    mutate(receipt)
+    receipt_bytes = support_artifact_bytes(support_artifact_from_dict(receipt))
+    receipt_digest = "sha256:" + sha256(receipt_bytes).hexdigest()
+    row_payload = (
+        row.ordinal,
+        row.row_id,
+        row.claim_digest,
+        row.head_scope_digest,
+        row.certainty,
+        row.certainty_digest,
+        row.values,
+        receipt_digest,
+    )
+    changed_row = replace(
+        row,
+        proof_receipt_bytes=receipt_bytes,
+        proof_receipt_digest=receipt_digest,
+        row_capture_digest=_bundle_token("evaluation_run_projection_row_v0", row_payload),
+    )
+    return _reseal_bundle(bundle, rows=(changed_row, *bundle.rows[1:]))
+
+
+def _with_self_sealed_duplicate_relation_fact(bundle):
+    """Add a matching assertion which a full receipt rebuild must include."""
+    relation = next(item for item in bundle.relations if item.facts)
+    first_assertion_id, first_values = relation.facts[0]
+    duplicate = (f"selfsealed-duplicate-{first_assertion_id}", first_values)
+    changed_relation = replace(relation, facts=(*relation.facts, duplicate))
+    relations = tuple(
+        changed_relation if item.predicate_id == relation.predicate_id else item
+        for item in bundle.relations
+    )
+    return _reseal_bundle(bundle, relations=relations)
+
+
+def _with_self_sealed_relation_value(bundle, *, assertion_id, value):
+    """Change one captured typed fact and reseal its container graph."""
+    relations = []
+    changed = False
+    for relation in bundle.relations:
+        facts = []
+        for current_id, values in relation.facts:
+            if current_id == assertion_id:
+                facts.append((current_id, (*values[:-1], replace(values[-1], value=value))))
+                changed = True
+            else:
+                facts.append((current_id, values))
+        relations.append(replace(relation, facts=tuple(facts)))
+    assert changed
+    return _reseal_bundle(bundle, relations=tuple(relations))
+
+
+def _replace_receipt_binding(receipt, name, value):
+    """Keep receipt binding/detail copies superficially self-consistent."""
+    for item in receipt["binding"]:
+        if item[0] == name:
+            item[1] = value
+    for step in receipt["non_fact_steps"]:
+        for detail in step["details"]:
+            if detail[0] == "binding":
+                for item in detail[1]:
+                    if item[0] == name:
+                        item[1] = value
+
+
+def _reseal_bundle(bundle, *, rows=None, relations=None):
+    rows = bundle.rows if rows is None else rows
+    relations = bundle.relations if relations is None else relations
+    relations_capture_digest = _bundle_token(
+        "evaluation_run_relations_capture_v0",
+        (bundle.relation_capture_scope, bundle.dependency_predicate_ids, relations),
+    )
     rows_capture_digest = _bundle_token(
         "evaluation_run_rows_capture_v0", tuple(item.row_capture_digest for item in rows)
     )
@@ -262,7 +319,7 @@ def _with_self_sealed_wrong_receipt_branch(bundle):
         bundle.query_capture_digest,
         bundle.native_plan.plan_digest,
         bundle.schema_capture_digest,
-        bundle.relations_capture_digest,
+        relations_capture_digest,
         rows_capture_digest,
         bundle.execution_contract,
         bundle.integrity,
@@ -274,6 +331,8 @@ def _with_self_sealed_wrong_receipt_branch(bundle):
     )
     return replace(
         bundle,
+        relations=relations,
+        relations_capture_digest=relations_capture_digest,
         rows=rows,
         rows_capture_digest=rows_capture_digest,
         bundle_digest=_bundle_token("evaluation_run_bundle_v0", bundle_values),
@@ -494,6 +553,104 @@ class EvaluationRunVerificationRuntimeTests(unittest.TestCase):
                     with self.assertRaisesRegex(ProtocolShapeError, "selected branch"):
                         verify_evaluation_run_bundle(forged)
                 evaluator.assert_not_called()
+
+    def test_receipt_inventory_tampering_cannot_be_masked_by_early_exit(self) -> None:
+        _graph, _rule, bundle = _capture(score=9)
+
+        def duplicate_predicate_witness(receipt):
+            receipt["pred_witnesses"].insert(1, dict(receipt["pred_witnesses"][1]))
+
+        def duplicate_binding(receipt):
+            receipt["binding"].insert(3, list(receipt["binding"][2]))
+
+        def duplicate_non_fact_step(receipt):
+            receipt["non_fact_steps"].insert(0, dict(receipt["non_fact_steps"][0]))
+
+        def alter_non_fact_details(receipt):
+            receipt["non_fact_steps"][0]["details"][0][1] = "forged"
+
+        def duplicate_non_fact_detail(receipt):
+            receipt["non_fact_steps"][0]["details"].insert(
+                0, list(receipt["non_fact_steps"][0]["details"][0])
+            )
+
+        def empty_predicate_witness(receipt):
+            receipt["pred_witnesses"][0]["asrt_ids"] = []
+
+        forged_cases = (
+            (_with_self_sealed_receipt_mutation(bundle, duplicate_predicate_witness), "keys"),
+            (_with_self_sealed_receipt_mutation(bundle, duplicate_binding), "duplicate keys"),
+            (_with_self_sealed_receipt_mutation(bundle, duplicate_non_fact_step), "keys"),
+            (_with_self_sealed_receipt_mutation(bundle, alter_non_fact_details), "does not match"),
+            (_with_self_sealed_receipt_mutation(bundle, duplicate_non_fact_detail), "does not match"),
+            (_with_self_sealed_receipt_mutation(bundle, empty_predicate_witness), "no captured"),
+            (_with_self_sealed_duplicate_relation_fact(bundle), "inventory"),
+        )
+        for forged, detail in forged_cases:
+            for patch_target, value in (
+                ("NATIVE_WHERE_SEMANTICS_VERSION", "native_where_future"),
+                ("_estimate_verification_work", MAX_EVALUATION_RUN_VERIFICATION_WORK + 1),
+            ):
+                with self.subTest(detail=detail, patch_target=patch_target):
+                    with (
+                        patch(
+                            "factgraph.application.evaluation_run_verification_runtime."
+                            + patch_target,
+                            value,
+                        ),
+                        patch(
+                            "factgraph.application.evaluation_run_verification_runtime."
+                            "evaluate_native_where"
+                        ) as evaluator,
+                    ):
+                        with self.assertRaisesRegex(ProtocolShapeError, detail):
+                            verify_evaluation_run_bundle(forged)
+                    evaluator.assert_not_called()
+
+    def test_typed_predicate_receipts_cannot_coerce_to_captured_ints_before_early_exit(self) -> None:
+        _graph, _rule, bundle = _capture()
+        score_witness = next(
+            item
+            for item in json.loads(bundle.rows[0].proof_receipt_bytes.decode("utf-8"))[
+                "pred_witnesses"
+            ]
+            if item["pred_condition_key"].endswith(":person:score")
+        )
+        changed_relation = _with_self_sealed_relation_value(
+            bundle,
+            assertion_id=score_witness["asrt_ids"][0],
+            value=1,
+        )
+        canonical = _with_self_sealed_receipt_mutation(
+            changed_relation,
+            lambda receipt: _replace_receipt_binding(receipt, "$person__score", 1),
+        )
+        self.assertEqual(verify_evaluation_run_bundle(canonical).verdict, "matched_declared_runtime")
+
+        for impostor in (True, 1.0):
+            forged = _with_self_sealed_receipt_mutation(
+                canonical,
+                lambda receipt: _replace_receipt_binding(receipt, "$person__score", impostor),
+            )
+            for patch_target, value in (
+                ("NATIVE_WHERE_SEMANTICS_VERSION", "native_where_future"),
+                ("_estimate_verification_work", MAX_EVALUATION_RUN_VERIFICATION_WORK + 1),
+            ):
+                with self.subTest(impostor=impostor, patch_target=patch_target):
+                    with (
+                        patch(
+                            "factgraph.application.evaluation_run_verification_runtime."
+                            + patch_target,
+                            value,
+                        ),
+                        patch(
+                            "factgraph.application.evaluation_run_verification_runtime."
+                            "evaluate_native_where"
+                        ) as evaluator,
+                    ):
+                        with self.assertRaisesRegex(ProtocolShapeError, "incompatible"):
+                            verify_evaluation_run_bundle(forged)
+                    evaluator.assert_not_called()
 
     def test_semantic_support_and_execution_failures_are_distinct(self) -> None:
         _graph, _rule, bundle = _capture()

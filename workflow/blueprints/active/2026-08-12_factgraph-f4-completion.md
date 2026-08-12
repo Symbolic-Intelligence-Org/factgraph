@@ -2,7 +2,7 @@
 
 - Status: implementing
 - Created: 2026-08-12
-- Last Updated: 2026-08-12
+- Last Updated: 2026-08-13
 - Branch: `codex/v0.3.0-f4-completion-2026-08-12`
 - Base: `c09ea303`
 - Related Modules:
@@ -139,8 +139,10 @@ policy_view = project_policy_explanation_v0(
 - F4C maps exact lineage coordinates; generated alias parsing and positional `zip`
   inference are forbidden.
 - Structural Policy nodes aggregate child state but do not duplicate descendant sources.
-- Production gross-addition stops: F4B2 `<=750` (amended on 2026-08-13 solely
-  for the independent resource-gate correction), F4B3 `<=650`, F4C `<=950`.
+- Production gross-addition stops: F4B2 `<=1,050` (amended on 2026-08-13 solely
+  for independently discovered resource-gate and typed, fail-closed
+  receipt-validation corrections), F4B3 `<=650`, F4C `<=980` (including its
+  public exports).
 
 ## 7. Acceptance
 
