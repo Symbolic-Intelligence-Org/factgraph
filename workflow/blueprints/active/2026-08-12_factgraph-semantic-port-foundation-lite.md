@@ -41,9 +41,12 @@ binding needed to test the next product layer.
 - Schema deep-copy/rebuild or raw Schema IR revalidation.
 - Recursive validation of unrelated Rule AST predicates.
 - Endpoint-local compatibility digests.
-- Persisted/untrusted contract verification, codec, registry, or service wire.
+- Persisted/untrusted contract verification, codec, registry, service wire,
+  replay, or schema-evolution compatibility.
 - SDK `endpoint=Person` sugar.
 - Policy, Query, Plan, Evaluate/Explain integration, Meander, or UI.
+- Relationship endpoints, entity-reference field targets, derived/intermediate
+  endpoints, automatic inference, and partial managed-port coverage.
 
 ## 4. Current Context
 
@@ -69,6 +72,16 @@ ResolvedRuleContract(rule digest + schema digest + frozen ports + one digest)
 `build_resolved_rule(...)` accepts the complete semantic map once and returns a
 bundle containing the unchanged application `Rule` and its resolved contract.
 
+The two endpoint DTOs are `EntityIdentityEndpoint(entity_type)` and
+`FieldEndpoint(FieldPath)`. Identity requires a top-level unary exists witness;
+scalar fields require a top-level binary field witness with the declared Var in
+value position. Predicate ids come from existing `SchemaIndex` lookups.
+
+The contract copies and freezes its port map. Its caller-inaccessible digest is
+computed from a typed versioned payload containing the exact Rule identity and
+content digest, cached schema digest, sorted logical names, complete Var
+name/origin, and typed endpoint kind/coordinates.
+
 ## 6. Boundaries And Invariants
 
 - Keys exactly equal `Rule.ports`; Vars equal the corresponding Rule Vars.
@@ -76,18 +89,27 @@ bundle containing the unchanged application `Rule` and its resolved contract.
 - Only a top-level positive exact-arity predicate can witness a binding.
 - Two distinct Vars targeting one endpoint stay distinct and do not auto-join.
 - Entity-reference fields and unknown endpoint types fail closed.
-- The contract is trusted in-process only; no provenance claim is made.
+- All managed ports must use a supported endpoint; unsupported intermediate or
+  computed public ports reject the complete contract rather than become partial.
+- The contract is trusted in-process only; the SchemaIndex digest is a cached
+  pin, not a snapshot or proof of revalidated mutable state.
 - New production implementation target: 350–420 lines; 450 is a hard review
-  boundary requiring an explicit decision amendment.
+  boundary requiring an explicit decision amendment. The denominator is added
+  lines relative to `ca962dba` under `src/factgraph/application/**/*.py`,
+  including exports; deletions do not offset additions and tests/docs do not count.
 
 ## 7. Acceptance
 
 - [ ] Happy path covers entity identity and scalar field bindings.
 - [ ] Coverage, Var, endpoint, type, and witness failures are tested.
 - [ ] Same-endpoint/different-Var behavior is tested.
+- [ ] Same-Var/conflicting-endpoint behavior is rejected using Var value equality.
 - [ ] Contract digest is order-stable and changes with Rule/schema/endpoint.
+- [ ] Contract copy/freeze survives mutation of the input mapping.
 - [ ] Lightweight Rule drift detection is tested.
-- [ ] Legacy Rule digest and focused RuleExpr/evaluate compatibility pass.
+- [ ] Same-endpoint resolution leaves Rule body/digest and both Vars unchanged.
+- [ ] Legacy Rule digest, focused RuleExpr/evaluate compatibility, and an
+      existing evaluate→row→`row.explain()` regression pass.
 - [ ] Production addition stays within the Q3A budget.
 - [ ] Application module docs state current behavior and deferred boundaries.
 
@@ -97,8 +119,9 @@ bundle containing the unchanged application `Rule` and its resolved contract.
 2. Add trusted in-process resolver, one-map builder, and Rule-staleness check.
 3. Add the minimum acceptance matrix and legacy compatibility regression.
 4. Update application Rule/module docs and exports.
-5. Run focused tests, Ruff, mypy, and the existing full suite; independently
-   review semantic correctness and line-budget compliance.
+5. Run focused tests, the existing RuleStructure evaluate/row/explain path,
+   Ruff, mypy, and the existing full suite; independently review semantic
+   correctness and line-budget compliance.
 
 ## 9. Docs To Update
 

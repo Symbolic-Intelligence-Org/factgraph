@@ -69,6 +69,16 @@ concrete scalar field. `Person.identity` and `Person.employee_id` remain
 different meanings. Two distinct Vars may target the same endpoint and remain
 distinct; no equality or join is inferred.
 
+The exact protocol values are:
+
+```text
+EntityIdentityEndpoint(entity_type: str)
+FieldEndpoint(path: FieldPath)
+```
+
+`FieldPath` is the existing application protocol coordinate. Future SDK
+classes and descriptors must lower to these values before entering this layer.
+
 ### 4.3 Resolve only what semantic binding needs
 
 The resolver trusts an in-process `SchemaIndex` constructed by
@@ -78,18 +88,29 @@ The resolver trusts an in-process `SchemaIndex` constructed by
 - each declared Var equals the corresponding Rule Var;
 - one Var does not claim conflicting endpoints;
 - an endpoint exists and agrees with the Rule port execution type;
-- the exact Var has a top-level positive predicate witness in the endpoint's
-  schema-defined position and arity;
+- entity identity is witnessed only by a top-level direct
+  `PredAtom(entity.exists_predicate_id, [var])`;
+- a scalar field is witnessed only by a top-level direct
+  `PredAtom(field.pred_id, [owner, var])`, with the port Var in value position;
 - entity-reference fields and unknown endpoint kinds fail explicitly.
 
 Negative subtrees and aggregate filters cannot act as a positive witness. The
-resolver does not audit unrelated predicates or reconstruct Schema IR.
+predicate ids come from `SchemaIndex`; the resolver does not audit unrelated
+predicates, inspect raw Schema IR, or reconstruct the index. Var matching uses
+the shipped `Var` value semantics, not Python object identity.
 
 ### 4.4 Keep one conservative contract identity
 
 Resolution returns an immutable contract containing exact Rule id/version and
-content digest, the whole schema digest, and frozen authored ports using the
-Rule-owned Vars. One derived digest covers that complete payload.
+content digest, the trusted `SchemaIndex` cached schema digest, and copied-then-
+frozen authored ports using the Rule-owned Vars. The caller cannot supply the
+derived digest.
+
+One typed canonical digest payload contains a format/version tag, Rule
+id/version/content digest, schema digest, and ports sorted by logical name. Each
+port contributes the complete Var name/origin plus an endpoint `kind` and its
+typed entity/field coordinates. The digest never hashes `repr` or an ambiguous
+display path as the endpoint identity.
 
 Any schema digest change invalidates the contract, including unrelated additive
 changes. This conservative false invalidation is accepted until a real registry
@@ -101,6 +122,13 @@ The contract is an in-process resolved value, not an authorization credential.
 A lightweight check detects subsequent Rule id/version/content/port drift.
 Persisted, decoded, or external contracts are unsupported until a later
 persistence boundary defines provenance and canonical re-verification.
+
+### 4.6 Managed Rules are a closed subset
+
+Every port of a managed Rule must resolve to an entity identity or supported
+scalar field. A legacy Rule with an aggregate, computed, or intermediate public
+port remains executable but cannot receive this managed contract. F1-lite does
+not add `DerivedEndpoint`, partial coverage, or automatic endpoint inference.
 
 ## 5. Rejected Alternatives
 
@@ -142,9 +170,14 @@ persistence boundary defines provenance and canonical re-verification.
 - [ ] Endpoint/type/positive-position mismatches fail with typed errors.
 - [ ] Same endpoint does not merge Vars or create joins.
 - [ ] One stable whole-contract digest binds Rule, schema, and endpoints.
+- [ ] Contract ports are copied then frozen and input-map mutation cannot alter
+      the contract or derived digest.
 - [ ] Shipped Rule behavior and digest bytes remain unchanged.
-- [ ] Production implementation remains within 450 new lines unless this
-      decision is explicitly amended.
+- [ ] A focused existing evaluate-to-row-to-Explain path remains green.
+- [ ] Relative to `ca962dba`, added lines under
+      `src/factgraph/application/**/*.py` (including export edits, excluding
+      tests/docs, with deletions not offsetting additions) remain at or below
+      450 unless this decision is explicitly amended.
 
 ## 9. Decision Record
 
@@ -152,3 +185,4 @@ persistence boundary defines provenance and canonical re-verification.
 |---|---|---|---|
 | 2026-08-12 | proposed | Minimum contract extracted | Full candidate retained as a defensive reference. |
 | 2026-08-12 | adopted | User approved F1-lite | Authorized an isolated subtractive implementation before Policy work. |
+| 2026-08-12 | adopted | Preflight amendments applied | PF-R1..R5 and PF-Rec1..Rec3 from independent preflight `1e6e16e7` narrowed executable semantics and the size denominator. |
