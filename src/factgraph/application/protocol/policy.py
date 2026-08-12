@@ -151,8 +151,9 @@ class PolicyLineage:
             if ref in reverse or not valid_origins or len(set(origins)) != len(origins) or set(origins) - node_ids:
                 raise _shape("lowered origins must be unique and reference authored nodes", "INVALID_POLICY_LINEAGE")
             reverse.add(ref)
-        forward = {ref for node in self.authored_nodes for ref in node.lowered_refs}
-        if forward != reverse:
+        forward = {(ref, node.node_id) for node in self.authored_nodes for ref in node.lowered_refs}
+        backward = {(ref, origin) for ref, origins in self.lowered_origins for origin in origins}
+        if forward != backward:
             raise _shape("Policy lineage must be total in both directions", "INVALID_POLICY_LINEAGE")
 def _children(value: object, kind: str) -> tuple[PolicyNode, ...]:
     allowed = (PolicyOccurrence, PolicyAll, PolicyAny, PolicyUnify)

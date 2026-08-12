@@ -319,6 +319,13 @@ class PolicyLineageTests(unittest.TestCase):
             PolicyLineage((), ())
         with self.assertRaises(PolicyError):
             PolicyLineage((node,), ((PolicyLoweredRef("branch", "c1"), ("pn:x",)),))
+        other_ref = PolicyLoweredRef("branch", "c1")
+        other_node = PolicyNodeLineage("pn:y", "occurrence", (other_ref,))
+        with self.assertRaises(PolicyError):
+            PolicyLineage(
+                (node, other_node),
+                ((branch, ("pn:y",)), (other_ref, ("pn:x",))),
+            )
 
     def test_runtime_artifact_dtos_reject_empty_inventory(self) -> None:
         with self.assertRaises(ValueError):
