@@ -1,6 +1,6 @@
 # Task Blueprint: FactGraph derivation-output/materialization cleanup
 
-- Status: implementing
+- Status: archived
 - Created: 2026-08-12
 - Last Updated: 2026-08-12
 - Authority: task-scoped implementation contract for F3C only.
@@ -162,5 +162,9 @@ shipped Meander and therefore cannot be deleted safely in this local slice.
   non-blocking pickle boundary: old `CandidateSet` pickles remain readable by
   F3C, while newly emitted `DerivationOutput` pickles are not promised readable
   by pre-F3C runtimes. Durable v2 payload/wire/ledger compatibility is unchanged.
-- Status remains `implementing` until the user-side read-only review is returned;
-  this pair is not archived and no Meander migration starts automatically.
+- The user-side independent review read the full slice, ran the complete suite
+  (**2,968 passed / 1 failed / 32 skipped**) and added 30 passing adversarial
+  probes. It returned CLEAR with P0/P1=0. The sole P2 is a pre-existing service
+  import failure also reproduced at base `4024526c`; F3C does not repair it.
+- This blueprint and its paired audit are archived together. The later Meander
+  materialization migration remains a separate proposal and was not started.

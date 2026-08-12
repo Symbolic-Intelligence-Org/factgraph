@@ -11,7 +11,7 @@
   - Meander `main@4ddb8e36` cross-repository consumer inventory
   - 2026-08-12 user instruction: “同意，可以继续下一步”
 - Outputs / Downstream:
-  - [`2026-08-12_factgraph-derivation-output-materialization-cleanup.md`](../../../blueprints/active/2026-08-12_factgraph-derivation-output-materialization-cleanup.md)
+  - [`2026-08-12_factgraph-derivation-output-materialization-cleanup.md`](../../../blueprints/archive/2026-08-12_factgraph-derivation-output-materialization-cleanup.md)
   - A later Meander materialization migration and FactGraph public hard-cut
 - Related:
   - [`2026-08-12_q5b-evaluation-query-native-execution-decision.md`](./2026-08-12_q5b-evaluation-query-native-execution-decision.md)
@@ -140,3 +140,4 @@ cross-repository slice owns any `Materialization*` public vocabulary or API.
 | 2026-08-12 | adopted | User authorized the next isolated step | Two batches are scoped; no push, merge, Meander edit or materialization redesign is authorized. |
 | 2026-08-12 | narrowed | Cross-repository grep found live Meander consumers | Public seam deletion was removed from F3C and made conditional on a later Meander migration. |
 | 2026-08-12 | corrected | Cross-repository regression exposed two legitimate rule identities | Meander fixtures proved that RuleExpr outputs use compiler-generated derivation IDs while persisted provenance uses resolver-authorized business rule IDs. The single wrapper now uses a private enriched attribution seam; `Store.accept` remains strict. |
+| 2026-08-12 | verified | User-side independent review returned CLEAR | Full suite and 30 adversarial probes confirmed the two-batch decision; the only P2 is a reproduced pre-existing service import defect outside this slice. The implementation blueprint pair is archived. |

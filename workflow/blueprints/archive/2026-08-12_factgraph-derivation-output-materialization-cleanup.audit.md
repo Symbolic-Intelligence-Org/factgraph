@@ -1,6 +1,6 @@
 # Task Blueprint Audit: FactGraph derivation-output/materialization cleanup
 
-- Status: implementing
+- Status: archived
 - Created: 2026-08-12
 - Last Updated: 2026-08-12
 - Authority: paired blueprint audit log
@@ -25,6 +25,9 @@
 | 2026-08-12 | corrected | Meander regression refined the single-item write seam | Cross-repository tests proved compiler derivation identity and authored/business attribution are legitimately distinct. A private Store-owned accept-time enrichment helper preserves both; direct `Store.accept` remains strict. |
 | 2026-08-12 | verified | Cumulative local and cross-repository cohorts passed | FactGraph: 645 tests + 96 subtests; Meander: 27 focused compatibility tests; Ruff and diff checks clear. Mypy reports the same 107 pre-existing errors as the F3B base comparison. |
 | 2026-08-12 | review | Bounded independent review returned CLEAR | Review repeated 153 tests + 7 subtests, six Meander surface tests, Ruff and diff checks; P0/P1=0. One non-blocking note narrowed serialization claims to durable v2 wire/ledger compatibility and one-way old-pickle readability. User-side review remains pending. |
+| 2026-08-12 | review | User-side independent review returned CLEAR | Full suite: 2,968 passed / 1 failed / 32 skipped; 30/30 valid adversarial probes; Ruff and diff checks clear; P0/P1=0. The sole P2 is the pre-existing `render_evidence_graph_html` service import failure, reproduced at base `4024526c` and outside F3C. |
+| 2026-08-12 | implemented | F3C acceptance criteria closed | Canonical output terminology, byte-stable v2 compatibility, Meander seam, dual-identity attribution, batch guards and F4 boundary all passed independent review. |
+| 2026-08-12 | archived | Blueprint pair archived | Current implementation truth remains in the updated core/application/adapter/SDK docs; no Meander migration or unrelated base fix was started. |
 
 ## Decision Notes
 
