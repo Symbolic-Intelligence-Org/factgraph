@@ -9,7 +9,7 @@
   - Full defensive candidate `codex/v0.3.0-f1-semantic-ports-2026-08-12@9487b930`
   - [`2026-08-11_meander-factgraph-post-probe-session.md`](../../../memory/session_handoffs/2026-08-11_meander-factgraph-post-probe-session.md)
 - Outputs / Downstream:
-  - [`2026-08-12_factgraph-semantic-port-foundation-lite.md`](../../../blueprints/active/2026-08-12_factgraph-semantic-port-foundation-lite.md)
+  - [`2026-08-12_factgraph-semantic-port-foundation-lite.md`](../../../blueprints/archive/2026-08-12_factgraph-semantic-port-foundation-lite.md)
 - Related:
   - Branch-local full-candidate decision `8a72f235:workflow/design/decisions/active/2026-08-12_q3-semantic-port-contract-storage-decision.md`
 - Branch: `codex/v0.3.0-f1-lite-semantic-ports-2026-08-12`
