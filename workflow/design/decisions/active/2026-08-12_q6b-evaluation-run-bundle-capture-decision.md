@@ -69,15 +69,18 @@ the whole result and bundle.
 ### 2.3 F4B1 captures evaluator input, not a general historical database
 
 The bundle captures the complete relation for every predicate in the exact
-materialized plan dependency set, including explicit empty relations. Each row
-retains its assertion witness and canonical typed tuple. It also captures:
+materialized plan dependency set, including explicit empty relations. The
+evaluator itself consumes that same reduced relation; capture must never filter
+an already-different evaluator input. Each row retains its assertion witness,
+canonical typed tuple and observed relation order. It also captures:
 
 - full canonical schema IR bytes and schema identity digest;
 - actual normalized Query binding values, selections and projection head;
 - a strict DTO/codec representation of the exact materialized native plan;
 - F4A target, PolicyStructure, lineage and occurrence-qualified Rule pins;
 - typed result rows, semantic-row multiset and zero-row summary;
-- per-row native `ProofReceipt`, or an explicit unavailable/degraded state;
+- exactly one valid native `ProofReceipt` per positive row; every receipt
+  witness resolves uniquely inside the captured relation;
 - native/config-none/premise-empty and runtime/codec/order pins.
 
 The effective relation is post-active/revocation/chosen/premise projection. It
@@ -91,6 +94,8 @@ that scenario.
 - The codec is versioned, canonical, bounded and fail-closed on unknown or
   missing fields, duplicate JSON keys, unsupported tagged values, digest
   mismatch or cross-bundle splice.
+- V0 ceilings are 1 MiB encoded input, 128 predicates, 20,000 projected facts,
+  1,000 result rows, 64 values per fact/row and 64 nested JSON levels.
 - Pickle, `repr`, importable Python object identity, callbacks, Store/DB paths,
   registry lookup and `latest` are forbidden.
 - SHA-256 establishes content integrity only. The bundle explicitly reports
@@ -146,4 +151,3 @@ to infer one from live SDK behavior.
 |---|---|---|---|
 | 2026-08-12 | proposed | F4B entry audit completed | Snapshot, Explain and red-team audits independently rejected digest-only pseudo replay. |
 | 2026-08-12 | adopted | User authorized continuation after F4A CLEAR | F4B is split into capture/codec, isolated verification and detached Explain; this decision authorizes F4B1 only. |
-

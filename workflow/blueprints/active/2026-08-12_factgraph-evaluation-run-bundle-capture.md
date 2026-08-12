@@ -36,9 +36,10 @@ inspectable without the originating Store. Do not execute replay yet.
 - Captured evaluation and bundle use the same single projected relation; no
   post-hoc Store read may fill missing material.
 - Predicate coverage is complete for the exact materialized plan and records
-  empty relations explicitly.
+  empty relations explicitly; evaluator and capture consume the same reduced
+  relation rather than independently filtering/projecting it.
 - Bundle values preserve canonical types, duplicate semantic rows and support
-  occurrence multiplicity.
+  occurrence multiplicity. Relation rows preserve observed evaluator order.
 - Bundle decode touches no Store, DB, registry, filesystem path, network or
   import-by-name object.
 - Integrity is not authentication. Sensitive cleartext and caller-managed
@@ -72,6 +73,9 @@ inspectable without the originating Store. Do not execute replay yet.
 - [ ] Plan dependency inventory is complete; empty and missing differ.
 - [ ] Schema, actual Query values, exact native plan, effective facts, rows,
       F4A anchor and support inventory round-trip through a strict codec.
+- [ ] Actual row values/certainty recompute and match claim, binding and
+      certainty digests; every positive row has exactly one valid ProofReceipt
+      whose witnesses resolve uniquely in captured facts.
 - [ ] Unknown/missing fields, duplicate keys, unsupported types, corruption and
       cross-bundle splice fail closed before producing a partial bundle.
 - [ ] Decoded rows/support remain inspectable after the source Store changes or
@@ -79,6 +83,8 @@ inspectable without the originating Store. Do not execute replay yet.
 - [ ] Duplicate semantic rows and zero-row summaries retain F4A semantics.
 - [ ] Bundle reports `authenticity=unverified`, sensitive cleartext custody and
       `replay_availability=not_implemented`.
+- [ ] Codec enforces the adopted 1 MiB / 128 predicates / 20,000 facts / 1,000
+      result rows / 64 values / depth 64 ceilings, and object repr is redacted.
 - [ ] Unsupported engines/config/premise/registry/Operator/Scenario inputs are rejected.
 - [ ] Existing Query/Policy/evaluate/Explain behavior remains green within cap.
 
@@ -93,4 +99,3 @@ implementation tests or final independent review.
 ## 6. Outcome / Deviations
 
 Pending implementation.
-
