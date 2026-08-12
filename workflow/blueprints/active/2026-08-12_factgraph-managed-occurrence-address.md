@@ -59,7 +59,7 @@ stable direct-port addresses without treating lowered aliases or raw
 ResolvedRuleBundle
   -> managed occurrence(alias)
   -> canonical SemanticPortAddress(alias, port)
-  -> resolved semantic ref(address + RulePortRef + endpoint + contract digest)
+  -> runtime-private resolved ref(address + RulePortRef + endpoint + contract digest)
 
 managed occurrences
   -> immutable SemanticAddressSpace

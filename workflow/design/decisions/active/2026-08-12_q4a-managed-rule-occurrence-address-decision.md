@@ -101,6 +101,11 @@ Resolution returns a value containing:
 - the F1-lite Ontology endpoint;
 - the exact `semantic_contract_digest`.
 
+That resolved value is a runtime-private carrier rather than a publicly
+constructible protocol DTO. Only the canonical address is public input to the
+resolver; this avoids presenting shape validation as proof that a caller-built
+endpoint/digest pairing is authentic.
+
 Resolution does not navigate fields, materialize predicates, compare values or
 modify the Rule. Unknown aliases and unknown ports fail with distinct typed
 errors. A legacy Rule without a resolved semantic contract cannot enter this
@@ -203,3 +208,4 @@ Before F2B implements `Policy/All/Any/Unify/Compare`, a separate decision must:
 | 2026-08-12 | proposed | F2 source review completed | Three independent reviews found that shipped occurrence mechanics should be reused and full Policy compilation is premature. |
 | 2026-08-12 | adopted | User authorized the next bounded implementation | Scope narrowed to F2A occurrence/address substrate; F2B remains separately gated. |
 | 2026-08-12 | adopted | Independent contract amendments incorporated | Exact occurrence/contract consistency, internally derived refs, copy/freeze identity and unique typed resolution were added before scoping. |
+| 2026-08-12 | adopted | Implementation trust boundary clarified | Independent review found a public resolved DTO could be forged structurally; the verified carrier was made runtime-private rather than adding a heavier construction-token mechanism. |
