@@ -243,11 +243,17 @@ def _validate_inputs(
             "SEMANTIC_ROW_ANCHOR_NOT_FOUND",
             "semantic_row_anchor_digest does not belong to the EvaluationRun",
         )
-    selected_row = matches[0]
     if not isinstance(evidence, EvidenceGraph):
         raise _projection_error("INVALID_EVIDENCE_GRAPH", "evidence must be EvidenceGraph")
     if not isinstance(evidence.graph_id, str) or not evidence.graph_id:
         raise _projection_error("INVALID_EVIDENCE_GRAPH", "EvidenceGraph.graph_id is invalid")
+    selected = tuple(row for row in matches if row.row_id == evidence.metadata.get("row_id"))
+    if len(selected) != 1:
+        raise _projection_error(
+            "EVIDENCE_ROW_ANCHOR_MISMATCH",
+            "EvidenceGraph row_id does not uniquely select the semantic Run row",
+        )
+    selected_row = selected[0]
     if evidence.engine != run_anchor.execution_profile.engine:
         raise _projection_error(
             "EVIDENCE_ENGINE_MISMATCH",

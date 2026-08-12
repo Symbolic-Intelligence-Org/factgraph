@@ -404,6 +404,37 @@ def _view(anchor: EvaluationRunAnchorV0, graph: EvidenceGraph):
     )
 
 
+def _duplicate_semantic_row(anchor: EvaluationRunAnchorV0) -> EvaluationRunAnchorV0:
+    first = anchor.row_anchors[0]
+    second = replace(first, ordinal=1, row_id="row-1")
+    rows = (first, second)
+    summary_values = (
+        anchor.query_digest,
+        2,
+        tuple(sorted(item.semantic_anchor_digest for item in rows)),
+        "not_asserted",
+        "unknown",
+        "unspecified",
+    )
+    summary = replace(
+        anchor.summary,
+        row_count=2,
+        row_anchor_digests=summary_values[2],
+        summary_anchor_digest=_token("evaluation_run_summary_anchor_v0", summary_values),
+    )
+    values = tuple(
+        rows if name == "row_anchors" else summary if name == "summary" else getattr(anchor, name)
+        for name in anchor.__dataclass_fields__
+        if name != "anchor_digest"
+    )
+    return replace(
+        anchor,
+        row_anchors=rows,
+        summary=summary,
+        anchor_digest=_token("evaluation_run_anchor_v0", _plain(values)),
+    )
+
+
 class PolicyExplanationProjectionTests(unittest.TestCase):
     def test_single_occurrence_maps_exact_atoms_and_sources(self) -> None:
         anchor = _anchor(_compiled(_occ("person"), ("person",)))
@@ -553,6 +584,21 @@ class PolicyExplanationProjectionTests(unittest.TestCase):
                 with self.assertRaises(PolicyExplanationProjectionError) as ctx:
                     _view(anchor, forged)
                 self.assertEqual(ctx.exception.code, "EVIDENCE_ROW_ANCHOR_MISMATCH")
+
+    def test_duplicate_semantic_rows_are_disambiguated_by_row_id(self) -> None:
+        anchor = _duplicate_semantic_row(_anchor(_compiled(_occ("person"), ("person",))))
+        graph = replace(_evidence(anchor), metadata={
+            **_evidence(anchor).metadata,
+            "row_id": anchor.row_anchors[1].row_id,
+        })
+
+        view = project_policy_explanation_v0(
+            anchor,
+            graph,
+            semantic_row_anchor_digest=anchor.row_anchors[1].semantic_anchor_digest,
+        )
+
+        self.assertEqual(view.evaluation.root_state, "holds")
 
     def test_unknown_duplicate_and_timeline_paths_reject(self) -> None:
         anchor = _anchor(_compiled(_occ("person"), ("person",)))
