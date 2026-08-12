@@ -9,7 +9,7 @@
   - [`2026-08-12_q4b-managed-policy-v0-decision.md`](./2026-08-12_q4b-managed-policy-v0-decision.md)
   - [`2026-08-11_meander-factgraph-post-probe-session.md`](../../../memory/session_handoffs/2026-08-11_meander-factgraph-post-probe-session.md) §§3.2–3.3, 6.4, 8.2
 - Outputs / Downstream:
-  - [`2026-08-12_factgraph-evaluation-query-projection.md`](../../../blueprints/active/2026-08-12_factgraph-evaluation-query-projection.md)
+  - [`2026-08-12_factgraph-evaluation-query-projection.md`](../../../blueprints/archive/2026-08-12_factgraph-evaluation-query-projection.md)
 - Branch: `codex/v0.3.0-f3-policy-query-projection-2026-08-12`
 - Base: `afdd9e7e`
 - Depends on: Q4B / F2B
