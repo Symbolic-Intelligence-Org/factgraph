@@ -1,6 +1,6 @@
 # Task Blueprint: FactGraph derivation-output/materialization cleanup
 
-- Status: scoped
+- Status: implementing
 - Created: 2026-08-12
 - Last Updated: 2026-08-12
 - Authority: task-scoped implementation contract for F3C only.

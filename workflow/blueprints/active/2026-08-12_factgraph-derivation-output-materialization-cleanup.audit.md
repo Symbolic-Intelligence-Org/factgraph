@@ -1,6 +1,6 @@
 # Task Blueprint Audit: FactGraph derivation-output/materialization cleanup
 
-- Status: scoped
+- Status: implementing
 - Created: 2026-08-12
 - Last Updated: 2026-08-12
 - Authority: paired blueprint audit log
@@ -19,6 +19,7 @@
 | 2026-08-12 | draft | Three bounded read-only audits completed | Candidate inventory, public/accept surface and minimal migration design converged. |
 | 2026-08-12 | scoped | User authorized the next isolated step | Lightweight path skips a separate preflight because three independent audits already cover the deletion, type migration and cross-layer risks. |
 | 2026-08-12 | scoped | Cross-repository dependency narrowed Batch A | Meander `main@4ddb8e36` has four live `evaluate_candidates` consumers; deletion is deferred to a cross-repository migration. |
+| 2026-08-12 | implementing | Scoped contract entered implementation | User's instruction to continue covers the two bounded batches; no additional product surface is authorized. |
 
 ## Decision Notes
 
