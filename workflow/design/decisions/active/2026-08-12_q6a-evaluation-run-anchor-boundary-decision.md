@@ -111,8 +111,10 @@ by F4A.
 ### 4.3 Stable row and zero-row anchors are separate from run IDs
 
 Existing `run_id`, `result_id` and `row_id` remain run-local. A semantic row
-anchor commits Query identity, claim/binding content, closed-head identity and
-certainty without the random run ID. Identical duplicate rows may intentionally
+anchor commits Query identity, claim/binding content, projection-head scope and
+certainty without the random run ID. The existing row `closed_head_digest` is
+consumed only as this scope pin; it is not represented as the digest of the
+run-local Rule later returned by `row.close()`. Identical duplicate rows may intentionally
 share that semantic anchor; ordinal remains a run-local observation, not a
 semantic identity.
 
@@ -168,7 +170,7 @@ Stop and split if implementation requires:
 - reconstructing Policy topology from RuleExpr, names, `repr` or evidence;
 - changing EvidenceGraph/EvidenceTree semantics or legacy evaluate/Explain;
 - adding a registry, repository, Scenario or non-native engine;
-- more than 500 gross added production Python lines relative to `ca12b208`.
+- more than 720 gross added production Python lines relative to `ca12b208`.
 
 ## 7. Acceptance Criteria
 
@@ -189,4 +191,4 @@ Stop and split if implementation requires:
 | 2026-08-12 | proposed | Three read-only F4 audits converged | Identity, snapshot/replay and scope were audited independently. |
 | 2026-08-12 | adopted | User authorized direct execution on a new branch | F4A is limited to in-process immutable anchors; no push or merge is authorized. |
 | 2026-08-12 | narrowed | Red team separated anchors, replay and Policy overlay | Authored Policy topology became a load-bearing F4A capture; detached replay remains F4B and Policy-aware Explain remains F4C. |
-
+| 2026-08-12 | amended | Pre-implementation estimate was replaced by the validated DTO inventory | The 500-line estimate omitted strict target/row/summary seals and Policy topology validation. Red-team testing then proved cross-object matching, non-resealable digest fields, strict protocol shapes and honest head-scope naming required the final 720-line cap. Scope and non-goals are unchanged; unused margin is not authority. |

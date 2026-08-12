@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import unittest
-from dataclasses import replace
+from dataclasses import asdict, replace
 from datetime import datetime
+import json
 from unittest.mock import patch
 from uuid import UUID
 
@@ -26,12 +27,14 @@ from factgraph.application.protocol import (
     EvaluationQuerySelection,
     Policy,
     PolicyOccurrence,
+    ProtocolShapeError,
     Rule,
     SemanticPortAddress,
     SemanticRulePort,
     entity_identity,
     field_endpoint,
 )
+from factgraph.application.protocol.evaluation_run import _plain, _token
 from factgraph.core.evidence.write_protocol import set_field
 from factgraph.core.rules.where_ast import PredAtom, Var
 from factgraph.core.semantics import SemanticsProfile
@@ -211,7 +214,17 @@ class EvaluationQueryNativeEvaluateTests(unittest.TestCase):
             },
         )
         self.assertEqual(result.head, compiled.projection_head)
-        self.assertEqual(row.explain().status, "passed")
+        anchor = result.run_anchor
+        self.assertIsNotNone(anchor)
+        assert anchor is not None
+        self.assertEqual(anchor.target.policy_structure, compiled.compiled_policy.policy_structure)
+        self.assertEqual(anchor.query_digest, compiled.query_digest)
+        self.assertEqual(anchor.capture_level, "identity_only")
+        self.assertEqual(anchor.replay_availability, "not_available")
+        json.dumps(asdict(anchor), sort_keys=True)
+        explanation = row.explain()
+        self.assertEqual(explanation.status, "passed")
+        self.assertEqual(explanation.checked_scope["evaluation_run_anchor_digest"], anchor.anchor_digest)
         self.assertIsInstance(row.close(), Rule)
         with self.assertRaises(TypeError):
             row.bindings["selected_age"]["value"] = 99
@@ -228,6 +241,11 @@ class EvaluationQueryNativeEvaluateTests(unittest.TestCase):
         self.assertFalse(result.exists())
         self.assertIsNone(result.first())
         self.assertTrue(result.fingerprint.expr_digest.startswith("sha256:"))
+        self.assertIsNotNone(result.run_anchor)
+        assert result.run_anchor is not None
+        self.assertEqual(result.run_anchor.row_anchors, ())
+        self.assertEqual(result.run_anchor.summary.row_count, 0)
+        self.assertEqual(result.run_anchor.summary.truth_interpretation, "not_asserted")
 
     def test_query_candidate_arity_mismatch_fails_closed(self) -> None:
         graph = SDKStore([Person])
@@ -342,6 +360,117 @@ class EvaluationQueryNativeEvaluateTests(unittest.TestCase):
             first_result.fingerprint.rule_set_digest,
             second_result.fingerprint.rule_set_digest,
         )
+        assert first_result.run_anchor is not None
+        assert repeated_result.run_anchor is not None
+        self.assertNotEqual(first_result.run_anchor.run_id, repeated_result.run_anchor.run_id)
+        self.assertEqual(
+            first_result.run_anchor.summary.summary_anchor_digest,
+            repeated_result.run_anchor.summary.summary_anchor_digest,
+        )
+        self.assertEqual(
+            tuple(item.semantic_anchor_digest for item in first_result.run_anchor.row_anchors),
+            tuple(item.semantic_anchor_digest for item in repeated_result.run_anchor.row_anchors),
+        )
+
+    def test_run_anchor_splicing_fails_closed(self) -> None:
+        graph = SDKStore([Person])
+        _seed_person(graph, "alice", age=22, score=9)
+        compiled, _bundle = _compiled_person_query(graph)
+        result = graph.eval.evaluate(compiled)
+        anchor = result.run_anchor
+        assert anchor is not None
+
+        with self.assertRaises(ProtocolShapeError):
+            replace(anchor, result_id="evalr_v1:" + "0" * 64)
+        with self.assertRaises(ProtocolShapeError):
+            replace(anchor, result_id="evalr_v1:not-a-digest")
+        with self.assertRaises(ProtocolShapeError):
+            replace(anchor, run_id="run_v1:" + "A" * 64)
+        with self.assertRaises(ProtocolShapeError):
+            replace(anchor.target, target_id="forged")
+        with self.assertRaises(ProtocolShapeError):
+            replace(anchor.row_anchors[0], claim_digest="sha256:" + "0" * 64)
+        with self.assertRaises(ProtocolShapeError):
+            replace(anchor, anchor_digest="")
+        with self.assertRaises(ProtocolShapeError):
+            replace(
+                anchor.row_anchors[0],
+                bindings_digest="sha256:" + "0" * 64,
+                semantic_anchor_digest="sha256:" + "0" * 64,
+            )
+
+        other, _bundle = _compiled_person_query(graph, alias="other")
+        other_result = graph.eval.evaluate(other)
+        with self.assertRaises(ProtocolShapeError):
+            replace(result, run_anchor=other_result.run_anchor)
+
+    def test_self_consistent_run_anchor_splices_still_must_match_result(self) -> None:
+        graph = SDKStore([Person])
+        _seed_person(graph, "alice", age=22, score=9)
+        compiled, _bundle = _compiled_person_query(graph)
+        result = graph.eval.evaluate(compiled)
+        anchor = result.run_anchor
+        assert anchor is not None
+
+        def reseal_anchor(**changes):
+            values = tuple(
+                changes.get(name, getattr(anchor, name))
+                for name in anchor.__dataclass_fields__
+                if name != "anchor_digest"
+            )
+            return replace(
+                anchor,
+                **changes,
+                anchor_digest=_token("evaluation_run_anchor_v0", _plain(values)),
+            )
+
+        profile_changes = (
+            {"engine": "forged"},
+            {"engine_version": "forged"},
+            {"adapter_version": "forged"},
+            {"config_digest": "sha256:" + "0" * 64},
+        )
+        forged_anchors = [
+            reseal_anchor(evaluated_at="2099-01-01T00:00:00+00:00"),
+            *(
+                reseal_anchor(execution_profile=replace(anchor.execution_profile, **change))
+                for change in profile_changes
+            ),
+        ]
+
+        original_row = anchor.row_anchors[0]
+        for change in (
+            {"claim_kind": "fact_triple"},
+            {"bindings_digest": "sha256:" + "0" * 64},
+            {"certainty_digest": "sha256:" + "0" * 64},
+        ):
+            row_values = tuple(
+                change.get(name, getattr(original_row, name))
+                for name in original_row.__dataclass_fields__
+                if name != "semantic_anchor_digest"
+            )
+            forged_row = replace(
+                original_row,
+                **change,
+                semantic_anchor_digest=_token("evaluation_run_row_anchor_v0", row_values[2:]),
+            )
+            summary_values = (
+                anchor.query_digest, 1, (forged_row.semantic_anchor_digest,),
+                "not_asserted", "unknown", "unspecified",
+            )
+            forged_summary = replace(
+                anchor.summary,
+                row_anchor_digests=summary_values[2],
+                summary_anchor_digest=_token("evaluation_run_summary_anchor_v0", summary_values),
+            )
+            forged_anchors.append(
+                reseal_anchor(row_anchors=(forged_row,), summary=forged_summary)
+            )
+
+        for forged in forged_anchors:
+            with self.subTest(forged=forged):
+                with self.assertRaises(ProtocolShapeError):
+                    replace(result, run_anchor=forged)
 
     def test_execution_revalidates_artifact_and_store_schema_before_engine(self) -> None:
         graph = SDKStore([Person])

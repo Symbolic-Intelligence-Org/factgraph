@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 import os
 from pathlib import Path
@@ -21,6 +21,7 @@ from factgraph.application.evaluation_query_runtime import (
     CompiledEvaluationQueryV0,
     _assert_compiled_evaluation_query_current,
 )
+from factgraph.application.evaluation_run_runtime import build_evaluation_run_anchor_v0
 from factgraph.application.explain import EvidenceGraph, probe_native
 from factgraph.application.explain.evidence_tree import (
     Const,
@@ -3494,7 +3495,7 @@ class SDKStore:
                     view_snapshot_digest,
                     row_graph_builder,
                 )
-            return EvaluateResult(
+            result = EvaluateResult(
                 result_id=result_id,
                 rows=rows,
                 head=head,
@@ -3508,6 +3509,12 @@ class SDKStore:
                 _row_support_artifacts=row_support_artifacts,
                 _row_provenance_envelopes=row_provenance_envelopes,
             )
+            if evaluation_query is not None:
+                result = replace(
+                    result,
+                    run_anchor=build_evaluation_run_anchor_v0(evaluation_query, result),
+                )
+            return result
         except Exception as exc:
             if isinstance(exc, SDKStoreError):
                 raise

@@ -495,6 +495,7 @@ class EvaluateResultDTOTests(unittest.TestCase):
         self.assertEqual(len(result), 1)
         self.assertTrue(result.exists())
         self.assertEqual(result.count(), 1)
+        self.assertIsNone(result.run_anchor)
         self.assertIs(result.first(), result[0])
         self.assertIs(result[0]._require_live_result(), result)
 

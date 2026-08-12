@@ -31,6 +31,16 @@ from .evaluation_query import (
     EvaluationQuerySelection,
     EvaluationQueryValue,
 )
+from .evaluation_run import (
+    EvaluationRunAnchorV0,
+    EvaluationRunBindingV0,
+    EvaluationRunExecutionProfileV0,
+    EvaluationRunRowAnchorV0,
+    EvaluationRunRulePinV0,
+    EvaluationRunSelectionV0,
+    EvaluationRunSummaryAnchorV0,
+    EvaluationRunTargetV0,
+)
 from .explanation_render import walk_evidence
 from .derivation_fact_overlay import (
     FactOverlay,
@@ -111,6 +121,8 @@ from .policy import (
     PolicyLoweredRef,
     PolicyNodeLineage,
     PolicyOccurrence,
+    PolicyStructureNodeV0,
+    PolicyStructureV0,
     PolicyUnify,
 )
 from .rule_expr import ExplicitBoolError, RuleExpr, RuleExprError, RuleJoinConstraint
@@ -216,6 +228,14 @@ __all__ = [
     "EvaluationQueryError",
     "EvaluationQuerySelection",
     "EvaluationQueryValue",
+    "EvaluationRunAnchorV0",
+    "EvaluationRunBindingV0",
+    "EvaluationRunExecutionProfileV0",
+    "EvaluationRunRowAnchorV0",
+    "EvaluationRunRulePinV0",
+    "EvaluationRunSelectionV0",
+    "EvaluationRunSummaryAnchorV0",
+    "EvaluationRunTargetV0",
     "Explanation",
     "ResultFingerprint",
     "FactOverlay",
@@ -257,6 +277,8 @@ __all__ = [
     "PolicyLoweredRef",
     "PolicyNodeLineage",
     "PolicyOccurrence",
+    "PolicyStructureNodeV0",
+    "PolicyStructureV0",
     "PolicyUnify",
     "PortInspect",
     "ProofFrameConditionVerdict",

@@ -11,7 +11,7 @@ from factgraph.core.rules.where_ast import CmpAtom, Const, PredAtom, Var
 from .protocol.policy import (
     Policy, PolicyAll, PolicyAny, PolicyError, PolicyExpression, PolicyLineage,
     PolicyLoweredRef, PolicyNode, PolicyNodeLineage, PolicyOccurrence, PolicyStage,
-    PolicyUnify,
+    PolicyStructureNodeV0, PolicyStructureV0, PolicyUnify,
 )
 from .protocol.rule import _PROJECTION_ID_PREFIX
 from .protocol.rule_expr import (
@@ -58,6 +58,7 @@ class CompiledPolicyV0:
     policy_digest: str
     address_space_digest: str
     rule_pins: tuple[PolicyRulePin, ...]
+    policy_structure: PolicyStructureV0
     rule_expr: _RuleExpr
     branches: tuple[PolicyCompiledBranch, ...]
     lineage: PolicyLineage
@@ -71,7 +72,7 @@ class CompiledPolicyV0:
             raise ValueError("rule_pins must be a non-empty PolicyRulePin tuple")
         if not isinstance(self.branches, tuple) or not self.branches or not all(isinstance(branch, PolicyCompiledBranch) for branch in self.branches):
             raise ValueError("branches must be a non-empty PolicyCompiledBranch tuple")
-        if not isinstance(self.rule_expr, _RuleExpr) or not isinstance(self.lineage, PolicyLineage) or not isinstance(self._body_plan, _RuleExprBodyPlan):
+        if not isinstance(self.policy_structure, PolicyStructureV0) or not isinstance(self.rule_expr, _RuleExpr) or not isinstance(self.lineage, PolicyLineage) or not isinstance(self._body_plan, _RuleExprBodyPlan):
             raise ValueError("compiled Policy structure has invalid runtime types")
         _assert_compiled_policy_current(self)
 def compile_policy(policy: Policy, *, address_space: SemanticAddressSpace) -> CompiledPolicyV0:
@@ -88,6 +89,7 @@ def compile_policy(policy: Policy, *, address_space: SemanticAddressSpace) -> Co
     nodes = _nodes(policy.when)
     managed = {item.occurrence.alias: item for item in address_space.occurrences}
     _validate_structure(nodes, managed)
+    policy_structure = _policy_structure(policy.when, nodes)
     _admit(managed)
     branch_count = _branch_count(policy.when)
     if branch_count > _DNF_BRANCH_LIMIT:
@@ -127,11 +129,11 @@ def compile_policy(policy: Policy, *, address_space: SemanticAddressSpace) -> Co
     )
     policy_digest = _digest(
         policy.id, policy.version, address_space.address_space_digest,
-        pins, rule_expr, branches, lineage,
+        pins, policy_structure, rule_expr, branches, lineage,
     )
     return CompiledPolicyV0(
         policy.id, policy.version, policy_digest, address_space.address_space_digest,
-        pins, rule_expr, branches, lineage, body_plan,
+        pins, policy_structure, rule_expr, branches, lineage, body_plan,
     )
 def _validate_structure(nodes: tuple[PolicyNode, ...], managed: dict[str, ManagedRuleOccurrence]) -> None:
     aliases = [node.alias for node in nodes if isinstance(node, PolicyOccurrence)]
@@ -334,6 +336,26 @@ def _nodes(node: PolicyNode) -> tuple[PolicyNode, ...]:
     if isinstance(node, (PolicyOccurrence, PolicyUnify)):
         return (node,)
     return (node, *(nested for child in node.children for nested in _nodes(child)))
+def _policy_structure(
+    root: PolicyExpression,
+    nodes: tuple[PolicyNode, ...],
+) -> PolicyStructureV0:
+    result: list[PolicyStructureNodeV0] = []
+    for node in nodes:
+        if isinstance(node, PolicyOccurrence):
+            value = PolicyStructureNodeV0(
+                node.node_id, "occurrence", occurrence_alias=node.alias,
+            )
+        elif isinstance(node, PolicyUnify):
+            value = PolicyStructureNodeV0(
+                node.node_id, "unify", left=node.left, right=node.right,
+            )
+        else:
+            value = PolicyStructureNodeV0(
+                node.node_id, _kind(node), tuple(child.node_id for child in node.children),
+            )
+        result.append(value)
+    return PolicyStructureV0(root.node_id, tuple(sorted(result, key=lambda item: item.node_id)))
 def _lineage(
     nodes: tuple[PolicyNode, ...],
     plan: _RuleExprBodyPlan,
@@ -445,12 +467,19 @@ def _assert_compiled_policy_current(compiled: CompiledPolicyV0) -> None:
     )
     expected_digest = _digest(
         compiled.policy_id, compiled.policy_version, compiled.address_space_digest,
-        compiled.rule_pins, compiled.rule_expr,
+        compiled.rule_pins, compiled.policy_structure, compiled.rule_expr,
         compiled.branches, compiled.lineage,
     )
+    structure_kinds = {
+        node.node_id: node.kind for node in compiled.policy_structure.nodes
+    }
+    lineage_kinds = {
+        node.node_id: node.node_kind for node in compiled.lineage.authored_nodes
+    }
     if (
         current_body != compiled._body_plan
         or expected_branches != compiled.branches
+        or structure_kinds != lineage_kinds
         or expected_digest != compiled.policy_digest
     ):
         raise _error(
@@ -465,6 +494,7 @@ def _digest(
     policy_version: str | None,
     address_space_digest: str,
     rule_pins: tuple[PolicyRulePin, ...],
+    policy_structure: PolicyStructureV0,
     rule_expr: _RuleExpr,
     branches: tuple[PolicyCompiledBranch, ...],
     lineage: PolicyLineage,
@@ -473,6 +503,7 @@ def _digest(
         "format": "compiled_policy_v0",
         "policy": [policy_id, policy_version, address_space_digest],
         "rule_pins": [asdict(item) for item in rule_pins],
+        "policy_structure": asdict(policy_structure),
         "rule_expr": repr(rule_expr._canonical()),
         "branches": [asdict(item) for item in branches],
         "lineage": asdict(lineage),

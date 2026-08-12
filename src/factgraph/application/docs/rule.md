@@ -303,9 +303,12 @@ is checked statically: at most 32 branches compile and larger projections fail
 before structural lowering or engine execution.
 
 `CompiledPolicyV0` pins Policy, address-space, Rule, and semantic-contract
-identity and contains deterministic branch inventory plus bidirectional
-structural lineage. DNF-generated aliases retain their authored occurrence
-alias explicitly; lineage does not parse generated names or `repr`. It covers
+identity. It captures canonical `PolicyStructureV0` directly from authored
+`Policy.when` before lowering, including the root, nested All/Any children,
+occurrence aliases and Unify endpoints. The Policy digest seals that structure,
+the deterministic branch inventory and bidirectional structural lineage.
+DNF-generated aliases retain their authored occurrence alias explicitly;
+neither structure nor lineage parses generated names or `repr`. Lineage covers
 each authored node and every emitted branch, occurrence, Rule-body atom, and
 Unify coordinate.
 
@@ -388,16 +391,34 @@ This first bridge is native-only and accepts no `config`. It captures the live
 view digest around evaluation and permits `row.close()` / `row.explain()` only
 while that view remains unchanged. Premise filters are rejected because v0
 does not yet capture their policy with the view. This is a fail-closed
-live-view guard, not an immutable snapshot or historical replay guarantee. The
-older ad-hoc `QueryRuntimeRequest` and SDK `Query` remain unchanged. Non-native engines,
+live-view guard, not an immutable snapshot or historical replay guarantee.
+
+Successful compiled Query results also expose `result.run_anchor`, an immutable
+`EvaluationRunAnchorV0`. It commits the original/normalized Policy target,
+Policy structure and lineage, Rule pins, bind/select intent, native execution
+profile, view/result identity, stable semantic row anchors and a query-summary
+anchor. The summary exists for zero rows but explicitly makes no truth claim;
+completeness is unknown and ordering is unspecified. Existing run/result/row
+ids remain run-local. Repeated equivalent runs may share semantic row and
+summary anchors while retaining different run ids.
+
+The row anchor calls the existing projection-head scope pin
+`head_scope_digest`; it does not claim to contain the digest of the run-local
+closed Rule produced later by `row.close()`.
+
+This anchor is `identity_only`, uses a `digest_only_live_guard`, and declares
+replay `not_available`. It contains no Store callback, schema object, support
+carrier or derivation/candidate identity, and has no codec or `replay()` API.
+The older ad-hoc `QueryRuntimeRequest` and SDK `Query` remain unchanged. Non-native engines,
 standalone Query explain, candidate acceptance, Compare/literals, field
-navigation, `expect`, completeness, What-if, durable bundles, persistence,
+navigation, `expect`, completeness, What-if, durable replay bundles, persistence,
 Package, and Agent/Meander wire formats remain later slices.
 
-Compiled Policy/Query values are compiler-issued, in-process artifacts. Their
-integrity checks detect inconsistent splicing; they are not authentication or
-a MAC. Any future codec or rehydration path must recompile from authenticated
-source inputs or add an explicit artifact-authentication contract.
+Compiled Policy/Query and Run-anchor values are compiler-issued, in-process
+artifacts. Their integrity checks detect inconsistent splicing; they are not
+authentication or a MAC. Any future codec or rehydration path must recompile
+from authenticated source inputs or add an explicit artifact-authentication
+contract.
 
 ## Bridge Rejections
 

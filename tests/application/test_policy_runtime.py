@@ -27,6 +27,7 @@ from factgraph.application.protocol import (
     entity_identity,
     field_endpoint,
 )
+from factgraph.application.protocol.policy import PolicyStructureNodeV0, PolicyStructureV0
 from factgraph.core.rules.where_ast import (
     AggregateAtom,
     AndExpr,
@@ -315,6 +316,73 @@ class PolicyAdmissionTests(unittest.TestCase):
 
 
 class PolicyLineageTests(unittest.TestCase):
+    def test_authored_structure_preserves_nested_topology_and_unify_endpoints(self) -> None:
+        bundle = _person_bundle()
+        policy = Policy(
+            "structure",
+            PolicyAll((
+                _occ("a"),
+                PolicyAny((
+                    PolicyAll((_occ("b"), _occ("c"), _unify("b", "c"))),
+                    _occ("d"),
+                )),
+            )),
+        )
+
+        compiled = compile_policy(
+            policy, address_space=_space(bundle, "a", "b", "c", "d"),
+        )
+        structure = compiled.policy_structure
+        by_id = {node.node_id: node for node in structure.nodes}
+
+        self.assertEqual(structure.root_node_id, policy.when.node_id)
+        self.assertEqual(by_id[structure.root_node_id].kind, "all")
+        self.assertEqual(
+            by_id[structure.root_node_id].child_node_ids,
+            tuple(child.node_id for child in policy.when.children),
+        )
+        occurrence_aliases = {
+            node.occurrence_alias for node in structure.nodes if node.kind == "occurrence"
+        }
+        self.assertEqual(occurrence_aliases, {"a", "b", "c", "d"})
+        unify = next(node for node in structure.nodes if node.kind == "unify")
+        self.assertEqual((unify.left, unify.right), (_address("b"), _address("c")))
+        self.assertEqual(
+            {node.node_id: node.kind for node in structure.nodes},
+            {node.node_id: node.node_kind for node in compiled.lineage.authored_nodes},
+        )
+
+    def test_policy_structure_rejects_malformed_shape_and_splicing(self) -> None:
+        occurrence = _occ("a")
+        valid = PolicyStructureNodeV0(
+            occurrence.node_id, "occurrence", occurrence_alias="a",
+        )
+        with self.assertRaises(PolicyError):
+            PolicyStructureNodeV0(occurrence.node_id, "occurrence", occurrence_alias="b")
+        with self.assertRaises(PolicyError):
+            PolicyStructureV0("pn:absent", (valid,))
+
+        bundle = _person_bundle()
+        space = _space(bundle, "a", "b")
+        conjunctive = compile_policy(
+            Policy("same", PolicyAll((_occ("a"), _occ("b")))), address_space=space,
+        )
+        disjunctive = compile_policy(
+            Policy("same", PolicyAny((_occ("a"), _occ("b")))), address_space=space,
+        )
+        with self.assertRaises(PolicyError) as sealed:
+            replace(conjunctive, policy_structure=disjunctive.policy_structure)
+        self.assertEqual(sealed.exception.code, "COMPILED_POLICY_INTEGRITY_MISMATCH")
+        with self.assertRaises(PolicyError) as self_consistent_digest:
+            replace(
+                conjunctive,
+                policy_structure=disjunctive.policy_structure,
+                policy_digest=disjunctive.policy_digest,
+            )
+        self.assertEqual(
+            self_consistent_digest.exception.code, "COMPILED_POLICY_INTEGRITY_MISMATCH",
+        )
+
     def test_public_lineage_dtos_reject_malformed_or_non_total_shapes(self) -> None:
         invalid_refs = (
             lambda: PolicyLoweredRef("bogus", "c0"),  # type: ignore[arg-type]
@@ -452,6 +520,11 @@ class PolicyLineageTests(unittest.TestCase):
         left = compile_policy(first, address_space=space)
         right = compile_policy(second, address_space=space)
         self.assertEqual(left.policy_digest, right.policy_digest)
+        self.assertEqual(left.policy_structure, right.policy_structure)
+        self.assertEqual(
+            left.policy_structure.structure_digest,
+            right.policy_structure.structure_digest,
+        )
         self.assertEqual(left.branches, right.branches)
         self.assertEqual(left.lineage, right.lineage)
 

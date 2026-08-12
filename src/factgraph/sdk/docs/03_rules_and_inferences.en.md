@@ -430,7 +430,17 @@ This v0 execution path is deliberately native-only and rejects `config=`,
 helpers: they fail closed if the FactGraph view has changed since evaluation.
 Premise exclusions, allowances and predicate blocks are not yet captured with
 that live view, so a non-empty or later-changed premise policy also fails closed.
-That guard does not provide an immutable bundle, historical replay,
+Each successful compiled Query result carries `result.run_anchor`, a pure-data
+identity anchor for the exact target, Query, Policy structure/lineage, Rule
+pins, bind/select intent, execution profile, view, result and rows. Its semantic
+row anchors exclude random run ids; its query-summary anchor also covers a
+zero-row result without interpreting it as false. `row.explain()` includes the
+Run anchor digest in `checked_scope`.
+
+The anchor explicitly reports identity-only capture, digest-only live-view
+guarding and replay unavailable. It contains no detached snapshot or support
+material and does not add a codec, repository or `replay()` method. Thus the
+guard still does not provide an immutable replay bundle, historical replay,
 completeness, truncation or expectation semantics; those remain later slices.
 
 ### Rule and RuleExpr snapshot matching

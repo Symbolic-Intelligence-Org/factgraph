@@ -87,6 +87,93 @@ class Policy:
             _text(self.version, "version")
         if not isinstance(self.when, (PolicyOccurrence, PolicyAll, PolicyAny)):
             raise _shape("Policy.when must be structural", "INVALID_POLICY_ROOT")
+@dataclass(frozen=True)
+class PolicyStructureNodeV0:
+    node_id: str
+    kind: Literal["occurrence", "all", "any", "unify"]
+    child_node_ids: tuple[str, ...] = ()
+    occurrence_alias: str | None = None
+    left: SemanticPortAddress | None = None
+    right: SemanticPortAddress | None = None
+    def __post_init__(self) -> None:
+        _text(self.node_id, "node_id", "INVALID_POLICY_STRUCTURE")
+        if self.kind not in {"occurrence", "all", "any", "unify"}:
+            raise _shape("invalid Policy structure node kind", "INVALID_POLICY_STRUCTURE")
+        if not isinstance(self.child_node_ids, tuple) or not all(
+            isinstance(item, str) and item for item in self.child_node_ids
+        ):
+            raise _shape("child_node_ids must be a string tuple", "INVALID_POLICY_STRUCTURE")
+        expected = {
+            "occurrence": (False, True, False, False),
+            "all": (True, False, False, False),
+            "any": (True, False, False, False),
+            "unify": (False, False, True, True),
+        }[self.kind]
+        actual = (
+            bool(self.child_node_ids), self.occurrence_alias is not None,
+            self.left is not None, self.right is not None,
+        )
+        if actual != expected:
+            raise _shape("Policy structure fields do not match node kind", "INVALID_POLICY_STRUCTURE")
+        if self.occurrence_alias is not None:
+            _text(self.occurrence_alias, "occurrence_alias", "INVALID_POLICY_STRUCTURE")
+        if self.left is not None and not isinstance(self.left, SemanticPortAddress):
+            raise _shape("left must be SemanticPortAddress", "INVALID_POLICY_STRUCTURE")
+        if self.right is not None and not isinstance(self.right, SemanticPortAddress):
+            raise _shape("right must be SemanticPortAddress", "INVALID_POLICY_STRUCTURE")
+        if self.kind == "unify":
+            assert self.left is not None and self.right is not None
+            endpoints = (self.left, self.right)
+            if self.left == self.right or endpoints != tuple(sorted(endpoints, key=_address_key)):
+                raise _shape("Unify endpoints must be distinct and canonical", "INVALID_POLICY_STRUCTURE")
+        expected_id = _structure_node_id(
+            self.kind, self.child_node_ids, self.occurrence_alias, self.left, self.right,
+        )
+        if self.node_id != expected_id:
+            raise _shape("Policy structure node_id does not match its content", "INVALID_POLICY_STRUCTURE")
+@dataclass(frozen=True)
+class PolicyStructureV0:
+    root_node_id: str
+    nodes: tuple[PolicyStructureNodeV0, ...]
+    structure_digest: str = field(init=False)
+    def __post_init__(self) -> None:
+        _text(self.root_node_id, "root_node_id", "INVALID_POLICY_STRUCTURE")
+        if not isinstance(self.nodes, tuple) or not self.nodes or not all(
+            isinstance(node, PolicyStructureNodeV0) for node in self.nodes
+        ):
+            raise _shape("nodes must be a non-empty PolicyStructureNodeV0 tuple", "INVALID_POLICY_STRUCTURE")
+        ordered = tuple(sorted(self.nodes, key=lambda node: node.node_id))
+        if ordered != self.nodes or len({node.node_id for node in ordered}) != len(ordered):
+            raise _shape("Policy structure nodes must be unique and canonically ordered", "INVALID_POLICY_STRUCTURE")
+        by_id = {node.node_id: node for node in ordered}
+        if self.root_node_id not in by_id:
+            raise _shape("Policy structure root is absent", "INVALID_POLICY_STRUCTURE")
+        if by_id[self.root_node_id].kind not in {"occurrence", "all", "any"}:
+            raise _shape("Policy structure root must be structural", "INVALID_POLICY_STRUCTURE")
+        for node in ordered:
+            child_kinds = tuple(by_id[child].kind for child in node.child_node_ids if child in by_id)
+            if node.kind == "any" and "unify" in child_kinds:
+                raise _shape("PolicyAny cannot contain Unify", "INVALID_POLICY_STRUCTURE")
+            if node.kind == "all" and child_kinds and all(kind == "unify" for kind in child_kinds):
+                raise _shape("PolicyAll requires a structural child", "INVALID_POLICY_STRUCTURE")
+        child_counts = {
+            child: sum(child in node.child_node_ids for node in ordered)
+            for child in {item for node in ordered for item in node.child_node_ids}
+        }
+        if set(child_counts) - set(by_id):
+            raise _shape("Policy structure child is absent", "INVALID_POLICY_STRUCTURE")
+        if child_counts != {node_id: 1 for node_id in set(by_id) - {self.root_node_id}}:
+            raise _shape("Policy structure must be one rooted tree", "INVALID_POLICY_STRUCTURE")
+        reachable, pending = set[str](), [self.root_node_id]
+        while pending:
+            node_id = pending.pop()
+            if node_id in reachable:
+                raise _shape("Policy structure contains a cycle", "INVALID_POLICY_STRUCTURE")
+            reachable.add(node_id)
+            pending.extend(by_id[node_id].child_node_ids)
+        if reachable != set(by_id):
+            raise _shape("Policy structure contains unreachable nodes", "INVALID_POLICY_STRUCTURE")
+        object.__setattr__(self, "structure_digest", _structure_digest(self.root_node_id, ordered))
 @dataclass(frozen=True, order=True)
 class PolicyLoweredRef:
     kind: Literal["branch", "occurrence", "body_atom", "unify"]
@@ -169,6 +256,42 @@ def _node_id(payload: tuple[object, ...]) -> str:
         sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False,
     ).encode()
     return f"pn:{sha256_hex(raw)}"
+def _structure_node_id(
+    kind: str,
+    child_node_ids: tuple[str, ...],
+    occurrence_alias: str | None,
+    left: SemanticPortAddress | None,
+    right: SemanticPortAddress | None,
+) -> str:
+    if kind == "occurrence":
+        return _node_id((kind, occurrence_alias))
+    if kind in {"all", "any"}:
+        if child_node_ids != tuple(sorted(set(child_node_ids))):
+            raise _shape("structural child ids must be unique and canonical", "INVALID_POLICY_STRUCTURE")
+        return _node_id((kind, child_node_ids))
+    assert left is not None and right is not None
+    left_key, right_key = sorted((_address_key(left), _address_key(right)))
+    return _node_id((kind, left_key, right_key))
+def _structure_digest(root_node_id: str, nodes: tuple[PolicyStructureNodeV0, ...]) -> str:
+    payload = {
+        "format": "policy_structure_v0",
+        "root_node_id": root_node_id,
+        "nodes": [
+            {
+                "node_id": node.node_id,
+                "kind": node.kind,
+                "child_node_ids": node.child_node_ids,
+                "occurrence_alias": node.occurrence_alias,
+                "left": None if node.left is None else _address_key(node.left),
+                "right": None if node.right is None else _address_key(node.right),
+            }
+            for node in nodes
+        ],
+    }
+    raw = json.dumps(
+        payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False,
+    ).encode()
+    return sha256_hex(raw)
 def _address_key(address: SemanticPortAddress) -> tuple[str, str]:
     return address.occurrence_alias, address.port_name
 def _text(value: object, name: str, code: str = "INVALID_POLICY_SHAPE") -> None:
@@ -176,4 +299,4 @@ def _text(value: object, name: str, code: str = "INVALID_POLICY_SHAPE") -> None:
         raise _shape(f"{name} must be a non-empty string", code)
 def _shape(message: str, code: str) -> PolicyError:
     return PolicyError(message, code=code, stage="policy_construct")
-__all__ = ["Policy", "PolicyAll", "PolicyAny", "PolicyError", "PolicyLineage", "PolicyLoweredRef", "PolicyNodeLineage", "PolicyOccurrence", "PolicyUnify"]
+__all__ = ["Policy", "PolicyAll", "PolicyAny", "PolicyError", "PolicyLineage", "PolicyLoweredRef", "PolicyNodeLineage", "PolicyOccurrence", "PolicyStructureNodeV0", "PolicyStructureV0", "PolicyUnify"]

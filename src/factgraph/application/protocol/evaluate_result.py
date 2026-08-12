@@ -20,6 +20,7 @@ from factgraph.application.explain.evidence_tree import (
 )
 from factgraph.application.protocol.common import ErrorDTO, ProtocolShapeError, WarningDTO
 from factgraph.application.protocol.certainty import BOOLEAN_CERTAINTY, Certainty
+from factgraph.application.protocol.evaluation_run import EvaluationRunAnchorV0
 from factgraph.application.protocol.explanation_render import narrate_evidence, walk_evidence
 from factgraph.application.protocol.rule import Rule, _is_projection_rule
 from factgraph.application.protocol.rule_expr import RuleExprError
@@ -144,6 +145,7 @@ class EvaluateResult:
     evaluated_at: object
     fingerprint: ResultFingerprint
     engine_meta: Mapping[str, Any]
+    run_anchor: EvaluationRunAnchorV0 | None = field(default=None, kw_only=True)
     _schema_index: object | None = field(default=None, repr=False, compare=False, hash=False)
     _row_close_builder: Callable[[EvaluateRow, EvaluateResult], Rule] | None = field(
         default=None,
@@ -209,6 +211,7 @@ class EvaluateResult:
         object.__setattr__(self, "_row_support_artifacts", row_support_artifacts)
         object.__setattr__(self, "_row_provenance_envelopes", row_provenance_envelopes)
         object.__setattr__(self, "rows", tuple(bound_rows))
+        _validate_run_anchor(self)
 
     @property
     def run_id(self) -> str:
@@ -1098,22 +1101,74 @@ def _validate_row_provenance_envelopes(
 
 def _checked_scope_for_row_result(result: EvaluateResult, row: EvaluateRow) -> Mapping[str, Any]:
     fingerprint = result.fingerprint
+    scope = {
+        "config_digest": fingerprint.config_digest,
+        "semantics_source": "row_result",
+        "evaluate_config_digest": fingerprint.config_digest,
+        "explain_config_digest": fingerprint.config_digest,
+        "semantics_match": True,
+        "result_id": result.result_id,
+        "row_id": row.row_id,
+        "expr_digest": fingerprint.expr_digest,
+        "rule_set_digest": fingerprint.rule_set_digest,
+        "view_snapshot_digest": fingerprint.view_snapshot_digest,
+        "closed_head_digest": row.closed_head_digest,
+    }
+    if result.run_anchor is not None:
+        scope["evaluation_run_anchor_digest"] = result.run_anchor.anchor_digest
     return _freeze_mapping(
-        {
-            "config_digest": fingerprint.config_digest,
-            "semantics_source": "row_result",
-            "evaluate_config_digest": fingerprint.config_digest,
-            "explain_config_digest": fingerprint.config_digest,
-            "semantics_match": True,
-            "result_id": result.result_id,
-            "row_id": row.row_id,
-            "expr_digest": fingerprint.expr_digest,
-            "rule_set_digest": fingerprint.rule_set_digest,
-            "view_snapshot_digest": fingerprint.view_snapshot_digest,
-            "closed_head_digest": row.closed_head_digest,
-        },
+        scope,
         field_name="Explanation.checked_scope",
     )
+
+
+def _validate_run_anchor(result: EvaluateResult) -> None:
+    anchor = result.run_anchor
+    if anchor is None:
+        return
+    if not isinstance(anchor, EvaluationRunAnchorV0):
+        raise ProtocolShapeError("EvaluateResult.run_anchor must be EvaluationRunAnchorV0 or None")
+    fingerprint = result.fingerprint
+    actual = (
+        result.result_id, fingerprint.result_digest, fingerprint.run_id,
+        fingerprint.view_snapshot_digest, result.engine, result.head.id,
+        result.head.content_digest, tuple(row.row_id for row in result.rows),
+        tuple(row.digest for row in result.rows),
+        tuple(row.closed_head_digest for row in result.rows),
+    )
+    expected = (
+        anchor.result_id, anchor.result_digest, anchor.run_id,
+        anchor.view_snapshot_digest, anchor.execution_profile.engine,
+        anchor.projection_head_id, anchor.projection_head_content_digest,
+        tuple(row.row_id for row in anchor.row_anchors),
+        tuple(row.claim_digest for row in anchor.row_anchors),
+        tuple(row.head_scope_digest for row in anchor.row_anchors),
+    )
+    row_semantics_match = all(
+        row.kind == row_anchor.claim_kind
+        and sha256_token(canonical_bytes_for_evaluate("evaluation_run_bindings_v0", row.bindings))
+            == row_anchor.bindings_digest
+        and sha256_token(canonical_bytes_for_evaluate(
+            "evaluation_run_certainty_v0", _certainty_payload(row.certainty),
+        )) == row_anchor.certainty_digest
+        for row, row_anchor in zip(result.rows, anchor.row_anchors, strict=True)
+    )
+    evaluated_at = result.evaluated_at.isoformat() if isinstance(result.evaluated_at, (datetime, date)) else result.evaluated_at
+    anchored_rule_set = rule_set_digest_for_entries((
+        (f"compiled-policy:{anchor.target.normalized_policy_id}", anchor.target.policy_digest),
+        (f"query-projection:{anchor.projection_head_id}", anchor.projection_head_content_digest),
+    ))
+    if (
+        actual != expected
+        or not row_semantics_match
+        or anchor.execution_profile.engine_version != result.engine_meta["engine_version"]
+        or anchor.execution_profile.adapter_version != result.engine_meta["adapter_version"]
+        or anchor.execution_profile.config_digest != fingerprint.config_digest
+        or anchor.evaluated_at != evaluated_at
+        or fingerprint.expr_digest != f"sha256:{anchor.query_digest}"
+        or fingerprint.rule_set_digest != anchored_rule_set
+    ):
+        raise ProtocolShapeError("EvaluateResult.run_anchor does not match this result")
 
 
 def _metadata_value(value: Any) -> Any:

@@ -19,6 +19,8 @@
 | 2026-08-12 | draft | Three bounded read-only audits completed | Run/result shape, snapshot/replay feasibility and anti-degeneration boundaries converged. |
 | 2026-08-12 | scoped | User authorized the narrow F4A slice on a new branch | Lightweight path replaces a separate preflight with the three audits; no replay, registry, UI, Meander edit, push or merge is authorized. |
 | 2026-08-12 | implementing | Scoped contract entered implementation | The only production goals are canonical authored Policy structure and in-process immutable Run anchors. |
+| 2026-08-12 | implementing | Production cap amended from 500 to 720 | The initial count omitted strict splice guards and canonical authored-tree validation; independent red-team probes then required cross-object result matching, non-resealable digest fields, strict protocol shapes and honest head-scope naming. No new feature or downstream scope was admitted; unused margin is not implementation authority. |
+| 2026-08-12 | review | Internal fixed-state review returned CLEAR | Two independent reviews reported zero P0/P1; their two non-blocking P2 observations were resolved by narrowing the legacy-compatibility claim and pinning self-consistently resealed cross-object mismatch guards in a repository regression test. User-side review remains pending. |
 
 ## Decision Notes
 
@@ -28,4 +30,3 @@
 - EvidenceGraph/EvidenceTree remains engine evidence. Policy overlay remains F4C.
 - Future Rule/Policy peer syntax must use explicit resolved targets and one
   normalization path; no ambient registry enters this slice.
-

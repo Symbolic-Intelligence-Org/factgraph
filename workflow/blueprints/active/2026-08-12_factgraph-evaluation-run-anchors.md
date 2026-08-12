@@ -1,6 +1,6 @@
 # Task Blueprint: FactGraph EvaluationRun anchors
 
-- Status: scoped
+- Status: implementing
 - Created: 2026-08-12
 - Last Updated: 2026-08-12
 - Authority: task-scoped implementation contract for F4A only.
@@ -35,7 +35,9 @@ preserve authored Policy topology needed by later Policy-aware Explain.
 ## 2. Invariants
 
 - Existing `EvaluateResult` is the singular row envelope and execution return.
-- Legacy results remain byte/behavior compatible with `run_anchor=None`.
+- Legacy evaluation semantics, positional construction and the documented
+  service wire shape remain compatible with `run_anchor=None`; Python object
+  `repr`, pickle and `asdict` shapes are not byte protocols.
 - Query results receive exactly one anchor after result construction.
 - Authored Policy structure is captured before lowering and participates in the
   Policy digest/integrity check.
@@ -46,7 +48,9 @@ preserve authored Policy topology needed by later Policy-aware Explain.
 - Zero rows produce only a query-summary anchor and no truth interpretation.
 - F4A remains native, identity-only, digest-only-live-view and non-replayable.
 - Existing EvidenceGraph/EvidenceTree semantics remain unchanged.
-- Gross added production Python is capped at 500 lines relative to `ca12b208`.
+- Gross added production Python is capped at 720 lines relative to `ca12b208`;
+  the amendment covers strict seals, cross-object result matching and authored
+  topology validation only.
 
 ## 3. Implementation Plan
 
@@ -89,4 +93,3 @@ final independent review.
 ## 6. Outcome / Deviations
 
 - Pending implementation.
-
