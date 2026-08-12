@@ -379,7 +379,8 @@ row = result.first()
 
 Execution revalidates the artifact and active schema, then executes the stored
 plan rather than substituting the validation-time reconstruction. It returns
-the existing `EvaluateResult`; raw `CandidateSet` values remain internal. Query rows have kind `projection`, keep
+the existing `EvaluateResult`; raw `DerivationOutput` values remain internal
+(`CandidateSet` is a legacy materialization alias). Query rows have kind `projection`, keep
 selection order and carry the compiler-known value-domain tags. A non-matching
 binding yields a valid empty result and is not interpreted as a false claim.
 

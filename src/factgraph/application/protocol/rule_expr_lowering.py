@@ -6,7 +6,7 @@ from itertools import product
 from typing import Literal
 
 from factgraph.application.derivation_runtime import evaluate_derivation_plans
-from factgraph.core.derivation.candidates import CandidateSet
+from factgraph.core.derivation.candidates import DerivationOutput
 from factgraph.core.rules.where_ast import (
     AggregateAtom,
     AndExpr,
@@ -837,7 +837,7 @@ def _evaluate_rule_expr_native_for_tests(
     *,
     head: Rule,
     store: Store,
-) -> list[CandidateSet]:
+) -> list[DerivationOutput]:
     plan = _lower_rule_expr(expr, head=head)
     compiled, _traces = _materialize_native_derivation_plan(plan)
     return evaluate_derivation_plans(DerivationEvaluateRequest(plans=(compiled,), engine="native"), store=store)

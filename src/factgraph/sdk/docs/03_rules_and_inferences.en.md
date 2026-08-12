@@ -419,7 +419,7 @@ for row in result:
 ```
 
 The SDK executes the exact compiler-issued plan and returns `EvaluateResult`;
-it does not expose the intermediate `CandidateSet`. No `head=` is needed because
+it does not expose the intermediate `DerivationOutput`. No `head=` is needed because
 the artifact already contains its synthetic projection head. Bindings constrain
 engine truth and selections only project, so a non-matching bind returns an
 empty result rather than a failed/false claim.
@@ -628,8 +628,15 @@ result = sdk.eval.evaluate(inf, engine="native")
 - `row.close()` returns a closed application `Rule` that can be passed to
   `fg.eval.explain(expr, head=closed_head, ...)`.
 
-`CandidateSet` remains an internal runtime artifact. Public code should use
-`EvaluateResult`, `EvaluateRow`, `row.explain()`, and `row.close()`.
+`DerivationOutput` is the canonical internal engine-output artifact. The legacy
+`CandidateSet` name remains a direct alias for materialization and wire
+compatibility. Public code should use `EvaluateResult`, `EvaluateRow`,
+`row.explain()`, and `row.close()`.
+
+`evaluate_candidates(...)` is a temporary cross-repository compatibility seam
+for shipped Meander consumers, not the target SDK design. It remains read-only,
+does not accept `CompiledEvaluationQueryV0`, and should not be adopted by new
+callers. Its removal requires a coordinated Meander migration.
 
 For the full envelope chain (`EvaluateResult` direct fields plus
 `ResultFingerprint` / `engine_meta`, `EvaluateRow` data + methods,

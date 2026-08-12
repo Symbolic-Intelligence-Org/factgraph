@@ -20,7 +20,7 @@ from factgraph.authoring.derivation_compile import (
 from factgraph.authoring.rules import compile_authoring_rule_v1
 from factgraph.application.protocol import EvaluateResult, EvaluateRow, ResultFingerprint
 from factgraph.application.protocol.evaluate_result import (
-    _candidate_set_to_evaluate_row,
+    _derivation_output_to_evaluate_row,
     _claim_arguments_for_row,
     _claim_name_for_row_result,
     _claim_repr_for_row_result,
@@ -41,7 +41,7 @@ from factgraph.application.protocol.evaluate_result import (
     view_snapshot_digest_for_parts,
 )
 from factgraph.application.protocol.rule import Rule as ApplicationRule
-from factgraph.core.derivation.candidates import CandidateSet
+from factgraph.core.derivation.candidates import DerivationOutput
 from factgraph.core.evidence.write_protocol import add_field, retract_by_asrt, set_field
 from factgraph.core.mapping.canon import MappingConflictError, MappingResolution
 from factgraph.core.protocol.digests import sha256_hex
@@ -998,7 +998,7 @@ def evaluate_runtime_derivation(session_id: str, dto: dict[str, Any]) -> dict[st
             active_registry = RuleRegistry()
             _apply_ephemeral_rules(active_registry, session)
         runtime_engine_ext = _resolve_runtime_derivation_engine_ext(compiled, mode=mode)
-        candidates = session.store.evaluate(
+        outputs = session.store.evaluate(
             derivation_id=compiled["derivation_id"],
             version=compiled["version"],
             target_pred_id=compiled["target_pred_id"],
@@ -1011,9 +1011,9 @@ def evaluate_runtime_derivation(session_id: str, dto: dict[str, Any]) -> dict[st
             engine_ext=runtime_engine_ext,
             semantics_profile=semantics_profile,
         )
-        result = _evaluate_result_from_candidates(
+        result = _evaluate_result_from_outputs(
             session,
-            candidates=candidates,
+            outputs=outputs,
             compiled=compiled,
             mode=mode,
             semantics_profile=semantics_profile,
@@ -1785,10 +1785,10 @@ def _session_to_dict(session: RuntimeSession) -> dict[str, Any]:
 def _cache_derivation_recipe(
     session: RuntimeSession,
     *,
-    candidates: list[CandidateSet],
+    outputs: list[DerivationOutput],
     compiled: dict[str, Any],
 ) -> None:
-    run_ids = {candidate.run_id for candidate in candidates if candidate.run_id}
+    run_ids = {output.run_id for output in outputs if output.run_id}
     if not run_ids:
         return
     recipe = RuntimeDerivationRecipe(
@@ -2326,10 +2326,10 @@ def _jsonable_row(row: tuple[Any, ...]) -> list[Any]:
     return [item for item in row]
 
 
-def _evaluate_result_from_candidates(
+def _evaluate_result_from_outputs(
     session: RuntimeSession,
     *,
-    candidates: list[CandidateSet],
+    outputs: list[DerivationOutput],
     compiled: dict[str, Any],
     mode: str,
     semantics_profile: SemanticsProfile | None,
@@ -2356,15 +2356,15 @@ def _evaluate_result_from_candidates(
     )
     closed_head_digest = closed_head_digest_for(head)
     rows = tuple(
-        _candidate_set_to_evaluate_row(
-            candidate,
+        _derivation_output_to_evaluate_row(
+            output,
             head=head,
             result_id=result_id,
             run_id=run_id,
             closed_head_digest=closed_head_digest,
             claim_name=head.id,
         )
-        for candidate in candidates
+        for output in outputs
     )
     result_digest = result_digest_for(
         result_id=result_id,

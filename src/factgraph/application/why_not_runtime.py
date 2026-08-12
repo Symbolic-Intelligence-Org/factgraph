@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from factgraph.core.derivation.candidates import CandidateSet
+from factgraph.core.derivation.candidates import DerivationOutput
 from factgraph.core.rules.rule_ir import RuleCompileError, RuleRegistry
 from factgraph.core.rules.ruleref_substrate import evaluate_native_where
 from factgraph.core.store._support import BindingItems, ProofReceipt, normalize_binding_items
@@ -258,7 +258,7 @@ def _extract_head_binding_from_mapping(
 
 def _extract_head_binding_from_candidate_payload(
     *,
-    candidate: CandidateSet,
+    candidate: DerivationOutput,
     plan: Any,
 ) -> BindingItems | object:
     payload = candidate.payload
@@ -453,7 +453,7 @@ def _unrepresentable_candidate_error(
     *,
     engine: str,
     reason: str,
-    candidate: CandidateSet | None = None,
+    candidate: DerivationOutput | None = None,
 ) -> _UnsupportedHeadBindings:
     details: dict[str, Any] = {
         "engine": engine,

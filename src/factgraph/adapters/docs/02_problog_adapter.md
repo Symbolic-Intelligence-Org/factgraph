@@ -9,7 +9,7 @@
 
 `adapters.problog` is the external-engine adapter layer. It
 converts `Store + derivation/query where` into a ProbLog program,
-executes it, and reads the results back into `CandidateSet`.
+executes it, and reads the results back into `DerivationOutput`.
 
 It is responsible for:
 
@@ -19,7 +19,7 @@ It is responsible for:
 - Invoking the ProbLog CLI for execution
 - Parsing CLI output back into bindings, then constructing
   candidate sets
-- Writing probability into `CandidateSet.confidence` and tagging
+- Writing probability into `DerivationOutput.confidence` and tagging
   `confidence_kind="probability"`
 - Projecting shared raw uncertainty (`raw_kind` + `bound`) into
   ProbLog point probabilities only when an explicit
@@ -69,7 +69,7 @@ It is not responsible for:
     shared explain assembler
 - `problog_import.py`
   - `parse_problog_output(...)`: parses output and constructs
-    `CandidateSet`
+    `DerivationOutput`
 
 ## 3. Boundary with core
 
@@ -120,7 +120,7 @@ Main flow of `evaluate_problog(...)`:
      configured, export rejects instead of silently choosing a point.
 6. `run_problog(...)` invokes the ProbLog CLI
 7. `parse_problog_output(...)` parses the result and maps it into
-   `CandidateSet`
+   `DerivationOutput`
 8. `parse_problog_trace(...)` parses the same `--trace` output
    into an adapter-local proof trace
 9. The derivation probability is written into
@@ -229,8 +229,8 @@ EvidenceGraph addendum:
 Semantic-delivery addendum:
 
 - internal compatibility lane:
-  - ProbLog may still set `CandidateSet.confidence` and
-    `CandidateSet.confidence_kind="probability"` as session-local output
+  - ProbLog may still set `DerivationOutput.confidence` and
+    `DerivationOutput.confidence_kind="probability"` as session-local output
     carriers
   - `accept` does not persist those legacy carrier fields into assertion
     meta by default
@@ -365,8 +365,8 @@ Constraints:
 - Filters by `query_pred` (default `answer`)
 - For the same binding, takes the maximum probability
 - Then aggregates probability per candidate key and writes back
-  into `CandidateSet.confidence`
-- Also tags `CandidateSet.confidence_kind` as `"probability"`
+  into `DerivationOutput.confidence`
+- Also tags `DerivationOutput.confidence_kind` as `"probability"`
 - Final candidate construction reuses `store_builders` (consistent
   with the native / souffle paths)
 

@@ -5,7 +5,8 @@ from typing import Any, TYPE_CHECKING
 from uuid import uuid4
 
 from factgraph.core.derivation.accept import AcceptOptions, AcceptRequest, AcceptResult
-from factgraph.core.derivation.candidates import CandidateSet, make_candidate
+from factgraph.core.derivation.candidates import CandidateSet
+from factgraph.core.derivation.candidates import DerivationOutput, make_derivation_output
 from factgraph.core.evidence.write_protocol import now_epoch_nanos
 from factgraph.core.mapping.canon import MappingResolution
 from factgraph.core.protocol.digests import sha256_token
@@ -358,7 +359,7 @@ class Store:
         engine_ext: EngineExtBase | None = None,
         engine_options: EngineOptionsIR = None,
         semantics_profile: Any | None = None,
-    ) -> list[CandidateSet]:
+    ) -> list[DerivationOutput]:
         return evaluate_store(
             self,
             derivation_id=derivation_id,
@@ -388,7 +389,7 @@ class Store:
         engine_ext: EngineExtBase | None = None,
         engine_options: EngineOptionsIR = None,
         semantics_profile: Any | None = None,
-    ) -> list[CandidateSet]:
+    ) -> list[DerivationOutput]:
         """Internal adapter entrypoint; prefer evaluate(mode='souffle'|'problog'|'pyreason')."""
         if not isinstance(mode, str) or not mode:
             raise WhereValidationError("mode must be non-empty string")
@@ -428,7 +429,7 @@ class Store:
         e_ref: str,
         rest_terms: list[tuple[str, Any]],
         dims_terms: list[tuple[str, Any]],
-    ) -> CandidateSet:
+    ) -> DerivationOutput:
         warnings.warn(
             "evaluate_dummy is deprecated; use evaluate()",
             DeprecationWarning,
@@ -443,7 +444,7 @@ class Store:
             + [{"kind": "literal", "tag": tag, "value": value} for tag, value in rest_terms],
         }
         tup_digest = sha256_token(canonical_bytes_tup_v1(rest_terms))
-        return make_candidate(
+        return make_derivation_output(
             derivation_id=derivation_id,
             derivation_version=version,
             run_id=run_id,

@@ -14,7 +14,7 @@ from factgraph.application.protocol import (
     IngestSetItem,
     ProtocolShapeError,
 )
-from factgraph.core.derivation.candidates import CandidateSet
+from factgraph.core.derivation.candidates import DerivationOutput
 from factgraph.core.evidence.write_protocol import add_field, set_field
 from factgraph.core.schema.meta_policy import (
     EVENT_TIME_META_KEY,
@@ -673,7 +673,7 @@ def _prepare_single_ingest_item(
 
 
 def _coerce_provenance_input(obj: Any) -> dict[str, Any]:
-    if isinstance(obj, CandidateSet):
+    if isinstance(obj, DerivationOutput):
         return {
             "derived_rule_id": obj.derivation_id,
             "derived_rule_version": obj.derivation_version,
@@ -685,7 +685,8 @@ def _coerce_provenance_input(obj: Any) -> dict[str, Any]:
     if isinstance(obj, dict):
         return dict(obj)
     raise SDKStoreError(
-        "validate_provenance(...) currently supports CandidateSet or meta dict input"
+        "validate_provenance(...) currently supports DerivationOutput "
+        "(including the legacy CandidateSet alias) or meta dict input"
     )
 
 

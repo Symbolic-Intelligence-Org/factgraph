@@ -8,7 +8,7 @@ matching:
   witness-bearing ``ProofReceipt.binding_items``;
 - problog / pyreason delegate through ``evaluate_derivation_plans(...)`` and
   match only payload-representable head-variable bindings carried by
-  ``CandidateSet.payload["terms"]``.
+  ``DerivationOutput.payload["terms"]``.
 
 Algorithm (per audit log Step 0.C C1+C2 unified):
 
@@ -44,7 +44,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from factgraph.core.derivation.candidates import CandidateSet
+from factgraph.core.derivation.candidates import DerivationOutput
 from factgraph.core.rules.rule_ir import RuleCompileError, RuleRegistry
 from factgraph.core.rules.ruleref_substrate import evaluate_native_where
 from factgraph.core.store._support import (
@@ -325,7 +325,7 @@ def _souffle_check(
         eval_request, store=store, registry=registry
     )
 
-    matches: list[tuple[CandidateSet, ProofReceipt, dict[str, Any]]] = []
+    matches: list[tuple[DerivationOutput, ProofReceipt, dict[str, Any]]] = []
     for candidate in candidates:
         artifact = _lookup_support_artifact(store, candidate.support_digest)
         if artifact is None:
@@ -345,7 +345,7 @@ def _souffle_check(
             warnings=(),
         )
 
-    def _sort_key(item: tuple[CandidateSet, ProofReceipt, dict[str, Any]]) -> tuple[Any, ...]:
+    def _sort_key(item: tuple[DerivationOutput, ProofReceipt, dict[str, Any]]) -> tuple[Any, ...]:
         candidate, artifact, binding = item
         case_index = _derive_case_index_from_artifact(artifact)
         # Known case_index participates in source-order sorting. If the artifact
@@ -474,7 +474,7 @@ def _problog_pyreason_check(
         eval_request, store=store, registry=registry
     )
 
-    matches: list[tuple[CandidateSet, ProvenanceEnvelope, dict[str, Any]]] = []
+    matches: list[tuple[DerivationOutput, ProvenanceEnvelope, dict[str, Any]]] = []
     for candidate in candidates:
         envelope_payload = _lookup_provenance_envelope(store, candidate.support_digest)
         if envelope_payload is None:
@@ -497,7 +497,7 @@ def _problog_pyreason_check(
         )
 
     def _sort_key(
-        item: tuple[CandidateSet, ProvenanceEnvelope, dict[str, Any]],
+        item: tuple[DerivationOutput, ProvenanceEnvelope, dict[str, Any]],
     ) -> tuple[Any, ...]:
         candidate, _envelope, binding = item
         # Per C4: ProbLog/PyReason primary key is (candidate_key, binding_items).
@@ -547,7 +547,7 @@ def _receipt_as_of_event_seq(store: Store) -> tuple[int, int]:
 
 
 def _extract_head_var_binding(
-    *, candidate: CandidateSet, plan: Any
+    *, candidate: DerivationOutput, plan: Any
 ) -> dict[str, Any]:
     """Extract var → value mapping from a candidate via head_var_names alignment.
 

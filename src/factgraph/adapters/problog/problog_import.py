@@ -5,7 +5,7 @@ import re
 from typing import Any
 
 from factgraph.adapters.problog._parsing import _split_top_level_args
-from factgraph.core.derivation.candidates import CandidateSet
+from factgraph.core.derivation.candidates import DerivationOutput
 from factgraph.core.store import builders as store_builders
 from factgraph.core.store.ledger import Ledger
 from factgraph.core.store.runtime import Store
@@ -19,7 +19,7 @@ class ProbLogImportError(Exception):
     pass
 
 
-def parse_problog_output(raw: str, rule_spec: dict[str, Any], ledger: Ledger) -> list[CandidateSet]:
+def parse_problog_output(raw: str, rule_spec: dict[str, Any], ledger: Ledger) -> list[DerivationOutput]:
     if not isinstance(raw, str):
         raise ProbLogImportError("raw must be string")
     if not isinstance(rule_spec, dict):
@@ -58,28 +58,34 @@ def parse_problog_output(raw: str, rule_spec: dict[str, Any], ledger: Ledger) ->
     prob_by_candidate_key: dict[str, float] = {}
     for key, binding in binding_by_key.items():
         prob = max_prob_by_binding[key]
-        temp_candidates = _build_candidates_from_bindings(store, rule_spec, [binding])
-        for candidate in temp_candidates:
-            prev = prob_by_candidate_key.get(candidate.candidate_key)
+        temp_outputs = _build_derivation_outputs_from_bindings(store, rule_spec, [binding])
+        for output in temp_outputs:
+            prev = prob_by_candidate_key.get(output.candidate_key)
             if prev is None or prob > prev:
-                prob_by_candidate_key[candidate.candidate_key] = prob
+                prob_by_candidate_key[output.candidate_key] = prob
 
-    candidates = _build_candidates_from_bindings(store, rule_spec, bindings)
-    out: list[CandidateSet] = []
-    for candidate in candidates:
-        prob = prob_by_candidate_key.get(candidate.candidate_key)
-        if prob is None:
-            out.append(candidate)
+    outputs = _build_derivation_outputs_from_bindings(store, rule_spec, bindings)
+    out: list[DerivationOutput] = []
+    for output in outputs:
+        output_probability = prob_by_candidate_key.get(output.candidate_key)
+        if output_probability is None:
+            out.append(output)
         else:
-            out.append(replace(candidate, confidence=float(prob), confidence_kind="probability"))
+            out.append(
+                replace(
+                    output,
+                    confidence=float(output_probability),
+                    confidence_kind="probability",
+                )
+            )
     return out
 
 
-def _build_candidates_from_bindings(
+def _build_derivation_outputs_from_bindings(
     store: Store,
     rule_spec: dict[str, Any],
     bindings: list[dict[str, Any]],
-) -> list[CandidateSet]:
+) -> list[DerivationOutput]:
     derivation_id = rule_spec.get("derivation_id")
     version = rule_spec.get("version")
     target_pred_id = rule_spec.get("target_pred_id")
@@ -99,7 +105,7 @@ def _build_candidates_from_bindings(
             entity_type=target_pred_id,
             head=head,
         )
-        return store_builders.entity_candidates_from_bindings(
+        return store_builders.entity_derivation_outputs_from_bindings(
             store,
             derivation_id=derivation_id,
             version=version,
@@ -111,7 +117,7 @@ def _build_candidates_from_bindings(
     if schema_pred is None:
         if not isinstance(head_vars, list) or not head_vars:
             raise WhereValidationError("head_vars must be non-empty list")
-        return store_builders.query_style_candidates_from_bindings(
+        return store_builders.query_style_derivation_outputs_from_bindings(
             store,
             derivation_id=derivation_id,
             version=version,
@@ -127,7 +133,7 @@ def _build_candidates_from_bindings(
     if not isinstance(head_vars, list) or len(head_vars) != len(arg_specs):
         raise WhereValidationError("head_vars length must match target arg_specs")
 
-    return store_builders.candidates_from_bindings(
+    return store_builders.derivation_outputs_from_bindings(
         store,
         derivation_id=derivation_id,
         version=version,

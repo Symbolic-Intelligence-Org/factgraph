@@ -15,7 +15,7 @@ from factgraph.adapters.souffle.where_compile import (
     extract_where_variables,
     query_rel_for_where,
 )
-from factgraph.core.derivation.candidates import CandidateSet
+from factgraph.core.derivation.candidates import DerivationOutput
 from factgraph.core.rules.where_eval import WhereValidationError
 from factgraph.core.store import builders as store_builders
 from factgraph.core.store._support import (
@@ -51,7 +51,7 @@ def evaluate_store_engine(
     head_vars: list[Any],
     where: list[Any],
     head: dict[str, Any] | None = None,
-) -> list[CandidateSet]:
+) -> list[DerivationOutput]:
     from factgraph.adapters.souffle.package import ExportOptions, export_package
     from factgraph.adapters.souffle.runner import run_package
 
@@ -99,7 +99,7 @@ def evaluate_store_engine(
                 )
             if not bindings:
                 return []
-            return store_builders.entity_candidates_from_bindings(
+            return store_builders.entity_derivation_outputs_from_bindings(
                 store,
                 derivation_id=derivation_id,
                 version=version,
@@ -109,7 +109,7 @@ def evaluate_store_engine(
 
         if not query_support_rows:
             return []
-        return store_builders.entity_candidates_from_bindings(
+        return store_builders.entity_derivation_outputs_from_bindings(
             store,
             derivation_id=derivation_id,
             version=version,
@@ -165,7 +165,7 @@ def evaluate_store_engine(
         if not bindings:
             return []
         if schema_pred is None:
-            return store_builders.query_style_candidates_from_bindings(
+            return store_builders.query_style_derivation_outputs_from_bindings(
                 store,
                 derivation_id=derivation_id,
                 version=version,
@@ -173,7 +173,7 @@ def evaluate_store_engine(
                 head_vars=head_vars,
                 bindings=bindings,
             )
-        return store_builders.candidates_from_bindings(
+        return store_builders.derivation_outputs_from_bindings(
             store,
             derivation_id=derivation_id,
             version=version,
@@ -187,7 +187,7 @@ def evaluate_store_engine(
     if not query_support_rows:
         return []
     if schema_pred is None:
-        return store_builders.query_style_candidates_from_bindings(
+        return store_builders.query_style_derivation_outputs_from_bindings(
             store,
             derivation_id=derivation_id,
             version=version,
@@ -195,7 +195,7 @@ def evaluate_store_engine(
             head_vars=head_vars,
             rows=query_support_rows,
         )
-    return store_builders.candidates_from_bindings(
+    return store_builders.derivation_outputs_from_bindings(
         store,
         derivation_id=derivation_id,
         version=version,

@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import unittest
 from dataclasses import dataclass
+from unittest.mock import Mock, patch
 
 from factgraph.application import (
     DerivationRuntimeError,
+    accept_derivation_candidate_set,
     accept_derivation_candidate_sets,
     build_schema_index,
     evaluate_derivation_plans,
@@ -212,6 +214,89 @@ class AcceptDerivationSmokeTests(unittest.TestCase):
         accept_request = DerivationAcceptRequest()
         result = accept_derivation_candidate_sets([], accept_request, store=store)
         self.assertEqual(result, [])
+
+    def test_single_accept_delegates_to_store_owned_seam(self) -> None:
+        store = Mock()
+        expected = object()
+        candidate = _make_candidate(run_id="single")
+        request = DerivationAcceptRequest(
+            approved_by="alice",
+            note="reviewed",
+            dry_run=True,
+            identity_override={"name": "alice"},
+            meta={"request_id": "req-1"},
+        )
+
+        with patch(
+            "factgraph.application.derivation_runtime."
+            "_store_accept._accept_store_candidate_as_derived_rule",
+            return_value=expected,
+        ) as accept_with_provenance:
+            result = accept_derivation_candidate_set(
+                candidate,
+                request,
+                store=store,
+                derived_rule_id="business.rule",
+                derived_rule_version="v1",
+            )
+
+        self.assertIs(result, expected)
+        kwargs = accept_with_provenance.call_args.kwargs
+        self.assertIs(accept_with_provenance.call_args.args[0], store)
+        self.assertEqual(kwargs["derivation_id"], "business.rule")
+        self.assertEqual(kwargs["version"], "v1")
+        self.assertIs(kwargs["candidate_set"], candidate)
+        self.assertEqual(kwargs["options"].approved_by, "alice")
+        self.assertEqual(kwargs["options"].note, "reviewed")
+        self.assertTrue(kwargs["options"].dry_run)
+        self.assertEqual(kwargs["options"].identity_override, {"name": "alice"})
+        self.assertEqual(kwargs["options"].actor_meta, {"request_id": "req-1"})
+
+    def test_batch_accept_propagates_per_item_intent_to_store(self) -> None:
+        store = Mock()
+        store.accept_many.return_value = [{"ok": True}]
+        candidates = [_make_candidate(run_id="batch")]
+        request = DerivationAcceptRequest(
+            accept_mode="atomic",
+            idempotent_duplicate_ok=False,
+            approved_by="alice",
+            note="reviewed",
+            identity_override={"name": "alice"},
+            meta={"request_id": "req-2"},
+        )
+
+        result = accept_derivation_candidate_sets(candidates, request, store=store)
+
+        self.assertEqual(result, [{"ok": True}])
+        batch = store.accept_many.call_args.args[0]
+        self.assertEqual(len(batch), 1)
+        self.assertIs(batch[0].candidate_set, candidates[0])
+        self.assertEqual(batch[0].approved_by, "alice")
+        self.assertEqual(batch[0].note, "reviewed")
+        self.assertEqual(batch[0].identity_override, {"name": "alice"})
+        self.assertEqual(batch[0].actor_meta, {"request_id": "req-2"})
+        self.assertEqual(store.accept_many.call_args.kwargs["mode"], "atomic")
+        self.assertFalse(store.accept_many.call_args.kwargs["idempotent_duplicate_ok"])
+
+    def test_batch_accept_rejects_dry_run(self) -> None:
+        store = Mock()
+        with self.assertRaisesRegex(DerivationRuntimeError, "dry_run"):
+            accept_derivation_candidate_sets(
+                [_make_candidate(run_id="batch")],
+                DerivationAcceptRequest(dry_run=True),
+                store=store,
+            )
+        store.accept_many.assert_not_called()
+
+    def test_batch_accept_rejects_multi_output_identity_override(self) -> None:
+        store = Mock()
+        with self.assertRaisesRegex(DerivationRuntimeError, "ambiguous"):
+            accept_derivation_candidate_sets(
+                [_make_candidate(run_id="one"), _make_candidate(run_id="two")],
+                DerivationAcceptRequest(identity_override={"name": "alice"}),
+                store=store,
+            )
+        store.accept_many.assert_not_called()
 
 
 class EvaluateDerivationSmokeTests(unittest.TestCase):

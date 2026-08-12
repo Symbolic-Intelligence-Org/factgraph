@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any, Literal, TypedDict, TypeAlias
 
-from factgraph.core.derivation.candidates import CandidateSet
+from factgraph.core.derivation.candidates import DerivationOutput
 
 HeadVarsIR: TypeAlias = list[object]
 WhereIR: TypeAlias = list[object]
@@ -11,7 +11,7 @@ HeadSpecIR: TypeAlias = dict[str, object]
 BodyConfidencesIR: TypeAlias = list[float] | None
 EngineOptionsIR: TypeAlias = dict[str, Any] | None
 EvaluateMode: TypeAlias = Literal["native", "souffle", "problog", "pyreason"]
-EngineEvaluatorFn: TypeAlias = Callable[..., list[CandidateSet]]
+EngineEvaluatorFn: TypeAlias = Callable[..., list[DerivationOutput]]
 
 
 class EngineExtBase:

@@ -401,7 +401,7 @@ class EvaluationQueryNativeEvaluateTests(unittest.TestCase):
         graph = SDKStore([Person])
         _seed_person(graph, "alice", age=22, score=9)
         compiled, _bundle = _compiled_person_query(graph)
-        original = graph._candidate_sets_to_evaluate_result
+        original = graph._derivation_outputs_to_evaluate_result
 
         def mutate_after_adaptation(*args, **kwargs):
             result = original(*args, **kwargs)
@@ -410,7 +410,7 @@ class EvaluationQueryNativeEvaluateTests(unittest.TestCase):
 
         with patch.object(
             graph,
-            "_candidate_sets_to_evaluate_result",
+            "_derivation_outputs_to_evaluate_result",
             side_effect=mutate_after_adaptation,
         ):
             with self.assertRaisesRegex(SDKStoreError, "view changed during"):

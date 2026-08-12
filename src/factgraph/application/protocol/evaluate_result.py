@@ -25,7 +25,7 @@ from factgraph.application.protocol.rule import Rule, _is_projection_rule
 from factgraph.application.protocol.rule_expr import RuleExprError
 from factgraph.application.protocol.rule_expr_inspect import _inspect_closed_head
 from factgraph.application.protocol.schema_runtime import EntityRef
-from factgraph.core.derivation.candidates import CandidateSet
+from factgraph.core.derivation.candidates import DerivationOutput
 from factgraph.core.protocol.digests import sha256_hex, sha256_token
 from factgraph.core.protocol.tup_v1 import claim_args_from_rest_terms
 from factgraph.core.rules.where_ast import CmpAtom, Const, PredAtom
@@ -683,8 +683,8 @@ def rule_set_digest_for_entries(entries: Iterable[tuple[str, str]]) -> str:
     return sha256_token(canonical_bytes_for_evaluate("evaluate_rule_set_digest_v1", tuple(sorted(normalized))))
 
 
-def _candidate_set_to_evaluate_row(
-    candidate: CandidateSet,
+def _derivation_output_to_evaluate_row(
+    output: DerivationOutput,
     *,
     head: Rule,
     result_id: str,
@@ -694,26 +694,26 @@ def _candidate_set_to_evaluate_row(
     claim_name: str | None = None,
     binding_types: Mapping[str, str] | None = None,
 ) -> EvaluateRow:
-    if not isinstance(candidate, CandidateSet):
-        raise ProtocolShapeError("candidate must be CandidateSet")
+    if not isinstance(output, DerivationOutput):
+        raise ProtocolShapeError("output must be DerivationOutput")
     if not isinstance(head, Rule):
         raise ProtocolShapeError("head must be application protocol Rule")
     _require_token_prefix(result_id, prefix=_RESULT_ID_PREFIX, field_name="result_id")
     _require_token_prefix(run_id, prefix=_RUN_ID_PREFIX, field_name="run_id")
     _require_sha256_token(closed_head_digest, field_name="closed_head_digest")
     if binding_types is not None:
-        if candidate.candidate_kind != "fact" or candidate.target != head.id or candidate.payload.get("pred_id") != head.id:
-            raise ProtocolShapeError("candidate projection target must exactly match its query head")
-        terms = candidate.payload.get("terms")
+        if output.candidate_kind != "fact" or output.target != head.id or output.payload.get("pred_id") != head.id:
+            raise ProtocolShapeError("derivation output projection target must exactly match its query head")
+        terms = output.payload.get("terms")
         if not isinstance(terms, Sequence) or isinstance(terms, (str, bytes)) or len(terms) != len(head.ports):
-            raise ProtocolShapeError("candidate projection terms must exactly align with head ports")
-    bindings = _bindings_from_candidate(candidate, head=head)
+            raise ProtocolShapeError("derivation output projection terms must exactly align with head ports")
+    bindings = _bindings_from_output(output, head=head)
     if binding_types is not None:
         bindings = _typed_projection_bindings(bindings, head=head, binding_types=binding_types)
-    effective_claim_name = candidate.target if claim_name is None else claim_name
+    effective_claim_name = output.target if claim_name is None else claim_name
     digest = claim_digest_for(claim_kind, effective_claim_name, bindings)
     row_id = row_id_for(run_id, bindings)
-    certainty = _certainty_from_candidate(candidate)
+    certainty = _certainty_from_output(output)
     return EvaluateRow(
         row_id=row_id,
         bindings=bindings,
@@ -1124,22 +1124,27 @@ def _metadata_value(value: Any) -> Any:
     return str(value)
 
 
-def _bindings_from_candidate(candidate: CandidateSet, *, head: Rule) -> Mapping[str, Any]:
+def _bindings_from_output(output: DerivationOutput, *, head: Rule) -> Mapping[str, Any]:
     if not isinstance(head, Rule):
         raise ProtocolShapeError("head must be application protocol Rule")
-    payload = candidate.payload
+    payload = output.payload
     if not isinstance(payload, Mapping):
-        raise ProtocolShapeError("candidate.payload must be mapping")
+        raise ProtocolShapeError("derivation_output.payload must be mapping")
     terms = payload.get("terms")
     port_names = tuple(head.ports)
     if isinstance(terms, Sequence) and not isinstance(terms, (str, bytes)):
         if len(terms) < len(port_names):
-            raise ProtocolShapeError("candidate.payload.terms must align with head ports")
-        return _freeze_mapping(dict(zip(port_names, terms[: len(port_names)])), field_name="candidate.payload.terms")
+            raise ProtocolShapeError("derivation_output.payload.terms must align with head ports")
+        return _freeze_mapping(
+            dict(zip(port_names, terms[: len(port_names)])),
+            field_name="derivation_output.payload.terms",
+        )
     maybe_bindings = payload.get("bindings")
     if isinstance(maybe_bindings, Mapping):
-        return _freeze_mapping(maybe_bindings, field_name="candidate.payload.bindings")
-    return _freeze_mapping(payload, field_name="candidate.payload")
+        return _freeze_mapping(
+            maybe_bindings, field_name="derivation_output.payload.bindings"
+        )
+    return _freeze_mapping(payload, field_name="derivation_output.payload")
 
 
 def _typed_projection_bindings(
@@ -1149,22 +1154,22 @@ def _typed_projection_bindings(
     if tuple(binding_types) != port_names:
         raise ProtocolShapeError("typed projection domains must follow the exact head-port order")
     if set(bindings) != set(port_names):
-        raise ProtocolShapeError("candidate projection bindings must exactly match head ports")
+        raise ProtocolShapeError("derivation output projection bindings must exactly match head ports")
     typed: dict[str, Any] = {}
     for port_name in port_names:
         value_type = binding_types[port_name]
         source = bindings[port_name]
         if not isinstance(source, Mapping):
-            raise ProtocolShapeError(f"candidate projection term for {port_name!r} must be typed")
+            raise ProtocolShapeError(f"derivation output projection term for {port_name!r} must be typed")
         source_kind = source.get("kind")
         source_type = "entity_ref" if source_kind == "entity_ref" else source.get("tag")
         if source_kind not in {"entity_ref", "literal"} or not isinstance(source_type, str):
-            raise ProtocolShapeError(f"candidate projection term for {port_name!r} is malformed")
+            raise ProtocolShapeError(f"derivation output projection term for {port_name!r} is malformed")
         value = _public_term_value(source)
         try:
             claim_args_from_rest_terms([(source_type, value)])
         except ValueError as exc:
-            raise ProtocolShapeError(f"candidate projection term for {port_name!r} contradicts its runtime tag") from exc
+            raise ProtocolShapeError(f"derivation output projection term for {port_name!r} contradicts its runtime tag") from exc
         if value_type == "bytes" and isinstance(value, str):
             try:
                 encoded_value = value.encode("ascii")
@@ -1172,27 +1177,29 @@ def _typed_projection_bindings(
                 if base64.urlsafe_b64encode(value).rstrip(b"=") != encoded_value:
                     raise ValueError("bytes value is not canonical base64url")
             except (ValueError, UnicodeEncodeError, binascii.Error) as exc:
-                raise ProtocolShapeError(f"candidate projection value for {port_name!r} is not canonical bytes") from exc
+                raise ProtocolShapeError(f"derivation output projection value for {port_name!r} is not canonical bytes") from exc
         try:
             _idx, canonical, canonical_type = claim_args_from_rest_terms([(value_type, value)])[0]
         except ValueError as exc:
-            raise ProtocolShapeError(f"candidate projection value for {port_name!r} is not {value_type!r}") from exc
+            raise ProtocolShapeError(f"derivation output projection value for {port_name!r} is not {value_type!r}") from exc
         term = (
             {"kind": "entity_ref", "value": canonical}
             if canonical_type == "entity_ref"
             else {"kind": "literal", "tag": canonical_type, "value": canonical}
         )
-        typed[port_name] = _freeze_mapping(term, field_name=f"candidate.typed_projection.{port_name}")
-    return _freeze_mapping(typed, field_name="candidate.typed_projection")
+        typed[port_name] = _freeze_mapping(
+            term, field_name=f"derivation_output.typed_projection.{port_name}"
+        )
+    return _freeze_mapping(typed, field_name="derivation_output.typed_projection")
 
 
-def _certainty_from_candidate(candidate: CandidateSet) -> Certainty | None:
-    if candidate.confidence is None or candidate.confidence_kind is None:
+def _certainty_from_output(output: DerivationOutput) -> Certainty | None:
+    if output.confidence is None or output.confidence_kind is None:
         return BOOLEAN_CERTAINTY
-    value = _require_finite_number(candidate.confidence, field_name="CandidateSet.confidence")
-    if candidate.confidence_kind == "probability":
+    value = _require_finite_number(output.confidence, field_name="DerivationOutput.confidence")
+    if output.confidence_kind == "probability":
         return Certainty(value, value, "probabilistic")
-    if candidate.confidence_kind == "certainty":
+    if output.confidence_kind == "certainty":
         return Certainty(value, value, "possibilistic")
     return None
 

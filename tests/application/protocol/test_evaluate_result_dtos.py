@@ -16,7 +16,7 @@ from factgraph.application.protocol import (
 )
 from factgraph.application.protocol.common import ProtocolShapeError
 from factgraph.application.protocol.evaluate_result import (
-    _candidate_set_to_evaluate_row,
+    _derivation_output_to_evaluate_row,
     _explain_live_row,
     _row_digest_for,
     canonical_bytes_for_evaluate,
@@ -1082,7 +1082,7 @@ class EvaluateResultDTOTests(unittest.TestCase):
             confidence_kind="probability",
         )
 
-        row = _candidate_set_to_evaluate_row(
+        row = _derivation_output_to_evaluate_row(
             candidate,
             head=head,
             result_id=result_id,
@@ -1095,7 +1095,7 @@ class EvaluateResultDTOTests(unittest.TestCase):
         self.assertFalse(hasattr(row, "candidate_id"))
         self.assertEqual(row.digest, claim_digest_for(row.kind, "Person:exists", row.bindings))
 
-        native_row = _candidate_set_to_evaluate_row(
+        native_row = _derivation_output_to_evaluate_row(
             CandidateSet(
                 derivation_id="native",
                 derivation_version="v1",
@@ -1114,7 +1114,7 @@ class EvaluateResultDTOTests(unittest.TestCase):
             run_id=run_id,
             closed_head_digest=closed_head_digest,
         )
-        pyreason_row = _candidate_set_to_evaluate_row(
+        pyreason_row = _derivation_output_to_evaluate_row(
             CandidateSet(
                 derivation_id="pyreason",
                 derivation_version="v1",

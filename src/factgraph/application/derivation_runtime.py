@@ -1,20 +1,22 @@
 """Application-layer derivation runtime executor.
 
-Commit 1 scope: thin orchestrator that returns core CandidateSet / AcceptResult /
+Commit 1 scope: thin orchestrator that returns core DerivationOutput / AcceptResult /
 accept_many output without wrapping them in application-specific DTOs.
 
 - evaluate_derivation_plans iterates plans and heads, calls evaluate_store per head
   using store.evaluate_engine as the EngineEvaluatorFn, and returns the flattened
-  list of CandidateSet objects.
-- accept_derivation_candidate_sets passes through to
-  factgraph.core.derivation.accept.accept_many_candidate_sets.
+  list of DerivationOutput objects.
+- materialization wrappers delegate through Store-owned write seams so Store
+  schema/policy digest enrichment is preserved. The single-item application
+  seam may retain a stable authored/business rule identity distinct from a
+  compiler-generated output identity.
 
 Commit 2a parity:
 - ``CompiledDerivationPlan.head_spec`` (HeadSpecIR dict) is forwarded as the
   ``head=`` payload to ``evaluate_store`` when set; in that case ``len(heads) == 1``
   and ``heads[0]`` provides ``target_pred_id`` / ``head_var_names``.
 - ``CompiledDerivationPlan.engine_ext`` (``EngineExtBase``) is forwarded.
-- Multi-plan ``run_id`` is propagated by rebuilding each ``CandidateSet`` with the
+- Multi-plan ``run_id`` is propagated by rebuilding each ``DerivationOutput`` with the
   shared ``run_id`` via ``dataclasses.replace``.
 - ``DerivationAcceptRequest`` exposes the legitimate ``AcceptOptions`` fields
   (``approved_by``/``note``/``dry_run``/``identity_override``); ``idempotent_duplicate_ok``
@@ -27,11 +29,11 @@ from typing import Any
 
 from factgraph.core.derivation.accept import (
     AcceptOptions,
+    AcceptRequest,
     AcceptResult,
-    accept_candidate_set,
-    accept_many_candidate_sets,
 )
-from factgraph.core.derivation.candidates import CandidateSet
+from factgraph.core.derivation.candidates import CandidateSet, DerivationOutput
+from factgraph.core.store import _accept as _store_accept
 from factgraph.core.store._evaluate import evaluate_store
 from factgraph.core.store.runtime import Store
 
@@ -71,22 +73,22 @@ def evaluate_derivation_plans(
     *,
     store: Store,
     registry: Any | None = None,
-) -> list[CandidateSet]:
+) -> list[DerivationOutput]:
     """Evaluate compiled derivation plans against the store.
 
     For each plan the executor iterates over the plan's heads and calls
     factgraph.core.store._evaluate.evaluate_store once per head, using
     ``store.evaluate_engine`` as the EngineEvaluatorFn. The flattened list of
-    CandidateSet objects is returned to the caller (no application-side wrapping).
+    DerivationOutput objects is returned to the caller (no application-side wrapping).
     """
-    candidate_sets: list[CandidateSet] = []
+    outputs: list[DerivationOutput] = []
     for plan in request.plans:
-        candidate_sets.extend(
+        outputs.extend(
             _evaluate_plan(plan, request=request, store=store, registry=registry)
         )
     if request.run_id is not None and len(request.plans) > 1:
-        candidate_sets = _attach_run_id(candidate_sets, run_id=request.run_id)
-    return candidate_sets
+        outputs = _attach_run_id(outputs, run_id=request.run_id)
+    return outputs
 
 
 def _evaluate_plan(
@@ -95,7 +97,7 @@ def _evaluate_plan(
     request: DerivationEvaluateRequest,
     store: Store,
     registry: Any | None,
-) -> list[CandidateSet]:
+) -> list[DerivationOutput]:
     engine_options = dict(plan.engine_options) if plan.engine_options else None
     if plan.head_spec is not None:
         # Single-head call with the HeadSpecIR forwarded; heads tuple length 1 invariant
@@ -119,7 +121,7 @@ def _evaluate_plan(
             )
         )
 
-    results: list[CandidateSet] = []
+    results: list[DerivationOutput] = []
     for head in plan.heads:
         head_results = evaluate_store(
             store,
@@ -139,7 +141,9 @@ def _evaluate_plan(
     return results
 
 
-def _attach_run_id(candidates: list[CandidateSet], *, run_id: str) -> list[CandidateSet]:
+def _attach_run_id(
+    outputs: list[DerivationOutput], *, run_id: str
+) -> list[DerivationOutput]:
     return [
         replace(
             candidate,
@@ -147,7 +151,7 @@ def _attach_run_id(candidates: list[CandidateSet], *, run_id: str) -> list[Candi
             payload=dict(candidate.payload),
             candidate_id="",
         )
-        for candidate in candidates
+        for candidate in outputs
     ]
 
 
@@ -161,10 +165,10 @@ def accept_derivation_candidate_set(
 ) -> AcceptResult:
     """Accept a single CandidateSet against the store ledger.
 
-    Thin wrapper over factgraph.core.derivation.accept.accept_candidate_set. Only the
-    fields supported by core ``AcceptOptions`` are forwarded; ``idempotent_duplicate_ok``
-    is intentionally NOT part of ``AcceptOptions`` and applies only to the
-    ``accept_many`` flow.
+    The application wrapper delegates to the Store-owned enriched write seam.
+    It preserves the established application contract in which the declared
+    authored/business rule identity can differ from a compiler-generated output
+    identity; direct ``Store.accept`` keeps its stricter identity-match guard.
     """
     options = AcceptOptions(
         approved_by=accept_request.approved_by,
@@ -179,12 +183,12 @@ def accept_derivation_candidate_set(
         # (DerivationAcceptRequest.meta -> AcceptOptions.actor_meta -> write meta).
         actor_meta=dict(accept_request.meta) if accept_request.meta else None,
     )
-    return accept_candidate_set(
-        store.ledger,
-        candidate_set,
-        options,
-        derived_rule_id,
-        derived_rule_version,
+    return _store_accept._accept_store_candidate_as_derived_rule(
+        store,
+        derivation_id=derived_rule_id,
+        version=derived_rule_version,
+        candidate_set=candidate_set,
+        options=options,
     )
 
 
@@ -196,15 +200,39 @@ def accept_derivation_candidate_sets(
 ) -> list[dict[str, Any]]:
     """Accept many CandidateSets against the store ledger.
 
-    Pass-through to factgraph.core.derivation.accept.accept_many_candidate_sets;
-    callers receive the raw list[dict[str, Any]] result without application-side
-    rewrapping.
+    Delegates to the Store-owned batch write seam after preserving per-item intent.
+    Batch dry-run is not implemented by the core protocol and therefore fails closed.
     """
     if not candidate_sets:
         return []
-    return accept_many_candidate_sets(
-        store.ledger,
-        list(candidate_sets),
+    if accept_request.dry_run:
+        raise DerivationRuntimeError(
+            "batch acceptance does not support dry_run=True",
+            code="DERIVATION_BATCH_DRY_RUN_UNSUPPORTED",
+            path=("accept_request", "dry_run"),
+        )
+    if len(candidate_sets) > 1 and accept_request.identity_override is not None:
+        raise DerivationRuntimeError(
+            "identity_override is ambiguous for multiple derivation outputs",
+            code="DERIVATION_BATCH_IDENTITY_OVERRIDE_AMBIGUOUS",
+            path=("accept_request", "identity_override"),
+        )
+    requests: list[AcceptRequest | CandidateSet | dict[str, Any]] = [
+        AcceptRequest(
+            candidate_set=candidate_set,
+            identity_override=(
+                dict(accept_request.identity_override)
+                if accept_request.identity_override is not None
+                else None
+            ),
+            approved_by=accept_request.approved_by,
+            note=accept_request.note,
+            actor_meta=dict(accept_request.meta) if accept_request.meta else None,
+        )
+        for candidate_set in candidate_sets
+    ]
+    return store.accept_many(
+        requests,
         mode="atomic" if accept_request.accept_mode == "atomic" else "best_effort",
         idempotent_duplicate_ok=accept_request.idempotent_duplicate_ok,
     )

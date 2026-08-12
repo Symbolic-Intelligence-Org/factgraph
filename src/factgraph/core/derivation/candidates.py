@@ -1,8 +1,16 @@
+"""Derivation outputs and legacy candidate-protocol compatibility names.
+
+``DerivationOutput`` is the canonical read-only evaluation vocabulary.  The
+class remains defined in this historical module so persisted references to
+``factgraph.core.derivation.candidates.CandidateSet`` can resolve through the
+direct compatibility alias below.
+"""
+
 from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, TypeAlias
 
 from factgraph.core.protocol.digests import sha256_hex, sha256_token
 from factgraph.core.protocol.tup_v1 import canonical_bytes_tup_v1
@@ -11,7 +19,7 @@ CONFIDENCE_KINDS = frozenset({"none", "probability", "certainty"})
 
 
 @dataclass(frozen=True)
-class CandidateSet:
+class DerivationOutput:
     derivation_id: str
     derivation_version: str
     run_id: str
@@ -164,7 +172,7 @@ def canonical_candidate_content(*, candidate_kind: str, target: str, payload: di
     )
 
 
-def extract_candidate_refs(candidate_set: CandidateSet) -> set[str]:
+def extract_candidate_refs(candidate_set: DerivationOutput) -> set[str]:
     payload = candidate_set.payload
     if not isinstance(payload, dict):
         return set()
@@ -225,7 +233,7 @@ def _to_jsonable(value: Any) -> Any:
     return value
 
 
-def make_candidate(
+def make_derivation_output(
     *,
     derivation_id: str,
     derivation_version: str,
@@ -241,7 +249,7 @@ def make_candidate(
     candidate_kind: str = "fact",
     confidence: float | None = None,
     confidence_kind: str = "none",
-) -> CandidateSet:
+) -> DerivationOutput:
     if not isinstance(derivation_id, str) or not derivation_id:
         raise ValueError("derivation_id must be non-empty string")
     if not isinstance(derivation_version, str) or not derivation_version:
@@ -270,7 +278,7 @@ def make_candidate(
         candidate_key=candidate_key,
     )
 
-    return CandidateSet(
+    return DerivationOutput(
         derivation_id=derivation_id,
         derivation_version=derivation_version,
         run_id=run_id,
@@ -288,3 +296,24 @@ def make_candidate(
         candidate_key=candidate_key,
         candidate_id=candidate_id,
     )
+
+
+# Persisted candidate identifiers and payload keys remain the v2 compatibility
+# protocol.  These direct aliases keep existing construction, ``isinstance``,
+# unpickling, and equality semantics intact while read-only evaluation code
+# adopts the accurate in-process name.
+CandidateSet: TypeAlias = DerivationOutput
+make_candidate = make_derivation_output
+
+__all__ = [
+    "CandidateSet",
+    "CONFIDENCE_KINDS",
+    "DerivationOutput",
+    "canonical_candidate_content",
+    "compute_candidate_id_v2",
+    "compute_candidate_key_v2",
+    "compute_key_tuple_digest",
+    "extract_candidate_refs",
+    "make_candidate",
+    "make_derivation_output",
+]

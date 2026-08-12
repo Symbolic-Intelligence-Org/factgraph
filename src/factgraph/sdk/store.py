@@ -67,7 +67,7 @@ from factgraph.application.protocol.evaluate_result import (
     _FORM1_ROW_SUPPORT_KINDS,
     _build_closed_head_from_row,
     _build_minimal_row_evidence_graph,
-    _candidate_set_to_evaluate_row,
+    _derivation_output_to_evaluate_row,
     _legacy_candidate_payload_for_row_result,
     _public_term_value,
     _row_digest_for,
@@ -96,7 +96,7 @@ from factgraph.application.protocol.rule_expr_lowering import (
 from factgraph.application.schema_runtime import build_schema_index, display_value, entity_type_from_ref
 from factgraph.authoring.derivations import compile_authoring_derivation_v1
 from factgraph.authoring.rules import compile_authoring_rule_v1
-from factgraph.core.derivation.candidates import CandidateSet
+from factgraph.core.derivation.candidates import DerivationOutput
 from factgraph.core.evidence.write_protocol import WriteProtocolError, retract_by_asrt
 from factgraph.core.protocol.digests import sha256_hex
 from factgraph.core.rules.where_ast import PredAtom, Var
@@ -1516,10 +1516,14 @@ class _SDKEvalManager:
         return self._sdk._evaluate(*args, **kwargs)
 
     def evaluate_candidates(self, *args: Any, **kwargs: Any) -> Any:
-        """Evaluate an Inference/derivation and return its raw CandidateSets.
+        """Evaluate an Inference/derivation and return raw DerivationOutputs.
 
         Read-only: candidates are hypothetical until accepted on a writing
         surface; this method never writes to the ledger.
+
+        Temporary cross-repository compatibility debt: Meander still consumes
+        this raw-output seam. New callers should use :meth:`evaluate`, whose
+        ``EvaluateResult`` keeps engine outputs internal.
         """
         return self._sdk._evaluate_candidates(*args, **kwargs)
 
@@ -2847,10 +2851,10 @@ class SDKStore:
             raise SDKStoreError("SDK public semantics require Rule, RuleExpr, or Inference object input")
         return (engine, _lower_public_semantics(raw_config, derivation=derivation))
 
-    def _candidates_for_derivation(
+    def _outputs_for_derivation(
         self, derivation: Any, *, raw_engine: Any, raw_config: Any
-    ) -> tuple[list[CandidateSet], list[dict[str, Any]], str, "SemanticsProfile | None"]:
-        """Erzeugt die rohen CandidateSets für eine Inference oder ein Derivation-Dict.
+    ) -> tuple[list[DerivationOutput], list[dict[str, Any]], str, "SemanticsProfile | None"]:
+        """Erzeugt die rohen DerivationOutputs für eine Inference oder ein Derivation-Dict.
 
         Gemeinsamer Kern von _evaluate und _evaluate_candidates: engine/semantics
         auflösen, bei einer Inference zusätzlich die runtime registry, kompilieren,
@@ -2872,13 +2876,13 @@ class SDKStore:
             else None
         )
         compiled_plans = self._compile_derivation_input(derivation)
-        candidates = self._evaluate_compiled_derivation_plans(
+        outputs = self._evaluate_compiled_derivation_plans(
             compiled_plans,
             mode=engine,
             registry=runtime_registry,
             semantics_profile=semantics_profile,
         )
-        return candidates, compiled_plans, engine, semantics_profile
+        return outputs, compiled_plans, engine, semantics_profile
 
     def _evaluate(self, *args: Any, **kwargs: Any) -> EvaluateResult:
         if "view" in kwargs:
@@ -2923,30 +2927,30 @@ class SDKStore:
                 raw_config=raw_config,
             )
         if args and hasattr(args[0], "to_authoring_payload"):
-            candidates, compiled_plans, engine, semantics_profile = (
-                self._candidates_for_derivation(
+            outputs, compiled_plans, engine, semantics_profile = (
+                self._outputs_for_derivation(
                     args[0], raw_engine=raw_engine, raw_config=raw_config
                 )
             )
             app_plans = _application_plans_from_compiled_dicts(compiled_plans, mode=engine)
             head = _head_rule_for_compiled_plans(app_plans)
-            return self._candidate_sets_to_evaluate_result(
-                candidates,
+            return self._derivation_outputs_to_evaluate_result(
+                outputs,
                 compiled_plans=app_plans,
                 head=head,
                 engine=engine,
                 semantics_profile=semantics_profile,
             )
         if args and isinstance(args[0], dict) and ("derivation_id" in args[0] or "target_pred_id" in args[0] or "head" in args[0]):
-            candidates, compiled_plans, engine, semantics_profile = (
-                self._candidates_for_derivation(
+            outputs, compiled_plans, engine, semantics_profile = (
+                self._outputs_for_derivation(
                     args[0], raw_engine=raw_engine, raw_config=raw_config
                 )
             )
             app_plans = _application_plans_from_compiled_dicts(compiled_plans, mode=engine)
             head = _head_rule_for_compiled_plans(app_plans)
-            return self._candidate_sets_to_evaluate_result(
-                candidates,
+            return self._derivation_outputs_to_evaluate_result(
+                outputs,
                 compiled_plans=app_plans,
                 head=head,
                 engine=engine,
@@ -2958,7 +2962,7 @@ class SDKStore:
             "derivation dict"
         )
 
-    def _evaluate_candidates(self, *args: Any, **kwargs: Any) -> list[CandidateSet]:
+    def _evaluate_candidates(self, *args: Any, **kwargs: Any) -> list[DerivationOutput]:
         if "view" in kwargs:
             raise SDKStoreError(
                 "method-level view= is not supported by evaluate_candidates(); use FactGraph.attach(db, view=view) instead"
@@ -2991,7 +2995,7 @@ class SDKStore:
             )
         if args and isinstance(args[0], (ApplicationRule, _RuleExpr)):
             # RuleExpr/Rule candidates come from the SAME lowering + evaluation as
-            # evaluate(rule_expr, head=): the returned CandidateSets are exactly the
+            # evaluate(rule_expr, head=): the returned outputs are exactly the
             # ones whose EvaluateResult rows explain()/narrate(). This is the write
             # leg of the RuleExpr path (feed accept_derivation_candidate_set), with no
             # second evaluator and no recompute outside the FactGraph evaluation.
@@ -3000,14 +3004,14 @@ class SDKStore:
                     "evaluate_candidates(rule_expr, head=) requires a closed application Rule head "
                     "(same head you would pass to evaluate(rule_expr, head=))"
                 )
-            candidates, *_rest = self._rule_expr_candidates_core(
+            outputs, *_rest = self._rule_expr_outputs_core(
                 args[0],
                 head=head,
                 raw_engine=raw_engine,
                 raw_config=raw_config,
                 api_path="evaluate_candidates(rule_expr)",
             )
-            return candidates
+            return outputs
         if head is not None:
             raise SDKStoreError(
                 "head= is only accepted by evaluate_candidates(rule_expr, head=); "
@@ -3024,12 +3028,12 @@ class SDKStore:
                 )
             )
         ):
-            candidates, _compiled_plans, _engine, _semantics = (
-                self._candidates_for_derivation(
+            outputs, _compiled_plans, _engine, _semantics = (
+                self._outputs_for_derivation(
                     args[0], raw_engine=raw_engine, raw_config=raw_config
                 )
             )
-            return candidates
+            return outputs
         raise SDKStoreError(
             "evaluate_candidates() requires an Inference object or a structured derivation dict"
         )
@@ -3159,7 +3163,7 @@ class SDKStore:
         registry: RuleRegistry | None,
         engine_options: dict[str, Any] | None = None,
         semantics_profile: SemanticsProfile | None = None,
-    ) -> list[CandidateSet]:
+    ) -> list[DerivationOutput]:
         if not compiled_plans:
             return []
         resolved_mode = _resolve_compiled_derivation_mode(compiled_plans, explicit_mode=mode)
@@ -3241,15 +3245,15 @@ class SDKStore:
             raise SDKStoreError(
                 "compiled EvaluationQuery could not be materialized for native execution"
             ) from exc
-        candidates = evaluate_derivation_plans(
+        outputs = evaluate_derivation_plans(
             DerivationEvaluateRequest(plans=(compiled_plan,), engine="native"),
             store=self._store,
             registry=None,
         )
         self._assert_evaluation_query_execution_current(compiled_query, view_snapshot_digest)
 
-        result = self._candidate_sets_to_evaluate_result(
-            candidates,
+        result = self._derivation_outputs_to_evaluate_result(
+            outputs,
             compiled_plans=[compiled_plan],
             head=compiled_query.projection_head,
             engine="native",
@@ -3303,8 +3307,8 @@ class SDKStore:
                 "legacy SDK Rule, Inference, dict, string, and inspect objects are not accepted"
             )
 
-        candidates, compiled, plan, rules_by_id, engine, semantics_profile = (
-            self._rule_expr_candidates_core(
+        outputs, compiled, plan, rules_by_id, engine, semantics_profile = (
+            self._rule_expr_outputs_core(
                 args[0],
                 head=head,
                 raw_engine=raw_engine,
@@ -3312,8 +3316,8 @@ class SDKStore:
                 api_path="evaluate(rule_expr)",
             )
         )
-        return self._candidate_sets_to_evaluate_result(
-            candidates,
+        return self._derivation_outputs_to_evaluate_result(
+            outputs,
             compiled_plans=[compiled],
             head=head,
             engine=engine,
@@ -3322,7 +3326,7 @@ class SDKStore:
             lowering_rules_by_id=rules_by_id if engine in {"native", "problog", "souffle"} else None,
         )
 
-    def _rule_expr_candidates_core(
+    def _rule_expr_outputs_core(
         self,
         source: Any,
         *,
@@ -3330,14 +3334,14 @@ class SDKStore:
         raw_engine: Any,
         raw_config: Any,
         api_path: str,
-    ) -> tuple[list[CandidateSet], Any, Any, Any, str, Any]:
-        """Lower a RuleExpr/Rule (+ closed head) and evaluate it to CandidateSets.
+    ) -> tuple[list[DerivationOutput], Any, Any, Any, str, Any]:
+        """Lower a RuleExpr/Rule (+ closed head) and evaluate it to DerivationOutputs.
 
         The single shared RuleExpr evaluation path. ``evaluate(rule_expr)`` wraps the
         returned candidates into an EvaluateResult (whose rows ``explain()``/``narrate()``);
         ``evaluate_candidates(rule_expr, head=)`` returns the same candidates raw (for
         ``accept_derivation_candidate_set``). Identical lowering + identical
-        ``evaluate_derivation_plans`` call, so the accepted CandidateSet is exactly the
+        ``evaluate_derivation_plans`` call, so the materialized output is exactly the
         one the narration explains — no second evaluator.
         """
         if isinstance(source, ApplicationRule):
@@ -3367,7 +3371,7 @@ class SDKStore:
         else:
             compiled, _traces = _materialize_adapter_derivation_plan(plan, engine=engine)
 
-        candidates = evaluate_derivation_plans(
+        outputs = evaluate_derivation_plans(
             DerivationEvaluateRequest(
                 plans=(compiled,),
                 engine=engine,
@@ -3376,11 +3380,11 @@ class SDKStore:
             store=self._store,
             registry=None,
         )
-        return candidates, compiled, plan, rules_by_id, engine, semantics_profile
+        return outputs, compiled, plan, rules_by_id, engine, semantics_profile
 
-    def _candidate_sets_to_evaluate_result(
+    def _derivation_outputs_to_evaluate_result(
         self,
-        candidates: list[CandidateSet],
+        outputs: list[DerivationOutput],
         *,
         compiled_plans: Sequence[CompiledDerivationPlan],
         head: ApplicationRule,
@@ -3434,8 +3438,8 @@ class SDKStore:
         closed_head_digest = closed_head_digest_for(head)
         try:
             rows = tuple(
-                _candidate_set_to_evaluate_row(
-                    candidate,
+                _derivation_output_to_evaluate_row(
+                    output,
                     head=head,
                     result_id=result_id,
                     run_id=run_id,
@@ -3444,10 +3448,10 @@ class SDKStore:
                     claim_name=head.id,
                     binding_types=binding_types,
                 )
-                for candidate in candidates
+                for output in outputs
             )
-            row_support_artifacts = self._row_support_artifacts_for_candidates(candidates, rows)
-            row_provenance_envelopes = self._row_provenance_envelopes_for_candidates(candidates, rows)
+            row_support_artifacts = self._row_support_artifacts_for_outputs(outputs, rows)
+            row_provenance_envelopes = self._row_provenance_envelopes_for_outputs(outputs, rows)
             row_digests = tuple(_row_digest_for(row, result_id=result_id, claim_name=head.id) for row in rows)
             result_digest = result_digest_for(
                 result_id=result_id,
@@ -3926,30 +3930,30 @@ class SDKStore:
             pin_bindings=pin_bindings,
         )
 
-    def _row_support_artifacts_for_candidates(
+    def _row_support_artifacts_for_outputs(
         self,
-        candidates: Sequence[CandidateSet],
+        outputs: Sequence[DerivationOutput],
         rows: Sequence[Any],
     ) -> Mapping[str, ProofReceipt]:
         out: dict[str, ProofReceipt] = {}
-        for candidate, row in zip(candidates, rows):
-            if candidate.support_kind not in _FORM1_ROW_SUPPORT_KINDS:
+        for output, row in zip(outputs, rows):
+            if output.support_kind not in _FORM1_ROW_SUPPORT_KINDS:
                 continue
-            artifact = self._store._lookup_support_artifact(candidate.support_digest)
+            artifact = self._store._lookup_support_artifact(output.support_digest)
             if isinstance(artifact, ProofReceipt):
                 out[row.row_id] = artifact
         return out
 
-    def _row_provenance_envelopes_for_candidates(
+    def _row_provenance_envelopes_for_outputs(
         self,
-        candidates: Sequence[CandidateSet],
+        outputs: Sequence[DerivationOutput],
         rows: Sequence[Any],
     ) -> Mapping[str, ProvenanceEnvelope]:
         out: dict[str, ProvenanceEnvelope] = {}
-        for candidate, row in zip(candidates, rows):
-            if candidate.support_kind not in {PROBLOG_PROVENANCE_KIND, PYREASON_PROVENANCE_KIND}:
+        for output, row in zip(outputs, rows):
+            if output.support_kind not in {PROBLOG_PROVENANCE_KIND, PYREASON_PROVENANCE_KIND}:
                 continue
-            envelope = self._store._lookup_provenance_envelope(candidate.support_digest)
+            envelope = self._store._lookup_provenance_envelope(output.support_digest)
             if isinstance(envelope, ProvenanceEnvelope):
                 out[row.row_id] = envelope
         return out

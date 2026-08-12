@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any
 from uuid import uuid4
 
-from factgraph.core.derivation.candidates import CandidateSet, make_candidate
+from factgraph.core.derivation.candidates import DerivationOutput, make_derivation_output
 from factgraph.core.evidence.write_protocol import now_epoch_nanos
 from factgraph.core.protocol.digests import sha256_token
 from factgraph.core.protocol.tup_v1 import canonical_bytes_tup_v1
@@ -16,7 +16,7 @@ from factgraph.core.store._support import (
 )
 
 
-def query_style_candidates_from_bindings(
+def query_style_derivation_outputs_from_bindings(
     store: Any,
     *,
     derivation_id: str,
@@ -26,17 +26,17 @@ def query_style_candidates_from_bindings(
     rows: list[BindingSupportCapture] | None = None,
     bindings: list[dict[str, Any]] | None = None,
     confidence_kind_resolver: Any | None = None,
-) -> list[CandidateSet]:
+) -> list[DerivationOutput]:
     run_id = uuid4().hex
     binding_rows = _coerce_binding_rows(rows=rows, bindings=bindings)
 
-    candidates: list[CandidateSet] = []
+    outputs: list[DerivationOutput] = []
     for row in binding_rows:
         binding = row.binding_dict()
         tagged_args = [_infer_query_style_tagged_arg(resolve_head_ref(head_ref, binding)) for head_ref in head_vars]
         key_terms = [("string", target_pred_id), *tagged_args]
         tup_digest = sha256_token(canonical_bytes_tup_v1(tagged_args))
-        candidate = make_candidate(
+        output = make_derivation_output(
             derivation_id=derivation_id,
             derivation_version=version,
             run_id=run_id,
@@ -59,14 +59,14 @@ def query_style_candidates_from_bindings(
                 store,
             ),
         )
-        candidates.append(candidate)
+        outputs.append(output)
 
-    unique: dict[tuple[Any, ...], CandidateSet] = {}
-    for candidate in candidates:
-        key = (candidate.candidate_kind, candidate.candidate_key)
+    unique: dict[tuple[Any, ...], DerivationOutput] = {}
+    for output in outputs:
+        key = (output.candidate_kind, output.candidate_key)
         existing = unique.get(key)
-        if existing is None or _support_is_better(candidate, existing):
-            unique[key] = candidate
+        if existing is None or _support_is_better(output, existing):
+            unique[key] = output
     return sorted(unique.values(), key=lambda cand: (cand.candidate_kind, cand.candidate_key))
 
 
@@ -126,9 +126,9 @@ def _resolve_confidence_kind(
     return resolver.resolve(support_digest, support_kind, store._lookup_support_artifact)
 
 
-def _support_is_better(candidate: CandidateSet, existing: CandidateSet) -> bool:
-    if candidate.support_digest < existing.support_digest:
+def _support_is_better(output: DerivationOutput, existing: DerivationOutput) -> bool:
+    if output.support_digest < existing.support_digest:
         return True
-    if candidate.support_digest == existing.support_digest:
-        return candidate.support_kind < existing.support_kind
+    if output.support_digest == existing.support_digest:
+        return output.support_kind < existing.support_kind
     return False

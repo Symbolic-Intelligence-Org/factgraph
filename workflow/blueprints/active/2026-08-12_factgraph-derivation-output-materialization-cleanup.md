@@ -38,7 +38,8 @@ shipped Meander and therefore cannot be deleted safely in this local slice.
   `CandidateSet` alias.
 - Move active read-only FactGraph producers, adapters and evaluation consumers
   to the canonical name while preserving all runtime and wire behavior.
-- Repair two proven application-wrapper safety gaps without adding an API.
+- Repair two proven application-wrapper safety gaps without adding a public API
+  or conflating compiler-generated and authored/business rule identities.
 - Make compatibility debt and the later Meander migration gate durable.
 
 ## 3. Non-goals
@@ -81,9 +82,12 @@ shipped Meander and therefore cannot be deleted safely in this local slice.
    core evaluation, application evaluation and SDK result conversion—to
    `DerivationOutput`. Compatibility/materialization modules may retain the
    alias where their historic field/wire vocabulary remains authoritative.
-3. Repair the application single wrapper to call `Store.accept`; repair batch
-   to reject `dry_run=True`, reject multi-output `identity_override`, preserve
-   per-item approval/note/actor metadata, and call `Store.accept_many`.
+3. Repair the application single wrapper through a private Store-owned
+   accept-time enrichment helper. Preserve both the compiler-generated output
+   `derivation_id` and the trusted resolver's authored/business
+   `derived_rule_id`; keep direct `Store.accept` strict. Repair batch to reject
+   `dry_run=True`, reject multi-output `identity_override`, preserve per-item
+   approval/note/actor metadata, and call `Store.accept_many`.
 4. Add identity and regression tests proving both names are the same class and
    candidate IDs/keys/content remain byte-identical.
 5. Update current-truth core/application/SDK docs. Historical workflow material
@@ -99,8 +103,12 @@ shipped Meander and therefore cannot be deleted safely in this local slice.
 - Batch A and B are separate implementation commits and independently tested.
 - Stop if the alias changes serialization/identity, requires a datastore
   migration, or forces Meander changes.
-- Wrapper fixes preserve Store digest enrichment and fail closed rather than
-  simulate unsupported batch dry-run/override semantics.
+- Wrapper fixes preserve Store accept-time digest enrichment and fail closed
+  rather than simulate unsupported batch dry-run/override semantics. These
+  digests do not claim to be an evaluation-time snapshot; F4 owns that boundary.
+- The application `derived_rule_id` is attribution supplied by an already
+  authorized resolver. The private enrichment helper is not an authorization
+  decision point and is not exported as a Store method.
 - F4 consumes result/query fingerprints only, never output/candidate identity.
 
 ## 7. Acceptance
@@ -110,7 +118,9 @@ shipped Meander and therefore cannot be deleted safely in this local slice.
 - [ ] `CandidateSet is DerivationOutput` and existing constructors still work.
 - [ ] Active read-only chains use canonical terminology.
 - [ ] Candidate protocol and materialization regression cohorts are unchanged.
-- [ ] Single/batch wrapper P1 cases pass focused regression tests.
+- [ ] Single/batch wrapper P1 cases pass focused regression tests, including a
+  synthetic-output/business-rule identity mismatch and the unchanged strict
+  `Store.accept` guard.
 - [ ] F3A/F3B Query/evaluate/explain cohorts and static checks pass.
 - [ ] Current docs state the temporary debt and F4 fingerprint boundary.
 
@@ -126,7 +136,12 @@ shipped Meander and therefore cannot be deleted safely in this local slice.
 ## 9. Docs To Update
 
 - `src/factgraph/core/derivation/CANDIDATE_PROTOCOL_V2.md`
+- `src/factgraph/core/docs/01_architecture.en.md`
+- `src/factgraph/core/annotation/docs/README.md`
 - `src/factgraph/application/docs/rule.md`
+- `src/factgraph/adapters/docs/01_souffle_adapter.md`
+- `src/factgraph/adapters/docs/02_problog_adapter.md`
+- `src/factgraph/adapters/docs/03_pyreason_adapter.md`
 - `src/factgraph/sdk/docs/03_rules_and_inferences.en.md`
 - `src/factgraph/sdk/docs/04_api_surface.en.md`
 

@@ -15,7 +15,7 @@ from factgraph.core.store._support_capture import (
     derive_rule_ref_edges_for_binding,
     find_winning_case_index,
 )
-from factgraph.core.derivation.candidates import CandidateSet
+from factgraph.core.derivation.candidates import DerivationOutput
 from factgraph.core.rules.where_eval import WhereValidationError
 from factgraph.core.store import builders
 from factgraph.core.store.premise_filter import premise_scoped_ledger
@@ -47,7 +47,7 @@ def evaluate_store(
     engine_ext: EngineExtBase | None = None,
     engine_options: EngineOptionsIR = None,
     semantics_profile: Any | None = None,
-) -> list[CandidateSet]:
+) -> list[DerivationOutput]:
     if mode == "python":
         raise ValueError("mode='python' is removed; use mode='native'")
     if mode == "engine":
@@ -94,9 +94,9 @@ def evaluate_store(
                 engine_kwargs["engine_options"] = engine_options
             if semantics_profile is not None:
                 engine_kwargs["semantics_profile"] = semantics_profile
-            candidates = engine_evaluate(**engine_kwargs)
-            _remember_candidate_support_backrefs(store, candidates)
-            return candidates
+            outputs = engine_evaluate(**engine_kwargs)
+            _remember_output_support_backrefs(store, outputs)
+            return outputs
         if mode != "native":
             raise ValueError("mode must be one of: native, souffle, problog, pyreason")
 
@@ -113,7 +113,7 @@ def evaluate_store(
         )
         if not captures:
             return []
-        candidates = builders.entity_candidates_from_bindings(
+        outputs = builders.entity_derivation_outputs_from_bindings(
             store,
             derivation_id=derivation_id,
             version=version,
@@ -121,8 +121,8 @@ def evaluate_store(
             rows=captures,
             confidence_kind_resolver=confidence_kind_resolver,
         )
-        _remember_candidate_support_backrefs(store, candidates)
-        return candidates
+        _remember_output_support_backrefs(store, outputs)
+        return outputs
 
     if mode in {"souffle", "problog", "pyreason"}:
         engine_kwargs = {
@@ -140,9 +140,9 @@ def evaluate_store(
             engine_kwargs["engine_options"] = engine_options
         if semantics_profile is not None:
             engine_kwargs["semantics_profile"] = semantics_profile
-        candidates = engine_evaluate(**engine_kwargs)
-        _remember_candidate_support_backrefs(store, candidates)
-        return candidates
+        outputs = engine_evaluate(**engine_kwargs)
+        _remember_output_support_backrefs(store, outputs)
+        return outputs
     if mode != "native":
         raise ValueError("mode must be one of: native, souffle, problog, pyreason")
 
@@ -167,7 +167,7 @@ def evaluate_store(
         return []
 
     if schema_pred is None:
-        candidates = builders.query_style_candidates_from_bindings(
+        outputs = builders.query_style_derivation_outputs_from_bindings(
             store,
             derivation_id=derivation_id,
             version=version,
@@ -177,7 +177,7 @@ def evaluate_store(
             confidence_kind_resolver=confidence_kind_resolver,
         )
     else:
-        candidates = builders.candidates_from_bindings(
+        outputs = builders.derivation_outputs_from_bindings(
             store,
             derivation_id=derivation_id,
             version=version,
@@ -188,8 +188,8 @@ def evaluate_store(
             rows=captures,
             confidence_kind_resolver=confidence_kind_resolver,
         )
-    _remember_candidate_support_backrefs(store, candidates)
-    return candidates
+    _remember_output_support_backrefs(store, outputs)
+    return outputs
 
 
 def _evaluate_where_over_view(
@@ -289,23 +289,23 @@ def _evaluate_where_over_view_with_support(
     captures.sort(key=lambda row: (row.binding_items, row.support_digest, row.support_kind))
     return captures
 
-def _remember_candidate_support_backrefs(
+def _remember_output_support_backrefs(
     store: Any,
-    candidates: list[CandidateSet],
+    outputs: list[DerivationOutput],
 ) -> None:
-    if not candidates:
+    if not outputs:
         return
 
-    for candidate in candidates:
-        support_kind = candidate.support_kind
-        support_digest = candidate.support_digest
+    for output in outputs:
+        support_kind = output.support_kind
+        support_digest = output.support_digest
         if support_kind in _DEGRADED_SUPPORT_KINDS or support_kind in _PROVENANCE_BEARING_SUPPORT_KINDS:
             store._remember_candidate_support(
-                candidate.candidate_id,
+                output.candidate_id,
                 support_digest,
                 support_kind,
-                confidence_kind=candidate.confidence_kind,
-                target_pred_id=candidate.target,
+                confidence_kind=output.confidence_kind,
+                target_pred_id=output.target,
             )
             continue
         if support_kind not in _WITNESS_BEARING_SUPPORT_KINDS:
@@ -315,9 +315,9 @@ def _remember_candidate_support_backrefs(
         if support_digest == f"sha256:{'0' * 64}":
             continue
         store._remember_candidate_support(
-            candidate.candidate_id,
+            output.candidate_id,
             support_digest,
             support_kind,
-            confidence_kind=candidate.confidence_kind,
-            target_pred_id=candidate.target,
+            confidence_kind=output.confidence_kind,
+            target_pred_id=output.target,
         )

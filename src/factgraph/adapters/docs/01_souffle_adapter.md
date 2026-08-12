@@ -92,7 +92,7 @@ The main flow of `evaluate_store_engine(...)`:
    the query where)
 3. `run_package(..., engine="souffle")` executes
 4. Read `outputs/<query_rel>.out.facts` and parse bindings
-5. Convert into `CandidateSet` (entity / fact candidate)
+5. Convert into `DerivationOutput` (entity / fact output; legacy materialization still uses the `CandidateSet` alias)
 
 Note: `engine_eval` strictly verifies that
 `run_manifest.engine_mode == "souffle"`; if the runner falls back

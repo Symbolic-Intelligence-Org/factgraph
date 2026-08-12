@@ -46,7 +46,7 @@ This decision locks a two-batch cleanup:
    debt, and retain the service tombstone plus Agent/core materialization paths;
 2. make `DerivationOutput` canonical with a legacy `CandidateSet` `TypeAlias`,
    migrate the active read-only chain, and repair the two application wrappers
-   by delegating to Store-owned materialization entrypoints.
+   through Store-owned accept-time enrichment seams.
 
 ## 3. Non-scope
 
@@ -96,13 +96,17 @@ as a durable evaluation, replay or Explain anchor.
 
 ### 4.5 Repair wrappers without adding a public materialization API
 
-The single application wrapper delegates through `Store.accept`, so Store-owned
-schema/policy digests are written. The batch wrapper delegates through
-`Store.accept_many`: it fails closed on `dry_run=True`, propagates each
-`AcceptRequest`'s approval/note/actor metadata, and rejects an
-`identity_override` applied ambiguously to multiple outputs. Names, payloads and
-wire contracts otherwise remain unchanged. A later cross-repository slice owns
-any `Materialization*` public vocabulary or API.
+The single application wrapper delegates through a private Store-owned
+accept-time enrichment seam, so current schema/policy digests are written while
+the established two identities remain distinct: the output's compiler-generated
+`derivation_id` and the trusted application resolver's authored/business
+`derived_rule_id`. Direct `Store.accept` retains its stricter identity-match
+guard. This enrichment is accept-time context, not an evaluation snapshot or
+replay claim. The batch wrapper delegates through `Store.accept_many`: it fails
+closed on `dry_run=True`, propagates each `AcceptRequest`'s approval/note/actor
+metadata, and rejects an `identity_override` applied ambiguously to multiple
+outputs. Names, payloads and wire contracts otherwise remain unchanged. A later
+cross-repository slice owns any `Materialization*` public vocabulary or API.
 
 ## 5. Rejected Alternatives
 
@@ -122,7 +126,7 @@ any `Materialization*` public vocabulary or API.
 - [ ] All candidate fields, IDs, payloads, wire and persistence remain unchanged.
 - [ ] `evaluate_candidates` remains callable and is explicitly temporary debt.
 - [ ] Five zero-call primary codecs and their four-helper-only parser chain are removed; the HTTP tombstone remains.
-- [ ] Single/batch wrappers delegate through Store and enforce the stated guards.
+- [ ] Single/batch wrappers consume Store-owned enrichment and enforce the stated guards without conflating compiler and business rule identity.
 - [ ] F4 documentation names only Query/result fingerprints as durable anchors.
 
 ## 7. Decision Record
@@ -132,3 +136,4 @@ any `Materialization*` public vocabulary or API.
 | 2026-08-12 | proposed | Three-way read-only audit converged | Candidate naming debt is real, but write semantics and public compatibility have a wider blast radius. |
 | 2026-08-12 | adopted | User authorized the next isolated step | Two batches are scoped; no push, merge, Meander edit or materialization redesign is authorized. |
 | 2026-08-12 | narrowed | Cross-repository grep found live Meander consumers | Public seam deletion was removed from F3C and made conditional on a later Meander migration. |
+| 2026-08-12 | corrected | Cross-repository regression exposed two legitimate rule identities | Meander fixtures proved that RuleExpr outputs use compiler-generated derivation IDs while persisted provenance uses resolver-authorized business rule IDs. The single wrapper now uses a private enriched attribution seam; `Store.accept` remains strict. |

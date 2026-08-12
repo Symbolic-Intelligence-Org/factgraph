@@ -669,6 +669,12 @@ cached. `row_format="tuple"` still works but emits `DeprecationWarning`.
 SDK path. Evaluation is read-only; explicit writes go through `fg.fields.*`,
 `fg.assertions.retract(...)`, `fg.entities.edit(...)`, or `fg.batch(...)`.
 
+`fg.eval.evaluate_candidates(...)` remains only as temporary cross-repository
+compatibility debt for shipped Meander code. It returns the internal
+`DerivationOutput` class (also reachable under the legacy `CandidateSet` alias),
+must not be used with `CompiledEvaluationQueryV0`, and is not recommended for
+new integrations.
+
 ---
 
 ## 7. Identity Claim Emission and Reject Semantics
