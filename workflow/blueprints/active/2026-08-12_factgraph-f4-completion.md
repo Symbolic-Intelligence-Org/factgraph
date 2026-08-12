@@ -139,7 +139,8 @@ policy_view = project_policy_explanation_v0(
 - F4C maps exact lineage coordinates; generated alias parsing and positional `zip`
   inference are forbidden.
 - Structural Policy nodes aggregate child state but do not duplicate descendant sources.
-- Production gross-addition stops: F4B2 `<=650`, F4B3 `<=650`, F4C `<=950`.
+- Production gross-addition stops: F4B2 `<=750` (amended on 2026-08-13 solely
+  for the independent resource-gate correction), F4B3 `<=650`, F4C `<=950`.
 
 ## 7. Acceptance
 
@@ -174,4 +175,3 @@ policy_view = project_policy_explanation_v0(
 ## 10. Outcome / Deviations
 
 Pending implementation and combined independent review.
-

@@ -177,6 +177,53 @@ def _with_profile(bundle, profile):
     )
 
 
+def _with_self_sealed_inconsistent_row(bundle):
+    """Forge a DTO-sealed row whose values no longer match its Run anchor."""
+    row = bundle.rows[0]
+    changed_value = replace(row.values[-1][1], value=23)
+    changed_values = (*row.values[:-1], (row.values[-1][0], changed_value))
+    row_payload = (
+        row.ordinal,
+        row.row_id,
+        row.claim_digest,
+        row.head_scope_digest,
+        row.certainty,
+        row.certainty_digest,
+        changed_values,
+        row.proof_receipt_digest,
+    )
+    changed_row = replace(
+        row,
+        values=changed_values,
+        row_capture_digest=_bundle_token("evaluation_run_projection_row_v0", row_payload),
+    )
+    rows = (changed_row, *bundle.rows[1:])
+    rows_capture_digest = _bundle_token(
+        "evaluation_run_rows_capture_v0", tuple(item.row_capture_digest for item in rows)
+    )
+    bundle_values = (
+        bundle.run_anchor.anchor_digest,
+        bundle.query_capture_digest,
+        bundle.native_plan.plan_digest,
+        bundle.schema_capture_digest,
+        bundle.relations_capture_digest,
+        rows_capture_digest,
+        bundle.execution_contract,
+        bundle.integrity,
+        bundle.authenticity,
+        bundle.privacy,
+        bundle.custody,
+        bundle.playback,
+        bundle.replay_availability,
+    )
+    return replace(
+        bundle,
+        rows=rows,
+        rows_capture_digest=rows_capture_digest,
+        bundle_digest=_bundle_token("evaluation_run_bundle_v0", bundle_values),
+    )
+
+
 class EvaluationRunVerificationRuntimeTests(unittest.TestCase):
     def test_declared_runtime_verifies_semantic_and_support_multisets(self) -> None:
         graph, _rule, bundle = _capture()
@@ -307,6 +354,66 @@ class EvaluationRunVerificationRuntimeTests(unittest.TestCase):
             ),
             5,
         )
+
+    def test_work_budget_includes_per_binding_receipt_reconstruction(self) -> None:
+        # One raw native binding per fact can collapse to a single projected row.
+        # The verifier still has to select a branch and rebuild a ProofReceipt for
+        # every raw binding, so this must be rejected before the evaluator runs.
+        where = [("pred", "many", ["$value"])]
+        estimate = _estimate_verification_work(where, {"many": 200})
+        self.assertGreater(estimate, MAX_EVALUATION_RUN_VERIFICATION_WORK)
+
+        _graph, _rule, bundle = _capture()
+        with (
+            patch(
+                "factgraph.application.evaluation_run_verification_runtime."
+                "_preflight_verification_input",
+                return_value=(where, {"many": 200}),
+            ),
+            patch(
+                "factgraph.application.evaluation_run_verification_runtime."
+                "evaluate_native_where"
+            ) as evaluator,
+        ):
+            record = verify_evaluation_run_bundle(bundle)
+
+        evaluator.assert_not_called()
+        self.assertEqual(record.verdict, "resource_rejected")
+        self.assertGreater(record.estimated_work, record.work_limit)
+
+    def test_static_bundle_inconsistency_cannot_be_masked_by_early_exit(self) -> None:
+        _graph, _rule, bundle = _capture()
+        forged = _with_self_sealed_inconsistent_row(bundle)
+
+        with (
+            patch(
+                "factgraph.application.evaluation_run_verification_runtime."
+                "NATIVE_WHERE_SEMANTICS_VERSION",
+                "native_where_future",
+            ),
+            patch(
+                "factgraph.application.evaluation_run_verification_runtime."
+                "evaluate_native_where"
+            ) as evaluator,
+        ):
+            with self.assertRaisesRegex(ProtocolShapeError, "projection values"):
+                verify_evaluation_run_bundle(forged)
+        evaluator.assert_not_called()
+
+        with (
+            patch(
+                "factgraph.application.evaluation_run_verification_runtime."
+                "_estimate_verification_work",
+                return_value=MAX_EVALUATION_RUN_VERIFICATION_WORK + 1,
+            ),
+            patch(
+                "factgraph.application.evaluation_run_verification_runtime."
+                "evaluate_native_where"
+            ) as evaluator,
+        ):
+            with self.assertRaisesRegex(ProtocolShapeError, "projection values"):
+                verify_evaluation_run_bundle(forged)
+        evaluator.assert_not_called()
 
     def test_semantic_support_and_execution_failures_are_distinct(self) -> None:
         _graph, _rule, bundle = _capture()

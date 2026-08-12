@@ -60,7 +60,12 @@ def verify_evaluation_run_bundle(
     bundle: EvaluationRunBundleV0,
 ) -> EvaluationRunVerificationV0:
     """Re-execute one decoded F4B1 bundle without consulting a Store."""
-    where, relation, view = _materialize_evaluation_run_bundle_input(bundle)
+    # This deliberately precedes the full F4B1 receipt reconstruction below.
+    # A bundle is caller-supplied and that reconstruction itself scans captured
+    # witness relations once for every captured row.  Do the cheap, content-sealed
+    # shape and cost preflight first, so a large but otherwise well-formed bundle
+    # cannot spend unbounded work merely to establish that it is replayable.
+    where, relation_counts = _preflight_verification_input(bundle)
     expected_semantics = tuple(
         sorted(row.semantic_anchor_digest for row in bundle.run_anchor.row_anchors)
     )
@@ -97,8 +102,11 @@ def verify_evaluation_run_bundle(
             reason_codes=reasons,
         )
 
-    relation_counts = {relation.predicate_id: len(relation.facts) for relation in bundle.relations}
-    estimated_work = _estimate_verification_work(where, relation_counts)
+    estimated_work = _estimate_verification_work(
+        where,
+        relation_counts,
+        captured_row_count=len(bundle.rows),
+    )
     if estimated_work > MAX_EVALUATION_RUN_VERIFICATION_WORK:
         return _record(
             bundle,
@@ -114,6 +122,7 @@ def verify_evaluation_run_bundle(
             reason_codes=["WORK_LIMIT_EXCEEDED"],
         )
 
+    where, relation, view = _materialize_evaluation_run_bundle_input(bundle)
     try:
         observed_rows = _execute_isolated(bundle, where, relation, view)
     except (
@@ -290,12 +299,54 @@ def _materialize_evaluation_run_bundle_input(
     return where, relation, view
 
 
+def _preflight_verification_input(
+    bundle: EvaluationRunBundleV0,
+) -> tuple[list[Any], dict[str, int]]:
+    """Return the bounded information needed before expensive receipt checks.
+
+    Static consistency is complete before a verifier can emit any record.  The
+    F4B1 receipt reconstruction additionally rebuilds every receipt; that remains
+    mandatory for an admitted verification, but must sit behind the verifier's
+    resource gate because it is proportional to the number of captured rows.
+    """
+    if not isinstance(bundle, EvaluationRunBundleV0):
+        raise ProtocolShapeError("bundle must be EvaluationRunBundleV0")
+    _assert_evaluation_run_bundle_current(bundle, rebuild_receipts=False)
+    where = _validate_native_where_bytes(bundle.native_plan.where_bytes)
+    relation_counts = {item.predicate_id: len(item.facts) for item in bundle.relations}
+    return where, relation_counts
+
+
 def _estimate_verification_work(
     where: list[Any],
     relation_counts: Mapping[str, int],
+    *,
+    captured_row_count: int = 0,
 ) -> int:
+    if (
+        isinstance(captured_row_count, bool)
+        or not isinstance(captured_row_count, int)
+        or captured_row_count < 0
+    ):
+        raise ProtocolShapeError("verification captured row count is invalid")
     expression = parse_where_ir_to_ast(where)
-    return _estimate_expression(expression, relation_counts)
+    binding_upper_bound = _estimate_expression(expression, relation_counts)
+    relation_scan_bound = max(1, sum(max(0, count) for count in relation_counts.values()))
+    condition_bound = max(1, _condition_count(expression))
+
+    # One primary evaluation may yield ``binding_upper_bound`` raw bindings.
+    # Each raw binding is subsequently checked for a winning branch and has a
+    # receipt rebuilt; F4B1 validation also rebuilds once per captured row.
+    # Those paths linearly inspect witness relations.  Three scans per logical
+    # condition (evaluation / branch check / receipt reconstruction) is a
+    # conservative upper bound for the v0 native, no-RuleRef grammar.  The
+    # arithmetic is deliberately saturating so this gate fails closed.
+    scans_per_binding = _saturating_multiply(
+        3,
+        _saturating_multiply(condition_bound, relation_scan_bound),
+    )
+    rebuild_count = _saturating_add(binding_upper_bound, captured_row_count)
+    return _saturating_multiply(rebuild_count, scans_per_binding)
 
 
 def _estimate_expression(expression: WhereExpr, counts: Mapping[str, int]) -> int:
@@ -339,6 +390,37 @@ def _term_factors(terms: Sequence[Term], counts: Mapping[str, int]) -> int:
                 max(1, _estimate_atoms(term.filter, counts)),
             )
     return factor
+
+
+def _condition_count(expression: WhereExpr) -> int:
+    if isinstance(expression, AndExpr):
+        return sum(_condition_count_atom(atom) for atom in expression.atoms)
+    if isinstance(expression, OrExpr):
+        return sum(_condition_count(branch) for branch in expression.branches)
+    raise ProtocolShapeError("verification work estimator encountered unknown expression")
+
+
+def _condition_count_atom(atom: Atom) -> int:
+    if isinstance(atom, NotAtom):
+        return 1 + _condition_count(atom.body)
+    if isinstance(atom, (PredAtom, InAtom, CmpAtom, BuiltinAtom)):
+        terms: Sequence[Term]
+        if isinstance(atom, PredAtom):
+            terms = atom.terms
+        elif isinstance(atom, CmpAtom):
+            terms = (atom.lhs, atom.rhs)
+        elif isinstance(atom, BuiltinAtom):
+            terms = atom.args
+        else:
+            terms = ()
+        return 1 + sum(_aggregate_condition_count(term) for term in terms)
+    raise ProtocolShapeError("verification work estimator encountered unsupported atom")
+
+
+def _aggregate_condition_count(term: Term) -> int:
+    if isinstance(term, AggregateAtom):
+        return sum(_condition_count_atom(atom) for atom in term.filter)
+    return 0
 
 
 def _saturating_add(left: int, right: int) -> int:

@@ -410,7 +410,14 @@ def _capture_certainty(value: object) -> tuple[str, str, str] | None:
     )
 
 
-def _assert_evaluation_run_bundle_current(bundle: EvaluationRunBundleV0) -> None:
+def _assert_evaluation_run_bundle_current(
+    bundle: EvaluationRunBundleV0,
+    *,
+    rebuild_receipts: bool = True,
+) -> None:
+    """Validate bundle consistency, optionally deferring bounded receipt rebuilding."""
+    if not isinstance(rebuild_receipts, bool):
+        raise ProtocolShapeError("EvaluationRun receipt rebuild flag must be bool")
     if not isinstance(bundle, EvaluationRunBundleV0):
         raise ProtocolShapeError("bundle must be EvaluationRunBundleV0")
     EvaluationRunBundleV0.__post_init__(bundle)
@@ -522,23 +529,25 @@ def _assert_evaluation_run_bundle_current(bundle: EvaluationRunBundleV0) -> None
             raise ProtocolShapeError(
                 "ProofReceipt head bindings do not match the captured projection row"
             )
-        selected_case = _receipt_case_index(receipt)
-        try:
-            rebuilt_receipt = build_support_artifact_for_binding(
-                where=where,
-                binding=receipt_binding,
-                witness_facts=captured_relation,
-                root_result_kind="fact",
-                selected_case_index=selected_case,
-            )
-        except (TypeError, ValueError) as exc:
-            raise ProtocolShapeError(
-                "ProofReceipt cannot be rebuilt from the captured execution relation"
-            ) from exc
-        if support_artifact_bytes(rebuilt_receipt) != row.proof_receipt_bytes:
-            raise ProtocolShapeError(
-                "ProofReceipt does not match the captured plan, bindings, and relation"
-            )
+        _receipt_case_index(receipt)
+        if rebuild_receipts:
+            selected_case = _receipt_case_index(receipt)
+            try:
+                rebuilt_receipt = build_support_artifact_for_binding(
+                    where=where,
+                    binding=receipt_binding,
+                    witness_facts=captured_relation,
+                    root_result_kind="fact",
+                    selected_case_index=selected_case,
+                )
+            except (TypeError, ValueError) as exc:
+                raise ProtocolShapeError(
+                    "ProofReceipt cannot be rebuilt from the captured execution relation"
+                ) from exc
+            if support_artifact_bytes(rebuilt_receipt) != row.proof_receipt_bytes:
+                raise ProtocolShapeError(
+                    "ProofReceipt does not match the captured plan, bindings, and relation"
+                )
         witness_ids = {
             asrt_id for witness in receipt.pred_witnesses for asrt_id in witness.asrt_ids
         }
