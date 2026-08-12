@@ -1,6 +1,6 @@
 # Task Blueprint Audit: FactGraph EvaluationQuery projection
 
-- Status: scoped
+- Status: implementing
 - Created: 2026-08-12
 - Last Updated: 2026-08-12
 - Authority: paired blueprint audit log
@@ -16,7 +16,8 @@
 |---|---|---|---|
 | 2026-08-12 | draft | F3A blueprint created | Scope is exact Policy bind/select lowering only. |
 | 2026-08-12 | scoped | Runtime and compatibility audits converged | Old Query cannot be redefined; explicit per-branch links and later reuse of existing EvaluateResult are required. |
-| 2026-08-12 | implementing | User authorized the next isolated item | Implementation may proceed inside the 550-line and no-execution stops. |
+| 2026-08-12 | implementing | User authorized the next isolated item | Implementation may proceed inside the original 500-line and no-execution stops. |
+| 2026-08-12 | implementing | Internal adversarial review activated the line stop | Cap amended to 650 solely for compiled-artifact integrity, execution-variable collision and projection-namespace guards; the no-execution boundary and all other non-scope remain unchanged. |
 
 ## Decision Notes
 

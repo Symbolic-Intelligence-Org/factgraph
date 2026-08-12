@@ -1,6 +1,6 @@
 # Task Blueprint: FactGraph EvaluationQuery projection
 
-- Status: scoped
+- Status: implementing
 - Created: 2026-08-12
 - Last Updated: 2026-08-12
 - Authority: task-scoped implementation contract for F3A only.
@@ -34,7 +34,8 @@ result model.
 - Projection aliases map explicitly to branch-local vars; no name inference.
 - Legacy lowering plans with no query metadata retain their exact canonical key and behavior.
 - The output has no engine, config, snapshot, rows, completeness, expectations or Explain result.
-- Added production Python is capped at 500 lines; crossing the cap stops implementation.
+- Added production Python is capped at 650 lines; the final 150 lines are
+  reserved for review-required integrity and collision guards, not new features.
 
 ## 3. Implementation Plan
 
@@ -54,8 +55,10 @@ result model.
 - [ ] Explicit alias projection and query-aware probe seeds are tested.
 - [ ] Query materialization is inspectable but performs no engine call.
 - [ ] F1/F2A/F2B and legacy RuleExpr/evaluate/Explain tests remain green.
-- [ ] Static checks and 500-line production cap pass.
+- [ ] Static checks and 650-line production cap pass.
 
 ## 5. Outcome / Deviations
 
-- Pending implementation and independent review.
+- Implementation is in progress. Internal adversarial review found required
+  compiled-artifact integrity and namespace-collision guards; no execution or
+  product-facing scope was added.

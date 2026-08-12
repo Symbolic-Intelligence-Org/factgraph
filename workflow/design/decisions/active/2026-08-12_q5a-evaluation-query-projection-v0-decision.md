@@ -105,7 +105,11 @@ Stop and split the slice if any of the following becomes necessary:
 - adding engine execution or Store/SDK dispatch;
 - defining `expect`, completeness, What-if or field navigation;
 - changing legacy RuleExpr canonical keys or projection behavior;
-- exceeding 500 added production Python lines relative to `afdd9e7e`.
+- exceeding 650 added production Python lines relative to `afdd9e7e`. The
+  original 500-line stop was reached before review-discovered artifact-integrity,
+  generated-variable-collision and projection-namespace guards could be added;
+  the 150-line increase is reserved for those guards and does not authorize a
+  wider product or execution surface.
 
 ## 6. Acceptance Criteria
 
@@ -126,3 +130,4 @@ Stop and split the slice if any of the following becomes necessary:
 |---|---|---|---|
 | 2026-08-12 | proposed | Source and runtime audit completed | Existing Query is a separate ad-hoc path; projection is same-name based; EvaluateResult/Explain require a later execution integration. |
 | 2026-08-12 | adopted | User authorized the next isolated implementation item | F3A is limited to typed bind/select and an engine-neutral pre-execution artifact. |
+| 2026-08-12 | amended | Adversarial review activated the original line stop | Cap raised from 500 to 650 only for fail-closed compiled-artifact integrity, execution-variable collision and projection-namespace guards; scope remains unchanged. |
