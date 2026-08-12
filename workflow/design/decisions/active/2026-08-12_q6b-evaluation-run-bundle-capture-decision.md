@@ -79,8 +79,11 @@ canonical typed tuple and observed relation order. It also captures:
 - a strict DTO/codec representation of the exact materialized native plan;
 - F4A target, PolicyStructure, lineage and occurrence-qualified Rule pins;
 - typed result rows, semantic-row multiset and zero-row summary;
-- exactly one valid native `ProofReceipt` per positive row; every receipt
-  witness resolves uniquely inside the captured relation;
+- exactly one canonical native `ProofReceipt` emitted for each positive row;
+  its binding, selected-branch structure and witnesses must reconstruct from
+  the captured plan/relation, and every witness resolves uniquely there. This
+  is structural playback validation, not re-evaluation of non-fact truth;
+  isolated logical verification belongs to F4B2;
 - native/config-none/premise-empty and runtime/codec/order pins.
 
 The effective relation is post-active/revocation/chosen/premise projection. It
@@ -151,3 +154,4 @@ to infer one from live SDK behavior.
 |---|---|---|---|
 | 2026-08-12 | proposed | F4B entry audit completed | Snapshot, Explain and red-team audits independently rejected digest-only pseudo replay. |
 | 2026-08-12 | adopted | User authorized continuation after F4A CLEAR | F4B is split into capture/codec, isolated verification and detached Explain; this decision authorizes F4B1 only. |
+| 2026-08-12 | clarified | ProofReceipt validation boundary made explicit | F4B1 validates canonical structural reconstruction and witness resolution; it does not execute non-fact truth verification reserved for F4B2. |

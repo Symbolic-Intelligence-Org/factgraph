@@ -1,6 +1,6 @@
 # Task Blueprint: FactGraph EvaluationRun bundle capture
 
-- Status: scoped
+- Status: implementing
 - Created: 2026-08-12
 - Last Updated: 2026-08-12
 - Authority: task-scoped implementation contract for F4B1 only.
@@ -48,12 +48,15 @@ inspectable without the originating Store. Do not execute replay yet.
   is its optional detached audit artifact.
 - F4B1 adds no evaluator, replay comparison, detached Explain, Policy overlay,
   What-if or repository.
-- Gross added production Python is capped at 1,000 lines relative to `b7eea261`.
+- Gross added production Python is hard-capped at 1,750 lines relative to
+  `b7eea261`. The measured review-ready implementation is 1,713 lines; the
+  remaining 37 lines are reserved only for review fixes, not new behavior.
 
 ## 3. Implementation Plan
 
 1. Collapse native witness and evaluator projection onto one immutable
-   effective relation and add a private optional capture observer.
+   effective relation behind a private atomic capture seam. Public core and
+   application evaluation signatures expose no callback or raw-relation bypass.
 2. Add strict bundle DTOs, canonical typed-value/plan/schema/support codecs,
    cross-component seals and bounded decoding.
 3. Build the bundle synchronously inside the existing compiled Query execution
@@ -74,8 +77,10 @@ inspectable without the originating Store. Do not execute replay yet.
 - [ ] Schema, actual Query values, exact native plan, effective facts, rows,
       F4A anchor and support inventory round-trip through a strict codec.
 - [ ] Actual row values/certainty recompute and match claim, binding and
-      certainty digests; every positive row has exactly one valid ProofReceipt
-      whose witnesses resolve uniquely in captured facts.
+      certainty digests; every positive row has exactly one canonical
+      ProofReceipt whose binding/branch structure reconstructs from the
+      captured plan and whose witnesses resolve uniquely in captured facts.
+      Non-fact logical re-evaluation remains F4B2.
 - [ ] Unknown/missing fields, duplicate keys, unsupported types, corruption and
       cross-bundle splice fail closed before producing a partial bundle.
 - [ ] Decoded rows/support remain inspectable after the source Store changes or
