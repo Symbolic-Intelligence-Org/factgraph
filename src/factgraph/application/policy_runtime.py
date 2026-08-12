@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from collections import Counter
 from dataclasses import dataclass, field
-from itertools import product
 import json
 from typing import Any, Literal
 
@@ -183,13 +182,14 @@ def _admit(managed: dict[str, ManagedRuleOccurrence]) -> None:
                 {"reserved_prefix": _PROJECTION_ID_PREFIX},
             )
         for index, atom in enumerate(rule.when):
+            supported_pred = isinstance(atom, PredAtom) and all(isinstance(term, (Var, Const)) for term in atom.terms)
             supported_cmp = (
                 isinstance(atom, CmpAtom)
                 and atom.op in _CMP_OPS
                 and isinstance(atom.lhs, (Var, Const))
                 and isinstance(atom.rhs, (Var, Const))
             )
-            if not isinstance(atom, PredAtom) and not supported_cmp:
+            if not supported_pred and not supported_cmp:
                 raise _error(
                     f"Rule {rule.id!r} uses unsupported body atom {type(atom).__name__}",
                     "UNSUPPORTED_MANAGED_RULE_CAPABILITY",
@@ -210,21 +210,19 @@ def _validate_unifies(
         for child in node.children:
             _validate_unifies(child, address_space, joins)
         return
-    structural = tuple(child for child in node.children if not isinstance(child, PolicyUnify))
-    branches = _branch_product(structural)
+    guaranteed = _guaranteed_aliases(node)
     for item in node.children:
         if not isinstance(item, PolicyUnify):
             _validate_unifies(item, address_space, joins)
             continue
         required = {item.left.occurrence_alias, item.right.occurrence_alias}
-        missing = [index for index, aliases in enumerate(branches) if not required <= aliases]
-        if missing:
+        if not required <= guaranteed:
             raise _error(
                 "Unify endpoints are absent from a local Any branch",
                 "PARTIAL_BRANCH_CONSTRAINT",
                 "policy_compile",
                 ("policy", "when", item.node_id),
-                {"missing_branch_indexes": missing},
+                {"not_guaranteed_aliases": sorted(required - guaranteed)},
             )
         joins[item.node_id] = _resolve_unify(item, address_space)
 
@@ -289,17 +287,21 @@ def _branch_count(node: PolicyExpression) -> int:
     return result
 
 
-def _branch_aliases(node: PolicyExpression) -> tuple[frozenset[str], ...]:
+def _guaranteed_aliases(node: PolicyExpression) -> frozenset[str]:
     if isinstance(node, PolicyOccurrence):
-        return (frozenset((node.alias,)),)
+        return frozenset((node.alias,))
     structural = tuple(child for child in node.children if not isinstance(child, PolicyUnify))
     if isinstance(node, PolicyAny):
-        return tuple(branch for child in structural for branch in _branch_aliases(child))
-    return _branch_product(structural)
+        return frozenset.intersection(*map(_guaranteed_aliases, structural))
+    return frozenset().union(*map(_guaranteed_aliases, structural))
 
 
-def _branch_product(nodes: tuple[PolicyExpression, ...]) -> tuple[frozenset[str], ...]:
-    return tuple(frozenset().union(*parts) for parts in product(*map(_branch_aliases, nodes)))
+def _occurrence_aliases(node: PolicyNode) -> frozenset[str]:
+    if isinstance(node, PolicyOccurrence):
+        return frozenset((node.alias,))
+    if isinstance(node, PolicyUnify):
+        return frozenset()
+    return frozenset().union(*map(_occurrence_aliases, node.children))
 
 
 def _nodes(node: PolicyNode) -> tuple[PolicyNode, ...]:
@@ -320,8 +322,8 @@ def _lineage(
     unify_nodes = {
         _unify_key(node.left, node.right): node for node in nodes if isinstance(node, PolicyUnify)
     }
-    signatures = {
-        node.node_id: _branch_aliases(node) for node in nodes if not isinstance(node, PolicyUnify)
+    descendants = {
+        node.node_id: _occurrence_aliases(node) for node in nodes if not isinstance(node, PolicyUnify)
     }
     branches: list[PolicyCompiledBranch] = []
     universe: set[PolicyLoweredRef] = set()
@@ -330,8 +332,8 @@ def _lineage(
         authored_aliases = tuple(authored[alias] for alias in branch.occurrence_aliases)
         branch_ref = PolicyLoweredRef("branch", branch.branch_id)
         universe.add(branch_ref)
-        for node_id, alternatives in signatures.items():
-            if any(option <= frozenset(authored_aliases) for option in alternatives):
+        for node_id, aliases in descendants.items():
+            if aliases & frozenset(authored_aliases):
                 refs[node_id].add(branch_ref)
 
         body_index = 0

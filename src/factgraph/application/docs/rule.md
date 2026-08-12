@@ -295,7 +295,8 @@ inside a `PolicyAll` whose every local DNF branch contains both endpoints. Thus
 Policy. The existing RuleExpr partial-join lowering remains unchanged.
 
 Compilation accepts only managed Rules whose top-level bodies contain
-`PredAtom` and non-aggregate `CmpAtom(eq/ne/gt/ge/lt/le)`. `NotAtom`, `InAtom`,
+`PredAtom` with ordinary Var/Const terms and non-aggregate
+`CmpAtom(eq/ne/gt/ge/lt/le)`. `NotAtom`, `InAtom`,
 `BuiltinAtom`, aggregate terms, stale contracts, mixed schema digests, and
 compiler-reserved Rule IDs fail with typed `PolicyError` codes. DNF expansion
 is checked statically: at most 32 branches compile and larger projections fail

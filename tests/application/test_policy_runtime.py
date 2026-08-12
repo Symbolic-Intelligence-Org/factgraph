@@ -265,6 +265,10 @@ class PolicyAdmissionTests(unittest.TestCase):
             NotAtom(AndExpr([PredAtom("person:blocked", [person])])),
             InAtom(value, [Const(18), Const(21)]),
             BuiltinAtom("addc", [value, Const(1)]),
+            PredAtom(
+                "aggregate_predicate",
+                [AggregateAtom("count", None, [PredAtom("Person:exists", [person])])],
+            ),
             CmpAtom(
                 "eq",
                 value,
