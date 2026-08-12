@@ -1,6 +1,6 @@
 # Task Blueprint Audit: FactGraph managed Policy compiler and lineage
 
-- Status: implementing
+- Status: implemented
 - Created: 2026-08-12
 - Last Updated: 2026-08-12
 - Authority: paired blueprint audit log
@@ -18,6 +18,9 @@
 | 2026-08-12 | draft | Three independent implementation analyses converged | Reject-on-partial, conservative Rule admission and head-independent lineage are required; Compare is split rather than forcing a new lowering substrate. |
 | 2026-08-12 | scoped | Lightweight preflight and self-check passed | Q4B and the blueprint agree on exact F2A namespace consumption, managed Rule allowlist, reject-on-partial, DNF 32, total lineage, 700-line stop and explicit Query/Compare deferral. |
 | 2026-08-12 | implementing | Bounded implementation started | The user authorized the next F2B step; implementation remains limited to the scoped Policy compiler, structural lineage, tests, and current-truth docs. |
+| 2026-08-12 | review | Internal adversarial review corrections completed | Aggregate-term admission, invalid lineage DTO states and crossed-origin reverse mappings were corrected without expanding scope; final internal re-review returned CLEAR. |
+| 2026-08-12 | review | User-side independent review cleared the implementation | The read-only review repeated the 248-test cohort and static checks, added 29 passing adversarial probes, and reported zero P0/P1/P2. |
+| 2026-08-12 | implemented | Scoped implementation landed | `e7680d47`; production delta 699 additions/10 deletions, focused cohort 248 passing, legacy RuleExpr behavior preserved and all F2B acceptance criteria met. |
 
 ## Decision Notes
 

@@ -1,6 +1,6 @@
 # Task Blueprint: FactGraph managed Policy compiler and lineage
 
-- Status: implementing
+- Status: implemented
 - Created: 2026-08-12
 - Last Updated: 2026-08-12
 - Authority: task-scoped implementation contract for F2B only.
@@ -97,17 +97,17 @@ projection-only head and runtime intent.
 
 ## 7. Acceptance
 
-- [ ] Simple occurrence, All, Any and cross-occurrence Unify compile.
-- [ ] Same Rule under distinct aliases remains distinct and only explicit Unify joins it.
-- [ ] `a & (b | c)` with `Unify(a,b)` rejects; a constraint local to an `All(a,b)` branch compiles.
-- [ ] Entity/field mismatch, different semantic paths and self-Unify reject.
-- [ ] Not/In/Builtin/aggregate/unsupported comparison Rule bodies reject at admission.
-- [ ] Stale contracts, schema mismatch, alias mismatch and projection namespace reject distinctly.
-- [ ] 1, 32 and 33 branch fixtures assign the documented capability outcome.
-- [ ] One-to-many alias rewrite and body-atom/Unify lineage are total in both directions.
-- [ ] Reordered All/Any inputs produce identical digest, branches and lineage.
-- [ ] F1/F2A, RuleExpr/lowering and one evaluate→row→Explain regression remain green.
-- [ ] Ruff, targeted mypy and production-line cap pass.
+- [x] Simple occurrence, All, Any and cross-occurrence Unify compile.
+- [x] Same Rule under distinct aliases remains distinct and only explicit Unify joins it.
+- [x] `a & (b | c)` with `Unify(a,b)` rejects; a constraint local to an `All(a,b)` branch compiles.
+- [x] Entity/field mismatch, different semantic paths and self-Unify reject.
+- [x] Not/In/Builtin/aggregate/unsupported comparison Rule bodies reject at admission.
+- [x] Stale contracts, schema mismatch, alias mismatch and projection namespace reject distinctly.
+- [x] 1, 32 and 33 branch fixtures assign the documented capability outcome.
+- [x] One-to-many alias rewrite and body-atom/Unify lineage are total in both directions.
+- [x] Reordered All/Any inputs produce identical digest, branches and lineage.
+- [x] F1/F2A, RuleExpr/lowering and one evaluate→row→Explain regression remain green.
+- [x] Ruff, targeted mypy and production-line cap pass.
 
 ## 8. Implementation Plan
 
@@ -125,5 +125,28 @@ projection-only head and runtime intent.
 
 ## 10. Outcome / Deviations
 
-Task completion will record implementation commit, production/test line counts,
-verification results, external review disposition and any explicit deviation.
+- Implementation stack `93102d91`, `39f55922`, `cad037b8` and `e7680d47`
+  adds the managed Policy value surface, exact F2A address-space compiler,
+  head-independent RuleExpr body plan and machine-checkable bidirectional
+  structural lineage.
+- Production Python under `src/factgraph/application/**/*.py` is 699 additions
+  and 10 deletions relative to `9418d6dc`, within the 700-added-line stop.
+- The final focused F1/F2A/Policy/RuleExpr/lowering/evaluate/Explain cohort is
+  248 tests passing. Ruff, targeted mypy and `git diff --check` pass.
+- Broad unittest discovery found two unrelated import/collection failures: the
+  unchanged `service.static_ui` import of absent
+  `render_evidence_graph_html`, and the environment's pandas/numpy ABI failure
+  while importing the PyReason test. Excluding exactly those two paths, the
+  remainder ran 2,257 tests successfully with 32 skipped.
+- Internal adversarial review found and corrected aggregate-term admission,
+  invalid public/runtime lineage DTO states and crossed-origin reverse
+  mappings. The final internal re-review returned CLEAR.
+- The user's independent read-only review returned CLEAR with zero P0/P1/P2
+  after the 248-test cohort, Ruff, mypy, diff/cap checks and 29 additional
+  adversarial probes all passed.
+- No contract deviation remains. Raw RuleExpr partial-join filtering is
+  intentionally preserved while managed Policy rejects partial-branch Unify
+  before lowering. Compare, Query/head, engine execution, SDK and Meander stay
+  deferred.
+- Archive intent: move this blueprint and its paired audit together after this
+  closure commit.

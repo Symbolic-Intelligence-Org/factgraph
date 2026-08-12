@@ -173,14 +173,14 @@ decided.
 
 ## 7. Acceptance Criteria
 
-- [ ] `All/Any/Occurrence/Unify` compile deterministically against one exact address space.
-- [ ] Partial-branch Unify rejects before structural lowering; explicit local forms compile.
-- [ ] 32 DNF branches compile and 33 reject with a typed static-capability error.
-- [ ] Managed Rule allowlist, stale contracts and reserved namespaces fail distinctly.
-- [ ] Authored-to-lowered and lowered-to-authored lineage are total for every compiled artifact.
-- [ ] Reordered commutative input has the same Policy digest, branch inventory and lineage.
-- [ ] Existing RuleExpr/lowering/evaluate/Explain behavior remains unchanged.
-- [ ] No Compare, Query, synthetic head, engine execution or Meander surface is added.
+- [x] `All/Any/Occurrence/Unify` compile deterministically against one exact address space.
+- [x] Partial-branch Unify rejects before structural lowering; explicit local forms compile.
+- [x] 32 DNF branches compile and 33 reject with a typed static-capability error.
+- [x] Managed Rule allowlist, stale contracts and reserved namespaces fail distinctly.
+- [x] Authored-to-lowered and lowered-to-authored lineage are total for every compiled artifact.
+- [x] Reordered commutative input has the same Policy digest, branch inventory and lineage.
+- [x] Existing RuleExpr/lowering/evaluate/Explain behavior remains unchanged.
+- [x] No Compare, Query, synthetic head, engine execution or Meander surface is added.
 
 ## 8. Decision Record
 
@@ -189,3 +189,4 @@ decided.
 | 2026-08-12 | proposed | F2B source and design audit completed | Existing occurrence/RuleExpr substrate is reusable, but partial joins and authored alias loss require a checked compiler boundary. |
 | 2026-08-12 | adopted | User authorized the next isolated implementation step | F2B is limited to Policy structure, Unify and total structural lineage. |
 | 2026-08-12 | adopted | Compare split from F2B | Three independent implementation analyses agreed that direct comparison would force a second lowering concern; it remains an explicit follow-up rather than a placeholder API. |
+| 2026-08-12 | adopted | F2B contract implemented | `e7680d47` completed the bounded compiler/lineage slice in 699 added production lines; independent review returned CLEAR with zero P0/P1/P2. |
