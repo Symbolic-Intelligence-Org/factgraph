@@ -16,6 +16,7 @@ from .protocol.evaluation_expectation import (
     ExpectationResultV0,
     ResolvedExpectationValueV0,
 )
+from .protocol.evaluation_run_bundle import EvaluationRunBundleV0
 from .protocol.evaluate_result import EvaluateResult, EvaluateRow, _public_term_value
 from .schema_runtime import (
     SchemaIndex,
@@ -141,6 +142,102 @@ def evaluate_contains_row_expectations_v0(
     return tuple(outcomes)
 
 
+def evaluate_captured_contains_row_expectations_v0(
+    expectations: tuple[CompiledContainsRowExpectationV0, ...],
+    *,
+    bundle: EvaluationRunBundleV0,
+    targeted_query_wrapper_digest: str,
+) -> tuple[ExpectationResultV0, ...]:
+    """Evaluate exact observations against sealed F4 projection rows.
+
+    This intentionally does not rebuild a live :class:`EvaluateResult`.
+    Captured rows already carry the canonical typed projection values, while
+    the F4 anchor supplies the exact result/row identity the outcome must pin.
+    """
+
+    if not isinstance(bundle, EvaluationRunBundleV0):
+        raise EvaluationExpectationError(
+            "captured expectation requires EvaluationRunBundleV0",
+            code="EXPECTATION_CAPTURE_REQUIRED",
+        )
+    if (
+        not isinstance(targeted_query_wrapper_digest, str)
+        or not targeted_query_wrapper_digest.startswith("sha256:")
+    ):
+        raise EvaluationExpectationError(
+            "captured expectation requires targeted Query wrapper digest",
+            code="EXPECTATION_WRAPPER_REQUIRED",
+        )
+    if (
+        not isinstance(expectations, tuple)
+        or not all(isinstance(item, CompiledContainsRowExpectationV0) for item in expectations)
+    ):
+        raise EvaluationExpectationError(
+            "captured expectations must be compiled contains-row expectations",
+            code="EXPECTATION_PROTOCOL_SHAPE",
+        )
+    ids = tuple(item.expectation_id for item in expectations)
+    if len(set(ids)) != len(ids):
+        raise EvaluationExpectationError(
+            "captured expectation ids are duplicated",
+            code="DUPLICATE_EXPECTATION_ID",
+        )
+
+    anchor = bundle.run_anchor
+    selection_types = {item.alias: item.value_type for item in anchor.selections}
+    outcomes: list[ExpectationResultV0] = []
+    for expectation in expectations:
+        try:
+            assert_compiled_contains_row_expectation_current(expectation)
+        except EvaluationExpectationError:
+            raise
+        if expectation.query_digest != bundle.query_digest:
+            raise EvaluationExpectationError(
+                "compiled expectation does not match captured Query",
+                code="EXPECTATION_QUERY_MISMATCH",
+            )
+        for value in expectation.values:
+            selected_type = selection_types.get(value.alias)
+            if selected_type is None:
+                raise EvaluationExpectationError(
+                    "compiled expectation alias is absent from captured Query selections",
+                    code="EXPECTATION_ALIAS_NOT_SELECTED",
+                )
+            if selected_type != value.value_type:
+                raise EvaluationExpectationError(
+                    "compiled expectation value type contradicts captured Query selection",
+                    code="EXPECTATION_VALUE_TYPE_MISMATCH",
+                )
+        matching = tuple(
+            sorted(
+                row.row_id
+                for row in bundle.rows
+                if _captured_row_matches(row.values, expectation.values)
+            )
+        )
+        if matching:
+            status, diagnostic = "satisfied", "EXPECTATION_CONTAINS_ROW_SATISFIED"
+        else:
+            status, diagnostic = "not_satisfied", "EXPECTATION_CONTAINS_ROW_NOT_SATISFIED"
+        outcomes.append(
+            ExpectationResultV0(
+                expectation_id=expectation.expectation_id,
+                kind="contains_row",
+                expectation_digest=expectation.expectation_digest,
+                query_digest=bundle.query_digest,
+                targeted_query_wrapper_digest=targeted_query_wrapper_digest,
+                result_id=anchor.result_id,
+                result_digest=anchor.result_digest,
+                run_anchor_digest=anchor.anchor_digest,
+                status=status,
+                completeness_basis="complete_native_enumeration_v0",
+                matched_row_ids=matching,
+                diagnostic_code=diagnostic,
+            )
+        )
+    return tuple(outcomes)
+
+
 def assert_compiled_contains_row_expectation_current(
     value: CompiledContainsRowExpectationV0,
 ) -> None:
@@ -245,6 +342,32 @@ def _row_matches(row: EvaluateRow, values: Sequence[ResolvedExpectationValueV0])
     return True
 
 
+def _captured_row_matches(
+    row_values: tuple[tuple[str, object], ...],
+    values: Sequence[ResolvedExpectationValueV0],
+) -> bool:
+    """Match compiled operands against F4's canonical typed row storage."""
+
+    by_alias = dict(row_values)
+    if len(by_alias) != len(row_values):
+        raise EvaluationExpectationError(
+            "captured projection row has duplicate aliases",
+            code="EXPECTATION_RESULT_SHAPE",
+        )
+    for expected in values:
+        actual = by_alias.get(expected.alias)
+        actual_tag = getattr(actual, "tag", None)
+        actual_value = getattr(actual, "value", None)
+        actual_digest = getattr(actual, "digest", None)
+        if (
+            actual_tag != expected.value_type
+            or actual_value != expected.normalized_value
+            or actual_digest != expected.value_digest
+        ):
+            return False
+    return True
+
+
 def _query_digest_for_result(result: EvaluateResult) -> str:
     prefix = "sha256:"
     value = result.fingerprint.expr_digest
@@ -258,4 +381,5 @@ __all__ = [
     "assert_compiled_contains_row_expectation_current",
     "compile_contains_row_expectations_v0",
     "evaluate_contains_row_expectations_v0",
+    "evaluate_captured_contains_row_expectations_v0",
 ]

@@ -450,6 +450,35 @@ complete live enumeration without one. That result-local
 historical completeness claim. `underdetermined` and `unsupported` remain
 explicit future-profile states. An expected Query rejects `capture=` and
 `scenario=` because current F4/F5A contracts do not seal expectation inventory.
+
+For a durable record of that exact observation, use the separate terminal
+capture entrance rather than widening ordinary `evaluate`:
+
+```python
+captured = (
+    fg.query(resolved_rule)
+      .select("age", SemanticPortAddress("target", "age"))
+      .expect_contains("alice_age", age=22)
+      .capture()
+)
+assert captured.expectation_results[0].status == "satisfied"
+assert captured.verify().matched
+detached = type(captured).from_bytes(captured.to_bytes())
+evidence = detached.explain(
+    row_capture_digest=detached.bundle.rows[0].row_capture_digest,
+)
+```
+
+`CapturedEvaluationQueryRunV0` wraps — but does not modify — the existing F4
+bundle. It seals that bundle, the original targeted-Query wrapper, the ordered
+compiled `contains_row` inventory and outcomes; decode, `verify()` and
+`explain()` recompute outcomes from captured typed rows. It is digest-sealed,
+caller-custodied cleartext rather than authenticated or historical truth. A
+`not_satisfied` outcome only describes the captured native enumeration and has
+no negative EvidenceGraph: `explain()` accepts a real positive
+`row_capture_digest` only. The captured form is native-only and has no
+Scenario, config, premise-filter, paging, generic expectation or Operator
+surface. Its inventory is bounded to 64 expectations.
 It has no string lookup, registry, Package, generic `expect`, modes,
 empty-select existence, relationship/multi-hop traversal, Operator, or
 non-native configuration surface. Navigation is not accepted in `bind` or

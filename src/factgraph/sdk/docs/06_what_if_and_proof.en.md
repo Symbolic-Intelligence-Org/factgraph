@@ -23,6 +23,31 @@ manual = fg.eval.explain(inference, head=closed_head)
 
 Persisted-fact inspection remains under `fg.audit.*`.
 
+## Captured Query observation
+
+For a native resolved Query that has `expect_contains(...)` observations, use
+the terminal `.capture()` form when those observations must travel with the
+detached evidence record:
+
+```python
+captured = (
+    fg.query(resolved_rule)
+      .select("age", SemanticPortAddress("target", "age"))
+      .expect_contains("alice_age", age=22)
+      .capture()
+)
+captured.verify()
+captured.explain(row_capture_digest=captured.bundle.rows[0].row_capture_digest)
+```
+
+This returns `CapturedEvaluationQueryRunV0`, not `EvaluateResult`. It wraps an
+unmodified F4 bundle and seals the original targeted Query wrapper plus ordered
+compiled observation inventory/outcomes. It is detached and caller-custodied,
+but not authenticated, historical replay, source validation or a negative
+proof: a `not_satisfied` observation has no EvidenceGraph. The old
+`eval.evaluate(targeted_query, capture="run_bundle_v0")` rejection remains
+intentional; use `.capture()` for this one bounded combination.
+
 ## Captured replacement-only ScenarioRun
 
 `fg.what_if.*` remains removed. The existing Q7/Q11

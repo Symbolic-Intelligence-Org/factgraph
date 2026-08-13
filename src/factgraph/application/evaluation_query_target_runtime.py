@@ -234,7 +234,7 @@ def compile_targeted_evaluation_query(
     return TargetedCompiledEvaluationQueryV0(
         compiled,
         target,
-        _targeted_query_digest(
+        targeted_evaluation_query_wrapper_digest_v0(
             compiled.query_digest,
             target.run_target.target_digest,
             compiled_expectations,
@@ -279,7 +279,7 @@ def _assert_targeted_compiled_query_current(
             "targeted compiled Query does not match its sealed source target",
             "TARGETED_QUERY_CONTEXT_MISMATCH",
         )
-    expected_wrapper_digest = _targeted_query_digest(
+    expected_wrapper_digest = targeted_evaluation_query_wrapper_digest_v0(
         compiled.query_digest, target.run_target.target_digest, value.expectations,
     )
     if value.wrapper_digest != expected_wrapper_digest:
@@ -345,11 +345,18 @@ def _error(message: str, code: str) -> EvaluationQueryTargetError:
     return EvaluationQueryTargetError(message, code=code)
 
 
-def _targeted_query_digest(
+def targeted_evaluation_query_wrapper_digest_v0(
     query_digest: str,
     target_digest: str,
     expectations: tuple[CompiledContainsRowExpectationV0, ...] = (),
 ) -> str:
+    """Return the exact v0 seal for one targeted Query wrapper.
+
+    This is deliberately a pure, shared helper.  Detached capture can retain
+    the F4 bundle's public target pin without serializing the in-process
+    address space, then rederive the original wrapper seal from that pin and
+    its ordered compiled expectation inventory.
+    """
     payload = {
         "format": "targeted_compiled_evaluation_query_v0",
         "query_digest": query_digest,
@@ -362,6 +369,21 @@ def _targeted_query_digest(
     return f"sha256:{sha256_hex(encoded)}"
 
 
+# Keep the old private spelling as a compatibility alias for application-local
+# callers/tests.  It delegates to the public v0 helper and therefore preserves
+# the exact pre-Q15 digest bytes.
+def _targeted_query_digest(
+    query_digest: str,
+    target_digest: str,
+    expectations: tuple[CompiledContainsRowExpectationV0, ...] = (),
+) -> str:
+    return targeted_evaluation_query_wrapper_digest_v0(
+        query_digest,
+        target_digest,
+        expectations,
+    )
+
+
 __all__ = [
     "EvaluationQueryTargetError",
     "ResolvedEvaluationQueryTargetV1",
@@ -369,4 +391,5 @@ __all__ = [
     "assert_targeted_evaluation_query_current",
     "compile_targeted_evaluation_query",
     "resolve_evaluation_query_target",
+    "targeted_evaluation_query_wrapper_digest_v0",
 ]

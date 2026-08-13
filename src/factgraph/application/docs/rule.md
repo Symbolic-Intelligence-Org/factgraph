@@ -652,6 +652,37 @@ inventory. Generic expect/exists/count/set/bag modes, negative evidence and
 expectation Explain remain later work. A matching row may still use ordinary
 live `row.explain()`; a non-match does not fabricate an EvidenceGraph.
 
+### Captured EvaluationQuery observation v0
+
+`EvaluationQueryBuilderV1.capture()` is the detached counterpart for a
+targeted native Query, including its bounded compiled `contains_row`
+observations:
+
+```python
+captured = (
+    fg.query(resolved_rule)
+      .select("age", SemanticPortAddress("target", "age"))
+      .expect_contains("alice_age", age=22)
+      .capture()
+)
+```
+
+It returns `CapturedEvaluationQueryRunV0`, an outer protocol record containing
+one unmodified `EvaluationRunBundleV0`, the exact targeted-wrapper digest, the
+ordered compiled expectation inventory and outcomes recomputed from the sealed
+rows. It does not attach expectations to `EvaluateResult` or change the
+ordinary `evaluate(..., capture=...)` rejection. `to_bytes()` and
+`from_bytes()` use a bounded strict canonical codec; detached `verify()`
+reuses F4 isolated verification, while `explain(row_capture_digest=...)`
+reuses detached positive-row playback and the authored Policy projection.
+
+The record is digest-sealed but not authenticated, contains caller-managed
+typed values, and says nothing about source authority or historical truth.
+`not_satisfied` means only no matching row in this exact complete native
+capture. It has no negative EvidenceGraph; callers may explain a real captured
+row only. The v0 inventory is capped at 64 and excludes Scenario, config,
+premise filtering, paging, generic expectation grammar, Operators and Actions.
+
 ### Scenario field substitution v0
 
 `ScenarioFieldSubstitutionV0` is the first deliberately narrow Scenario

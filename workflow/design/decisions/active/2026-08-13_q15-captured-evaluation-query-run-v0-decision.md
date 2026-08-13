@@ -55,11 +55,10 @@ L3 adapter, but is not such an adapter.
 
 ## Acceptance
 
-- [ ] The outer digest seals exact F4 bundle, targeted wrapper, ordered
+- [x] The outer digest seals exact F4 bundle, targeted wrapper, ordered
   expectation inventory and recomputed outcomes.
-- [ ] Codec/decode rejects hybrid or stale inventory/outcome artifacts.
-- [ ] `verify()` and explicit-row `explain()` never read a live Store.
-- [ ] Zero-row/negative outcomes never manufacture an EvidenceGraph.
-- [ ] Existing F4 and ordinary expectation/capture rejection paths remain
+- [x] Codec/decode rejects hybrid or stale inventory/outcome artifacts.
+- [x] `verify()` and explicit-row `explain()` never read a live Store.
+- [x] Zero-row/negative outcomes never manufacture an EvidenceGraph.
+- [x] Existing F4 and ordinary expectation/capture rejection paths remain
   byte/behavior compatible.
-

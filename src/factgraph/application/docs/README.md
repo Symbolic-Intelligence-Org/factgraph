@@ -33,8 +33,10 @@ compatibility.
     identity-to-field navigation) and structural-lineage boundary, and the compile-only
     `EvaluationQuery` typed bind/select projection contract plus opt-in,
     detached `EvaluationRunBundleV0` capture/codec, isolated verification,
-    single-row evidence playback, and readonly `PolicyExplanationViewV0`
-    projection semantics; also records the narrow replacement-only
+    single-row evidence playback, readonly `PolicyExplanationViewV0`
+    projection semantics, and the separate outer
+    `CapturedEvaluationQueryRunV0` record for bounded detached Query
+    observations; also records the narrow replacement-only
     `ScenarioFieldSubstitutionV0` and atomic
     `ScenarioFieldSubstitutionSetV0` boundaries, including the separate,
     captured `ScenarioRunV0` lifecycle for detached Scenario evidence and

@@ -1,6 +1,6 @@
 # Task Blueprint: FactGraph Query/Scenario continuous delivery program
 
-- Status: scoped
+- Status: implementing
 - Created: 2026-08-13
 - Last Updated: 2026-08-13
 - Branch: `codex/v0.3.0-factgraph-whatif-v1-continuous-2026-08-13`
@@ -49,14 +49,17 @@ Policy-relative premise addressing, source admission, or a generic premise DSL.
 
 ## 6. Acceptance
 
-- [ ] P1 is implemented, independently reviewed and documented.
+- [x] P1 is implemented, independently reviewed and documented.
 - [ ] P2 has an adopted conservative identity contract before implementation.
 - [ ] All final package outcomes distinguish shipped capability from remaining
   semantic gates.
 
 ## 7. Outcome / deviations
 
-In progress.  This program intentionally replaces repeated per-function
-approval pauses with explicit work-package stop conditions; it does not weaken
-the integrity, provenance or scope boundaries inherited from Q8–Q14.
-
+P1 is implemented and independently reviewed. Its outer artifact preserves
+ordinary expectation/capture rejection, rechecks bundle selection alias/type
+contracts on every detached operation, and rejects in-memory captures that do
+not fit the strict durable codec. P2 remains the next bounded package. This
+program intentionally replaces repeated per-function approval pauses with
+explicit work-package stop conditions; it does not weaken the integrity,
+provenance or scope boundaries inherited from Q8–Q14.

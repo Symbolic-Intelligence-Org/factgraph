@@ -43,6 +43,12 @@ from .evaluation_expectation import (
     ExpectationStatusV0,
     ResolvedExpectationValueV0,
 )
+from .captured_evaluation_query_run import (
+    CapturedEvaluationQueryRunExplanationV0,
+    CapturedEvaluationQueryRunV0,
+    CapturedEvaluationQueryRunVerificationV0,
+    MAX_CAPTURED_EVALUATION_QUERY_EXPECTATIONS_V0,
+)
 from .evaluation_scenario import (
     ScenarioFieldSubstitutionOperationV0,
     ScenarioFieldSubstitutionSetResolutionV0,
@@ -297,6 +303,10 @@ __all__ = [
     "ExpectationResultV0",
     "ExpectationStatusV0",
     "ResolvedExpectationValueV0",
+    "CapturedEvaluationQueryRunExplanationV0",
+    "CapturedEvaluationQueryRunV0",
+    "CapturedEvaluationQueryRunVerificationV0",
+    "MAX_CAPTURED_EVALUATION_QUERY_EXPECTATIONS_V0",
     "ScenarioFieldSubstitutionV0",
     "ScenarioFieldSubstitutionSetV0",
     "ScenarioFieldSubstitutionOperationV0",

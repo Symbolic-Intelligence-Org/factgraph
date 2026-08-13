@@ -137,6 +137,7 @@ from .evaluation_expectation_runtime import (
     EvaluationExpectationError,
     assert_compiled_contains_row_expectation_current,
     compile_contains_row_expectations_v0,
+    evaluate_captured_contains_row_expectations_v0,
     evaluate_contains_row_expectations_v0,
 )
 from .evaluation_query_target_runtime import (
@@ -146,6 +147,7 @@ from .evaluation_query_target_runtime import (
     assert_targeted_evaluation_query_current,
     compile_targeted_evaluation_query,
     resolve_evaluation_query_target,
+    targeted_evaluation_query_wrapper_digest_v0,
 )
 from .evaluation_run_bundle_runtime import (
     evaluation_run_bundle_bytes,
@@ -157,6 +159,10 @@ from .policy_explanation_runtime import project_policy_explanation_v0
 from .scenario_run_runtime import (
     scenario_run_bytes,
     scenario_run_from_bytes,
+)
+from .captured_evaluation_query_run_runtime import (
+    captured_evaluation_query_run_bytes,
+    captured_evaluation_query_run_from_bytes,
 )
 from .authoring_runtime import AuthoringRuntimeError
 from .why_not_runtime import (
@@ -170,6 +176,7 @@ __all__ = [
     "assert_compiled_contains_row_expectation_current",
     "compile_contains_row_expectations_v0",
     "evaluate_contains_row_expectations_v0",
+    "evaluate_captured_contains_row_expectations_v0",
     "ConditionKeyView",
     "AuthoringRuntimeError",
     "CheckRuntimeError",
@@ -178,6 +185,8 @@ __all__ = [
     "EvaluationQueryTargetError",
     "scenario_run_bytes",
     "scenario_run_from_bytes",
+    "captured_evaluation_query_run_bytes",
+    "captured_evaluation_query_run_from_bytes",
     "CapabilityHelperError",
     "DerivationRuntimeError",
     "DiagnoseRuntimeError",
@@ -275,6 +284,7 @@ __all__ = [
     "render_entity_repr",
     "resolve_rule_contract",
     "resolve_evaluation_query_target",
+    "targeted_evaluation_query_wrapper_digest_v0",
     "render_proof_frame_narrative",
     "resolve_workspace_paths",
     "save_workspace",

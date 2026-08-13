@@ -34,12 +34,16 @@ from factgraph.application.evaluation_query_runtime import (
 from factgraph.application.evaluation_query_target_runtime import (
     TargetedCompiledEvaluationQueryV0,
     assert_targeted_evaluation_query_current,
+    targeted_evaluation_query_wrapper_digest_v0,
 )
 from factgraph.application.evaluation_expectation_runtime import (
     EvaluationExpectationError,
     evaluate_contains_row_expectations_v0,
 )
 from factgraph.application.evaluation_run_bundle_runtime import _build_evaluation_run_bundle_v0
+from factgraph.application.captured_evaluation_query_run_runtime import (
+    build_captured_evaluation_query_run_v0,
+)
 from factgraph.application.scenario_run_runtime import build_scenario_run_v0
 from factgraph.application.evaluation_run_runtime import (
     EVALUATION_QUERY_PROJECTION_ADAPTER_VERSION,
@@ -87,6 +91,8 @@ from factgraph.application.protocol import (
     ScenarioFieldSubstitutionSetV0,
     ScenarioResultDiffV0,
     ScenarioRunV0,
+    CapturedEvaluationQueryRunV0,
+    MAX_CAPTURED_EVALUATION_QUERY_EXPECTATIONS_V0,
 )
 from factgraph.application.protocol.certainty import BOOLEAN_CERTAINTY, Certainty
 from factgraph.application.protocol.evaluate_result import (
@@ -1564,6 +1570,10 @@ class _SDKEvalManager:
     def run_scenario(self, *args: Any, **kwargs: Any) -> Any:
         """Capture one bounded replacement-only ScenarioRun."""
         return self._sdk._run_scenario(*args, **kwargs)
+
+    def capture_query(self, *args: Any, **kwargs: Any) -> Any:
+        """Capture one targeted native Query with detached observations."""
+        return self._sdk._capture_targeted_evaluation_query_run(*args, **kwargs)
 
     def evaluate_program(self, *args: Any, **kwargs: Any) -> Any:
         """Evaluate a selected Horn program read-only on this ledger."""
@@ -3551,6 +3561,82 @@ class SDKStore:
             raw_config=raw_config,
             source_target=targeted,
         )
+
+    def _capture_targeted_evaluation_query_run(
+        self,
+        *args: Any,
+        **kwargs: Any,
+    ) -> CapturedEvaluationQueryRunV0:
+        """Capture a targeted Query without widening ordinary evaluate contracts.
+
+        A private expectation-free wrapper runs through the existing F4 capture
+        seam, retaining the original resolved target.  The original wrapper is
+        then rechecked and its observations are sealed *outside* EvaluateResult.
+        """
+
+        if len(args) != 1 or kwargs:
+            if kwargs:
+                unknown = ", ".join(sorted(kwargs))
+                raise SDKStoreError(
+                    "eval.capture_query(...) accepts one TargetedCompiledEvaluationQueryV0 "
+                    f"and no keyword(s); got {unknown}"
+                )
+            raise SDKStoreError(
+                "eval.capture_query(...) accepts exactly one TargetedCompiledEvaluationQueryV0"
+            )
+        targeted = args[0]
+        if not isinstance(targeted, TargetedCompiledEvaluationQueryV0):
+            raise SDKStoreError(
+                "eval.capture_query(...) requires TargetedCompiledEvaluationQueryV0"
+            )
+        try:
+            assert_targeted_evaluation_query_current(targeted)
+        except ValueError as exc:
+            raise SDKStoreError(
+                "targeted compiled Query failed its capture-time integrity check"
+            ) from exc
+        if len(targeted.expectations) > MAX_CAPTURED_EVALUATION_QUERY_EXPECTATIONS_V0:
+            raise SDKStoreError(
+                "targeted Query capture expectation inventory exceeds the v0 limit"
+            )
+        view_snapshot_digest = self._view_snapshot_digest(query_typed_values=True)
+        capture_wrapper = TargetedCompiledEvaluationQueryV0(
+            compiled_query=targeted.compiled_query,
+            target=targeted.target,
+            wrapper_digest=targeted_evaluation_query_wrapper_digest_v0(
+                targeted.compiled_query.query_digest,
+                targeted.target.run_target.target_digest,
+                (),
+            ),
+            expectations=(),
+        )
+        result = self._evaluate_compiled_evaluation_query_input(
+            (capture_wrapper.compiled_query,),
+            {"capture": "run_bundle_v0"},
+            raw_engine=None,
+            raw_config=None,
+            source_target=capture_wrapper,
+        )
+        self._assert_evaluation_query_execution_current(
+            targeted.compiled_query,
+            view_snapshot_digest,
+        )
+        try:
+            assert_targeted_evaluation_query_current(targeted)
+        except ValueError as exc:
+            raise SDKStoreError(
+                "targeted compiled Query changed during capture"
+            ) from exc
+        if result.run_bundle is None:
+            raise SDKStoreError("targeted Query capture did not produce an EvaluationRun bundle")
+        try:
+            return build_captured_evaluation_query_run_v0(
+                bundle=result.run_bundle,
+                targeted_query_wrapper_digest=targeted.wrapper_digest,
+                expectations=targeted.expectations,
+            )
+        except (TypeError, ValueError) as exc:
+            raise SDKStoreError(f"failed to capture targeted Query run: {exc}") from exc
 
     def _run_scenario(self, *args: Any, **kwargs: Any) -> ScenarioRunV0:
         """Capture a bounded ScenarioRun without changing legacy ``scenario=``.

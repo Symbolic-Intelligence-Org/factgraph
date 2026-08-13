@@ -120,6 +120,16 @@ class EvaluationQueryBuilderV1:
 
         return self._graph.eval.evaluate(self.compile(), **kwargs)
 
+    def capture(self) -> Any:
+        """Capture this exact native Query and its optional observations.
+
+        This is terminal.  It does not widen ordinary ``evaluate(...,
+        capture=...)``: the returned outer artifact retains the compiled
+        expectation inventory separately from F4's bundle contract.
+        """
+
+        return self._graph.eval.capture_query(self.compile())
+
     def what_if(
         self,
         scenario: ScenarioFieldSubstitutionV0 | ScenarioFieldSubstitutionSetV0,
