@@ -7,6 +7,8 @@
 | Date | Stage | Event | Notes |
 | --- | --- | --- |
 | 2026-08-13 | draft | Blueprint created | Multiple direct substitutions require one atomic relation, not repeated Q7 calls. |
+| 2026-08-13 | preflight | Independent preflight CLEAR | Shared baseline, canonical target uniqueness, all-or-nothing admission, and Q7/Q9 boundary preservation verified before implementation. |
+| 2026-08-13 | scoped | Preflight and self-check passed | F5B2 is limited to a typed direct-field substitution set; no general Scenario, expectation combination, capture, anchor, explain, or replay surface. |
 
 ## Decision Notes
 

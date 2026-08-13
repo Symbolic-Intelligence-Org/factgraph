@@ -1,6 +1,6 @@
 # Task Blueprint: FactGraph F5B2 Scenario field substitution set
 
-- Status: draft
+- Status: scoped
 - Created: 2026-08-13
 - Last Updated: 2026-08-13
 - Related Modules:
