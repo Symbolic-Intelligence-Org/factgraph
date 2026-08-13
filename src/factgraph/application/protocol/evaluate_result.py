@@ -23,6 +23,7 @@ from factgraph.application.protocol.certainty import BOOLEAN_CERTAINTY, Certaint
 from factgraph.application.protocol.evaluation_run import EvaluationRunAnchorV0
 from factgraph.application.protocol.evaluation_run_bundle import EvaluationRunBundleV0
 from factgraph.application.protocol.evaluation_scenario import ScenarioResolutionV0
+from factgraph.application.protocol.evaluation_expectation import ExpectationResultV0
 from factgraph.application.protocol.explanation_render import narrate_evidence, walk_evidence
 from factgraph.application.protocol.rule import Rule, _is_projection_rule
 from factgraph.application.protocol.rule_expr import RuleExprError
@@ -150,6 +151,7 @@ class EvaluateResult:
     run_anchor: EvaluationRunAnchorV0 | None = field(default=None, kw_only=True)
     run_bundle: EvaluationRunBundleV0 | None = field(default=None, kw_only=True, repr=False)
     scenario: ScenarioResolutionV0 | None = field(default=None, kw_only=True, repr=False)
+    expectation_results: tuple[ExpectationResultV0, ...] = field(default=(), kw_only=True)
     _schema_index: object | None = field(default=None, repr=False, compare=False, hash=False)
     _row_close_builder: Callable[[EvaluateRow, EvaluateResult], Rule] | None = field(
         default=None,
@@ -199,6 +201,16 @@ class EvaluateResult:
                 raise ProtocolShapeError(
                     "Scenario EvaluateResult must not carry EvaluationRun anchor or bundle"
                 )
+        if (
+            not isinstance(self.expectation_results, tuple)
+            or not all(isinstance(item, ExpectationResultV0) for item in self.expectation_results)
+        ):
+            raise ProtocolShapeError(
+                "EvaluateResult.expectation_results must be tuple[ExpectationResultV0, ...]"
+            )
+        expectation_ids = tuple(item.expectation_id for item in self.expectation_results)
+        if len(set(expectation_ids)) != len(expectation_ids):
+            raise ProtocolShapeError("EvaluateResult.expectation_results ids must be unique")
 
         if not isinstance(self.rows, tuple):
             raise ProtocolShapeError("EvaluateResult.rows must be tuple[EvaluateRow, ...]")
@@ -227,6 +239,7 @@ class EvaluateResult:
             support_artifacts=row_support_artifacts,
             provenance_envelopes=row_provenance_envelopes,
         )
+        _validate_expectation_results(self)
         _validate_run_anchor(self)
         _validate_run_bundle(self)
 
@@ -1184,6 +1197,30 @@ def _validate_scenario_result(
         raise ProtocolShapeError(
             "Scenario result diff effective rows must match EvaluateResult rows"
         )
+
+
+def _validate_expectation_results(result: EvaluateResult) -> None:
+    """Bind result-local query observations without changing result identity."""
+
+    if not result.expectation_results:
+        return
+    query_digest = result.fingerprint.expr_digest
+    if not isinstance(query_digest, str) or not query_digest.startswith("sha256:"):
+        raise ProtocolShapeError("EvaluateResult expectation results require an EvaluationQuery fingerprint")
+    query_digest = query_digest[7:]
+    valid_row_ids = {row.row_id for row in result.rows}
+    anchor_digest = None if result.run_anchor is None else result.run_anchor.anchor_digest
+    for item in result.expectation_results:
+        ExpectationResultV0.__post_init__(item)
+        if (
+            item.query_digest != query_digest
+            or item.result_id != result.result_id
+            or item.result_digest != result.fingerprint.result_digest
+            or item.run_anchor_digest != anchor_digest
+        ):
+            raise ProtocolShapeError("EvaluateResult expectation result does not match result identity")
+        if any(row_id not in valid_row_ids for row_id in item.matched_row_ids):
+            raise ProtocolShapeError("EvaluateResult expectation result names unknown row")
 
 
 def _checked_scope_for_row_result(result: EvaluateResult, row: EvaluateRow) -> Mapping[str, Any]:

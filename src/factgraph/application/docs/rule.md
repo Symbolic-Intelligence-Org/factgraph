@@ -506,7 +506,7 @@ still not a false result.
 
 The older ad-hoc `QueryRuntimeRequest` and SDK `Query` remain unchanged.
 Non-native engines, standalone Query explain integration, candidate acceptance,
-Compare/literals, field navigation, `expect`, completeness, What-if, bundle
+Compare/literals, field navigation, general expectation modes, completeness, What-if, bundle
 persistence, Package, and Agent/Meander wire formats remain later slices.
 
 ### Unified resolved Query target v1
@@ -550,11 +550,42 @@ Rule-lift Run anchor reports `original_target_kind="rule"` and
 because of this provenance label.
 
 String policy ids, registries, Packages, dotted field paths, bare Rules,
-Policy without `address_space=`, `expect`, modes, empty-select existence,
+Policy without `address_space=`, generic `expect`, modes, empty-select existence,
 navigation and external Operators are deliberately not accepted by this v1
 facade. `ScenarioFieldSubstitutionV0` may be forwarded through
 `.evaluate(scenario=...)`, with its existing no-anchor/no-bundle/no-live-evidence
 boundary unchanged.
+
+F5B1 adds one result-observation extension:
+
+```python
+result = (
+    fg.query(resolved_rule)
+      .select("age", SemanticPortAddress("target", "age"))
+      .expect_contains("alice_age", age=22)
+      .evaluate()
+)
+outcome = result.expectation_results[0]
+```
+
+`expect_contains` is not a Rule condition, a Policy node, a post-filter or an
+authorization decision.  Each expected keyword must name an already-selected
+alias and is normalized using the same schema-aware contract as `bind`.  It
+does not alter the Policy digest, Query digest, projection head, lowered plan
+or returned rows; its separate digest is committed by the targeted-Query
+wrapper.  A matching row is `satisfied`.  A non-match is `not_satisfied` only
+when this exact native live-view execution has the result-local
+`complete_native_enumeration_v0` basis; it proves neither closed-world truth,
+source authority/freshness, historical snapshot, replayability nor
+cross-engine equivalence. `underdetermined` and `unsupported` remain explicit
+DTO states for incomplete/unsupported future execution profiles.
+
+F4's Run summary remains `not_asserted`/`unknown`/`unspecified`; it is not
+reinterpreted as the expectation basis. An expected Query rejects `capture=`
+and `scenario=` because their current contracts do not seal the expectation
+inventory. Generic expect/exists/count/set/bag modes, negative evidence and
+expectation Explain remain later work. A matching row may still use ordinary
+live `row.explain()`; a non-match does not fabricate an EvidenceGraph.
 
 ### Scenario field substitution v0
 

@@ -17,6 +17,7 @@ from factgraph.application.protocol.evaluation_query import (
     EvaluationQueryError,
     EvaluationQuerySelection,
 )
+from factgraph.application.protocol.evaluation_expectation import ContainsRowExpectationV0
 from factgraph.application.protocol.policy import Policy
 from factgraph.application.protocol.semantic_address import SemanticPortAddress
 from factgraph.application.semantic_address_runtime import SemanticAddressSpace
@@ -36,6 +37,7 @@ class EvaluationQueryBuilderV1:
     _target: ResolvedEvaluationQueryTargetV1
     _bindings: tuple[EvaluationQueryBinding, ...] = ()
     _selections: tuple[EvaluationQuerySelection, ...] = ()
+    _expectations: tuple[ContainsRowExpectationV0, ...] = ()
 
     def bind(self, address: SemanticPortAddress, value: Any) -> "EvaluationQueryBuilderV1":
         """Add one structured direct-port binding; dotted paths are not accepted."""
@@ -55,6 +57,27 @@ class EvaluationQueryBuilderV1:
             raise SDKStoreError(f"query select rejected: {exc}", code=exc.code) from exc
         return replace(self, _selections=(*self._selections, selection))
 
+    def expect_contains(
+        self,
+        expectation_id: str,
+        /,
+        **selected_values: Any,
+    ) -> "EvaluationQueryBuilderV1":
+        """Observe whether a completed result contains a matching selected row.
+
+        This does not modify the Policy or the Query projection.  Exact aliases
+        and typed values are resolved only at compile time against ``select``.
+        """
+
+        try:
+            expectation = ContainsRowExpectationV0(
+                expectation_id,
+                tuple(selected_values.items()),
+            )
+        except (TypeError, ValueError) as exc:
+            raise SDKStoreError(f"query expectation rejected: {exc}") from exc
+        return replace(self, _expectations=(*self._expectations, expectation))
+
     def compile(self) -> TargetedCompiledEvaluationQueryV0:
         """Return the existing compiled Query inside a source-target envelope."""
 
@@ -63,6 +86,7 @@ class EvaluationQueryBuilderV1:
                 self._target,
                 bindings=self._bindings,
                 selections=self._selections,
+                expectations=self._expectations,
                 schema_index=self._graph._application_schema_index,
             )
         except (EvaluationQueryError, EvaluationQueryTargetError, ValueError) as exc:

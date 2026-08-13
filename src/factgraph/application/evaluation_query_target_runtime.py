@@ -18,6 +18,15 @@ from .evaluation_query_runtime import (
     _assert_compiled_evaluation_query_current,
     compile_evaluation_query,
 )
+from .evaluation_expectation_runtime import (
+    EvaluationExpectationError,
+    assert_compiled_contains_row_expectation_current,
+    compile_contains_row_expectations_v0,
+)
+from .protocol.evaluation_expectation import (
+    CompiledContainsRowExpectationV0,
+    ContainsRowExpectationV0,
+)
 from .evaluation_run_runtime import build_evaluation_run_target_v0
 from .policy_runtime import CompiledPolicyV0, _assert_compiled_policy_current, compile_policy
 from .protocol.evaluation_query import (
@@ -70,6 +79,7 @@ class TargetedCompiledEvaluationQueryV0:
     compiled_query: CompiledEvaluationQueryV0
     target: ResolvedEvaluationQueryTargetV1
     wrapper_digest: str
+    expectations: tuple[CompiledContainsRowExpectationV0, ...] = ()
 
     def __post_init__(self) -> None:
         _assert_targeted_compiled_query_current(self)
@@ -154,6 +164,7 @@ def compile_targeted_evaluation_query(
     *,
     bindings: tuple[EvaluationQueryBinding, ...],
     selections: tuple[EvaluationQuerySelection, ...],
+    expectations: tuple[ContainsRowExpectationV0, ...] = (),
     schema_index: SchemaIndex,
 ) -> TargetedCompiledEvaluationQueryV0:
     """Compile through the sole F3 typed Query compiler, without execution."""
@@ -184,10 +195,24 @@ def compile_targeted_evaluation_query(
         raise
     except ValueError as exc:
         raise _error("typed Query compilation rejected this target intent", "QUERY_TARGET_COMPILATION_REJECTED") from exc
+    try:
+        compiled_expectations = compile_contains_row_expectations_v0(
+            expectations,
+            compiled_query=compiled,
+            address_space=target.address_space,
+            schema_index=schema_index,
+        )
+    except EvaluationExpectationError as exc:
+        raise _error(str(exc), exc.code) from exc
     return TargetedCompiledEvaluationQueryV0(
         compiled,
         target,
-        _targeted_query_digest(compiled.query_digest, target.run_target.target_digest),
+        _targeted_query_digest(
+            compiled.query_digest,
+            target.run_target.target_digest,
+            compiled_expectations,
+        ),
+        compiled_expectations,
     )
 
 
@@ -203,6 +228,20 @@ def _assert_targeted_compiled_query_current(
     _assert_compiled_evaluation_query_current(value.compiled_query)
     _assert_resolved_target_current(value.target)
     compiled, target = value.compiled_query, value.target
+    if not isinstance(value.expectations, tuple) or not all(
+        isinstance(item, CompiledContainsRowExpectationV0) for item in value.expectations
+    ):
+        raise _error("targeted compiled Query expectations are malformed", "INVALID_TARGETED_QUERY")
+    expectation_ids = tuple(item.expectation_id for item in value.expectations)
+    if len(set(expectation_ids)) != len(expectation_ids):
+        raise _error("targeted compiled Query expectation ids are duplicated", "DUPLICATE_EXPECTATION_ID")
+    if any(item.query_digest != compiled.query_digest for item in value.expectations):
+        raise _error("targeted compiled Query expectation does not match its Query", "EXPECTATION_QUERY_MISMATCH")
+    try:
+        for item in value.expectations:
+            assert_compiled_contains_row_expectation_current(item)
+    except EvaluationExpectationError as exc:
+        raise _error(str(exc), exc.code) from exc
     if (
         compiled.compiled_policy != target.compiled_policy
         or compiled.policy_digest != target.run_target.policy_digest
@@ -214,7 +253,7 @@ def _assert_targeted_compiled_query_current(
             "TARGETED_QUERY_CONTEXT_MISMATCH",
         )
     expected_wrapper_digest = _targeted_query_digest(
-        compiled.query_digest, target.run_target.target_digest,
+        compiled.query_digest, target.run_target.target_digest, value.expectations,
     )
     if value.wrapper_digest != expected_wrapper_digest:
         raise _error(
@@ -279,11 +318,16 @@ def _error(message: str, code: str) -> EvaluationQueryTargetError:
     return EvaluationQueryTargetError(message, code=code)
 
 
-def _targeted_query_digest(query_digest: str, target_digest: str) -> str:
+def _targeted_query_digest(
+    query_digest: str,
+    target_digest: str,
+    expectations: tuple[CompiledContainsRowExpectationV0, ...] = (),
+) -> str:
     payload = {
         "format": "targeted_compiled_evaluation_query_v0",
         "query_digest": query_digest,
         "target_digest": target_digest,
+        "expectation_digests": [item.expectation_digest for item in expectations],
     }
     encoded = json.dumps(
         payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False,

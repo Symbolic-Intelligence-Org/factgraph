@@ -428,9 +428,19 @@ Policy `__factgraph_rule_lift__:<rule-id>`; it does not make a Rule and Policy
 the same authored object. For a direct Policy use
 `fg.query(policy, address_space=addresses)`. The builder accepts only
 structured `SemanticPortAddress` values and delegates to the existing
-`EvaluationQuery` compiler. It has no string lookup, registry, Package,
-`expect`, modes, empty-select existence, navigation, Operator, or non-native
-configuration surface. Ordinary capture/evidence remains the existing F4 path;
+`EvaluationQuery` compiler. Its sole result-observation extension is
+`expect_contains(expectation_id, /, **selected_values)`: values name existing
+selections, are schema-normalized like `bind`, and observe the completed row
+set without changing the Policy, query digest, lowering plan or rows. Native
+success reports `satisfied` for a matching row and `not_satisfied` for a
+complete live enumeration without one. That result-local
+`complete_native_enumeration_v0` basis is neither closed-world truth nor an F4
+historical completeness claim. `underdetermined` and `unsupported` remain
+explicit future-profile states. An expected Query rejects `capture=` and
+`scenario=` because current F4/F5A contracts do not seal expectation inventory.
+It has no string lookup, registry, Package, generic `expect`, modes,
+empty-select existence, navigation, Operator, or non-native configuration
+surface. Ordinary capture/evidence remains the existing F4 path;
 the Run anchor records whether its source was a direct Policy or a Rule lift.
 
 `builder.evaluate(scenario=ScenarioFieldSubstitutionV0(...))` forwards only the

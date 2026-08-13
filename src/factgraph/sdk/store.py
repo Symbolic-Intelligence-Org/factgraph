@@ -33,6 +33,10 @@ from factgraph.application.evaluation_query_target_runtime import (
     TargetedCompiledEvaluationQueryV0,
     assert_targeted_evaluation_query_current,
 )
+from factgraph.application.evaluation_expectation_runtime import (
+    EvaluationExpectationError,
+    evaluate_contains_row_expectations_v0,
+)
 from factgraph.application.evaluation_run_bundle_runtime import _build_evaluation_run_bundle_v0
 from factgraph.application.evaluation_run_runtime import (
     EVALUATION_QUERY_PROJECTION_ADAPTER_VERSION,
@@ -3274,6 +3278,7 @@ class SDKStore:
         capture_supplied = "capture" in kwargs
         capture = kwargs.pop("capture", None)
         scenario = kwargs.pop("scenario", None)
+        expectations = () if source_target is None else source_target.expectations
         if scenario is not None and not isinstance(scenario, ScenarioFieldSubstitutionV0):
             raise SDKStoreError(
                 "evaluate(compiled_query) scenario= must be ScenarioFieldSubstitutionV0"
@@ -3281,6 +3286,14 @@ class SDKStore:
         if scenario is not None and capture_supplied:
             raise SDKStoreError(
                 "evaluate(compiled_query) ScenarioFieldSubstitutionV0 does not support capture="
+            )
+        if expectations and capture_supplied:
+            raise SDKStoreError(
+                "evaluate(targeted_compiled_query) expectations do not support capture="
+            )
+        if expectations and scenario is not None:
+            raise SDKStoreError(
+                "evaluate(targeted_compiled_query) expectations do not support scenario="
             )
         if capture is not None and (
             type(capture) is not str or capture != "run_bundle_v0"
@@ -3420,11 +3433,27 @@ class SDKStore:
                 compiled_query.compiled_policy.rule_expr,
                 head=compiled_query.projection_head,
             ),
-            evaluation_query=compiled_query,
-            evaluation_query_source_target=source_target,
+                evaluation_query=compiled_query,
+                evaluation_query_source_target=(
+                    None if source_target is None else source_target.target.run_target
+                ),
             view_snapshot_digest_override=view_snapshot_digest,
         )
         self._assert_evaluation_query_execution_current(compiled_query, view_snapshot_digest)
+        if expectations:
+            try:
+                result = replace(
+                    result,
+                    expectation_results=evaluate_contains_row_expectations_v0(
+                        expectations,
+                        result=result,
+                        targeted_query_wrapper_digest=source_target.wrapper_digest,
+                        completeness_basis="complete_native_enumeration_v0",
+                    ),
+                )
+            except EvaluationExpectationError as exc:
+                raise SDKStoreError(f"compiled Query expectation failed: {exc}", code=exc.code) from exc
+            self._assert_evaluation_query_execution_current(compiled_query, view_snapshot_digest)
         if capture == "run_bundle_v0":
             if result._row_support_artifacts is None:
                 raise SDKStoreError("native EvaluationQuery capture did not produce one complete execution record")
@@ -3467,7 +3496,7 @@ class SDKStore:
             kwargs,
             raw_engine=raw_engine,
             raw_config=raw_config,
-            source_target=targeted.target.run_target,
+            source_target=targeted,
         )
 
     @staticmethod

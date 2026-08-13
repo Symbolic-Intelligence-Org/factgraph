@@ -193,6 +193,93 @@ class UnifiedEvaluationQueryTests(unittest.TestCase):
         with self.assertRaisesRegex(SDKStoreError, "does not support capture"):
             graph.eval.evaluate(compiled, scenario=scenario, capture="run_bundle_v0")
 
+    def test_builder_contains_expectation_observes_rows_without_changing_query(self) -> None:
+        graph = SDKStore([Person])
+        _seed(graph, "alice", age=22, score=9)
+        base = (
+            graph.query(_bundle(graph))
+            .select("age", _address("target", "age"))
+        )
+        ordinary = base.compile()
+        expected = base.expect_contains("alice_age", age=22).compile()
+        self.assertEqual(ordinary.compiled_query.query_digest, expected.compiled_query.query_digest)
+        self.assertEqual(ordinary.compiled_query._lowering_plan, expected.compiled_query._lowering_plan)
+        self.assertNotEqual(ordinary.wrapper_digest, expected.wrapper_digest)
+
+        result = graph.eval.evaluate(expected)
+        self.assertEqual(len(result.expectation_results), 1)
+        outcome = result.expectation_results[0]
+        self.assertEqual(outcome.status, "satisfied")
+        self.assertEqual(outcome.completeness_basis, "complete_native_enumeration_v0")
+        self.assertEqual(outcome.matched_row_ids, (result[0].row_id,))
+        self.assertIsNotNone(result.run_anchor)
+        assert result.run_anchor is not None
+        self.assertEqual(outcome.run_anchor_digest, result.run_anchor.anchor_digest)
+        self.assertEqual(result.run_anchor.summary.completeness, "unknown")
+
+    def test_builder_contains_expectation_complete_non_match_and_rejections(self) -> None:
+        graph = SDKStore([Person])
+        _seed(graph, "alice", age=22, score=9)
+        expected = (
+            graph.query(_bundle(graph))
+            .select("age", _address("target", "age"))
+            .expect_contains("missing_age", age=19)
+            .compile()
+        )
+        result = graph.eval.evaluate(expected)
+        self.assertEqual(result.expectation_results[0].status, "not_satisfied")
+        self.assertEqual(result.expectation_results[0].matched_row_ids, ())
+        with self.assertRaisesRegex(SDKStoreError, "not support capture"):
+            graph.eval.evaluate(expected, capture="run_bundle_v0")
+        scenario = ScenarioFieldSubstitutionV0(
+            EntityRef("Person", {"employee_id": "alice"}),
+            FieldPath("Person", "age"),
+            19,
+            "hypothesis",
+        )
+        with self.assertRaisesRegex(SDKStoreError, "not support scenario"):
+            graph.eval.evaluate(expected, scenario=scenario)
+        with self.assertRaisesRegex(SDKStoreError, "selected"):
+            graph.query(_bundle(graph)).select("age", _address("target", "age")).expect_contains(
+                "bad-alias", missing=19
+            ).compile()
+        with self.assertRaisesRegex(SDKStoreError, "non-empty"):
+            graph.query(_bundle(graph)).expect_contains("not-exists").compile()
+        with self.assertRaisesRegex(SDKStoreError, "unique"):
+            graph.query(_bundle(graph)).select("age", _address("target", "age")).expect_contains(
+                "duplicate", age=22
+            ).expect_contains("duplicate", age=19).compile()
+
+    def test_expectation_wrapper_splice_fails_before_engine(self) -> None:
+        graph = SDKStore([Person])
+        _seed(graph, "alice", age=22, score=9)
+        expected = (
+            graph.query(_bundle(graph))
+            .select("age", _address("target", "age"))
+            .expect_contains("alice_age", age=22)
+            .compile()
+        )
+        object.__setattr__(expected.expectations[0], "query_digest", "0" * 64)
+        with patch("factgraph.sdk.store.evaluate_derivation_plans") as evaluator:
+            with self.assertRaisesRegex(SDKStoreError, "integrity check"):
+                graph.eval.evaluate(expected)
+        evaluator.assert_not_called()
+
+    def test_expectation_outcome_splice_is_rejected_by_result_validation(self) -> None:
+        graph = SDKStore([Person])
+        _seed(graph, "alice", age=22, score=9)
+        expected = (
+            graph.query(_bundle(graph))
+            .select("age", _address("target", "age"))
+            .expect_contains("alice_age", age=22)
+            .compile()
+        )
+        result = graph.eval.evaluate(expected)
+        outcome = result.expectation_results[0]
+        object.__setattr__(outcome, "result_digest", "sha256:" + "0" * 64)
+        with self.assertRaisesRegex(ValueError, "outcome_digest"):
+            replace(result, expectation_results=(outcome,))
+
     def test_invalid_targets_and_addresses_fail_before_evaluator(self) -> None:
         graph = SDKStore([Person])
         bundle = _bundle(graph)

@@ -31,6 +31,15 @@ from .evaluation_query import (
     EvaluationQuerySelection,
     EvaluationQueryValue,
 )
+from .evaluation_expectation import (
+    CompiledContainsRowExpectationV0,
+    ContainsRowExpectationV0,
+    ExpectationCompletenessBasisV0,
+    ExpectationKindV0,
+    ExpectationResultV0,
+    ExpectationStatusV0,
+    ResolvedExpectationValueV0,
+)
 from .evaluation_scenario import (
     ScenarioFieldSubstitutionV0,
     ScenarioInputValue,
@@ -255,6 +264,13 @@ __all__ = [
     "EvaluationQueryError",
     "EvaluationQuerySelection",
     "EvaluationQueryValue",
+    "CompiledContainsRowExpectationV0",
+    "ContainsRowExpectationV0",
+    "ExpectationCompletenessBasisV0",
+    "ExpectationKindV0",
+    "ExpectationResultV0",
+    "ExpectationStatusV0",
+    "ResolvedExpectationValueV0",
     "ScenarioFieldSubstitutionV0",
     "ScenarioInputValue",
     "ScenarioResolutionV0",

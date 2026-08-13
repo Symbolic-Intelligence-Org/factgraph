@@ -133,6 +133,12 @@ from .evaluation_query_runtime import (
     CompiledEvaluationQueryV0,
     compile_evaluation_query,
 )
+from .evaluation_expectation_runtime import (
+    EvaluationExpectationError,
+    assert_compiled_contains_row_expectation_current,
+    compile_contains_row_expectations_v0,
+    evaluate_contains_row_expectations_v0,
+)
 from .evaluation_query_target_runtime import (
     EvaluationQueryTargetError,
     ResolvedEvaluationQueryTargetV1,
@@ -156,6 +162,10 @@ from .why_not_runtime import (
 
 __all__ = [
     "AssertionView",
+    "EvaluationExpectationError",
+    "assert_compiled_contains_row_expectation_current",
+    "compile_contains_row_expectations_v0",
+    "evaluate_contains_row_expectations_v0",
     "ConditionKeyView",
     "AuthoringRuntimeError",
     "CheckRuntimeError",
