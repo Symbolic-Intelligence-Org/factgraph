@@ -9,6 +9,7 @@
 | 2026-08-13 | draft | Blueprint created | Narrow `contains_row` observation selected rather than a generic expectation grammar. |
 | 2026-08-13 | preflight | Independent source audit complete | Native stored-plan enumeration is locally complete on successful public execution; F4 summary remains identity-only and Scenario/capture require explicit rejection. |
 | 2026-08-13 | scoped | Boundary frozen | Only unified targeted Query gets `contains_row`; no Query mode, generic false claim, bundle/Scenario expectation, Agent or Meander surface. |
+| 2026-08-13 | implementing | Implementation started | Protocol-first addition will reuse the existing compiler and sole native evaluator. |
 
 ## Decision Notes
 
