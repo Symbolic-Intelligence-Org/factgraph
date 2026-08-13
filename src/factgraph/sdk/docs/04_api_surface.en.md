@@ -53,10 +53,11 @@ should not be imported directly.
 
 ## 1. Top-Level Exports
 
-Everything below is importable as `from factgraph.sdk import <name>`.
-The export list currently has 87 names. `SchemaTransitionInput` is deliberately
-absent: it is a policy-free core mechanism, while SDK schema changes go through
-the additive-only `fg.schema` namespace.
+Everything below is importable as `from factgraph.sdk import <name>`. The
+export list is intentionally curated; inspect `factgraph.sdk.__all__` for its
+exact current membership. `SchemaTransitionInput` is deliberately absent: it
+is a policy-free core mechanism, while SDK schema changes go through the
+additive-only `fg.schema` namespace.
 
 ### 1.1 Schema and store
 
@@ -386,8 +387,9 @@ Identity Claim retracts raise `INV_7C_IDENTITY_PROTECTED`; legacy
 
 | Method | One-liner |
 |---|---|
-| `query(resolved_rule_or_policy, *, address_space=None)` | Start the native resolved Query builder. A `ResolvedRuleBundle` is lifted under alias `target`; a `Policy` requires its exact `SemanticAddressSpace`. `.bind(SemanticPortAddress, value).select(alias, SemanticPortAddress).expect_contains(id, /, **selected_values).compile()/evaluate()` delegates to the existing compiled Query path. `expect_contains` observes only selected, schema-normalized result values and returns result-local `ExpectationResultV0` items; it is not a mode or product decision. Query bind/select do not accept navigation; a direct Policy may separately use the narrow structured `PolicyCompare` / `PolicyFieldNavigation` compiler contract. It does not accept bare Rules, string lookup, generic expect/modes, or Operators. |
+| `query(resolved_rule_or_policy, *, address_space=None)` | Start the native resolved Query builder. A `ResolvedRuleBundle` is lifted under alias `target`; a `Policy` requires its exact `SemanticAddressSpace`. `.bind(SemanticPortAddress, value).select(alias, SemanticPortAddress).expect_contains(id, /, **selected_values).compile()/evaluate()` delegates to the existing compiled Query path. `.what_if(Q7_or_Q11_scenario).run()` is its terminal, captured `ScenarioRunV0` form. `expect_contains` observes only selected, schema-normalized result values and returns result-local `ExpectationResultV0` items; it is not a mode or product decision. Query bind/select do not accept navigation; a direct Policy may separately use the narrow structured `PolicyCompare` / `PolicyFieldNavigation` compiler contract. It does not accept bare Rules, string lookup, generic expect/modes, or Operators. |
 | `evaluate(inference_or_expr_or_compiled_query, *, head=None, engine=None, config=None, capture=None, scenario=None)` | Evaluate an `Inference`, `Rule`, `RuleExpr`, an application-compiled `CompiledEvaluationQueryV0`, or the `TargetedCompiledEvaluationQueryV0` produced by `fg.query(...)`; returns `EvaluateResult`. Ordinary Query v0 consumes its own projection head, is native-only, rejects `config=`, and adds an identity-only `run_anchor`. It alone accepts `capture="run_bundle_v0"`, which atomically attaches a detached, strict-codec `run_bundle`; this artifact is not replay and contains sensitive cleartext under caller-managed custody. A targeted Query carrying F5B1 `expect_contains` attaches `result.expectation_results`, but rejects `capture=` and `scenario=` because their current contracts cannot preserve its inventory. A Query with no expectation alone accepts either `scenario=ScenarioFieldSubstitutionV0(...)` or `ScenarioFieldSubstitutionSetV0((...))`: direct scalar-field replacement only, with the set resolved atomically against one baseline. Both return `result.scenario`, have no Run anchor/bundle/close/explain path, and reject any `capture=` argument. Neither is a general What-if or overlay API. Other inputs reject `capture` and `scenario` and retain their documented engine/config behavior with `run_anchor=None` and `run_bundle=None`. |
+| `run_scenario(compiled_or_targeted_query, scenario)` | The low-level explicit `ScenarioRunV0` entry. It accepts only a current native compiled Query or a no-expectation targeted Query plus the existing Q7/Q11 replacement-only Scenario forms. It captures two frozen relation sides with no Store support-sidecar writes; `.diff()`, `.verify()`, `.explain(...)`, and codec decode are detached. Synthetic effective sources are labelled `scenario_hypothesis`; the output is digest-sealed but not authenticated, historical replay or premise truth proof. |
 | `explain(expr, *, head, engine=None, config=None)` | Replay a closed-head explanation; `head=` is required (no default). `engine=` resolves the same way as `evaluate`. Returns `Explanation`. |
 | `preview_config(profile)` | Inspect public semantics wrappers or canonical `SemanticsProfile`. |
 
@@ -429,7 +431,9 @@ removed by Q8 Phase 2.
 Direct `check`, `diagnose`, `why_not`, `what_if.*`, `accept`, and
 `accept_many` candidate workflows are not part of the T5 public SDK evidence
 path. Use `fg.eval.evaluate(...)`, `row.explain()`, `row.close()`, and
-`fg.eval.explain(...)`.
+`fg.eval.explain(...)`; for the separate bounded scalar-replacement capture,
+use `fg.query(...).what_if(scenario).run()` rather than restoring a
+`what_if.*` namespace.
 
 ### 2.12 Audit namespace (`fg.audit.*`)
 

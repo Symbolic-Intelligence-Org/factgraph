@@ -52,6 +52,15 @@ from .evaluation_scenario import (
     ScenarioScalarTag,
     ScenarioScalarValueV0,
 )
+from .scenario_run import (
+    ScenarioPremiseBindingV0,
+    ScenarioRunExplanationV0,
+    ScenarioRunPlanV0,
+    ScenarioRunRowV0,
+    ScenarioRunSideV0,
+    ScenarioRunV0,
+    ScenarioRunVerificationV0,
+)
 from .evaluation_run import (
     EvaluationRunAnchorV0,
     EvaluationRunBindingV0,
@@ -287,6 +296,13 @@ __all__ = [
     "ScenarioInputValue",
     "ScenarioResolutionV0",
     "ScenarioResultDiffV0",
+    "ScenarioPremiseBindingV0",
+    "ScenarioRunExplanationV0",
+    "ScenarioRunPlanV0",
+    "ScenarioRunRowV0",
+    "ScenarioRunSideV0",
+    "ScenarioRunV0",
+    "ScenarioRunVerificationV0",
     "ScenarioScalarStorage",
     "ScenarioScalarTag",
     "ScenarioScalarValueV0",

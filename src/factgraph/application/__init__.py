@@ -154,6 +154,10 @@ from .evaluation_run_bundle_runtime import (
 from .evaluation_run_verification_runtime import verify_evaluation_run_bundle
 from .evaluation_run_evidence_runtime import evaluation_run_bundle_evidence
 from .policy_explanation_runtime import project_policy_explanation_v0
+from .scenario_run_runtime import (
+    scenario_run_bytes,
+    scenario_run_from_bytes,
+)
 from .authoring_runtime import AuthoringRuntimeError
 from .why_not_runtime import (
     WhyNotRuntimeError,
@@ -172,6 +176,8 @@ __all__ = [
     "CompiledPolicyV0",
     "CompiledEvaluationQueryV0",
     "EvaluationQueryTargetError",
+    "scenario_run_bytes",
+    "scenario_run_from_bytes",
     "CapabilityHelperError",
     "DerivationRuntimeError",
     "DiagnoseRuntimeError",

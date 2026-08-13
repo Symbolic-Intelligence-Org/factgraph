@@ -136,7 +136,7 @@ remain the implementation-truth layer for maintainers and advanced users.
 | [`02_readwrite_and_ingest.en.md`](02_readwrite_and_ingest.en.md) | Read/write and ingest behavior. |
 | [`03_rules_and_inferences.en.md`](03_rules_and_inferences.en.md) | Rule DSL and evaluation namespace. |
 | [`04_api_surface.en.md`](04_api_surface.en.md) | Public API index and signatures. |
-| [`06_what_if_and_proof.en.md`](06_what_if_and_proof.en.md) | Evidence and closed-head replay overview. |
+| [`06_what_if_and_proof.en.md`](06_what_if_and_proof.en.md) | Evidence, closed-head replay, and bounded captured `ScenarioRunV0` overview. |
 | [`07_walker_and_advanced.en.md`](07_walker_and_advanced.en.md) | Advanced direct imports and adapters. |
 
 ## Stability and Versioning

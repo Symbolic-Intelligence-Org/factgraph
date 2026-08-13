@@ -49,6 +49,26 @@ def evaluation_run_bundle_evidence(
     row_capture_digest: str,
 ) -> EvidenceGraph:
     """Play back one captured positive row as detached, unverified engine evidence."""
+    return _evaluation_run_bundle_evidence(
+        bundle,
+        row_capture_digest=row_capture_digest,
+    )
+
+
+def _evaluation_run_bundle_evidence(
+    bundle: EvaluationRunBundleV0,
+    *,
+    row_capture_digest: str,
+    source_meta_by_assertion: Mapping[str, Mapping[str, object]] | None = None,
+    metadata_extra: Mapping[str, object] | None = None,
+) -> EvidenceGraph:
+    """Private source-aware receipt playback used by ScenarioRun.
+
+    Public F4 callers continue through :func:`evaluation_run_bundle_evidence`
+    and therefore retain their byte/API-compatible source vocabulary.  A
+    ScenarioRun supplies a complete exact assertion inventory so a synthetic
+    effective witness cannot be emitted as an ordinary ledger witness.
+    """
     if not isinstance(row_capture_digest, str) or not row_capture_digest:
         raise ProtocolShapeError("row_capture_digest must be a non-empty string")
     where, relation, view = _materialize_evaluation_run_bundle_input(bundle)
@@ -86,6 +106,17 @@ def evaluation_run_bundle_evidence(
     witnesses = {item.pred_condition_key: item for item in receipt.pred_witnesses}
     steps = {item.step_key: item for item in receipt.non_fact_steps}
     relation_by_assertion = _relation_assertion_index(bundle)
+    if source_meta_by_assertion is not None:
+        if not isinstance(source_meta_by_assertion, Mapping) or set(
+            source_meta_by_assertion
+        ) != set(relation_by_assertion):
+            raise ProtocolShapeError(
+                "Scenario source metadata must exactly cover captured assertions"
+            )
+        if not all(isinstance(item, Mapping) for item in source_meta_by_assertion.values()):
+            raise ProtocolShapeError("Scenario source metadata values must be mappings")
+    if metadata_extra is not None and not isinstance(metadata_extra, Mapping):
+        raise ProtocolShapeError("Scenario evidence metadata must be mapping or None")
     atom_condition_keys: list[tuple[str, str]] = []
     atoms_by_occurrence: dict[str, list[EvidenceAtom]] = {}
     policy_conditions: list[EvidencePolicyCondition] = []
@@ -118,6 +149,7 @@ def evaluation_run_bundle_evidence(
             relation_by_assertion=relation_by_assertion,
             bundle=bundle,
             row=row,
+            source_meta_by_assertion=source_meta_by_assertion,
         )
         atom_condition_keys.append((atom_id, condition_key))
         if authored is not None:
@@ -202,6 +234,14 @@ def evaluation_run_bundle_evidence(
         ),
         "join_condition_ids": tuple(join_condition_ids),
     }
+    if metadata_extra is not None:
+        overlap = set(metadata) & set(metadata_extra)
+        if overlap:
+            raise ProtocolShapeError(
+                "Scenario evidence metadata must not override F4 metadata: "
+                + ", ".join(sorted(overlap))
+            )
+        metadata.update(dict(metadata_extra))
     tree = EvidenceTree(
         tree_id=branch_id,
         status="holds",
@@ -296,6 +336,7 @@ def _captured_atom_evidence(
     relation_by_assertion: Mapping[str, tuple[str, tuple[tuple[str, object], ...]]],
     bundle: EvaluationRunBundleV0,
     row: EvaluationRunProjectionRowV0,
+    source_meta_by_assertion: Mapping[str, Mapping[str, object]] | None,
 ) -> tuple[EvidenceAtom, str]:
     kind = str(atom[0])
     form = _atom_form(atom, envs)
@@ -316,20 +357,37 @@ def _captured_atom_evidence(
             captured = relation_by_assertion.get(assertion_id)
             if captured is None or captured[0] != pred_id:
                 raise ProtocolShapeError("ProofReceipt assertion does not match its predicate")
+            base_meta: dict[str, object] = {
+                "role": "captured_witness",
+                "origin": "evaluation_run_bundle_v0",
+                "predicate_id": pred_id,
+                "pred_condition_key": condition_key,
+                "assertion_id": assertion_id,
+                "bundle_digest": bundle.bundle_digest,
+                "row_capture_digest": row.row_capture_digest,
+            }
+            if source_meta_by_assertion is not None:
+                supplied = dict(source_meta_by_assertion[assertion_id])
+                overlap = set(base_meta) & set(supplied)
+                # ScenarioRun is the only private caller allowed to replace
+                # source classification.  It must still agree on the captured
+                # predicate/assertion identities and cannot alter any bundle or
+                # row binding metadata below.
+                allowed = {"predicate_id", "assertion_id", "role", "origin"}
+                if overlap - allowed:
+                    raise ProtocolShapeError(
+                        "Scenario source metadata overrides protected F4 source keys"
+                    )
+                identity_overlap = overlap & {"predicate_id", "assertion_id"}
+                if any(supplied[key] != base_meta[key] for key in identity_overlap):
+                    raise ProtocolShapeError("Scenario source metadata contradicts captured assertion")
+                base_meta.update(supplied)
             sources.append(
                 Source(
                     ref=assertion_id,
                     field=pred_id,
                     value=captured[1],
-                    meta={
-                        "role": "captured_witness",
-                        "origin": "evaluation_run_bundle_v0",
-                        "predicate_id": pred_id,
-                        "pred_condition_key": condition_key,
-                        "assertion_id": assertion_id,
-                        "bundle_digest": bundle.bundle_digest,
-                        "row_capture_digest": row.row_capture_digest,
-                    },
+                    meta=base_meta,
                 )
             )
         support = tuple(sources)

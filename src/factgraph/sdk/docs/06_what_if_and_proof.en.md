@@ -1,4 +1,4 @@
-# Evidence And Replay
+# Evidence, Replay, And Captured ScenarioRun
 
 T5 removed the public candidate-universe and `what_if.*` evidence shells from
 the SDK user path. The supported evidence workflow is:
@@ -22,3 +22,39 @@ manual = fg.eval.explain(inference, head=closed_head)
 - `fg.eval.explain(expr, head=closed_head)` replays a closed-head explanation.
 
 Persisted-fact inspection remains under `fg.audit.*`.
+
+## Captured replacement-only ScenarioRun
+
+`fg.what_if.*` remains removed. The existing Q7/Q11
+`evaluate(..., scenario=...)` compatibility route remains supported but
+non-captured. The one supported **captured/detached** What-if-shaped API is the
+terminal native Query form for the same bounded scalar replacement grammar:
+
+```python
+run = (
+    fg.query(resolved_rule)
+      .bind(SemanticPortAddress("target", "person"), alice)
+      .select("age", SemanticPortAddress("target", "age"))
+      .what_if(ScenarioFieldSubstitutionV0(
+          EntityRef("Person", {"employee_id": "alice"}),
+          FieldPath("Person", "age"),
+          35,
+          "review-age",
+      ))
+      .run()
+)
+
+run.diff()
+run.verify()
+run.explain(side="effective", row_capture_digest=run.effective.rows[0].row_capture_digest)
+```
+
+This returns `ScenarioRunV0`, not `EvaluateResult`. It retains sealed,
+caller-custodied baseline/effective captures and offers detached diff,
+verification, and authored-Policy evidence projection without reading the
+live Store after capture. Effective synthetic witnesses are marked
+`scenario_hypothesis`, never ordinary ledger witnesses. The record is
+digest-sealed but not authenticated, a historical replay, or proof that a
+caller-declared premise is true. General premises, source authority,
+add/delete/mask, temporal overlays, actions, operators, and generic Scenario
+plans remain outside this API.

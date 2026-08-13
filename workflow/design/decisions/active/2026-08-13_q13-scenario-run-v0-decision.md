@@ -50,11 +50,19 @@ written to the ledger support sidecar or candidate-support index.
 
 ## Acceptance
 
-- [ ] Two effective-relation evaluations capture receipts without Store writes.
-- [ ] ScenarioRun is sealed, codec round-trips, and rejects cross-run splice.
-- [ ] Detached Explain maps through the authored Policy tree and preserves the
+- [x] One baseline and one effective-relation evaluation capture receipts without
+  Store writes.
+- [x] ScenarioRun is sealed, codec round-trips, and rejects cross-run splice.
+- [x] Detached Explain maps through the authored Policy tree and preserves the
   synthetic-hypothesis boundary.
-- [ ] Diff and isolated verification are deterministic and do not consult a
+- [x] Diff and isolated verification are deterministic and do not consult a
   live Store after capture.
-- [ ] Rule and direct Policy (including field comparison/navigation) share the
+- [x] Rule and direct Policy (including field comparison/navigation) share the
   same ScenarioRun path.
+
+## Implementation record
+
+Implemented on the Q13 continuous-delivery branch. The public protocol is
+sealed but deliberately not authenticated; Query-level select navigation,
+general premise truth algebra, Action/Operator execution, and Meander Plan
+integration remain outside this decision.

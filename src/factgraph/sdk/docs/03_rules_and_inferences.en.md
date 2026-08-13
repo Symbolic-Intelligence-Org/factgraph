@@ -576,6 +576,51 @@ What-if, fact overlay, rule/policy override, source claim, or replay surface.
 The same `capture=`, expectation, anchor, bundle, `close()`, and live
 `explain()` exclusions apply.
 
+### Captured replacement-only ScenarioRun (v0)
+
+The non-captured `builder.evaluate(scenario=...)` compatibility route above is
+not the audit surface. Use the terminal Query builder when a caller needs a
+sealed, detached baseline/effective record:
+
+```python
+run = (
+    fg.query(resolved_rule)
+      .bind(SemanticPortAddress("target", "person"), alice)
+      .select("age", SemanticPortAddress("target", "age"))
+      .what_if(ScenarioFieldSubstitutionV0(
+          EntityRef("Person", {"employee_id": "alice"}),
+          FieldPath("Person", "age"),
+          35,
+          "review-age",
+      ))
+      .run()
+)
+
+assert run.verify().matched
+diff = run.diff()
+evidence = run.explain(
+    side="effective",
+    row_capture_digest=run.effective.rows[0].row_capture_digest,
+)
+```
+
+`ScenarioRunV0` runs the exact same materialized native Query plan once over
+the frozen baseline relation and once over the atomic effective replacement
+relation. It captures receipts without writing the Store support sidecar or
+candidate indexes. `run.to_bytes()` / `ScenarioRunV0.from_bytes(...)` preserve
+a strict bounded record which can be inspected, explained and verified without
+a live Store. Detached Explain projects the captured row through the authored
+Policy tree; its source metadata explicitly distinguishes
+`captured_baseline_relation_witness`, `captured_effective_relation_witness`,
+and `scenario_hypothesis`.
+
+The captures contain typed cleartext under caller-managed custody and are only
+digest-sealed, not authenticated. They do not prove premise truth, ledger
+authority or a historical replay. This v0 remains native-only and accepts only
+the existing Q7/Q11 scalar replacement forms: no expectations, config,
+premise filters, add/delete/mask, Policy overlay, Operator/action, as-of time,
+or general Scenario language.
+
 ### Rule and RuleExpr snapshot matching
 
 `fg.entities.match(EntityCls, template, **port_constraints)` is the read-side

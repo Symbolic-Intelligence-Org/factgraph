@@ -34,6 +34,7 @@ from .protocol.evaluation_scenario import (
     ScenarioResolutionV0,
     ScenarioScalarValueV0,
 )
+from .protocol.scenario_run import ScenarioPremiseBindingV0
 from .protocol.schema_runtime import EntityRef
 from .schema_runtime import (
     SchemaIndex,
@@ -61,6 +62,7 @@ class ResolvedScenarioFieldSubstitutionV0:
     resolution: ScenarioResolutionV0
     baseline_relation: _NativeEffectiveRelationSnapshot
     effective_relation: _NativeEffectiveRelationSnapshot
+    premise_bindings: tuple[ScenarioPremiseBindingV0, ...]
 
 
 @dataclass(frozen=True)
@@ -70,6 +72,7 @@ class ResolvedScenarioFieldSubstitutionSetV0:
     resolution: ScenarioFieldSubstitutionSetResolutionV0
     baseline_relation: _NativeEffectiveRelationSnapshot
     effective_relation: _NativeEffectiveRelationSnapshot
+    premise_bindings: tuple[ScenarioPremiseBindingV0, ...]
 
 
 @dataclass(frozen=True)
@@ -173,10 +176,24 @@ def resolve_scenario_field_substitution_v0(
         semantic_value_changed=member.baseline_value != member.effective_value,
         effective_source_changed=True,
     )
+    premise_binding = ScenarioPremiseBindingV0(
+        premise_id=scenario.premise_id,
+        operation_digest=resolution.operation_digest,
+        origin_kind="scenario_hypothesis_v0",
+        entity_ref=member.entity_ref,
+        field=scenario.field,
+        predicate_id=member.pred_id,
+        baseline_assertion_id=member.target.asrt_id,
+        synthetic_witness_id=witness_id,
+        baseline_value=member.baseline_value,
+        effective_value=member.effective_value,
+        semantic_value_changed=member.baseline_value != member.effective_value,
+    )
     return ResolvedScenarioFieldSubstitutionV0(
         resolution=resolution,
         baseline_relation=context.baseline_relation,
         effective_relation=effective_relation,
+        premise_bindings=(premise_binding,),
     )
 
 
@@ -238,6 +255,7 @@ def resolve_scenario_field_substitution_set_v0(
         for item in ordered_members
     )
     replacements: dict[tuple[str, str], ProjectedFact] = {}
+    premise_bindings: list[ScenarioPremiseBindingV0] = []
     for item, operation in zip(ordered_members, operations, strict=True):
         witness_id = "scenario_hypothesis_set_v0:" + sha256_hex(
             _canonical_bytes(
@@ -254,6 +272,21 @@ def resolve_scenario_field_substitution_set_v0(
             asrt_id=witness_id,
             fact_tuple=(item.entity_ref, item.normalized_value),
         )
+        premise_bindings.append(
+            ScenarioPremiseBindingV0(
+                premise_id=item.source.premise_id,
+                operation_digest=operation.operation_digest,
+                origin_kind="scenario_hypothesis_set_v0",
+                entity_ref=item.entity_ref,
+                field=item.source.field,
+                predicate_id=item.pred_id,
+                baseline_assertion_id=item.target.asrt_id,
+                synthetic_witness_id=witness_id,
+                baseline_value=item.baseline_value,
+                effective_value=item.effective_value,
+                semantic_value_changed=item.baseline_value != item.effective_value,
+            )
+        )
     effective_relation = _replace_relation_rows(
         context.baseline_relation,
         replacements=replacements,
@@ -269,6 +302,7 @@ def resolve_scenario_field_substitution_set_v0(
         resolution=resolution,
         baseline_relation=context.baseline_relation,
         effective_relation=effective_relation,
+        premise_bindings=tuple(premise_bindings),
     )
 
 

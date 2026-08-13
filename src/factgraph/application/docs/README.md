@@ -36,7 +36,9 @@ compatibility.
     single-row evidence playback, and readonly `PolicyExplanationViewV0`
     projection semantics; also records the narrow replacement-only
     `ScenarioFieldSubstitutionV0` and atomic
-    `ScenarioFieldSubstitutionSetV0` boundaries.
+    `ScenarioFieldSubstitutionSetV0` boundaries, including the separate,
+    captured `ScenarioRunV0` lifecycle for detached Scenario evidence and
+    isolated verification.
 - `src/factgraph/application/explain/docs/README.md`
   - Paths-model evidence tree types (`EvidenceGraph`, `EvidenceTree`,
     `EvidenceRule`, `EvidenceAtom`, `Certainty`, `AtomForm`, `Verdict`) and

@@ -679,6 +679,12 @@ Failed explanations use `Explanation(status="failed")` with
 There is no public `.eval.why_not(...)` or `fg.what_if.*`
 candidate-universe shell in T5.
 
+For the distinct, replacement-only Scenario path, start from a resolved Query:
+`fg.query(...).bind(...).select(...).what_if(scenario).run()`. It returns a
+detached `ScenarioRunV0` with `.diff()`, `.verify()`, and side-specific
+`.explain(...)`; it is not a general What-if shell or an `EvaluateResult`.
+See [`06_what_if_and_proof.en.md`](06_what_if_and_proof.en.md).
+
 For native or Souffle passed rows, `row.explain().evidence` is a row-level Form
 1 `EvidenceGraph`: a root conclusion, selected-branch premises, assertion
 seeds, and `supports` edges. For ProbLog passed rows, it is a row-level
@@ -1036,7 +1042,7 @@ for the post-Phase-2 `fg.rules.*` and `fg.inferences.*` namespace shape.
 - **[`04_api_surface.en.md`](04_api_surface.en.md)** — full API
   reference with every method signature
 - **[`06_what_if_and_proof.en.md`](06_what_if_and_proof.en.md)** —
-  end-to-end tutorial of all nine what-if and proof methods
+  evidence, closed-head replay, and the bounded captured ScenarioRun path
 - **[`07_walker_and_advanced.en.md`](07_walker_and_advanced.en.md)** —
   walker views, recorder lifecycle, raw DTO construction, optional
   domain helpers, engine adapter registration

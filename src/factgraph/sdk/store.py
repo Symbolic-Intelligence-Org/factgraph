@@ -19,6 +19,7 @@ from factgraph.application.workspace_runtime import resolve_workspace_paths
 from factgraph.application.derivation_runtime import (
     _evaluate_derivation_plans_with_native_relation_capture,
     _evaluate_derivation_plans_with_native_effective_relation,
+    _evaluate_derivation_plans_with_native_effective_relation_capture,
     evaluate_derivation_plans,
 )
 from factgraph.application.evaluation_scenario_runtime import (
@@ -39,6 +40,7 @@ from factgraph.application.evaluation_expectation_runtime import (
     evaluate_contains_row_expectations_v0,
 )
 from factgraph.application.evaluation_run_bundle_runtime import _build_evaluation_run_bundle_v0
+from factgraph.application.scenario_run_runtime import build_scenario_run_v0
 from factgraph.application.evaluation_run_runtime import (
     EVALUATION_QUERY_PROJECTION_ADAPTER_VERSION,
     NATIVE_WHERE_SEMANTICS_VERSION,
@@ -84,6 +86,7 @@ from factgraph.application.protocol import (
     ScenarioFieldSubstitutionV0,
     ScenarioFieldSubstitutionSetV0,
     ScenarioResultDiffV0,
+    ScenarioRunV0,
 )
 from factgraph.application.protocol.certainty import BOOLEAN_CERTAINTY, Certainty
 from factgraph.application.protocol.evaluate_result import (
@@ -1557,6 +1560,10 @@ class _SDKEvalManager:
     def explain(self, *args: Any, **kwargs: Any) -> Any:
         """Explain a closed-head evaluation replay."""
         return self._sdk._explain(*args, **kwargs)
+
+    def run_scenario(self, *args: Any, **kwargs: Any) -> Any:
+        """Capture one bounded replacement-only ScenarioRun."""
+        return self._sdk._run_scenario(*args, **kwargs)
 
     def evaluate_program(self, *args: Any, **kwargs: Any) -> Any:
         """Evaluate a selected Horn program read-only on this ledger."""
@@ -3544,6 +3551,241 @@ class SDKStore:
             raw_config=raw_config,
             source_target=targeted,
         )
+
+    def _run_scenario(self, *args: Any, **kwargs: Any) -> ScenarioRunV0:
+        """Capture a bounded ScenarioRun without changing legacy ``scenario=``.
+
+        The old ``eval.evaluate(query, scenario=...)`` path deliberately
+        remains a non-captured compatibility route.  This separate entrance is
+        the only Scenario path allowed to create detached receipt evidence.
+        """
+
+        if len(args) != 2:
+            raise SDKStoreError(
+                "eval.run_scenario(query, scenario) accepts exactly one Query and one Scenario"
+            )
+        if kwargs:
+            unknown = ", ".join(sorted(kwargs))
+            raise SDKStoreError(f"unknown eval.run_scenario(...) keyword(s): {unknown}")
+        raw_query, scenario = args
+        source_target = None
+        if isinstance(raw_query, TargetedCompiledEvaluationQueryV0):
+            try:
+                assert_targeted_evaluation_query_current(raw_query)
+            except ValueError as exc:
+                raise SDKStoreError(
+                    "targeted compiled Query failed its ScenarioRun integrity check"
+                ) from exc
+            if raw_query.expectations:
+                raise SDKStoreError(
+                    "eval.run_scenario(targeted_compiled_query) does not support expectations"
+                )
+            source_target = raw_query.target.run_target
+            compiled_query = raw_query.compiled_query
+        elif isinstance(raw_query, CompiledEvaluationQueryV0):
+            compiled_query = raw_query
+        else:
+            raise SDKStoreError(
+                "eval.run_scenario(...) Query must be CompiledEvaluationQueryV0 "
+                "or TargetedCompiledEvaluationQueryV0"
+            )
+        if not isinstance(
+            scenario,
+            (ScenarioFieldSubstitutionV0, ScenarioFieldSubstitutionSetV0),
+        ):
+            raise SDKStoreError(
+                "eval.run_scenario(...) scenario must be ScenarioFieldSubstitutionV0 "
+                "or ScenarioFieldSubstitutionSetV0"
+            )
+        self._assert_evaluation_query_artifact_current(compiled_query)
+        if compiled_query.schema_digest != self._application_schema_index.schema_digest:
+            raise SDKStoreError("compiled EvaluationQuery schema does not match this FactGraph")
+        if self._evaluation_query_has_premise_filters():
+            raise SDKStoreError("eval.run_scenario(...) does not support premise-filtered execution")
+
+        base_view_digest = self._view_snapshot_digest(query_typed_values=True)
+        try:
+            compiled_plan, _traces = _materialize_adapter_derivation_plan(
+                compiled_query._lowering_plan,
+                engine="native",
+            )
+        except (RuleExprError, ValueError) as exc:
+            raise SDKStoreError(
+                "compiled EvaluationQuery could not be materialized for native ScenarioRun"
+            ) from exc
+        try:
+            if isinstance(scenario, ScenarioFieldSubstitutionSetV0):
+                resolved = resolve_scenario_field_substitution_set_v0(
+                    scenario,
+                    compiled_query=compiled_query,
+                    materialized_body=compiled_plan.body_ir,
+                    store=self._store,
+                    schema_index=self._application_schema_index,
+                    base_view_digest=base_view_digest,
+                )
+            else:
+                resolved = resolve_scenario_field_substitution_v0(
+                    scenario,
+                    compiled_query=compiled_query,
+                    materialized_body=compiled_plan.body_ir,
+                    store=self._store,
+                    schema_index=self._application_schema_index,
+                    base_view_digest=base_view_digest,
+                )
+        except ScenarioResolutionError as exc:
+            raise SDKStoreError(f"ScenarioRun scenario rejected: {exc.code}") from exc
+
+        self._assert_scenario_run_query_current(
+            compiled_query,
+            base_view_digest,
+            targeted=raw_query if isinstance(raw_query, TargetedCompiledEvaluationQueryV0) else None,
+        )
+        request = DerivationEvaluateRequest(plans=(compiled_plan,), engine="native")
+        baseline_outputs, baseline_receipts = (
+            _evaluate_derivation_plans_with_native_effective_relation_capture(
+                request,
+                store=self._store,
+                effective_relation=resolved.baseline_relation,
+            )
+        )
+        self._assert_scenario_run_query_current(
+            compiled_query,
+            base_view_digest,
+            targeted=raw_query if isinstance(raw_query, TargetedCompiledEvaluationQueryV0) else None,
+        )
+        effective_outputs, effective_receipts = (
+            _evaluate_derivation_plans_with_native_effective_relation_capture(
+                request,
+                store=self._store,
+                effective_relation=resolved.effective_relation,
+            )
+        )
+        self._assert_scenario_run_query_current(
+            compiled_query,
+            base_view_digest,
+            targeted=raw_query if isinstance(raw_query, TargetedCompiledEvaluationQueryV0) else None,
+        )
+
+        shared_kwargs = {
+            "compiled_plans": [compiled_plan],
+            "head": compiled_query.projection_head,
+            "engine": "native",
+            "semantics_profile": None,
+            "lowering_plan": compiled_query._lowering_plan,
+            "lowering_rules_by_id": _rule_expr_rules_by_id(
+                compiled_query.compiled_policy.rule_expr,
+                head=compiled_query.projection_head,
+            ),
+            "evaluation_query": compiled_query,
+            "evaluation_query_source_target": source_target,
+            "attach_run_anchor": True,
+            "collect_support_artifacts": False,
+        }
+        baseline_result = self._derivation_outputs_to_evaluate_result(
+            baseline_outputs,
+            view_snapshot_digest_override=base_view_digest,
+            **shared_kwargs,
+        )
+        effective_result = self._derivation_outputs_to_evaluate_result(
+            effective_outputs,
+            view_snapshot_digest_override=resolved.resolution.effective_relation_digest,
+            **shared_kwargs,
+        )
+        baseline_result = replace(
+            baseline_result,
+            _row_support_artifacts=self._ephemeral_row_receipts(
+                baseline_outputs,
+                baseline_result.rows,
+                baseline_receipts,
+            ),
+        )
+        effective_result = replace(
+            effective_result,
+            _row_support_artifacts=self._ephemeral_row_receipts(
+                effective_outputs,
+                effective_result.rows,
+                effective_receipts,
+            ),
+        )
+        try:
+            assert baseline_result.run_anchor is not None and effective_result.run_anchor is not None
+            baseline_bundle = _build_evaluation_run_bundle_v0(
+                compiled_query,
+                baseline_result,
+                materialized_plan=compiled_plan,
+                schema_ir=self._schema_ir,
+                effective_relations=resolved.baseline_relation,
+                proof_receipts=baseline_result._row_support_artifacts or {},
+            )
+            effective_bundle = _build_evaluation_run_bundle_v0(
+                compiled_query,
+                effective_result,
+                materialized_plan=compiled_plan,
+                schema_ir=self._schema_ir,
+                effective_relations=resolved.effective_relation,
+                proof_receipts=effective_result._row_support_artifacts or {},
+            )
+            run = build_scenario_run_v0(
+                compiled_query=compiled_query,
+                target=(
+                    source_target
+                    if source_target is not None
+                    else baseline_bundle.run_anchor.target
+                ),
+                base_view_digest=base_view_digest,
+                baseline_relation_digest=resolved.resolution.baseline_relation_digest,
+                effective_relation_digest=resolved.resolution.effective_relation_digest,
+                premise_bindings=resolved.premise_bindings,
+                result_diff=_scenario_result_diff(baseline_result, effective_result),
+                baseline_bundle=baseline_bundle,
+                effective_bundle=effective_bundle,
+            )
+        except (TypeError, ValueError) as exc:
+            raise SDKStoreError(f"failed to capture ScenarioRun: {exc}") from exc
+        self._assert_scenario_run_query_current(
+            compiled_query,
+            base_view_digest,
+            targeted=raw_query if isinstance(raw_query, TargetedCompiledEvaluationQueryV0) else None,
+        )
+        return run
+
+    @staticmethod
+    def _ephemeral_row_receipts(
+        outputs: Sequence[DerivationOutput],
+        rows: Sequence[Any],
+        receipts_by_support_digest: Mapping[str, ProofReceipt],
+    ) -> Mapping[str, ProofReceipt]:
+        if len(outputs) != len(rows):
+            raise SDKStoreError("ScenarioRun output/row receipt cardinality changed during capture")
+        receipts: dict[str, ProofReceipt] = {}
+        for output, row in zip(outputs, rows, strict=True):
+            if output.support_kind != "native_binding_v1":
+                raise SDKStoreError("ScenarioRun capture requires native proof receipts")
+            receipt = receipts_by_support_digest.get(output.support_digest)
+            if not isinstance(receipt, ProofReceipt):
+                raise SDKStoreError("ScenarioRun capture did not retain a row proof receipt")
+            if row.row_id in receipts:
+                raise SDKStoreError("ScenarioRun capture produced duplicate result row identity")
+            receipts[row.row_id] = receipt
+        if set(receipts) != {row.row_id for row in rows}:
+            raise SDKStoreError("ScenarioRun receipt inventory does not exactly cover rows")
+        return receipts
+
+    def _assert_scenario_run_query_current(
+        self,
+        compiled_query: CompiledEvaluationQueryV0,
+        digest: str,
+        *,
+        targeted: TargetedCompiledEvaluationQueryV0 | None,
+    ) -> None:
+        self._assert_evaluation_query_execution_current(compiled_query, digest)
+        if targeted is not None:
+            try:
+                assert_targeted_evaluation_query_current(targeted)
+            except ValueError as exc:
+                raise SDKStoreError(
+                    "targeted compiled Query changed during ScenarioRun execution"
+                ) from exc
 
     @staticmethod
     def _assert_evaluation_query_artifact_current(

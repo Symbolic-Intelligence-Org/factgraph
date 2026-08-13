@@ -143,6 +143,20 @@ live-EvidenceGraph contract refers to asserted ledger facts and is not valid
 evidence for a hypothetical replacement. See
 `src/factgraph/application/docs/rule.md` for the replacement-only scope.
 
+`ScenarioRunV0` is a separate protocol value rather than a wider
+`EvaluateResult` variant. It is entered explicitly through
+`fg.eval.run_scenario(compiled_or_targeted_query, scenario)` or the terminal
+Query builder form `.what_if(scenario).run()`. It seals two opaque,
+Scenario-framed captures (baseline and effective), their exact shared Query
+contract, a resolver-produced premise binding inventory, public typed row
+summaries and the result multiset diff. Its `.diff()`, `.verify()` and
+`.explain(side=..., row_capture_digest=...)` are detached: they never consult
+a current Store after capture. The generic `EvaluationRunBundleV0` decoder
+does not accept the framed bytes, because Scenario-aware evidence must relabel
+synthetic witnesses as `scenario_hypothesis` rather than ordinary
+`captured_witness` sources. This sealed capture is not authenticated,
+historical replay, or a claim that the caller-declared premise is true.
+
 The separate F4C `PolicyExplanationViewV0` is intentionally not an
 `Explanation` field and is not produced by `EvaluateRow.explain()`. Its normal
 composition projects detached F4B3 evidence through a matching

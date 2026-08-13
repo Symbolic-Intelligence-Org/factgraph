@@ -1,6 +1,6 @@
 # Task Blueprint: FactGraph ScenarioRun v0 continuous delivery
 
-- Status: implementing
+- Status: implemented
 - Created: 2026-08-13
 - Last Updated: 2026-08-13
 - Branch: `codex/v0.3.0-factgraph-whatif-v1-continuous-2026-08-13`
@@ -50,12 +50,12 @@ Scenario route remains non-captured and unchanged.
 
 ## 6. Acceptance
 
-- [ ] Protocol seal/codec rejects malformed or hybrid ScenarioRun payloads.
-- [ ] SDK entry works for Rule and direct Policy targets.
-- [ ] Same-value, zero-result, multi-premise and stale-view cases are covered.
-- [ ] Detached Explain/Policy projection and isolated verification are covered.
-- [ ] Existing scenario fast path and F3–F5 regression cohorts remain green.
-- [ ] Application/SDK docs describe only shipped v0 semantics.
+- [x] Protocol seal/codec rejects malformed or hybrid ScenarioRun payloads.
+- [x] SDK entry works for Rule and direct Policy targets.
+- [x] Same-value, zero-result, multi-premise and stale-view cases are covered.
+- [x] Detached Explain/Policy projection and isolated verification are covered.
+- [x] Existing scenario fast path and F3–F5 regression cohorts remain green.
+- [x] Application/SDK docs describe only shipped v0 semantics.
 
 ## 7. Implementation Plan
 
@@ -74,4 +74,34 @@ Scenario route remains non-captured and unchanged.
 
 ## 9. Outcome / Deviations
 
-Pending continuous implementation and final review.
+Delivered `ScenarioRunV0` as an explicit, captured replacement-only path:
+`fg.eval.run_scenario(compiled_or_targeted_query, scenario)` and terminal
+`fg.query(...).what_if(scenario).run()`. It captures the exact native plan
+twice with frozen baseline/effective relations, preserves receipts only in
+memory, seals a Scenario-specific detached codec, and supports detached
+`diff()`, isolated `verify()`, and Policy-projected `explain()`.
+
+The existing `evaluate(..., scenario=...)` path remains intentionally
+non-captured. The implementation uses F4 bundle capture internally but wraps
+it in a Scenario-only frame, so generic F4 decode cannot reclassify synthetic
+effective witnesses as ordinary `captured_witness` evidence. All source labels
+are Scenario-aware; the artifact is digest-sealed, not authenticated.
+
+Verification: focused ScenarioRun suite `7 passed`; concentrated Query/
+Scenario/F4 cohort `77 passed, 55 subtests passed`; integrated
+`tests/application tests/sdk` `563 passed, 167 subtests passed`; ruff and
+`git diff --check` passed; focused mypy passed after using an external cache
+directory. The initial mypy invocation exposed a real shadowing issue in the
+new DTO (`FieldPath` hidden by `dataclasses.field`); it was repaired by aliasing
+the dataclass helper and rerun clean.
+
+An independent final review returned `CLEAR` with no P0/P1 blocker. It
+re-executed the permanent stale-window guard and a focused ScenarioRun cohort
+(`79 passed, 37 subtests passed`), and confirmed public exports, source labels,
+codec framing and documentation alignment. A proposed duplicate-import cleanup
+was not applied because the two similarly named capture helpers are distinct
+and both live call sites require them.
+
+Deliberate carry-forward: Query-level field-navigation selection, general
+Scenario/premise grammar, persistence/historical replay, Actions/Operators,
+non-native parity, Package/authority, Meander Plan/API and UI integration.

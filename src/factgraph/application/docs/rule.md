@@ -677,8 +677,9 @@ the former raises `DetachedRowError` and the latter returns an unsupported
 `Explanation`.  Scenario also rejects every `capture=` use and never attaches
 an F4 anchor or bundle.  Current F4 proof receipts describe asserted ledger
 facts, so presenting them as evidence for a hypothetical value would be false
-provenance.  Scenario-aware evidence, replay, multi-premise truth algebra,
-and general `ScenarioPlan` remain separate future contracts.
+provenance.  The separate `ScenarioRunV0` contract below is the only captured
+exception; general replay, multi-premise truth algebra, and a general
+`ScenarioPlan` remain future contracts.
 
 ### Atomic Scenario field-substitution set v0
 
@@ -709,6 +710,60 @@ authenticated artifact, ledger snapshot, source-truth claim, or provenance.
 Like the single form, the set rejects every `capture=` use, has no Run anchor
 or bundle, and rows cannot `close()` or live-`explain()`. An F5B1 expected Query
 rejects **all** Scenario forms, including this set.
+
+### Captured ScenarioRun v0
+
+The older `fg.eval.evaluate(compiled_query, scenario=...)` route above remains
+a deliberately non-captured compatibility result: it has no Run anchor,
+bundle, detached evidence or verification surface. A caller that needs an
+auditable, detached What-if result must explicitly enter the distinct
+`ScenarioRunV0` lifecycle through the same resolved Query:
+
+```python
+from factgraph.sdk import ScenarioRunV0
+
+run = (
+    fg.query(resolved_rule)
+      .bind(SemanticPortAddress("target", "person"), alice)
+      .select("age", SemanticPortAddress("target", "age"))
+      .what_if(ScenarioFieldSubstitutionV0(alice, FieldPath("Person", "age"), 35, "review-age"))
+      .run()
+)
+
+diff = run.diff()
+verification = run.verify()
+payload = run.to_bytes()
+detached = ScenarioRunV0.from_bytes(payload)
+explanation = detached.explain(
+    side="effective",
+    row_capture_digest=detached.effective.rows[0].row_capture_digest,
+)
+```
+
+`ScenarioRunV0` evaluates the *same exact materialized native Query plan*
+twice over a frozen dependency-complete baseline relation and one effective
+replacement relation. It retains two private receipt captures, a sealed
+premise-to-witness inventory, a typed public row summary, and a semantic
+result-multiset diff. After capture, `.diff()`, `.verify()`, `.explain()` and
+codec decode never read a live Store. The isolated verifier checks the
+captured native relations and receipts; it does not establish that the premise
+is true or that the historical ledger is authoritative.
+
+The generic `EvaluationRunBundleV0` codec intentionally cannot decode a
+ScenarioRun capture frame. Scenario-aware evidence is the only route that
+opens it, and labels sources as either a captured baseline/effective relation
+witness or `scenario_hypothesis`. A synthetic effective witness is therefore
+never exposed as F4's normal `captured_witness`. This is a protocol/API
+boundary, not encryption or authentication: payloads contain typed captured
+values under caller-managed custody, and digest sealing only detects
+inconsistent tampering/splicing.
+
+The captured form admits only the Q7/Q11 replacement grammar: native engine,
+no config, empty ledger premise policy, no expected Query, and one existing
+visible single-valued scalar field per atomic member. It does not introduce
+general fact add/remove/mask, negation, temporal/as-of semantics, Policy or
+Rule overlay, Operator/action execution, source authority, persistence,
+historical ledger replay, or a general Scenario language.
 
 Compiled Policy/Query and Run-anchor values are compiler-issued, in-process
 artifacts. Their integrity checks detect inconsistent splicing; they are not

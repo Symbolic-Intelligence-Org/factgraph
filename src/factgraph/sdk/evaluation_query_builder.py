@@ -18,6 +18,10 @@ from factgraph.application.protocol.evaluation_query import (
     EvaluationQuerySelection,
 )
 from factgraph.application.protocol.evaluation_expectation import ContainsRowExpectationV0
+from factgraph.application.protocol.evaluation_scenario import (
+    ScenarioFieldSubstitutionSetV0,
+    ScenarioFieldSubstitutionV0,
+)
 from factgraph.application.protocol.policy import Policy
 from factgraph.application.protocol.semantic_address import SemanticPortAddress
 from factgraph.application.semantic_address_runtime import SemanticAddressSpace
@@ -98,6 +102,42 @@ class EvaluationQueryBuilderV1:
 
         return self._graph.eval.evaluate(self.compile(), **kwargs)
 
+    def what_if(
+        self,
+        scenario: ScenarioFieldSubstitutionV0 | ScenarioFieldSubstitutionSetV0,
+    ) -> "ScenarioQueryBuilderV0":
+        """Freeze Query intent and enter the bounded ScenarioRun lifecycle.
+
+        This is terminal by design: binding, projection and expectation intent
+        must already be present, so there is still only one Query compiler and
+        one immutable Query contract.
+        """
+
+        if not isinstance(
+            scenario,
+            (ScenarioFieldSubstitutionV0, ScenarioFieldSubstitutionSetV0),
+        ):
+            raise SDKStoreError(
+                "query.what_if(...) requires ScenarioFieldSubstitutionV0 "
+                "or ScenarioFieldSubstitutionSetV0"
+            )
+        if self._expectations:
+            raise SDKStoreError("query.what_if(...) does not support expect_contains(...)")
+        return ScenarioQueryBuilderV0(self, scenario)
+
+
+@dataclass(frozen=True)
+class ScenarioQueryBuilderV0:
+    """Terminal Query wrapper that runs an already-declared Scenario."""
+
+    _query: EvaluationQueryBuilderV1
+    _scenario: ScenarioFieldSubstitutionV0 | ScenarioFieldSubstitutionSetV0
+
+    def run(self) -> Any:
+        """Compile once and enter the captured ScenarioRun API."""
+
+        return self._query._graph.eval.run_scenario(self._query.compile(), self._scenario)
+
 
 def build_evaluation_query_builder(
     graph: "SDKStore",
@@ -118,4 +158,8 @@ def build_evaluation_query_builder(
     return EvaluationQueryBuilderV1(graph, resolved)
 
 
-__all__ = ["EvaluationQueryBuilderV1", "build_evaluation_query_builder"]
+__all__ = [
+    "EvaluationQueryBuilderV1",
+    "ScenarioQueryBuilderV0",
+    "build_evaluation_query_builder",
+]
