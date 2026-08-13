@@ -1,6 +1,6 @@
 # Task Blueprint: FactGraph D09 native absence/closure observation
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-08-13
 - Last Updated: 2026-08-13
 - Authority: bounded, disposable native-observation task. It may measure
@@ -87,6 +87,22 @@ documentation surface.
 
 ## 10. Outcome / deviations
 
-Scope is frozen before the tool/test implementation. The only successful
-terminal result is an observed-only report; it cannot close D09 or approve a
-public API.
+- Final result: `observed-only`. The runner uses current Store, schema
+  projector, correlated native evaluator, premise-filter wrapper and Fact
+  Overlay routes to confirm O1–O7 exactly as frozen by Q17.
+- Verification: runner `--verify`; direct probe test; application/SDK suite
+  `590 passed, 172 subtests`; tool/test Ruff; tool/test mypy; and diff check
+  all passed.
+- Scope proof: no file under `src/factgraph/**`, no public export, DTO, SDK/API
+  documentation, Query/Scenario, Explain, replay, Meander, or adapter was
+  changed by this blueprint.
+- Important conclusion: O2, O3 and O5 can all result in a native match, but
+  their mechanisms remain separately asserted and do not imply equivalent
+  factual, authorization, provenance, `MISSING`, `MASKED`, `NEGATED`,
+  `UNKNOWN`, or closed-world semantics.
+- Deviation: none. A standalone preflight was deliberately not created because
+  this remained a non-public additive tool/test task; the paired audit records
+  that condition.
+- Next boundary: D09 remains open. Any public `WITHOUT_FIELD`, closure scope,
+  source/premise algebra, explicit negative predicate, Explain state, or
+  cross-engine design requires a new decision and blueprint.

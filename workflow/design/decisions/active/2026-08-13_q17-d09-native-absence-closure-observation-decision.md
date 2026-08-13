@@ -133,14 +133,15 @@ turning any result into a public capability claim.
 
 ## 7. Acceptance criteria
 
-- [ ] All seven cells execute against existing native components without mocks.
-- [ ] The runner and its test make no change under `src/factgraph/**`.
-- [ ] Output explicitly distinguishes an observed empty relation from a
+- [x] All seven cells execute against existing native components without mocks.
+- [x] The runner and its test make no change under `src/factgraph/**`.
+- [x] Output explicitly distinguishes an observed empty relation from a
   semantic absence/negative-fact conclusion.
-- [ ] D09 remains explicitly open after the probe closes.
+- [x] D09 remains explicitly open after the probe closes.
 
 ## 8. Decision record
 
 | Date | Stage | Event | Notes |
 | --- | --- | --- | --- |
 | 2026-08-13 | adopted | Observation protocol frozen | The user's continuous-delivery authority permits a disposable diagnostic, not an absence/closure product decision. |
+| 2026-08-13 | implemented | Observation protocol executed | O1–O7 are frozen in a non-public runner and direct test. The result is observed-only; it does not adopt a public absence or closure contract. |
