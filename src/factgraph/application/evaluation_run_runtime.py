@@ -179,6 +179,9 @@ def _assert_anchor_target_matches_query(
 ) -> None:
     if not isinstance(target, EvaluationRunTargetV0):
         raise ValueError("EvaluationRun source target is invalid")
+    # This is an internal runtime seam. Re-run the DTO seal before comparing
+    # it with the Query so direct callers cannot attach a mutated target.
+    EvaluationRunTargetV0.__post_init__(target)
     policy = compiled_query.compiled_policy
     expected_pins = tuple(EvaluationRunRulePinV0(
         pin.occurrence_alias, pin.rule_id, pin.rule_version,

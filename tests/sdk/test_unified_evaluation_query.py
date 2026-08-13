@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import unittest
+from dataclasses import replace
 from unittest.mock import patch
 
 from factgraph.application import (
@@ -14,6 +15,7 @@ from factgraph.application import (
     project_policy_explanation_v0,
     verify_evaluation_run_bundle,
 )
+from factgraph.application.evaluation_run_runtime import build_evaluation_run_anchor_v0
 from factgraph.application.protocol import (
     EntityRef,
     EntitySelector,
@@ -223,3 +225,15 @@ class UnifiedEvaluationQueryTests(unittest.TestCase):
             graph.eval.evaluate_candidates(compiled)
         with self.assertRaisesRegex(SDKStoreError, "does not accept TargetedCompiledEvaluationQueryV0"):
             graph.eval.explain(compiled)
+
+    def test_direct_anchor_helper_revalidates_source_target_seal(self) -> None:
+        graph = SDKStore([Person])
+        compiled = graph.query(_bundle(graph)).select("age", _address("target", "age")).compile()
+        result = graph.eval.evaluate(compiled.compiled_query)
+        object.__setattr__(compiled.target.run_target, "target_digest", "sha256:" + "0" * 64)
+        with self.assertRaisesRegex(ValueError, "target_digest"):
+            build_evaluation_run_anchor_v0(
+                compiled.compiled_query,
+                replace(result, run_anchor=None),
+                source_target=compiled.target.run_target,
+            )

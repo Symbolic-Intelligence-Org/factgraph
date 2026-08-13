@@ -12,6 +12,7 @@ from factgraph.application import (
     resolve_evaluation_query_target,
 )
 from factgraph.application.evaluation_query_target_runtime import EvaluationQueryTargetError
+from factgraph.application.protocol.evaluation_query import EvaluationQueryError
 from factgraph.application.protocol import (
     EvaluationQueryBinding,
     EvaluationQuerySelection,
@@ -114,6 +115,9 @@ class EvaluationQueryTargetRuntimeTests(unittest.TestCase):
         )
         with self.assertRaisesRegex(EvaluationQueryTargetError, "does not match"):
             replace(compiled, target=direct)
+        other_space = SemanticAddressSpace((manage_rule_occurrence(_bundle(index), "other"),))
+        with self.assertRaisesRegex(EvaluationQueryTargetError, "address space"):
+            replace(target, address_space=other_space)
 
     def test_compilation_remains_existing_direct_port_contract(self) -> None:
         index, target = _index(), resolve_evaluation_query_target(_bundle())
@@ -125,10 +129,11 @@ class EvaluationQueryTargetRuntimeTests(unittest.TestCase):
         )
         self.assertEqual(compiled.compiled_query.bindings[0].normalized_value, 22)
         self.assertEqual(compiled.compiled_query.selections[0].address.port_name, "age")
-        with self.assertRaisesRegex(EvaluationQueryTargetError, "compilation rejected"):
+        with self.assertRaisesRegex(EvaluationQueryError, "unknown semantic port") as ctx:
             compile_targeted_evaluation_query(
                 target,
                 bindings=(),
                 selections=(EvaluationQuerySelection("age", SemanticPortAddress("target", "missing")),),
                 schema_index=index,
             )
+        self.assertEqual(ctx.exception.code, "UNRESOLVED_QUERY_ADDRESS")

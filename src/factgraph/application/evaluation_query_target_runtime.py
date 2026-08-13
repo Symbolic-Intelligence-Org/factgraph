@@ -21,7 +21,7 @@ from .evaluation_query_runtime import (
 from .evaluation_run_runtime import build_evaluation_run_target_v0
 from .policy_runtime import CompiledPolicyV0, _assert_compiled_policy_current, compile_policy
 from .protocol.evaluation_query import (
-    EvaluationQuery,
+    EvaluationQuery, EvaluationQueryError,
     EvaluationQueryBinding,
     EvaluationQuerySelection,
 )
@@ -178,6 +178,10 @@ def compile_targeted_evaluation_query(
             address_space=target.address_space,
             schema_index=schema_index,
         )
+    except EvaluationQueryError:
+        # Preserve established, actionable compiler failures (for example,
+        # PARTIAL_BRANCH_QUERY_ADDRESS) through the unified facade.
+        raise
     except ValueError as exc:
         raise _error("typed Query compilation rejected this target intent", "QUERY_TARGET_COMPILATION_REJECTED") from exc
     return TargetedCompiledEvaluationQueryV0(
@@ -239,6 +243,11 @@ def _assert_resolved_target_current(target: ResolvedEvaluationQueryTargetV1) -> 
         schema_digest = _schema_digest_for_space(target.address_space)
     except (SemanticPortResolutionError, ValueError) as exc:
         raise _error("resolved Query target is stale", "QUERY_TARGET_STALE") from exc
+    if target.address_space.address_space_digest != target.compiled_policy.address_space_digest:
+        raise _error(
+            "resolved Query target address space does not match its compiled Policy",
+            "QUERY_TARGET_ADDRESS_SPACE_MISMATCH",
+        )
     source = target.run_target
     expected = build_evaluation_run_target_v0(
         compiled_policy=target.compiled_policy,
