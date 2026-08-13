@@ -1,10 +1,10 @@
 # Task Blueprint: FactGraph Query/Scenario continuous delivery program
 
-- Status: implementing
+- Status: implemented
 - Created: 2026-08-13
 - Last Updated: 2026-08-13
 - Branch: `codex/v0.3.0-factgraph-whatif-v1-continuous-2026-08-13`
-- Decision: [Q15 captured Query run](../../design/decisions/active/2026-08-13_q15-captured-evaluation-query-run-v0-decision.md)
+- Decision: [Q15 captured Query run](../../design/decisions/active/2026-08-13_q15-captured-evaluation-query-run-v0-decision.md), [Q16 query-scoped EffectiveSnapshot](../../design/decisions/active/2026-08-13_q16-query-effective-snapshot-v1-decision.md)
 - Audit Log: [paired audit](./2026-08-13_factgraph-query-scenario-program.audit.md)
 
 ## 1. Program objective
@@ -50,16 +50,29 @@ Policy-relative premise addressing, source admission, or a generic premise DSL.
 ## 6. Acceptance
 
 - [x] P1 is implemented, independently reviewed and documented.
-- [ ] P2 has an adopted conservative identity contract before implementation.
-- [ ] All final package outcomes distinguish shipped capability from remaining
+- [x] P2 has an adopted conservative identity contract before implementation.
+- [x] All final package outcomes distinguish shipped capability from remaining
   semantic gates.
 
 ## 7. Outcome / deviations
 
-P1 is implemented and independently reviewed. Its outer artifact preserves
-ordinary expectation/capture rejection, rechecks bundle selection alias/type
-contracts on every detached operation, and rejects in-memory captures that do
-not fit the strict durable codec. P2 remains the next bounded package. This
-program intentionally replaces repeated per-function approval pauses with
-explicit work-package stop conditions; it does not weaken the integrity,
-provenance or scope boundaries inherited from Q8–Q14.
+P1 and P2 are implemented and independently reviewed. P1's outer artifact
+preserves ordinary expectation/capture rejection, rechecks bundle selection
+alias/type contracts on every detached operation, and rejects in-memory
+captures that do not fit the strict durable codec. P2 adds an internal,
+Query-dependency-scoped pre-evaluation identity while preserving Q7/Q11's
+legacy DTO, witness and digest behavior through a fail-closed compatibility
+adapter. It uses one captured resolver context (legacy active-identity
+membership plus relation projection) for admission and relation construction,
+and the SDK rechecks both the full live view and adapter pair
+before/between native evaluator calls.
+
+Final verification: `pytest tests/application tests/sdk` = 588 passed + 172
+subtests; focused independent/adversarial reviews found and closed two P1
+integrity gaps (legacy self-consistent DTO splice and a second live-Store read);
+changed-file Ruff, targeted mypy and `git diff --check` passed. This program
+intentionally replaces repeated per-function approval pauses with explicit
+work-package stop conditions; it does not weaken the integrity, provenance or
+scope boundaries inherited from Q8–Q14. P3 remains deliberately unimplemented:
+absence/closure, relation/new-entity premises, Policy overlays, Operators and
+cross-engine profiles each require a new decision rather than speculative code.

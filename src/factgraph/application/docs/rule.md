@@ -735,6 +735,33 @@ provenance.  The separate `ScenarioRunV0` contract below is the only captured
 exception; general replay, multi-premise truth algebra, and a general
 `ScenarioPlan` remain future contracts.
 
+### Query-scoped EffectiveSnapshot v1
+
+Before either native evaluator call, the replacement-only resolver also forms
+a parallel `QueryEffectiveSnapshotV1`. It records the **pre-evaluation**
+identity of the exact Query-dependency relation that will be supplied to the
+baseline/effective evaluators: Query/Policy/schema pins, the caller-pinned
+live-view digest, canonical dependency predicates, resolved visible scalar
+replacements and the two relation digests. Its operation list has no result
+rows or result diff.
+
+This is deliberately narrower than the name “snapshot” can suggest. It is not
+a full ledger copy, historical/as-of snapshot, authenticated artifact, source
+authority or premise-truth statement. The resolver separately captures only
+the active-identity memberships required by the submitted Scenario. It then
+uses the private full projection to establish entity visibility and copy the
+exact Query-dependency relation; unrelated relations remain outside that copied
+relation. The SDK still checks the full live-view digest after resolution and
+between evaluator calls, so a changed Store fails closed rather than turning
+this identity into a promise about continued liveness.
+
+`ScenarioResolutionV0`,
+`ScenarioFieldSubstitutionSetResolutionV0`, `EvaluateResult.scenario`, and
+`ScenarioRunV0` are compatibility outputs and remain distinct: their legacy
+scenario digest intentionally includes the eventual result diff. They retain
+their existing wire formats, synthetic witness prefixes and provenance labels;
+the new identity is a parallel foundation, not a silent v0 reinterpretation.
+
 ### Atomic Scenario field-substitution set v0
 
 `ScenarioFieldSubstitutionSetV0` is the only multi-member extension. It holds

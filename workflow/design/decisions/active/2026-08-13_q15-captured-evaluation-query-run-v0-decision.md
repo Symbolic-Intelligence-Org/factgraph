@@ -5,7 +5,7 @@
 - Authority: the user's 2026-08-13 authorization for project-level continuous
   FactGraph delivery, bounded by the existing Query/F4 contracts.
 - Depends on: Q5A/Q5B, Q6A/Q6B, Q8, Q9, Q12, Q13 and Q14.
-- Downstream: [`FactGraph Query/Scenario program`](../../../blueprints/active/2026-08-13_factgraph-query-scenario-program.md)
+- Downstream: [`FactGraph Query/Scenario program`](../../../blueprints/archive/2026-08-13_factgraph-query-scenario-program.md)
 
 ## Decision
 

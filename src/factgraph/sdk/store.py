@@ -24,6 +24,7 @@ from factgraph.application.derivation_runtime import (
 )
 from factgraph.application.evaluation_scenario_runtime import (
     ScenarioResolutionError,
+    assert_resolved_scenario_compatibility_current,
     resolve_scenario_field_substitution_set_v0,
     resolve_scenario_field_substitution_v0,
 )
@@ -2284,9 +2285,11 @@ class SDKStore:
         """Start a typed native Query over one resolved Rule or managed Policy.
 
         This is a target-normalization facade, not a registry lookup or a new
-        evaluator. ``bind`` and ``select`` accept only SemanticPortAddress
-        values; expectation, modes, navigation, and generic Scenario algebra
-        are intentionally outside this v1 surface.
+        evaluator. ``bind`` accepts only SemanticPortAddress values; ``select``
+        supports direct ports and the documented one-hop field navigation, and
+        ``expect_contains`` is the sole expectation form. Other query modes,
+        broader navigation, and generic Scenario algebra remain outside this
+        v1 surface.
         """
 
         from .evaluation_query_builder import build_evaluation_query_builder
@@ -3407,6 +3410,11 @@ class SDKStore:
                 )
                 raise SDKStoreError(f"{scenario_name} rejected: {exc.code}") from exc
             self._assert_evaluation_query_execution_current(compiled_query, view_snapshot_digest)
+            self._assert_scenario_effective_snapshot_current(
+                resolved_scenario,
+                compiled_query=compiled_query,
+                base_view_digest=view_snapshot_digest,
+            )
             request = DerivationEvaluateRequest(plans=(compiled_plan,), engine="native")
             baseline_outputs = _evaluate_derivation_plans_with_native_effective_relation(
                 request,
@@ -3414,12 +3422,22 @@ class SDKStore:
                 effective_relation=resolved_scenario.baseline_relation,
             )
             self._assert_evaluation_query_execution_current(compiled_query, view_snapshot_digest)
+            self._assert_scenario_effective_snapshot_current(
+                resolved_scenario,
+                compiled_query=compiled_query,
+                base_view_digest=view_snapshot_digest,
+            )
             effective_outputs = _evaluate_derivation_plans_with_native_effective_relation(
                 request,
                 store=self._store,
                 effective_relation=resolved_scenario.effective_relation,
             )
             self._assert_evaluation_query_execution_current(compiled_query, view_snapshot_digest)
+            self._assert_scenario_effective_snapshot_current(
+                resolved_scenario,
+                compiled_query=compiled_query,
+                base_view_digest=view_snapshot_digest,
+            )
             baseline_result = self._derivation_outputs_to_evaluate_result(
                 baseline_outputs,
                 compiled_plans=[compiled_plan],
@@ -3726,6 +3744,11 @@ class SDKStore:
             base_view_digest,
             targeted=raw_query if isinstance(raw_query, TargetedCompiledEvaluationQueryV0) else None,
         )
+        self._assert_scenario_effective_snapshot_current(
+            resolved,
+            compiled_query=compiled_query,
+            base_view_digest=base_view_digest,
+        )
         request = DerivationEvaluateRequest(plans=(compiled_plan,), engine="native")
         baseline_outputs, baseline_receipts = (
             _evaluate_derivation_plans_with_native_effective_relation_capture(
@@ -3739,6 +3762,11 @@ class SDKStore:
             base_view_digest,
             targeted=raw_query if isinstance(raw_query, TargetedCompiledEvaluationQueryV0) else None,
         )
+        self._assert_scenario_effective_snapshot_current(
+            resolved,
+            compiled_query=compiled_query,
+            base_view_digest=base_view_digest,
+        )
         effective_outputs, effective_receipts = (
             _evaluate_derivation_plans_with_native_effective_relation_capture(
                 request,
@@ -3750,6 +3778,11 @@ class SDKStore:
             compiled_query,
             base_view_digest,
             targeted=raw_query if isinstance(raw_query, TargetedCompiledEvaluationQueryV0) else None,
+        )
+        self._assert_scenario_effective_snapshot_current(
+            resolved,
+            compiled_query=compiled_query,
+            base_view_digest=base_view_digest,
         )
 
         shared_kwargs = {
@@ -3872,6 +3905,35 @@ class SDKStore:
                 raise SDKStoreError(
                     "targeted compiled Query changed during ScenarioRun execution"
                 ) from exc
+
+    @staticmethod
+    def _assert_scenario_effective_snapshot_current(
+        resolved: Any,
+        *,
+        compiled_query: CompiledEvaluationQueryV0,
+        base_view_digest: str,
+    ) -> None:
+        """Check the v1 relation identity before it reaches the evaluator.
+
+        The surrounding caller separately checks the full live-view digest.
+        This helper only guards the private frozen baseline/effective relation
+        pair against a self-consistent or accidental compatibility splice.
+        """
+
+        snapshot = getattr(resolved, "effective_snapshot", None)
+        try:
+            if (
+                snapshot is None
+                or snapshot.query_digest != compiled_query.query_digest
+                or snapshot.policy_digest != compiled_query.policy_digest
+                or snapshot.address_space_digest != compiled_query.address_space_digest
+                or snapshot.schema_digest != compiled_query.schema_digest
+                or snapshot.base_view_digest != base_view_digest
+            ):
+                raise ValueError("Scenario effective snapshot does not match Query execution pins")
+            assert_resolved_scenario_compatibility_current(resolved)
+        except (AttributeError, TypeError, ValueError) as exc:
+            raise SDKStoreError("Scenario effective snapshot failed its execution-time integrity check") from exc
 
     @staticmethod
     def _assert_evaluation_query_artifact_current(

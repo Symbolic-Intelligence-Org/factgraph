@@ -153,6 +153,13 @@ live-EvidenceGraph contract refers to asserted ledger facts and is not valid
 evidence for a hypothetical replacement. See
 `src/factgraph/application/docs/rule.md` for the replacement-only scope.
 
+The internal resolver also returns a parallel `QueryEffectiveSnapshotV1` for
+its caller. It has pre-evaluation, Query-dependency-relation identity only and
+is intentionally not embedded in `EvaluateResult`, ScenarioRun v0 wire, or a
+public replay codec. Its digest excludes the later result diff; the legacy
+Scenario DTOs above intentionally do not. See the application Rule contract
+for its non-global/non-historical boundary.
+
 `ScenarioRunV0` is a separate protocol value rather than a wider
 `EvaluateResult` variant. It is entered explicitly through
 `fg.eval.run_scenario(compiled_or_targeted_query, scenario)` or the terminal

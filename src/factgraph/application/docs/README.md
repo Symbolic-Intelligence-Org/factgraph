@@ -40,7 +40,9 @@ compatibility.
     `ScenarioFieldSubstitutionV0` and atomic
     `ScenarioFieldSubstitutionSetV0` boundaries, including the separate,
     captured `ScenarioRunV0` lifecycle for detached Scenario evidence and
-    isolated verification.
+    isolated verification; and the parallel, query-dependency-scoped
+    `QueryEffectiveSnapshotV1` pre-evaluation identity used internally by the
+    replacement-only resolver (not a global or historical snapshot).
 - `src/factgraph/application/explain/docs/README.md`
   - Paths-model evidence tree types (`EvidenceGraph`, `EvidenceTree`,
     `EvidenceRule`, `EvidenceAtom`, `Certainty`, `AtomForm`, `Verdict`) and

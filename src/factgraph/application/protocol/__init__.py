@@ -61,6 +61,12 @@ from .evaluation_scenario import (
     ScenarioScalarTag,
     ScenarioScalarValueV0,
 )
+from .query_effective_snapshot import (
+    QueryEffectiveSnapshotNormalizationProfileV1,
+    QueryEffectiveSnapshotScopeV1,
+    QueryEffectiveSnapshotV1,
+    ResolvedExistingVisibleScalarReplacementV1,
+)
 from .scenario_run import (
     ScenarioPremiseBindingV0,
     ScenarioRunExplanationV0,
@@ -324,6 +330,10 @@ __all__ = [
     "ScenarioScalarStorage",
     "ScenarioScalarTag",
     "ScenarioScalarValueV0",
+    "QueryEffectiveSnapshotNormalizationProfileV1",
+    "QueryEffectiveSnapshotScopeV1",
+    "QueryEffectiveSnapshotV1",
+    "ResolvedExistingVisibleScalarReplacementV1",
     "EvaluationRunAnchorV0",
     "EvaluationRunBindingV0",
     "EvaluationRunExecutionProfileV0",

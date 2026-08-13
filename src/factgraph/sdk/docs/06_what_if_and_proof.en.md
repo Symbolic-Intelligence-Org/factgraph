@@ -83,3 +83,10 @@ digest-sealed but not authenticated, a historical replay, or proof that a
 caller-declared premise is true. General premises, source authority,
 add/delete/mask, temporal overlays, actions, operators, and generic Scenario
 plans remain outside this API.
+
+Internally, admission first resolves a `QueryEffectiveSnapshotV1`: an identity
+for the exact Query-dependency relation before either side is evaluated. It
+deliberately excludes the result diff and is not a global ledger/history
+snapshot, a source-authority claim, or an additional public What-if API.
+Existing `ScenarioRunV0` capture and Q7/Q11 compatibility values retain their
+previous result-aware identities and witness labels.
