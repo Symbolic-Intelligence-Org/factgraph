@@ -417,7 +417,13 @@ compiled = (
     fg.query(resolved_rule)
       .bind(SemanticPortAddress("target", "person"),
             EntityRef("Person", {"employee_id": "alice"}))
-      .select("age", SemanticPortAddress("target", "age"))
+      .select(
+          "age",
+          EvaluationQueryFieldNavigationV0(
+              base=SemanticPortAddress("target", "person"),
+              field=FieldPath("Person", "age"),
+          ),
+      )
       .compile()
 )
 result = fg.eval.evaluate(compiled, engine="native")
@@ -426,9 +432,15 @@ result = fg.eval.evaluate(compiled, engine="native")
 The Rule form deterministically lifts one `target` occurrence into the internal
 Policy `__factgraph_rule_lift__:<rule-id>`; it does not make a Rule and Policy
 the same authored object. For a direct Policy use
-`fg.query(policy, address_space=addresses)`. The builder accepts only
-structured `SemanticPortAddress` values and delegates to the existing
-`EvaluationQuery` compiler. Its sole result-observation extension is
+`fg.query(policy, address_space=addresses)`. `bind` accepts only a structured
+direct `SemanticPortAddress`. `select` accepts either that direct address or
+the narrow structured `EvaluationQueryFieldNavigationV0` shown above: exactly
+one identity-to-same-entity, single non-identity scalar-field lookup. The
+lookup is Query-owned projection plumbing, not a `PolicyFieldNavigation`; it
+changes the Query digest but not Policy structure, lineage, or digest. Missing
+field evidence produces no row, never `null` or `false`. The builder delegates
+all of this to the existing `EvaluationQuery` compiler. Its sole
+result-observation extension is
 `expect_contains(expectation_id, /, **selected_values)`: values name existing
 selections, are schema-normalized like `bind`, and observe the completed row
 set without changing the Policy, query digest, lowering plan or rows. Native
@@ -439,8 +451,9 @@ historical completeness claim. `underdetermined` and `unsupported` remain
 explicit future-profile states. An expected Query rejects `capture=` and
 `scenario=` because current F4/F5A contracts do not seal expectation inventory.
 It has no string lookup, registry, Package, generic `expect`, modes,
-empty-select existence, Query-level navigation, Operator, or non-native configuration
-surface. Ordinary capture/evidence remains the existing F4 path;
+empty-select existence, relationship/multi-hop traversal, Operator, or
+non-native configuration surface. Navigation is not accepted in `bind` or
+Policy authoring. Ordinary capture/evidence remains the existing F4 path;
 the Run anchor records whether its source was a direct Policy or a Rule lift.
 
 A direct Policy may itself contain the narrow application-level
@@ -482,7 +495,8 @@ Premise exclusions, allowances and predicate blocks are not yet captured with
 that live view, so a non-empty or later-changed premise policy also fails closed.
 Each ordinary successful compiled Query result carries `result.run_anchor`, a pure-data
 identity anchor for the exact target, Query, Policy structure/lineage, Rule
-pins, bind/select intent, execution profile, view, result and rows. Its semantic
+pins, direct/navigation bind/select intent, execution profile, view, result
+and rows. Its semantic
 row anchors exclude random run ids; its query-summary anchor also covers a
 zero-row result without interpreting it as false. `row.explain()` includes the
 Run anchor digest in `checked_scope`.

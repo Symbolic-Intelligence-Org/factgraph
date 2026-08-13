@@ -19,7 +19,10 @@ from factgraph.application.protocol import (
     EvaluationQuery,
     EvaluationQueryBinding,
     EvaluationQueryError,
+    EvaluationQueryFieldNavigationV0,
+    EvaluationQueryNavigationSelectionV0,
     EvaluationQuerySelection,
+    FieldPath,
     Policy,
     PolicyAll,
     PolicyAny,
@@ -138,8 +141,159 @@ class EvaluationQueryProtocolTests(unittest.TestCase):
                 with self.assertRaises(EvaluationQueryError):
                     factory()
 
+    def test_direct_and_navigation_selection_sources_are_independently_deduplicated(self) -> None:
+        digest = "a" * 64
+        person = _address("pair", "person")
+        navigation = EvaluationQueryFieldNavigationV0(person, FieldPath("Person", "age"))
+        query = EvaluationQuery(
+            digest,
+            (
+                EvaluationQuerySelection("person", person),
+                EvaluationQueryNavigationSelectionV0("age", navigation),
+            ),
+        )
+        self.assertEqual(tuple(item.alias for item in query.selections), ("person", "age"))
+        with self.assertRaisesRegex(EvaluationQueryError, "navigation selections must be unique"):
+            EvaluationQuery(
+                digest,
+                (
+                    EvaluationQueryNavigationSelectionV0("age", navigation),
+                    EvaluationQueryNavigationSelectionV0("another_age", navigation),
+                ),
+            )
+
 
 class EvaluationQueryCompileTests(unittest.TestCase):
+    def test_navigation_select_compiles_to_query_owned_lookup_after_bind(self) -> None:
+        index, _bundle_value, space, policy = _compiled_all("pair")
+        query = EvaluationQuery(
+            policy.policy_digest,
+            (
+                EvaluationQuerySelection("person", _address("pair", "person")),
+                EvaluationQueryNavigationSelectionV0(
+                    "age",
+                    EvaluationQueryFieldNavigationV0(
+                        _address("pair", "person"), FieldPath("Person", "age")
+                    ),
+                ),
+            ),
+            (EvaluationQueryBinding(_address("pair", "score"), 9),),
+        )
+        compiled = compile_evaluation_query(
+            query, compiled_policy=policy, address_space=space, schema_index=index
+        )
+        navigation = compiled.selections[1]
+        self.assertEqual(type(navigation).__name__, "ResolvedEvaluationQueryNavigationSelectionV0")
+        self.assertEqual(navigation.value_type, "int")
+        self.assertEqual(navigation.field_predicate_id, "person:age")
+        materialized, traces = _materialize_native_derivation_plan(compiled._lowering_plan)
+        body = materialized.body_ir
+        self.assertEqual(body[3], ("eq", "$pair__score", 9))
+        self.assertEqual(body[4][0:2], ("pred", "person:age"))
+        self.assertEqual(
+            traces[0].query_navigation_materializations[0].lookup_materialized_condition_index,
+            4,
+        )
+
+    def test_navigation_common_base_is_branch_total_and_partial_base_rejects(self) -> None:
+        index, bundle = _index(), _bundle()
+        space = _space(bundle, "common", "left", "right")
+        policy = compile_policy(
+            Policy(
+                "branches",
+                PolicyAll((
+                    PolicyOccurrence("common"),
+                    PolicyAny((PolicyOccurrence("left"), PolicyOccurrence("right"))),
+                )),
+            ),
+            address_space=space,
+        )
+        common = EvaluationQuery(
+            policy.policy_digest,
+            (
+                EvaluationQueryNavigationSelectionV0(
+                    "age",
+                    EvaluationQueryFieldNavigationV0(
+                        _address("common", "person"), FieldPath("Person", "age")
+                    ),
+                ),
+            ),
+        )
+        compiled = compile_evaluation_query(
+            common, compiled_policy=policy, address_space=space, schema_index=index
+        )
+        self.assertEqual(len(compiled.selections[0].sources), 2)
+        with self.assertRaisesRegex(EvaluationQueryError, "not present in every Policy branch"):
+            compile_evaluation_query(
+                EvaluationQuery(
+                    policy.policy_digest,
+                    (
+                        EvaluationQueryNavigationSelectionV0(
+                            "age",
+                            EvaluationQueryFieldNavigationV0(
+                                _address("left", "person"), FieldPath("Person", "age")
+                            ),
+                        ),
+                    ),
+                ),
+                compiled_policy=policy,
+                address_space=space,
+                schema_index=index,
+            )
+
+    def test_navigation_rejects_non_identity_cross_entity_and_identity_fields(self) -> None:
+        index, _bundle_value, space, policy = _compiled_all("pair")
+        cases = (
+            EvaluationQueryFieldNavigationV0(_address("pair", "age"), FieldPath("Person", "score")),
+            EvaluationQueryFieldNavigationV0(_address("pair", "person"), FieldPath("Person", "employee_id")),
+            EvaluationQueryFieldNavigationV0(_address("pair", "person"), FieldPath("Other", "code")),
+        )
+        for navigation in cases:
+            with self.subTest(navigation=navigation):
+                with self.assertRaises(EvaluationQueryError):
+                    compile_evaluation_query(
+                        EvaluationQuery(
+                            policy.policy_digest,
+                            (EvaluationQueryNavigationSelectionV0("value", navigation),),
+                        ),
+                        compiled_policy=policy,
+                        address_space=space,
+                        schema_index=index,
+                    )
+
+    def test_navigation_digest_changes_but_policy_identity_does_not(self) -> None:
+        index, _bundle_value, space, policy = _compiled_all("pair")
+        direct = compile_evaluation_query(
+            EvaluationQuery(
+                policy.policy_digest,
+                (EvaluationQuerySelection("age", _address("pair", "age")),),
+            ),
+            compiled_policy=policy,
+            address_space=space,
+            schema_index=index,
+        )
+        navigation = compile_evaluation_query(
+            EvaluationQuery(
+                policy.policy_digest,
+                (
+                    EvaluationQueryNavigationSelectionV0(
+                        "age",
+                        EvaluationQueryFieldNavigationV0(
+                            _address("pair", "person"), FieldPath("Person", "age")
+                        ),
+                    ),
+                ),
+            ),
+            compiled_policy=policy,
+            address_space=space,
+            schema_index=index,
+        )
+        self.assertNotEqual(direct.query_digest, navigation.query_digest)
+        self.assertEqual(direct.compiled_policy.policy_digest, navigation.compiled_policy.policy_digest)
+        self.assertEqual(direct.compiled_policy.policy_structure, navigation.compiled_policy.policy_structure)
+        self.assertEqual(direct.compiled_policy.lineage, navigation.compiled_policy.lineage)
+        with self.assertRaises(ValueError):
+            replace(navigation, selections=direct.selections)
     def test_exact_occurrence_projection_and_typed_bind_materialize(self) -> None:
         index, _bundle_value, space, policy = _compiled_all("left", "right")
         forged = EntityRef(

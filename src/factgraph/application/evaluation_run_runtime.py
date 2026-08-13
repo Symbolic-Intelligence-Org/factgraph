@@ -5,13 +5,18 @@ from typing import Literal
 
 from factgraph.core.protocol.digests import sha256_token
 
-from .evaluation_query_runtime import CompiledEvaluationQueryV0, _assert_compiled_evaluation_query_current
+from .evaluation_query_runtime import (
+    CompiledEvaluationQueryV0,
+    ResolvedEvaluationQueryNavigationSelectionV0,
+    _assert_compiled_evaluation_query_current,
+)
 from .policy_runtime import CompiledPolicyV0, _assert_compiled_policy_current
 from .protocol.evaluate_result import EvaluateResult, canonical_bytes_for_evaluate
 from .protocol.evaluation_run import (
     EvaluationRunAnchorV0, EvaluationRunBindingV0, EvaluationRunExecutionProfileV0,
-    EvaluationRunRowAnchorV0, EvaluationRunRulePinV0, EvaluationRunSelectionV0,
-    EvaluationRunSummaryAnchorV0, EvaluationRunTargetV0, _plain, _token,
+    EvaluationRunNavigationSelectionV0, EvaluationRunRowAnchorV0,
+    EvaluationRunRulePinV0, EvaluationRunSelectionV0, EvaluationRunSummaryAnchorV0,
+    EvaluationRunTargetV0, _plain, _token,
 )
 
 
@@ -41,9 +46,17 @@ def build_evaluation_run_anchor_v0(
     bindings = tuple(EvaluationRunBindingV0(
         item.address, item.value_type, item.value_digest,
     ) for item in compiled_query.bindings)
-    selections = tuple(EvaluationRunSelectionV0(
-        item.alias, item.address, item.value_type,
-    ) for item in compiled_query.selections)
+    selections = tuple(
+        EvaluationRunNavigationSelectionV0(
+            item.alias,
+            item.navigation,
+            item.value_type,
+            item.field_predicate_id,
+        )
+        if isinstance(item, ResolvedEvaluationQueryNavigationSelectionV0)
+        else EvaluationRunSelectionV0(item.alias, item.address, item.value_type)
+        for item in compiled_query.selections
+    )
     profile = EvaluationRunExecutionProfileV0(
         result.engine,
         result.engine_meta["engine_version"],

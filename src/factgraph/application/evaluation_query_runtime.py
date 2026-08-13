@@ -12,19 +12,22 @@ from factgraph.core.rules.where_ast import Const
 from .policy_runtime import CompiledPolicyV0, _assert_compiled_policy_current
 from .protocol.evaluation_query import (
     EvaluationQuery, EvaluationQueryBinding, EvaluationQueryError,
+    EvaluationQueryFieldNavigationV0, EvaluationQueryNavigationSelectionV0,
 )
 from .protocol.policy import PolicyError
 from .protocol.rule import Rule
 from .protocol.rule_expr import RuleExprError
 from .protocol.rule_expr_lowering import (
-    RuleExprLoweringPlan, _RuleExprQueryHeadLink, _RuleExprQueryValueBinding,
+    RuleExprLoweringPlan, _RuleExprQueryHeadLink, _RuleExprQueryNavigationLookup,
+    _RuleExprQueryValueBinding,
     _attach_evaluation_query_head,
 )
 from .protocol.schema_runtime import EntityRef
 from .protocol.semantic_address import SemanticPortAddress
 from .protocol.semantic_port import EntityIdentityEndpoint, FieldEndpoint
 from .schema_runtime import (
-    SchemaIndex, SchemaResolutionError, encode_entity_ref, field_predicate, materialize_identity,
+    SchemaIndex, SchemaResolutionError, encode_entity_ref, field_predicate,
+    field_value_type, materialize_identity,
 )
 from .semantic_address_runtime import SemanticAddressResolutionError, SemanticAddressSpace
 from .semantic_port_runtime import SemanticPortResolutionError, assert_rule_contract_current
@@ -51,6 +54,22 @@ class ResolvedEvaluationQuerySelection:
     value_type: str
     sources: tuple[EvaluationQueryPortSource, ...]
 
+
+@dataclass(frozen=True)
+class ResolvedEvaluationQueryNavigationSelectionV0:
+    """One compiled Query-owned scalar lookup source."""
+
+    alias: str
+    navigation: EvaluationQueryFieldNavigationV0
+    value_type: str
+    field_predicate_id: str
+    sources: tuple[EvaluationQueryPortSource, ...]
+
+
+ResolvedEvaluationQuerySelectionItem = (
+    ResolvedEvaluationQuerySelection | ResolvedEvaluationQueryNavigationSelectionV0
+)
+
 @dataclass(frozen=True)
 class CompiledEvaluationQueryV0:
     query_digest: str
@@ -58,7 +77,7 @@ class CompiledEvaluationQueryV0:
     address_space_digest: str
     schema_digest: str
     bindings: tuple[ResolvedEvaluationQueryBinding, ...]
-    selections: tuple[ResolvedEvaluationQuerySelection, ...]
+    selections: tuple[ResolvedEvaluationQuerySelectionItem, ...]
     projection_head: Rule
     compiled_policy: CompiledPolicyV0 = field(repr=False)
     _lowering_plan: RuleExprLoweringPlan = field(repr=False, compare=False)
@@ -75,7 +94,10 @@ class CompiledEvaluationQueryV0:
             raise ValueError("compiled EvaluationQuery Policy pins do not match its Policy")
         if not isinstance(self.bindings, tuple) or not all(isinstance(item, ResolvedEvaluationQueryBinding) for item in self.bindings):
             raise ValueError("compiled EvaluationQuery bindings are malformed")
-        if not isinstance(self.selections, tuple) or not all(isinstance(item, ResolvedEvaluationQuerySelection) for item in self.selections):
+        if not isinstance(self.selections, tuple) or not all(
+            isinstance(item, (ResolvedEvaluationQuerySelection, ResolvedEvaluationQueryNavigationSelectionV0))
+            for item in self.selections
+        ):
             raise ValueError("compiled EvaluationQuery selections are malformed")
         if not _valid_sources(self.bindings) or not _valid_sources(self.selections):
             raise ValueError("compiled EvaluationQuery branch sources are malformed")
@@ -95,6 +117,7 @@ class CompiledEvaluationQueryV0:
             self.compiled_policy._body_plan, head=expected_head,
             query_digest=self.query_digest, head_links=_query_head_links(self.selections),
             value_bindings=_query_value_bindings(self.bindings),
+            navigation_lookups=_query_navigation_lookups(self.selections),
             policy_conditions=self.compiled_policy._policy_conditions,
         )
         if self._lowering_plan != expected_plan:
@@ -127,13 +150,18 @@ def compile_evaluation_query(
             item.address, value_type, value, value_digest,
             _branch_sources(compiled_policy, item.address),
         ))
-    selections: list[ResolvedEvaluationQuerySelection] = []
+    selections: list[ResolvedEvaluationQuerySelectionItem] = []
     for selection in query.selections:
-        resolved = _resolve(selection.address, address_space)
-        selections.append(ResolvedEvaluationQuerySelection(
-            selection.alias, selection.address, _endpoint_value_type(resolved.endpoint, schema_index),
-            _branch_sources(compiled_policy, selection.address),
-        ))
+        if isinstance(selection, EvaluationQueryNavigationSelectionV0):
+            selections.append(_resolve_navigation_selection(
+                selection, compiled_policy, address_space, schema_index,
+            ))
+        else:
+            resolved = _resolve(selection.address, address_space)
+            selections.append(ResolvedEvaluationQuerySelection(
+                selection.alias, selection.address, _endpoint_value_type(resolved.endpoint, schema_index),
+                _branch_sources(compiled_policy, selection.address),
+            ))
 
     normalized_bindings, normalized_selections = tuple(bindings), tuple(selections)
     query_digest = _digest(
@@ -151,6 +179,7 @@ def compile_evaluation_query(
             compiled_policy._body_plan, head=head, query_digest=query_digest,
             head_links=_query_head_links(normalized_selections),
             value_bindings=_query_value_bindings(normalized_bindings),
+            navigation_lookups=_query_navigation_lookups(normalized_selections),
             policy_conditions=compiled_policy._policy_conditions,
         )
         return CompiledEvaluationQueryV0(
@@ -236,6 +265,59 @@ def _endpoint_value_type(endpoint: object, index: SchemaIndex) -> str:
         return str(field_predicate(index, endpoint.entity_type, endpoint.field_name).value_type_domain)
     raise _error("unsupported semantic endpoint", "UNSUPPORTED_QUERY_ENDPOINT", "query_admission")
 
+
+def _resolve_navigation_selection(
+    selection: EvaluationQueryNavigationSelectionV0,
+    policy: CompiledPolicyV0,
+    space: SemanticAddressSpace,
+    index: SchemaIndex,
+) -> ResolvedEvaluationQueryNavigationSelectionV0:
+    navigation = selection.navigation
+    resolved = _resolve(navigation.base, space)
+    if not isinstance(resolved.endpoint, EntityIdentityEndpoint):
+        raise _error(
+            "Query field navigation must start at an EntityIdentity port",
+            "INVALID_QUERY_NAVIGATION", "query_admission",
+            ("selections", selection.alias, "base"),
+        )
+    if resolved.endpoint.entity_type != navigation.field.entity_type:
+        raise _error(
+            "Query field navigation must stay on the identity endpoint entity type",
+            "INVALID_QUERY_NAVIGATION", "query_admission",
+            ("selections", selection.alias, "field"),
+            {
+                "base_entity_type": resolved.endpoint.entity_type,
+                "field_entity_type": navigation.field.entity_type,
+            },
+        )
+    try:
+        predicate = field_predicate(index, navigation.field.entity_type, navigation.field.field_name)
+        value_type = field_value_type(index, navigation.field.entity_type, navigation.field.field_name)
+    except SchemaResolutionError as exc:
+        raise _error(
+            str(exc), "INVALID_QUERY_NAVIGATION", "query_admission",
+            ("selections", selection.alias, "field"), {"schema_code": exc.code},
+        ) from exc
+    if (
+        value_type.value_kind != "scalar"
+        or value_type.cardinality != "single"
+        or value_type.scalar_domain is None
+        or predicate.is_identity_field
+    ):
+        raise _error(
+            "Query field navigation must select one non-identity scalar field",
+            "UNSUPPORTED_QUERY_NAVIGATION", "query_admission",
+            ("selections", selection.alias, "field"),
+            {"value_kind": value_type.value_kind, "cardinality": value_type.cardinality},
+        )
+    return ResolvedEvaluationQueryNavigationSelectionV0(
+        selection.alias,
+        navigation,
+        value_type.scalar_domain,
+        predicate.pred_id,
+        _branch_sources(policy, navigation.base),
+    )
+
 def _normalize_binding(
     binding: EvaluationQueryBinding, endpoint: object, index: SchemaIndex,
 ) -> tuple[str, Any, str]:
@@ -272,15 +354,29 @@ def _normalize_binding(
 def _digest(
     policy_digest: str, address_space_digest: str, schema_digest: str,
     bindings: tuple[ResolvedEvaluationQueryBinding, ...],
-    selections: tuple[ResolvedEvaluationQuerySelection, ...],
+    selections: tuple[ResolvedEvaluationQuerySelectionItem, ...],
 ) -> str:
     def address(item: Any) -> list[Any]:
         return [item.address.occurrence_alias, item.address.port_name, tuple((source.branch_id, source.occurrence_alias, source.port_name) for source in item.sources)]
+    def selection(item: ResolvedEvaluationQuerySelectionItem) -> list[Any]:
+        if isinstance(item, ResolvedEvaluationQuerySelection):
+            # Preserve direct-selection v0 payload bytes: old compiled Query
+            # digests must not change merely because navigation is now supported.
+            return [item.alias, *address(item), item.value_type]
+        navigation = item.navigation
+        return [
+            "field_navigation_v0", item.alias,
+            navigation.base.occurrence_alias, navigation.base.port_name,
+            navigation.field.entity_type, navigation.field.field_name,
+            item.field_predicate_id,
+            tuple((source.branch_id, source.occurrence_alias, source.port_name) for source in item.sources),
+            item.value_type,
+        ]
     payload = {
         "format": "compiled_evaluation_query_v0", "policy_digest": policy_digest,
         "address_space_digest": address_space_digest, "schema_digest": schema_digest,
         "bindings": [[*address(item), item.value_type, item.value_digest] for item in bindings],
-        "selections": [[item.alias, *address(item), item.value_type] for item in selections],
+        "selections": [selection(item) for item in selections],
     }
     return sha256_hex(json.dumps(
         payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False,
@@ -296,10 +392,31 @@ def _canonical_value(value_type: str, value: Any) -> tuple[Any, str]:
 
 def _valid_sources(items: Any) -> bool:
     return all(isinstance(item.sources, tuple) and item.sources and all(isinstance(source, EvaluationQueryPortSource) for source in item.sources) for item in items)
-def _query_head_links(selections: tuple[ResolvedEvaluationQuerySelection, ...]) -> tuple[_RuleExprQueryHeadLink, ...]:
+def _query_head_links(
+    selections: tuple[ResolvedEvaluationQuerySelectionItem, ...],
+) -> tuple[_RuleExprQueryHeadLink, ...]:
     return tuple(sorted(
         _RuleExprQueryHeadLink(source.branch_id, item.alias, source.occurrence_alias, source.port_name)
-        for item in selections for source in item.sources
+        for item in selections
+        if isinstance(item, ResolvedEvaluationQuerySelection)
+        for source in item.sources
+    ))
+
+
+def _query_navigation_lookups(
+    selections: tuple[ResolvedEvaluationQuerySelectionItem, ...],
+) -> tuple[_RuleExprQueryNavigationLookup, ...]:
+    return tuple(sorted(
+        _RuleExprQueryNavigationLookup(
+            source.branch_id,
+            item.alias,
+            source.occurrence_alias,
+            source.port_name,
+            item.field_predicate_id,
+        )
+        for item in selections
+        if isinstance(item, ResolvedEvaluationQueryNavigationSelectionV0)
+        for source in item.sources
     ))
 
 

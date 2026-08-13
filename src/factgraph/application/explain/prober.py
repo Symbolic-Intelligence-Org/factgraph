@@ -113,6 +113,14 @@ def _probe_branch(
     failed_upstream = False
     join_indexes = {join.materialized_condition_index for join in trace.join_materializations}
     head_link_indexes = {link.materialized_condition_index for link in trace.head_port_link_materializations}
+    navigation_indexes = {
+        index
+        for navigation in trace.query_navigation_materializations
+        for index in (
+            navigation.lookup_materialized_condition_index,
+            navigation.projection_head_link_materialized_condition_index,
+        )
+    }
     policy_condition_indexes = {
         condition.materialized_condition_index
         for condition in trace.policy_condition_materializations
@@ -120,7 +128,7 @@ def _probe_branch(
 
     for idx, atom in enumerate(atoms):
         before_envs = envs
-        if idx in join_indexes or idx in head_link_indexes:
+        if idx in join_indexes or idx in head_link_indexes or idx in navigation_indexes:
             evidence_atom, envs, verdict_envs = _probe_atom(
                 atom,
                 before_envs,
@@ -183,6 +191,17 @@ def _probe_branch(
         _fold_join_status(_tree_status((head_rule, *body_rules)), joins),
         policy_conditions,
     )
+    metadata: dict[str, Any] = {
+        "branch_id": trace.branch_id,
+        "runtime_case_index": trace.runtime_case_index,
+    }
+    if navigation_indexes:
+        navigation_atom_ids = tuple(
+            atom_id_for_condition(trace.branch_id, index, materialized=True)
+            for index in sorted(navigation_indexes)
+        )
+        metadata["query_navigation_atom_ids"] = navigation_atom_ids
+        metadata["outside_policy_lineage_atom_ids"] = navigation_atom_ids
     return EvidenceTree(
         tree_id=trace.branch_id,
         status=status,
@@ -190,7 +209,7 @@ def _probe_branch(
         joins=joins,
         policy_conditions=policy_conditions,
         certainty=BOOLEAN_CERTAINTY,
-        metadata={"branch_id": trace.branch_id, "runtime_case_index": trace.runtime_case_index},
+        metadata=metadata,
     )
 
 
@@ -314,6 +333,14 @@ def _body_rules_for_branch(
     occurrence_by_alias = {occ.alias: occ for occ in plan.occurrence_map}
     join_indexes = {join.materialized_condition_index for join in trace.join_materializations}
     head_link_indexes = {link.materialized_condition_index for link in trace.head_port_link_materializations}
+    navigation_indexes = {
+        index
+        for navigation in trace.query_navigation_materializations
+        for index in (
+            navigation.lookup_materialized_condition_index,
+            navigation.projection_head_link_materialized_condition_index,
+        )
+    }
     condition_indexes = policy_condition_indexes or set()
     grouped: dict[str, list[EvidenceAtom]] = {alias: [] for alias in lowered_branch.occurrence_aliases}
     fallback_alias = lowered_branch.occurrence_aliases[0] if lowered_branch.occurrence_aliases else ""
@@ -321,6 +348,7 @@ def _body_rules_for_branch(
         if (
             idx in join_indexes
             or idx in head_link_indexes
+            or idx in navigation_indexes
             or idx in condition_indexes
             or idx in head_atom_indexes
         ):
@@ -354,6 +382,14 @@ def _head_atom_indexes_for_branch(
 ) -> set[int]:
     join_indexes = {join.materialized_condition_index for join in trace.join_materializations}
     head_link_indexes = {link.materialized_condition_index for link in trace.head_port_link_materializations}
+    navigation_indexes = {
+        index
+        for navigation in trace.query_navigation_materializations
+        for index in (
+            navigation.lookup_materialized_condition_index,
+            navigation.projection_head_link_materialized_condition_index,
+        )
+    }
     policy_condition_indexes = {
         condition.materialized_condition_index
         for condition in trace.policy_condition_materializations
@@ -361,6 +397,9 @@ def _head_atom_indexes_for_branch(
     out: set[int] = set()
     for idx, atom, _evidence_atom, _envs in atom_results:
         if idx in join_indexes or idx in head_link_indexes or idx in policy_condition_indexes:
+            continue
+        if idx in navigation_indexes:
+            out.add(idx)
             continue
         if alias_for_atom(atom, lowered_branch.occurrence_aliases) is not None:
             continue

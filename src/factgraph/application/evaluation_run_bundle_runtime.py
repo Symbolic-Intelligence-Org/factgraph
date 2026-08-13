@@ -38,6 +38,7 @@ from .evaluation_query_runtime import (
 )
 from .protocol.common import ProtocolShapeError
 from .protocol.derivation import CompiledDerivationPlan
+from .protocol.evaluation_query import EvaluationQueryFieldNavigationV0
 from .protocol.evaluate_result import (
     EvaluateResult,
     canonical_bytes_for_evaluate,
@@ -47,6 +48,7 @@ from .protocol.evaluation_run import (
     EvaluationRunAnchorV0,
     EvaluationRunBindingV0,
     EvaluationRunExecutionProfileV0,
+    EvaluationRunNavigationSelectionV0,
     EvaluationRunRowAnchorV0,
     EvaluationRunRulePinV0,
     EvaluationRunSelectionV0,
@@ -922,6 +924,7 @@ _WIRE_TYPES = {
         SemanticPortAddress,
         FieldPath,
         PolicyFieldNavigation,
+        EvaluationQueryFieldNavigationV0,
         PolicyStructureNodeV0,
         PolicyCompareStructureNodeV0,
         PolicyStructureV0,
@@ -933,6 +936,7 @@ _WIRE_TYPES = {
         EvaluationRunTargetV0,
         EvaluationRunBindingV0,
         EvaluationRunSelectionV0,
+        EvaluationRunNavigationSelectionV0,
         EvaluationRunExecutionProfileV0,
         EvaluationRunRowAnchorV0,
         EvaluationRunSummaryAnchorV0,

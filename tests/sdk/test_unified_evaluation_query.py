@@ -23,7 +23,8 @@ from factgraph.application.protocol import (
     EntitySelector,
     EvaluationQuery,
     EvaluationQueryBinding,
-    EvaluationQuerySelection,
+    EvaluationQueryFieldNavigationV0,
+    EvaluationQueryNavigationSelectionV0,
     FieldPath,
     Policy,
     PolicyAll,
@@ -79,6 +80,18 @@ def _bundle(graph: SDKStore):
     )
 
 
+def _identity_bundle(graph: SDKStore):
+    index = build_schema_index(graph.schema_ir)
+    person = Var("$person")
+    return build_resolved_rule(
+        id="person_identity_only",
+        version="1",
+        when=(PredAtom("Person:exists", [person]),),
+        ports={"person": SemanticRulePort(person, entity_identity("Person"))},
+        schema_index=index,
+    )
+
+
 def _seed(graph: SDKStore, employee_id: str, *, age: int, score: int) -> str:
     index = build_schema_index(graph.schema_ir)
     ref = resolve_selector(
@@ -95,6 +108,153 @@ def _seed(graph: SDKStore, employee_id: str, *, age: int, score: int) -> str:
 
 
 class UnifiedEvaluationQueryTests(unittest.TestCase):
+    def test_query_navigation_adds_lookup_not_present_in_authored_rule_and_missing_field_is_zero_rows(self) -> None:
+        graph = SDKStore([Person])
+        _seed(graph, "alice", age=22, score=9)
+        bundle = _identity_bundle(graph)
+        compiled = (
+            graph.query(bundle)
+            .bind(_address("target", "person"), EntityRef("Person", {"employee_id": "alice"}))
+            .select(
+                "age",
+                EvaluationQueryFieldNavigationV0(
+                    _address("target", "person"), FieldPath("Person", "age")
+                ),
+            )
+            .compile()
+        )
+        self.assertEqual(
+            tuple(compiled.target.compiled_policy._body_plan.branches[0].body_atoms),
+            (PredAtom("Person:exists", [Var("$target__person")]),),
+        )
+        self.assertEqual(graph.eval.evaluate(compiled)[0].bindings["age"]["value"], 22)
+
+        missing = SDKStore([Person])
+        index = build_schema_index(missing.schema_ir)
+        ref = resolve_selector(
+            EntitySelector(entity_type="Person", identity={"employee_id": "without-age"}),
+            index=index,
+        )
+        set_field(missing.ledger, entity_info(index, "Person").exists_predicate_id, ref.encoded_ref or "", [])
+        set_field(
+            missing.ledger,
+            entity_info(index, "Person").identity_predicates["employee_id"].pred_id,
+            ref.encoded_ref or "",
+            [("string", "without-age")],
+        )
+        missing_compiled = (
+            missing.query(_identity_bundle(missing))
+            .bind(
+                _address("target", "person"),
+                EntityRef("Person", {"employee_id": "without-age"}),
+            )
+            .select(
+                "age",
+                EvaluationQueryFieldNavigationV0(
+                    _address("target", "person"), FieldPath("Person", "age")
+                ),
+            )
+            .compile()
+        )
+        result = missing.eval.evaluate(missing_compiled)
+        self.assertEqual(result.count(), 0)
+        self.assertEqual(result.run_anchor.summary.truth_interpretation, "not_asserted")
+
+    def test_query_navigation_executes_explains_captures_and_keeps_same_age_identity(self) -> None:
+        graph = SDKStore([Person])
+        alice = _seed(graph, "alice", age=22, score=9)
+        bob = _seed(graph, "bob", age=22, score=7)
+        builder = (
+            graph.query(_bundle(graph))
+            .bind(_address("target", "person"), EntityRef("Person", {"employee_id": "alice"}))
+            .select(
+                "age",
+                EvaluationQueryFieldNavigationV0(
+                    _address("target", "person"), FieldPath("Person", "age")
+                ),
+            )
+        )
+
+        expected = builder.expect_contains("alice_age", age=22).compile()
+        observed = graph.eval.evaluate(expected)
+        self.assertEqual(observed.expectation_results[0].status, "satisfied")
+        result = graph.eval.evaluate(builder.compile(), capture="run_bundle_v0")
+        self.assertEqual(result[0].bindings["age"]["value"], 22)
+        explanation = result[0].explain()
+        self.assertEqual(explanation.status, "passed")
+        assert explanation.evidence is not None and result.run_bundle is not None
+        tree = explanation.evidence.paths[0]
+        navigation_ids = tuple(tree.metadata["query_navigation_atom_ids"])
+        self.assertEqual(len(navigation_ids), 2)
+        body_atoms = {
+            atom.atom_id
+            for rule in tree.rules
+            if rule.role == "body"
+            for atom in rule.atoms
+        }
+        self.assertFalse(set(navigation_ids) & body_atoms)
+        navigation_fact = next(
+            atom
+            for rule in tree.rules
+            if rule.role == "head"
+            for atom in rule.atoms
+            if atom.atom_id == navigation_ids[0]
+        )
+        self.assertEqual(navigation_fact.form.terms[0].value, alice)
+        self.assertNotEqual(navigation_fact.form.terms[0].value, bob)
+
+        detached = evaluation_run_bundle_from_bytes(
+            evaluation_run_bundle_bytes(result.run_bundle)
+        )
+        self.assertEqual(
+            verify_evaluation_run_bundle(detached).verdict,
+            "matched_declared_runtime",
+        )
+        evidence = evaluation_run_bundle_evidence(
+            detached, row_capture_digest=detached.rows[0].row_capture_digest
+        )
+        metadata_ids = tuple(evidence.metadata["query_navigation_atom_ids"])
+        self.assertEqual(len(metadata_ids), 1)
+        self.assertTrue(
+            set(metadata_ids) <= set(evidence.metadata["outside_policy_lineage_atom_ids"])
+        )
+        self.assertIn("person:age", detached.dependency_predicate_ids)
+
+    def test_query_navigation_scenario_replaces_field_and_marks_hypothesis_source(self) -> None:
+        graph = SDKStore([Person])
+        _seed(graph, "alice", age=22, score=9)
+        builder = (
+            graph.query(_bundle(graph))
+            .bind(_address("target", "person"), EntityRef("Person", {"employee_id": "alice"}))
+            .select(
+                "age",
+                EvaluationQueryFieldNavigationV0(
+                    _address("target", "person"), FieldPath("Person", "age")
+                ),
+            )
+        )
+        run = builder.what_if(
+            ScenarioFieldSubstitutionV0(
+                EntityRef("Person", {"employee_id": "alice"}),
+                FieldPath("Person", "age"),
+                35,
+                "alice-age",
+            )
+        ).run()
+        self.assertEqual(dict(run.baseline.rows[0].values)["age"].value, 22)
+        self.assertEqual(dict(run.effective.rows[0].values)["age"].value, 35)
+        effective = run.explain(
+            side="effective", row_capture_digest=run.effective.rows[0].row_capture_digest
+        )
+        sources = [
+            source
+            for tree in effective.evidence.paths
+            for rule in tree.rules
+            for atom in rule.atoms
+            for source in getattr(atom.verdict, "support", ())
+        ]
+        self.assertIn("scenario_hypothesis", {source.meta["role"] for source in sources})
+
     def test_rule_target_runs_captures_verifies_and_projects_evidence(self) -> None:
         graph = SDKStore([Person])
         alice = _seed(graph, "alice", age=22, score=9)
@@ -149,14 +309,26 @@ class UnifiedEvaluationQueryTests(unittest.TestCase):
         from_builder = (
             graph.query(policy, address_space=space)
             .bind(_address("person", "person"), EntityRef("Person", {"employee_id": "alice"}))
-            .select("age", _address("person", "age"))
+            .select(
+                "age",
+                EvaluationQueryFieldNavigationV0(
+                    _address("person", "person"), FieldPath("Person", "age")
+                ),
+            )
             .compile()
         )
         direct_policy = compile_policy(policy, address_space=space)
         direct = compile_evaluation_query(
             EvaluationQuery(
                 direct_policy.policy_digest,
-                (EvaluationQuerySelection("age", _address("person", "age")),),
+                (
+                    EvaluationQueryNavigationSelectionV0(
+                        "age",
+                        EvaluationQueryFieldNavigationV0(
+                            _address("person", "person"), FieldPath("Person", "age")
+                        ),
+                    ),
+                ),
                 (EvaluationQueryBinding(_address("person", "person"), EntityRef("Person", {"employee_id": "alice"})),),
             ),
             compiled_policy=direct_policy,
@@ -167,6 +339,11 @@ class UnifiedEvaluationQueryTests(unittest.TestCase):
         self.assertEqual(from_builder.compiled_query._lowering_plan, direct._lowering_plan)
         result = graph.eval.evaluate(from_builder)
         assert result.run_anchor is not None
+        self.assertEqual(result[0].bindings["age"]["value"], 22)
+        self.assertEqual(
+            type(result.run_anchor.selections[0]).__name__,
+            "EvaluationRunNavigationSelectionV0",
+        )
         self.assertEqual(result.run_anchor.target.original_target_kind, "policy")
         self.assertEqual(result.run_anchor.target.normalization_kind, "policy_direct_v0")
         self.assertEqual(result.run_anchor.target.target_id, "people")

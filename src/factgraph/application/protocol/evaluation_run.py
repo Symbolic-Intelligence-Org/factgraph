@@ -2,11 +2,12 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass, is_dataclass
 import json
-from typing import Literal
+from typing import Literal, TypeAlias
 
 from factgraph.core.protocol.digests import sha256_hex
 
 from .common import ProtocolShapeError
+from .evaluation_query import EvaluationQueryFieldNavigationV0
 from .policy import PolicyLineage, PolicyStructureV0
 from .semantic_address import SemanticPortAddress
 
@@ -134,6 +135,35 @@ class EvaluationRunSelectionV0:
 
 
 @dataclass(frozen=True)
+class EvaluationRunNavigationSelectionV0:
+    """One sealed Query-owned field-navigation selection in a Run anchor.
+
+    This deliberately parallels rather than extends ``EvaluationRunSelectionV0``
+    so historical direct-only anchor and bundle wire shapes remain unchanged.
+    ``field_predicate_id`` is the compiler-resolved field relation consumed by
+    the captured native plan; the nested navigation remains the caller's typed
+    intent.
+    """
+
+    alias: str
+    navigation: EvaluationQueryFieldNavigationV0
+    value_type: str
+    field_predicate_id: str
+
+    def __post_init__(self) -> None:
+        _text(self.alias, "alias")
+        if not isinstance(self.navigation, EvaluationQueryFieldNavigationV0):
+            raise ProtocolShapeError("EvaluationRun navigation selection is invalid")
+        _text(self.value_type, "value_type")
+        _text(self.field_predicate_id, "field_predicate_id")
+
+
+EvaluationRunSelectionItemV0: TypeAlias = (
+    EvaluationRunSelectionV0 | EvaluationRunNavigationSelectionV0
+)
+
+
+@dataclass(frozen=True)
 class EvaluationRunExecutionProfileV0:
     engine: str
     engine_version: str | None
@@ -218,7 +248,7 @@ class EvaluationRunAnchorV0:
     target: EvaluationRunTargetV0
     query_digest: str
     bindings: tuple[EvaluationRunBindingV0, ...]
-    selections: tuple[EvaluationRunSelectionV0, ...]
+    selections: tuple[EvaluationRunSelectionItemV0, ...]
     execution_profile: EvaluationRunExecutionProfileV0
     projection_head_id: str
     projection_head_content_digest: str
@@ -254,7 +284,15 @@ class EvaluationRunAnchorV0:
             raise ProtocolShapeError("EvaluationRun execution profile is invalid")
         if not isinstance(self.bindings, tuple) or not all(isinstance(item, EvaluationRunBindingV0) for item in self.bindings):
             raise ProtocolShapeError("EvaluationRun bindings are invalid")
-        if not isinstance(self.selections, tuple) or not self.selections or not all(isinstance(item, EvaluationRunSelectionV0) for item in self.selections):
+        if (
+            not isinstance(self.selections, tuple)
+            or not self.selections
+            or not all(
+                isinstance(item, (EvaluationRunSelectionV0, EvaluationRunNavigationSelectionV0))
+                for item in self.selections
+            )
+            or len({item.alias for item in self.selections}) != len(self.selections)
+        ):
             raise ProtocolShapeError("EvaluationRun selections are invalid")
         if not isinstance(self.row_anchors, tuple) or not all(isinstance(item, EvaluationRunRowAnchorV0) for item in self.row_anchors):
             raise ProtocolShapeError("EvaluationRun row anchors are invalid")
@@ -318,6 +356,7 @@ def _prefixed_hex(value: object, prefix: str, name: str) -> None:
 
 __all__ = [
     "EvaluationRunAnchorV0", "EvaluationRunBindingV0", "EvaluationRunExecutionProfileV0",
-    "EvaluationRunRowAnchorV0", "EvaluationRunRulePinV0", "EvaluationRunSelectionV0",
+    "EvaluationRunNavigationSelectionV0", "EvaluationRunRowAnchorV0",
+    "EvaluationRunRulePinV0", "EvaluationRunSelectionItemV0", "EvaluationRunSelectionV0",
     "EvaluationRunSummaryAnchorV0", "EvaluationRunTargetV0",
 ]

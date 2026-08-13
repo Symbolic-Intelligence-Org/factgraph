@@ -32,7 +32,7 @@ from .policy_runtime import CompiledPolicyV0, _assert_compiled_policy_current, c
 from .protocol.evaluation_query import (
     EvaluationQuery, EvaluationQueryError,
     EvaluationQueryBinding,
-    EvaluationQuerySelection,
+    EvaluationQuerySelectionItem,
 )
 from .protocol.evaluation_run import EvaluationRunTargetV0
 from .protocol.policy import Policy, PolicyOccurrence
@@ -190,7 +190,7 @@ def compile_targeted_evaluation_query(
     target: ResolvedEvaluationQueryTargetV1,
     *,
     bindings: tuple[EvaluationQueryBinding, ...],
-    selections: tuple[EvaluationQuerySelection, ...],
+    selections: tuple[EvaluationQuerySelectionItem, ...],
     expectations: tuple[ContainsRowExpectationV0, ...] = (),
     schema_index: SchemaIndex,
 ) -> TargetedCompiledEvaluationQueryV0:

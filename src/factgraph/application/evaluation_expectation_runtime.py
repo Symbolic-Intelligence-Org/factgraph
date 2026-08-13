@@ -6,6 +6,7 @@ from collections.abc import Mapping, Sequence
 
 from .evaluation_query_runtime import (
     CompiledEvaluationQueryV0,
+    ResolvedEvaluationQueryNavigationSelectionV0,
     ResolvedEvaluationQuerySelection,
     _canonical_value,
 )
@@ -164,7 +165,7 @@ def assert_compiled_contains_row_expectation_current(
 
 
 def _normalize_expected_value(
-    selection: ResolvedEvaluationQuerySelection,
+    selection: ResolvedEvaluationQuerySelection | ResolvedEvaluationQueryNavigationSelectionV0,
     raw_value: object,
     *,
     address_space: SemanticAddressSpace,
@@ -173,6 +174,28 @@ def _normalize_expected_value(
     """Reuse F3's endpoint-aware normalization rather than compare Python reprs."""
 
     try:
+        if isinstance(selection, ResolvedEvaluationQueryNavigationSelectionV0):
+            if isinstance(raw_value, EntityRef):
+                raise ValueError("field navigation expects scalar value")
+            predicate = field_predicate(
+                schema_index,
+                selection.navigation.field.entity_type,
+                selection.navigation.field.field_name,
+            )
+            if (
+                predicate.pred_id != selection.field_predicate_id
+                or predicate.is_identity_field
+                or predicate.cardinality != "single"
+                or str(predicate.value_type_domain) != selection.value_type
+            ):
+                raise ValueError("compiled Query navigation no longer matches its schema field")
+            value = raw_value.lower() if selection.value_type == "uuid" and isinstance(raw_value, str) else raw_value
+            normalized = claim_args_from_rest_terms([(selection.value_type, value)])[0][1]
+            if isinstance(normalized, str) and normalized.startswith("$"):
+                raise ValueError("native lowering cannot preserve a '$'-prefixed string constant")
+            validate_field_value(normalized, pred_info=predicate)
+            canonical, digest = _canonical_value(selection.value_type, normalized)
+            return selection.value_type, canonical, digest
         endpoint = address_space.resolve(selection.address).endpoint
         if isinstance(endpoint, EntityIdentityEndpoint):
             if not isinstance(raw_value, EntityRef) or raw_value.entity_type != endpoint.entity_type:

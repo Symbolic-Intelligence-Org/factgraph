@@ -35,6 +35,7 @@ from .evaluation_run_bundle_runtime import (
 )
 from .evaluation_run_verification_runtime import _materialize_evaluation_run_bundle_input
 from .protocol.common import ProtocolShapeError
+from .protocol.evaluation_run import EvaluationRunNavigationSelectionV0
 from .protocol.evaluation_run_bundle import (
     EvaluationRunBundleV0,
     EvaluationRunProjectionRowV0,
@@ -90,18 +91,35 @@ def _evaluation_run_bundle_evidence(
     body_count = len(body_refs)
     policy_condition_count = len(condition_refs)
     query_binding_count = len(bundle.run_anchor.bindings)
+    navigation_selections = tuple(sorted(
+        (
+            item
+            for item in bundle.run_anchor.selections
+            if isinstance(item, EvaluationRunNavigationSelectionV0)
+        ),
+        key=lambda item: item.alias,
+    ))
+    query_navigation_count = len(navigation_selections)
     join_count = len(unify_refs)
     head_link_count = len(bundle.run_anchor.selections)
     if len(branch) != (
         body_count
         + policy_condition_count
         + query_binding_count
+        + query_navigation_count
         + join_count
         + head_link_count
     ):
         raise ProtocolShapeError(
             "captured branch cannot be partitioned into Policy, Query, join, and head atoms"
         )
+    navigation_start = body_count + policy_condition_count + query_binding_count
+    for offset, selection in enumerate(navigation_selections):
+        atom = branch[navigation_start + offset]
+        if len(atom) < 2 or atom[0] != "pred" or atom[1] != selection.field_predicate_id:
+            raise ProtocolShapeError(
+                "captured Query navigation does not match its sealed selection"
+            )
 
     witnesses = {item.pred_condition_key: item for item in receipt.pred_witnesses}
     steps = {item.step_key: item for item in receipt.non_fact_steps}
@@ -122,6 +140,7 @@ def _evaluation_run_bundle_evidence(
     policy_conditions: list[EvidencePolicyCondition] = []
     outside_atoms: list[EvidenceAtom] = []
     query_atom_ids: list[str] = []
+    query_navigation_atom_ids: list[str] = []
     head_atom_ids: list[str] = []
     policy_condition_atom_ids: list[str] = []
 
@@ -175,7 +194,10 @@ def _evaluation_run_bundle_evidence(
         ):
             query_atom_ids.append(atom_id)
             outside_atoms.append(evidence)
-        elif index >= body_count + policy_condition_count + query_binding_count + join_count:
+        elif navigation_start <= index < navigation_start + query_navigation_count:
+            query_navigation_atom_ids.append(atom_id)
+            outside_atoms.append(evidence)
+        elif index >= navigation_start + query_navigation_count + join_count:
             head_atom_ids.append(atom_id)
             outside_atoms.append(evidence)
 
@@ -186,6 +208,7 @@ def _evaluation_run_bundle_evidence(
         body_count=body_count,
         policy_condition_count=policy_condition_count,
         query_binding_count=query_binding_count,
+        query_navigation_count=query_navigation_count,
         refs=unify_refs,
         steps=steps,
     )
@@ -203,7 +226,7 @@ def _evaluation_run_bundle_evidence(
     )
     selected_anchor = bundle.run_anchor.row_anchors[row.ordinal]
     certainty = _certainty(row)
-    outside_ids = tuple((*query_atom_ids, *head_atom_ids))
+    outside_ids = tuple((*query_atom_ids, *query_navigation_atom_ids, *head_atom_ids))
     metadata = {
         "evidence_mode": "detached_receipt_playback_v0",
         "logical_verification": "not_performed",
@@ -234,6 +257,8 @@ def _evaluation_run_bundle_evidence(
         ),
         "join_condition_ids": tuple(join_condition_ids),
     }
+    if query_navigation_atom_ids:
+        metadata["query_navigation_atom_ids"] = tuple(query_navigation_atom_ids)
     if metadata_extra is not None:
         overlap = set(metadata) & set(metadata_extra)
         if overlap:
@@ -417,12 +442,18 @@ def _captured_joins(
     body_count: int,
     policy_condition_count: int,
     query_binding_count: int,
+    query_navigation_count: int,
     refs: tuple[PolicyLoweredRef, ...],
     steps: Mapping[str, Any],
 ) -> tuple[tuple[EvidenceJoin, ...], tuple[tuple[str, str], ...]]:
     joins: list[EvidenceJoin] = []
     keys: list[tuple[str, str]] = []
-    offset = body_count + policy_condition_count + query_binding_count
+    offset = (
+        body_count
+        + policy_condition_count
+        + query_binding_count
+        + query_navigation_count
+    )
     for ordinal, ref in enumerate(refs):
         index = offset + ordinal
         atom = branch[index]

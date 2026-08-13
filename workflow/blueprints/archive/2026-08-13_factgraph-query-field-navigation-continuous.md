@@ -1,6 +1,6 @@
 # Task Blueprint: FactGraph Query field-navigation continuous delivery
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-08-13
 - Last Updated: 2026-08-13
 - Branch: `codex/v0.3.0-factgraph-whatif-v1-continuous-2026-08-13`
@@ -52,14 +52,14 @@ live and detached paths.
 
 ## 6. Acceptance
 
-- [ ] Compiler and SDK contract cover valid and rejected source shapes.
-- [ ] Query digest/sealing, native execution, value recovery and expectations
+- [x] Compiler and SDK contract cover valid and rejected source shapes.
+- [x] Query digest/sealing, native execution, value recovery and expectations
   cover mixed direct/navigation selection.
-- [ ] Live Explain and detached F4 evidence partition navigation outside Policy
+- [x] Live Explain and detached F4 evidence partition navigation outside Policy
   lineage, and old direct-only capture remains valid.
-- [ ] Scenario replacement of the navigated field works through detached
+- [x] Scenario replacement of the navigated field works through detached
   explain/diff/verify with the correct source role.
-- [ ] Focused, concentrated and application/SDK regression checks are clean;
+- [x] Focused, concentrated and application/SDK regression checks are clean;
   affected module docs describe only shipped v0 behavior.
 
 ## 7. Implementation plan
@@ -81,4 +81,32 @@ live and detached paths.
 
 ## 9. Outcome / deviations
 
-To be completed after implementation and independent review.
+Delivered the bounded Query projection extension
+`EvaluationQueryFieldNavigationV0` and its parallel navigation-selection
+unions. `fg.query(...).select(...)` can now project exactly one field from an
+identity port when the field belongs to the same entity, is single-valued,
+scalar, and non-identity. `bind(...)` remains direct-port-only. The compiler
+adds a Query-owned lookup after direct binds and before joins; it seals the
+typed intent and branch map into the Query digest while leaving the Policy
+digest, structure, and lineage unchanged.
+
+The same selection flows through native result recovery, `expect_contains`,
+live Explain, the EvaluationRun anchor/bundle codec/detached evidence and the
+captured ScenarioRun path. Live Explain obtains the navigation base only from
+the exact native `ProofReceipt`; it fails closed rather than inferring an
+identity from a scalar. Missing field evidence produces a valid zero-row result
+whose Run summary remains `not_asserted`, never a nullable or false result.
+
+Verification: focused Query tests `36 passed`; full application discovery
+`129 passed`; full SDK discovery `190 passed`; targeted `ruff --no-cache` and
+`git diff --check` passed. Three independent read-only reviews found no P0/P1
+issue. They led to permanent coverage for direct Policy navigation, an
+identity-only Rule whose selected field is absent from its authored body, and
+the zero-row missing-field case. Targeted mypy is not a clean repository gate:
+it reports 571 pre-existing errors across 74 files, none introduced or isolated
+by Q14.
+
+Deliberate carry-forward: navigation remains select-only and native-only; no
+relationship/multi-hop traversal, navigation binding, general QueryPlan,
+operator/action, authorization, Agent/Meander, persistence, or broader
+What-if grammar is introduced.

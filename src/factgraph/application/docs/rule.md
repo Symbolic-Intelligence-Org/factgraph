@@ -324,7 +324,9 @@ starts at an EntityIdentity endpoint and can reach only one known scalar field
 of that same entity type. Both sides must have the same scalar domain.
 `eq`/`ne` canonicalize operand order; native ordering is deliberately limited
 to `int` and `time`. Entity references, multi-value fields, literals,
-relationships, multi-hop paths, and Query-level navigation are rejected.
+relationships and multi-hop paths are rejected from Policy logic. The separate
+select-side Query navigation described below is not a Policy condition and
+never changes a Policy's identity, structure, lineage, or evidence ownership.
 
 Like `PolicyUnify`, a compare is branch-total in its owning `PolicyAll`.
 Placing it inside the appropriate branch of `PolicyAny` is valid; placing it
@@ -348,9 +350,10 @@ DNF-generated aliases retain their authored occurrence alias explicitly;
 neither structure nor lineage parses generated names or `repr`. Lineage covers
 each authored node and every emitted branch, occurrence, Rule-body atom, Unify
 coordinate, and compiler-owned Compare condition. Compare conditions are
-sealed separately from reusable Rule bodies: a navigation lookup (when needed)
-precedes its compare atom, then normal Query bindings, Unify atoms, and the
-synthetic projection head follow.
+sealed separately from reusable Rule bodies. Within a materialized branch the
+fixed order is Rule bodies, Policy-owned conditions (including any Policy
+navigation lookup), Query bindings, Query-owned navigation lookups, Unify
+atoms, then synthetic projection-head links.
 
 This artifact is intentionally not executable by itself. It has no result
 head, bindings, assumptions, engine configuration, rows, or explanation. The
@@ -360,7 +363,8 @@ projection head; execution still remains a later slice.
 ## EvaluationQuery v0 projection
 
 `EvaluationQuery` describes exact Policy-owned direct-port bindings and ordered
-named selections:
+named selections. A selection is either one direct semantic port or one
+Query-owned, one-hop identity-to-scalar-field navigation:
 
 ```python
 from factgraph.application import compile_evaluation_query
@@ -368,7 +372,10 @@ from factgraph.application.protocol import (
     EntityRef,
     EvaluationQuery,
     EvaluationQueryBinding,
+    EvaluationQueryFieldNavigationV0,
+    EvaluationQueryNavigationSelectionV0,
     EvaluationQuerySelection,
+    FieldPath,
     SemanticPortAddress,
 )
 
@@ -381,8 +388,13 @@ query = EvaluationQuery(
         ),
     ),
     selections=(
-        EvaluationQuerySelection(
-            "other_age", SemanticPortAddress("person2", "age")
+        EvaluationQuerySelection("other", SemanticPortAddress("person2", "person")),
+        EvaluationQueryNavigationSelectionV0(
+            "other_age",
+            EvaluationQueryFieldNavigationV0(
+                base=SemanticPortAddress("person2", "person"),
+                field=FieldPath("Person", "age"),
+            ),
         ),
     ),
 )
@@ -395,25 +407,31 @@ compiled_query = compile_evaluation_query(
 ```
 
 `bind` is compiled into a typed equality inside every DNF branch; it is not an
-assertion, write, or post-filter. `select` maps an output alias to one exact
-occurrence port and changes only projection. Both sources must exist in every
-Policy branch. Branch-local sources fail with
+assertion, write, or post-filter. A direct `select` maps an output alias to one
+exact occurrence port. A navigation `select` maps it to one compiler-owned
+field lookup whose base is an identity port and whose field is a same-entity,
+single, non-identity scalar. Both direct sources and navigation bases must
+exist in every Policy branch. Branch-local sources fail with
 `PARTIAL_BRANCH_QUERY_ADDRESS` instead of being ignored or filled with null.
+A missing navigated field fact yields no projected row; it is not `null`,
+logical `false`, or a completeness claim.
 
 Identity bindings are re-encoded from their identity fields with the trusted
 schema; a caller-supplied `EntityRef.encoded_ref` is not trusted. Field bindings
 are validated and converted to the canonical storage atom for their schema
 domain. Binding order is canonical; selection order remains the output-column
-contract and therefore contributes to `query_digest`.
+contract and therefore contributes to `query_digest`. A navigation additionally
+commits its typed base, `FieldPath`, resolved field predicate and branch source
+map to that digest, without changing the compiled Policy digest.
 
 Because shipped Where IR reserves `$`-prefixed strings as variables, v0 rejects
 such direct string-field bindings with `QUERY_BINDING_TYPE_MISMATCH`. Identity
 strings inside `EntityRef` are safe because they are encoded to an idref first.
 
 `CompiledEvaluationQueryV0` contains the synthetic projection Rule, explicit
-per-branch source mappings, normalized bindings and an engine-neutral lowering
-plan. The initial execution bridge accepts that exact artifact through the
-existing SDK result surface:
+per-branch direct/navigation source mappings, normalized bindings and an
+engine-neutral lowering plan. The initial execution bridge accepts that exact
+artifact through the existing SDK result surface:
 
 ```python
 result = fg.eval.evaluate(compiled_query, engine="native")
@@ -435,7 +453,7 @@ live-view guard, not an immutable snapshot or historical replay guarantee.
 
 Successful compiled Query results also expose `result.run_anchor`, an immutable
 `EvaluationRunAnchorV0`. It commits the original/normalized Policy target,
-Policy structure and lineage, Rule pins, bind/select intent, native execution
+Policy structure and lineage, Rule pins, direct/navigation bind/select intent, native execution
 profile, view/result identity, stable semantic row anchors and a query-summary
 anchor. The summary exists for zero rows but explicitly makes no truth claim;
 completeness is unknown and ordering is unspecified. Existing run/result/row
@@ -503,8 +521,9 @@ evidence = evaluation_run_bundle_evidence(
 ```
 
 This returns one engine-centric `EvidenceGraph` for the ProofReceipt-selected
-branch. Predicate support uses captured assertion IDs, while Query binding and
-projection-head atoms are explicitly marked as outside authored Policy lineage.
+branch. Predicate support uses captured assertion IDs, while Query binding,
+Query-navigation lookup, and projection-head atoms are explicitly marked as
+outside authored Policy lineage.
 It reports captured evidence only: authenticity remains unverified and logical
 verification is not performed. It does not call an evaluator, fabricate evidence
 for empty results, inspect unselected OR branches, or produce an `Explanation`.
@@ -531,8 +550,9 @@ policy_view = project_policy_explanation_v0(
 `PolicyExplanationViewV0` uses the compiler-issued `PolicyStructureV0` and
 `PolicyLineage` rather than generated alias parsing. It maps direct body atoms
 and structured joins to their exact authored occurrence/unify nodes, then folds
-the authored `All`/`Any` tree. Query-binding and synthetic projection-head atoms
-remain visible in the inner evidence but are listed as outside Policy lineage;
+the authored `All`/`Any` tree. Query-binding, Query-navigation lookup, and
+synthetic projection-head atoms remain visible in the inner evidence but are
+listed as outside Policy lineage;
 they never change a Policy node state. The projection is total-or-error: it
 rejects incomplete, duplicate, stale, or internally contradictory evidence
 (including a body-rule status that disagrees with its atoms), rather than showing
@@ -592,8 +612,11 @@ because of this provenance label.
 
 String policy ids, registries, Packages, dotted field paths, bare Rules,
 Policy without `address_space=`, generic `expect`, modes, empty-select existence,
-Query-level navigation and external Operators are deliberately not accepted by this v1
-facade. `ScenarioFieldSubstitutionV0` and the explicit atomic
+and external Operators are deliberately not accepted by this v1 facade.
+`.select(...)` accepts only a direct `SemanticPortAddress` or the structured,
+select-only `EvaluationQueryFieldNavigationV0` described above; it does not
+admit navigation in `bind`, Policy logic, or a generic traversal language.
+`ScenarioFieldSubstitutionV0` and the explicit atomic
 `ScenarioFieldSubstitutionSetV0` may be forwarded through `.evaluate(scenario=...)`.
 Both retain the no-anchor/no-bundle/no-live-evidence boundary; neither is a
 general What-if language.

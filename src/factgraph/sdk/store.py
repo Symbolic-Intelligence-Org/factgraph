@@ -4136,7 +4136,11 @@ class SDKStore:
         row_provenance_envelopes: Mapping[str, ProvenanceEnvelope],
     ):
         if engine == "native" and lowering_plan is not None:
-            return self._row_graph_builder_for_lowering_plan(lowering_plan, rules_by_id=lowering_rules_by_id or {})
+            return self._row_graph_builder_for_lowering_plan(
+                lowering_plan,
+                rules_by_id=lowering_rules_by_id or {},
+                row_support_artifacts=row_support_artifacts,
+            )
         if engine == "souffle":
             return self._souffle_row_graph_builder(
                 row_support_artifacts,
@@ -4159,14 +4163,24 @@ class SDKStore:
         plan: RuleExprLoweringPlan,
         *,
         rules_by_id: Mapping[str, ApplicationRule],
+        row_support_artifacts: Mapping[str, ProofReceipt],
     ):
         def _builder(row: Any, result: EvaluateResult, metadata: Mapping[str, Any]) -> EvidenceGraph:
+            exact_query_navigation_bindings: Mapping[str, Any] | None = None
+            if plan.query_navigation_lookups:
+                receipt = row_support_artifacts.get(row.row_id)
+                if not isinstance(receipt, ProofReceipt):
+                    raise ValueError(
+                        "EvaluationQuery navigation explanation requires an exact native ProofReceipt"
+                    )
+                exact_query_navigation_bindings = binding_dict_from_items(receipt.binding_items)
             return self._probe_evidence_graph_for_lowering_plan(
                 plan,
                 result=result,
                 row=row,
                 metadata=metadata,
                 rules_by_id=rules_by_id,
+                exact_query_navigation_bindings=exact_query_navigation_bindings,
             )
 
         return _builder
@@ -4348,6 +4362,7 @@ class SDKStore:
         metadata: Mapping[str, Any],
         rules_by_id: Mapping[str, ApplicationRule] | None = None,
         pin_bindings: Mapping[str, Any] | None = None,
+        exact_query_navigation_bindings: Mapping[str, Any] | None = None,
     ) -> EvidenceGraph:
         view_facts = project_view_facts(self.ledger, self._schema_ir)
         if pin_bindings is not None:
@@ -4357,6 +4372,12 @@ class SDKStore:
             display_bindings = self._display_pin_bindings(pin_bindings)
         elif row is not None:
             initial_bindings = _initial_probe_bindings_for_row(row, plan)
+            if plan.query_navigation_lookups:
+                if not isinstance(exact_query_navigation_bindings, Mapping):
+                    raise ValueError(
+                        "EvaluationQuery navigation explanation lacks exact receipt bindings"
+                    )
+                initial_bindings.update(exact_query_navigation_bindings)
             display_bindings = self._display_bindings_for_row(row)
         else:
             initial_bindings = {}

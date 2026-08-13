@@ -15,7 +15,10 @@ from factgraph.application.evaluation_query_target_runtime import (
 from factgraph.application.protocol.evaluation_query import (
     EvaluationQueryBinding,
     EvaluationQueryError,
+    EvaluationQueryFieldNavigationV0,
+    EvaluationQueryNavigationSelectionV0,
     EvaluationQuerySelection,
+    EvaluationQuerySelectionItem,
 )
 from factgraph.application.protocol.evaluation_expectation import ContainsRowExpectationV0
 from factgraph.application.protocol.evaluation_scenario import (
@@ -40,7 +43,7 @@ class EvaluationQueryBuilderV1:
     _graph: "SDKStore"
     _target: ResolvedEvaluationQueryTargetV1
     _bindings: tuple[EvaluationQueryBinding, ...] = ()
-    _selections: tuple[EvaluationQuerySelection, ...] = ()
+    _selections: tuple[EvaluationQuerySelectionItem, ...] = ()
     _expectations: tuple[ContainsRowExpectationV0, ...] = ()
 
     def bind(self, address: SemanticPortAddress, value: Any) -> "EvaluationQueryBuilderV1":
@@ -52,11 +55,26 @@ class EvaluationQueryBuilderV1:
             raise SDKStoreError(f"query bind rejected: {exc}", code=exc.code) from exc
         return replace(self, _bindings=(*self._bindings, binding))
 
-    def select(self, alias: str, address: SemanticPortAddress) -> "EvaluationQueryBuilderV1":
-        """Add one ordered projection; at least one selection is required."""
+    def select(
+        self,
+        alias: str,
+        source: SemanticPortAddress | EvaluationQueryFieldNavigationV0,
+    ) -> "EvaluationQueryBuilderV1":
+        """Add one ordered direct-port or structured field projection."""
 
         try:
-            selection = EvaluationQuerySelection(alias, address)
+            selection: EvaluationQuerySelectionItem
+            if isinstance(source, SemanticPortAddress):
+                selection = EvaluationQuerySelection(alias, source)
+            elif isinstance(source, EvaluationQueryFieldNavigationV0):
+                selection = EvaluationQueryNavigationSelectionV0(alias, source)
+            else:
+                raise EvaluationQueryError(
+                    "selection address/source must be SemanticPortAddress or "
+                    "EvaluationQueryFieldNavigationV0",
+                    code="INVALID_QUERY_SELECTION",
+                    stage="query_construct",
+                )
         except EvaluationQueryError as exc:
             raise SDKStoreError(f"query select rejected: {exc}", code=exc.code) from exc
         return replace(self, _selections=(*self._selections, selection))

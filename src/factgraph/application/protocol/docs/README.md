@@ -130,6 +130,16 @@ but not authenticated, has caller-managed custody, and exposes neither replay
 nor detached Explain. Ordinary evaluation leaves `run_bundle=None`; capture
 cannot be added post hoc.
 
+An `EvaluationQuery` selection can also be a sealed
+`EvaluationQueryNavigationSelectionV0`: one Query-owned identity-to-same-entity
+single scalar-field lookup. Its parallel `EvaluationRunNavigationSelectionV0`
+keeps historical direct-selection anchor/bundle shapes unchanged. The lookup is
+recorded as Query-owned materialization outside Policy lineage. Live Explain
+uses the exact native `ProofReceipt` binding inventory for its base identity;
+if that receipt is unavailable, it fails closed rather than guessing from a
+projected scalar value. Captured detached evidence likewise labels the lookup
+outside Policy lineage.
+
 The only exception is a Scenario compiled Query result. It has either the
 single-field `ScenarioResolutionV0` or the atomic multi-field
 `ScenarioFieldSubstitutionSetResolutionV0` in `scenario`, but it **must not**
