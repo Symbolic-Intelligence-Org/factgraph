@@ -1,6 +1,6 @@
 # Task Blueprint: FactGraph F4 replay, detached evidence, and Policy projection
 
-- Status: implementing
+- Status: implemented
 - Created: 2026-08-12
 - Last Updated: 2026-08-13
 - Branch: `codex/v0.3.0-f4-completion-2026-08-12`
@@ -146,19 +146,19 @@ policy_view = project_policy_explanation_v0(
 
 ## 7. Acceptance
 
-- [ ] New Query bundles carry complete stable runtime pins; legacy paths do not change.
-- [ ] F4B2 verifies positive, zero-row, OR, negation, aggregate and typed-value cases.
-- [ ] Pin/gate mismatch and work-budget overflow execute the evaluator zero times.
-- [ ] Semantic drift and support drift are distinct, deterministic verdicts.
-- [ ] Repeated verification yields the same verification digest without source Run IDs.
-- [ ] F4B3 builds detached row evidence after the originating Store is changed/destroyed.
-- [ ] Every predicate support source resolves to a captured assertion ID.
-- [ ] F4C handles occurrence, All, Any, nested structures and Unify by total lineage.
-- [ ] Query binding/head atoms do not affect authored occurrence status.
-- [ ] Zero-row bundles do not become false/failed Policy explanations.
-- [ ] Legacy Rule/RuleExpr evaluate and Explain behavior remains green.
-- [ ] Application/SDK tests, lint, type checks and adversarial probes pass.
-- [ ] Module documentation distinguishes verification, playback and Policy projection.
+- [x] New Query bundles carry complete stable runtime pins; legacy paths do not change.
+- [x] F4B2 verifies positive, zero-row, OR, negation, aggregate and typed-value cases.
+- [x] Pin/gate mismatch and work-budget overflow execute the evaluator zero times.
+- [x] Semantic drift and support drift are distinct, deterministic verdicts.
+- [x] Repeated verification yields the same verification digest without source Run IDs.
+- [x] F4B3 builds detached row evidence after the originating Store is changed/destroyed.
+- [x] Every predicate support source resolves to a captured assertion ID.
+- [x] F4C handles occurrence, All, Any, nested structures and Unify by total lineage.
+- [x] Query binding/head atoms do not affect authored occurrence status.
+- [x] Zero-row bundles do not become false/failed Policy explanations.
+- [x] Legacy Rule/RuleExpr evaluate and Explain behavior remains green.
+- [x] Application/SDK tests, lint, type checks and adversarial probes pass.
+- [x] Module documentation distinguishes verification, playback and Policy projection.
 
 ## 8. Implementation Plan
 
@@ -176,4 +176,16 @@ policy_view = project_policy_explanation_v0(
 
 ## 10. Outcome / Deviations
 
-Pending implementation and combined independent review.
+Implemented through the F4A/F4B1 anchors and capture boundary plus the F4B2
+isolated verifier, F4B3 detached evidence builder and F4C readonly authored
+Policy projection.  Independent F4 slice reviews and the final combined F4/F5
+review found the implementation CLEAR after the bounded red-team hardenings
+recorded in the paired audit.  F5A consumes no F4 replay/evidence surface and
+does not alter these boundaries.
+
+The final application/SDK cohort remained green (`518 passed, 159 subtests`;
+with the effective-relation runtime test file `527 passed, 159 subtests`).
+The root collection still has pre-existing `service.static_ui` and
+`third_party/kg-gen` faults outside this branch's F4/F5 diff, so it is not used
+as an F4 closure gate.  Archive remains a separate lifecycle action after the
+user's final verification of the combined handoff.

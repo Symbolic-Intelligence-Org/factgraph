@@ -17,6 +17,7 @@
 | 2026-08-13 | implementing | F4B2/F4C code stops amended to 925/980 additions | Both adjustments are bounded security/integrity and public-contract completion work found by independent review; no new evaluator, Scenario, UI, or Meander surface is introduced. |
 | 2026-08-13 | implementing | F4C final review clarified its pure-value boundary | The projector does not create or change live Explain state, but may consume any compatible anchored/lineaged `EvidenceGraph`; documentation now states this without claiming a detached-only input restriction. |
 | 2026-08-13 | implementing | F4B2 final review tightened typed receipt preflight | Static receipt/witness matching now preserves captured tup-v1 tags and canonical storage values, so Python-equal but schema-incompatible values such as `True`/`1` or `1.0`/`1` cannot receive a non-executed verification record. The F4B2 stop rises to 1,050 solely for this bounded, selected-branch check; no generic type inference, Scenario, or API surface is added. |
+| 2026-08-13 | implemented | Combined F4/F5 final review CLEAR | F4 boundaries and acceptance remain intact after F5A. Contract, runtime and combined reviewers found no remaining P-level finding; F5A has no anchor, bundle, replay or evidence path. |
 
 ## Decision Notes
 
@@ -39,5 +40,5 @@
 - F4C treats the inner evidence rule status as an integrity assertion, not optional
   display metadata: a disagreement with its atom fold is a total-or-error
   contradiction.
-- Final `implemented` and archive transitions wait for the user-side combined
-  independent review.
+- The final independent review is complete; archive remains a separate
+  lifecycle action after the user's final verification of the combined handoff.
