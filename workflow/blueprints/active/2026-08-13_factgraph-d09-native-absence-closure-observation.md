@@ -1,6 +1,6 @@
 # Task Blueprint: FactGraph D09 native absence/closure observation
 
-- Status: draft
+- Status: scoped
 - Created: 2026-08-13
 - Last Updated: 2026-08-13
 - Authority: bounded, disposable native-observation task. It may measure
@@ -87,6 +87,6 @@ documentation surface.
 
 ## 10. Outcome / deviations
 
-Draft boundary only. The scoped anchor will freeze the seven cells before the
-tool/test is added. The only successful terminal result is an observed-only
-report; it cannot close D09 or approve a public API.
+Scope is frozen before the tool/test implementation. The only successful
+terminal result is an observed-only report; it cannot close D09 or approve a
+public API.
