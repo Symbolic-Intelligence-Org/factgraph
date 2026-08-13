@@ -211,6 +211,10 @@ class EvaluateResult:
         expectation_ids = tuple(item.expectation_id for item in self.expectation_results)
         if len(set(expectation_ids)) != len(expectation_ids):
             raise ProtocolShapeError("EvaluateResult.expectation_results ids must be unique")
+        if self.expectation_results and (self.run_bundle is not None or self.scenario is not None):
+            raise ProtocolShapeError(
+                "EvaluateResult expectation results cannot coexist with a run bundle or Scenario"
+            )
 
         if not isinstance(self.rows, tuple):
             raise ProtocolShapeError("EvaluateResult.rows must be tuple[EvaluateRow, ...]")

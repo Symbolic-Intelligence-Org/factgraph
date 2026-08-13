@@ -305,6 +305,30 @@ class UnifiedEvaluationQueryTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "outcome_digest"):
             replace(result, expectation_results=(outcome,))
 
+    def test_expectation_attachment_cannot_be_spliced_into_bundle_or_scenario_result(self) -> None:
+        graph = SDKStore([Person])
+        _seed(graph, "alice", age=22, score=9)
+        expected = (
+            graph.query(_bundle(graph))
+            .select("age", _address("target", "age"))
+            .expect_contains("alice_age", age=22)
+            .compile()
+        )
+        outcome = graph.eval.evaluate(expected).expectation_results[0]
+        plain = graph.query(_bundle(graph)).select("age", _address("target", "age")).compile()
+        captured = graph.eval.evaluate(plain, capture="run_bundle_v0")
+        with self.assertRaisesRegex(ValueError, "cannot coexist"):
+            replace(captured, expectation_results=(outcome,))
+        scenario = ScenarioFieldSubstitutionV0(
+            EntityRef("Person", {"employee_id": "alice"}),
+            FieldPath("Person", "age"),
+            19,
+            "hypothesis",
+        )
+        hypothetical = graph.eval.evaluate(plain, scenario=scenario)
+        with self.assertRaisesRegex(ValueError, "cannot coexist"):
+            replace(hypothetical, expectation_results=(outcome,))
+
     def test_invalid_targets_and_addresses_fail_before_evaluator(self) -> None:
         graph = SDKStore([Person])
         bundle = _bundle(graph)
