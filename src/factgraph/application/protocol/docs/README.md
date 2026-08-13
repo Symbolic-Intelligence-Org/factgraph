@@ -97,6 +97,8 @@ Private fields (not compared / not repr'd):
 - `_row_close_builder` — injected by SDK for entity-ref aware row closing
 - `_row_support_artifacts` — `{row_id: ProofReceipt}` for native/souffle Form 1 rows
 - `_row_provenance_envelopes` — `{row_id: ProvenanceEnvelope}` for ProbLog/PyReason rows
+- `_scenario_resolution_digest_pin` — private result-local seal that prevents
+  later substitution of different Scenario metadata
 
 Iteration / indexing:
 - `result[i]` → `EvaluateRow`

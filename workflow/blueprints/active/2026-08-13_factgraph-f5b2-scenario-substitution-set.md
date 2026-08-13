@@ -1,6 +1,6 @@
 # Task Blueprint: FactGraph F5B2 Scenario field substitution set
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-08-13
 - Last Updated: 2026-08-13
 - Related Modules:
@@ -101,7 +101,7 @@ effective result.
 
 ## 10. Outcome / Deviations
 
-Implementation is complete pending the final independent review. The set
+Implementation is complete and independently reviewed CLEAR. The set
 resolver shares one dependency-complete baseline, resolves all members before
 execution, and passes one immutable baseline/effective relation pair to the
 same native evaluator. Q7's public DTO/digest formulas remain unchanged.
