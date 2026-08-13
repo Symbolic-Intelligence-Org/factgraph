@@ -108,7 +108,11 @@ def build_evaluation_query_builder(
     """Resolve an in-process target before any bind/select intent is accepted."""
 
     try:
-        resolved = resolve_evaluation_query_target(target, address_space=address_space)
+        resolved = resolve_evaluation_query_target(
+            target,
+            address_space=address_space,
+            schema_index=graph._application_schema_index,
+        )
     except EvaluationQueryTargetError as exc:
         raise SDKStoreError(f"query target rejected: {exc}", code=exc.code) from exc
     return EvaluationQueryBuilderV1(graph, resolved)

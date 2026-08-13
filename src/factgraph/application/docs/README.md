@@ -29,7 +29,8 @@ compatibility.
     and remains below SDK ergonomic authoring. Also records the optional
     in-process semantic-port binding and authored occurrence/direct-port
     address space used by managed Rule consumers, the head-independent managed
-    Policy v0 compiler and structural-lineage boundary, and the compile-only
+    Policy v0 compiler (including direct scalar comparison and one-hop
+    identity-to-field navigation) and structural-lineage boundary, and the compile-only
     `EvaluationQuery` typed bind/select projection contract plus opt-in,
     detached `EvaluationRunBundleV0` capture/codec, isolated verification,
     single-row evidence playback, and readonly `PolicyExplanationViewV0`

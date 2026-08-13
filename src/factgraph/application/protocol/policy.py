@@ -7,6 +7,7 @@ from typing import Any, Literal, TypeAlias
 from factgraph.core.protocol.digests import sha256_hex
 
 from .common import ErrorDTO
+from .schema_runtime import FieldPath
 from .semantic_address import SemanticPortAddress
 
 PolicyStage: TypeAlias = Literal[
@@ -54,13 +55,94 @@ class PolicyUnify:
         object.__setattr__(self, "left", left)
         object.__setattr__(self, "right", right)
         object.__setattr__(self, "node_id", _node_id(("unify", _address_key(left), _address_key(right))))
+
+
+@dataclass(frozen=True)
+class PolicyFieldNavigation:
+    """One policy-owned identity-to-scalar-field lookup.
+
+    This deliberately stores a structured direct semantic address and a schema
+    path.  It is not a dotted-string parser and is not a Query bind/select
+    target.  The compiler resolves its actual field predicate and type against
+    the trusted address space and SchemaIndex.
+    """
+
+    base: SemanticPortAddress
+    field: FieldPath
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.base, SemanticPortAddress):
+            raise _shape("PolicyFieldNavigation.base must be SemanticPortAddress", "INVALID_POLICY_NAVIGATION")
+        if not isinstance(self.field, FieldPath):
+            raise _shape("PolicyFieldNavigation.field must be FieldPath", "INVALID_POLICY_NAVIGATION")
+
+
+PolicyComparisonOperand: TypeAlias = SemanticPortAddress | PolicyFieldNavigation
+
+
+@dataclass(frozen=True)
+class PolicyCompare:
+    """A branch-total Policy comparison between two scalar operands.
+
+    Constructor-level validation only establishes the structured syntax.  The
+    exact endpoint, scalar domain, cardinality and native-engine compatibility
+    are compiler responsibilities because they depend on the trusted runtime
+    address space and schema.
+    """
+
+    op: Literal["eq", "ne", "gt", "ge", "lt", "le"]
+    left: PolicyComparisonOperand
+    right: PolicyComparisonOperand
+    node_id: str = field(init=False)
+
+    def __post_init__(self) -> None:
+        if self.op not in {"eq", "ne", "gt", "ge", "lt", "le"}:
+            raise _shape("PolicyCompare.op is unsupported", "INVALID_POLICY_COMPARE")
+        if not isinstance(self.left, (SemanticPortAddress, PolicyFieldNavigation)) or not isinstance(
+            self.right, (SemanticPortAddress, PolicyFieldNavigation)
+        ):
+            raise _shape("PolicyCompare operands must be semantic addresses or field navigation", "INVALID_POLICY_COMPARE")
+        left, right = self.left, self.right
+        if self.op in {"eq", "ne"}:
+            left, right = sorted((left, right), key=_comparison_operand_key)
+            object.__setattr__(self, "left", left)
+            object.__setattr__(self, "right", right)
+        object.__setattr__(
+            self,
+            "node_id",
+            _node_id(("compare", self.op, _comparison_operand_key(left), _comparison_operand_key(right))),
+        )
+
+    @classmethod
+    def gt(cls, left: PolicyComparisonOperand, right: PolicyComparisonOperand) -> "PolicyCompare":
+        return cls("gt", left, right)
+
+    @classmethod
+    def ge(cls, left: PolicyComparisonOperand, right: PolicyComparisonOperand) -> "PolicyCompare":
+        return cls("ge", left, right)
+
+    @classmethod
+    def lt(cls, left: PolicyComparisonOperand, right: PolicyComparisonOperand) -> "PolicyCompare":
+        return cls("lt", left, right)
+
+    @classmethod
+    def le(cls, left: PolicyComparisonOperand, right: PolicyComparisonOperand) -> "PolicyCompare":
+        return cls("le", left, right)
+
+    @classmethod
+    def eq(cls, left: PolicyComparisonOperand, right: PolicyComparisonOperand) -> "PolicyCompare":
+        return cls("eq", left, right)
+
+    @classmethod
+    def ne(cls, left: PolicyComparisonOperand, right: PolicyComparisonOperand) -> "PolicyCompare":
+        return cls("ne", left, right)
 @dataclass(frozen=True)
 class PolicyAll:
     children: tuple[PolicyNode, ...]
     node_id: str = field(init=False)
     def __post_init__(self) -> None:
         children = _children(self.children, "ALL")
-        if all(isinstance(child, PolicyUnify) for child in children):
+        if all(isinstance(child, (PolicyUnify, PolicyCompare)) for child in children):
             raise _shape("PolicyAll requires a structural child", "INVALID_POLICY_ALL")
         object.__setattr__(self, "children", children)
         object.__setattr__(self, "node_id", _node_id(("all", tuple(c.node_id for c in children))))
@@ -70,12 +152,14 @@ class PolicyAny:
     node_id: str = field(init=False)
     def __post_init__(self) -> None:
         children = _children(self.children, "ANY")
-        if any(isinstance(child, PolicyUnify) for child in children):
-            raise _shape("PolicyUnify must be a direct PolicyAll child", "INVALID_UNIFY_SCOPE")
+        if any(isinstance(child, (PolicyUnify, PolicyCompare)) for child in children):
+            raise _shape("Policy constraints must be direct PolicyAll children", "INVALID_POLICY_CONSTRAINT_SCOPE")
+        if any(not isinstance(child, (PolicyOccurrence, PolicyAll, PolicyAny)) for child in children):
+            raise _shape("PolicyAny children must be structural", "INVALID_POLICY_ANY")
         object.__setattr__(self, "children", children)
         object.__setattr__(self, "node_id", _node_id(("any", tuple(c.node_id for c in children))))
 PolicyExpression: TypeAlias = PolicyOccurrence | PolicyAll | PolicyAny
-PolicyNode: TypeAlias = PolicyExpression | PolicyUnify
+PolicyNode: TypeAlias = PolicyExpression | PolicyUnify | PolicyCompare
 @dataclass(frozen=True)
 class Policy:
     id: str
@@ -131,15 +215,57 @@ class PolicyStructureNodeV0:
         )
         if self.node_id != expected_id:
             raise _shape("Policy structure node_id does not match its content", "INVALID_POLICY_STRUCTURE")
+
+
+@dataclass(frozen=True)
+class PolicyCompareStructureNodeV0:
+    """Persisted compare leaf kept separate from the legacy v0 structure DTO.
+
+    Adding fields to ``PolicyStructureNodeV0`` would alter historical
+    EvaluationRun seals through ``asdict``.  This independent DTO lets the
+    structure container grow while retaining old serialized node shapes.
+    """
+
+    node_id: str
+    op: Literal["eq", "ne", "gt", "ge", "lt", "le"]
+    left: PolicyComparisonOperand
+    right: PolicyComparisonOperand
+
+    @property
+    def kind(self) -> Literal["compare"]:
+        return "compare"
+
+    @property
+    def child_node_ids(self) -> tuple[()]:
+        return ()
+
+    def __post_init__(self) -> None:
+        if self.op not in {"eq", "ne", "gt", "ge", "lt", "le"}:
+            raise _shape("Policy compare structure op is invalid", "INVALID_POLICY_STRUCTURE")
+        if not isinstance(self.left, (SemanticPortAddress, PolicyFieldNavigation)) or not isinstance(
+            self.right, (SemanticPortAddress, PolicyFieldNavigation)
+        ):
+            raise _shape("Policy compare structure operands are invalid", "INVALID_POLICY_STRUCTURE")
+        left, right = self.left, self.right
+        if self.op in {"eq", "ne"}:
+            canonical = tuple(sorted((left, right), key=_comparison_operand_key))
+            if (left, right) != canonical:
+                raise _shape("symmetric compare structure operands must be canonical", "INVALID_POLICY_STRUCTURE")
+        expected_id = _node_id(("compare", self.op, _comparison_operand_key(left), _comparison_operand_key(right)))
+        if self.node_id != expected_id:
+            raise _shape("Policy compare structure node_id does not match its content", "INVALID_POLICY_STRUCTURE")
+
+
+PolicyStructureNode: TypeAlias = PolicyStructureNodeV0 | PolicyCompareStructureNodeV0
 @dataclass(frozen=True)
 class PolicyStructureV0:
     root_node_id: str
-    nodes: tuple[PolicyStructureNodeV0, ...]
+    nodes: tuple[PolicyStructureNode, ...]
     structure_digest: str = field(init=False)
     def __post_init__(self) -> None:
         _text(self.root_node_id, "root_node_id", "INVALID_POLICY_STRUCTURE")
         if not isinstance(self.nodes, tuple) or not self.nodes or not all(
-            isinstance(node, PolicyStructureNodeV0) for node in self.nodes
+            isinstance(node, (PolicyStructureNodeV0, PolicyCompareStructureNodeV0)) for node in self.nodes
         ):
             raise _shape("nodes must be a non-empty PolicyStructureNodeV0 tuple", "INVALID_POLICY_STRUCTURE")
         ordered = tuple(sorted(self.nodes, key=lambda node: node.node_id))
@@ -152,9 +278,9 @@ class PolicyStructureV0:
             raise _shape("Policy structure root must be structural", "INVALID_POLICY_STRUCTURE")
         for node in ordered:
             child_kinds = tuple(by_id[child].kind for child in node.child_node_ids if child in by_id)
-            if node.kind == "any" and "unify" in child_kinds:
-                raise _shape("PolicyAny cannot contain Unify", "INVALID_POLICY_STRUCTURE")
-            if node.kind == "all" and child_kinds and all(kind == "unify" for kind in child_kinds):
+            if node.kind == "any" and ({"unify", "compare"} & set(child_kinds)):
+                raise _shape("PolicyAny cannot contain Policy constraints", "INVALID_POLICY_STRUCTURE")
+            if node.kind == "all" and child_kinds and all(kind in {"unify", "compare"} for kind in child_kinds):
                 raise _shape("PolicyAll requires a structural child", "INVALID_POLICY_STRUCTURE")
         child_counts = {
             child: sum(child in node.child_node_ids for node in ordered)
@@ -206,32 +332,66 @@ class PolicyLoweredRef:
             value = getattr(self, name)
             if value is not None and (not isinstance(value, int) or isinstance(value, bool) or value < 0):
                 raise _shape(f"{name} must be a non-negative integer", "INVALID_POLICY_LINEAGE")
+
+
+@dataclass(frozen=True)
+class PolicyConditionLoweredRefV0:
+    """One compiler-owned Policy condition in one lowered branch.
+
+    Kept separate from ``PolicyLoweredRef`` so historical persisted lineage
+    retains its exact DTO shape and seal.
+    """
+
+    branch_id: str
+    policy_node_id: str
+    condition_id: str
+    role: Literal["left_field", "right_field", "compare"]
+    lowered_index: int
+
+    @property
+    def kind(self) -> Literal["policy_condition"]:
+        return "policy_condition"
+
+    def __post_init__(self) -> None:
+        for name in ("branch_id", "policy_node_id", "condition_id"):
+            _text(getattr(self, name), name, "INVALID_POLICY_LINEAGE")
+        if self.role not in {"left_field", "right_field", "compare"}:
+            raise _shape("Policy condition role is invalid", "INVALID_POLICY_LINEAGE")
+        if not isinstance(self.lowered_index, int) or isinstance(self.lowered_index, bool) or self.lowered_index < 0:
+            raise _shape("Policy condition lowered_index must be a non-negative integer", "INVALID_POLICY_LINEAGE")
+
+
+PolicyLineageRef: TypeAlias = PolicyLoweredRef | PolicyConditionLoweredRefV0
 @dataclass(frozen=True)
 class PolicyNodeLineage:
     node_id: str
-    node_kind: Literal["occurrence", "all", "any", "unify"]
-    lowered_refs: tuple[PolicyLoweredRef, ...]
+    node_kind: Literal["occurrence", "all", "any", "unify", "compare"]
+    lowered_refs: tuple[PolicyLineageRef, ...]
     def __post_init__(self) -> None:
         _text(self.node_id, "node_id", "INVALID_POLICY_LINEAGE")
-        if self.node_kind not in {"occurrence", "all", "any", "unify"}:
+        if self.node_kind not in {"occurrence", "all", "any", "unify", "compare"}:
             raise _shape("invalid lineage node kind", "INVALID_POLICY_LINEAGE")
-        if not isinstance(self.lowered_refs, tuple) or not self.lowered_refs or not all(isinstance(ref, PolicyLoweredRef) for ref in self.lowered_refs):
+        if not isinstance(self.lowered_refs, tuple) or not self.lowered_refs or not all(
+            isinstance(ref, (PolicyLoweredRef, PolicyConditionLoweredRefV0)) for ref in self.lowered_refs
+        ):
             raise _shape("lowered_refs must be a non-empty PolicyLoweredRef tuple", "INVALID_POLICY_LINEAGE")
         if len(set(self.lowered_refs)) != len(self.lowered_refs):
             raise _shape("lowered_refs must be unique", "INVALID_POLICY_LINEAGE")
 @dataclass(frozen=True)
 class PolicyLineage:
     authored_nodes: tuple[PolicyNodeLineage, ...]
-    lowered_origins: tuple[tuple[PolicyLoweredRef, tuple[str, ...]], ...]
+    lowered_origins: tuple[tuple[PolicyLineageRef, tuple[str, ...]], ...]
     def __post_init__(self) -> None:
         if not isinstance(self.authored_nodes, tuple) or not self.authored_nodes or not all(isinstance(node, PolicyNodeLineage) for node in self.authored_nodes):
             raise _shape("authored_nodes must be a non-empty lineage tuple", "INVALID_POLICY_LINEAGE")
         node_ids = {node.node_id for node in self.authored_nodes}
         if len(node_ids) != len(self.authored_nodes) or not isinstance(self.lowered_origins, tuple) or not self.lowered_origins:
             raise _shape("lineage nodes and origins must be non-empty and unique", "INVALID_POLICY_LINEAGE")
-        reverse: set[PolicyLoweredRef] = set()
+        reverse: set[PolicyLineageRef] = set()
         for item in self.lowered_origins:
-            if not isinstance(item, tuple) or len(item) != 2 or not isinstance(item[0], PolicyLoweredRef):
+            if not isinstance(item, tuple) or len(item) != 2 or not isinstance(
+                item[0], (PolicyLoweredRef, PolicyConditionLoweredRefV0)
+            ):
                 raise _shape("invalid lowered origin", "INVALID_POLICY_LINEAGE")
             ref, origins = item
             valid_origins = isinstance(origins, tuple) and origins and all(isinstance(origin, str) and origin for origin in origins)
@@ -243,7 +403,7 @@ class PolicyLineage:
         if forward != backward:
             raise _shape("Policy lineage must be total in both directions", "INVALID_POLICY_LINEAGE")
 def _children(value: object, kind: str) -> tuple[PolicyNode, ...]:
-    allowed = (PolicyOccurrence, PolicyAll, PolicyAny, PolicyUnify)
+    allowed = (PolicyOccurrence, PolicyAll, PolicyAny, PolicyUnify, PolicyCompare)
     if not isinstance(value, tuple) or not value or any(not isinstance(x, allowed) for x in value):
         raise _shape(f"Policy{kind}.children must be a non-empty node tuple", f"INVALID_POLICY_{kind}")
     by_id = {child.node_id: child for child in value}
@@ -272,21 +432,11 @@ def _structure_node_id(
     assert left is not None and right is not None
     left_key, right_key = sorted((_address_key(left), _address_key(right)))
     return _node_id((kind, left_key, right_key))
-def _structure_digest(root_node_id: str, nodes: tuple[PolicyStructureNodeV0, ...]) -> str:
+def _structure_digest(root_node_id: str, nodes: tuple[PolicyStructureNode, ...]) -> str:
     payload = {
         "format": "policy_structure_v0",
         "root_node_id": root_node_id,
-        "nodes": [
-            {
-                "node_id": node.node_id,
-                "kind": node.kind,
-                "child_node_ids": node.child_node_ids,
-                "occurrence_alias": node.occurrence_alias,
-                "left": None if node.left is None else _address_key(node.left),
-                "right": None if node.right is None else _address_key(node.right),
-            }
-            for node in nodes
-        ],
+        "nodes": [_structure_node_payload(node) for node in nodes],
     }
     raw = json.dumps(
         payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False,
@@ -294,9 +444,47 @@ def _structure_digest(root_node_id: str, nodes: tuple[PolicyStructureNodeV0, ...
     return sha256_hex(raw)
 def _address_key(address: SemanticPortAddress) -> tuple[str, str]:
     return address.occurrence_alias, address.port_name
+
+
+def _comparison_operand_key(value: PolicyComparisonOperand) -> tuple[object, ...]:
+    if isinstance(value, SemanticPortAddress):
+        return ("address", *_address_key(value))
+    return (
+        "navigation",
+        *_address_key(value.base),
+        value.field.entity_type,
+        value.field.field_name,
+    )
+
+
+def _structure_node_payload(node: PolicyStructureNode) -> dict[str, object]:
+    if isinstance(node, PolicyStructureNodeV0):
+        # Preserve the legacy v0 payload exactly for historical structure seals.
+        return {
+            "node_id": node.node_id,
+            "kind": node.kind,
+            "child_node_ids": node.child_node_ids,
+            "occurrence_alias": node.occurrence_alias,
+            "left": None if node.left is None else _address_key(node.left),
+            "right": None if node.right is None else _address_key(node.right),
+        }
+    return {
+        "node_id": node.node_id,
+        "kind": node.kind,
+        "child_node_ids": (),
+        "op": node.op,
+        "left": _comparison_operand_key(node.left),
+        "right": _comparison_operand_key(node.right),
+    }
 def _text(value: object, name: str, code: str = "INVALID_POLICY_SHAPE") -> None:
     if not isinstance(value, str) or not value:
         raise _shape(f"{name} must be a non-empty string", code)
 def _shape(message: str, code: str) -> PolicyError:
     return PolicyError(message, code=code, stage="policy_construct")
-__all__ = ["Policy", "PolicyAll", "PolicyAny", "PolicyError", "PolicyLineage", "PolicyLoweredRef", "PolicyNodeLineage", "PolicyOccurrence", "PolicyStructureNodeV0", "PolicyStructureV0", "PolicyUnify"]
+__all__ = [
+    "Policy", "PolicyAll", "PolicyAny", "PolicyCompare", "PolicyComparisonOperand",
+    "PolicyCompareStructureNodeV0", "PolicyConditionLoweredRefV0", "PolicyError",
+    "PolicyFieldNavigation", "PolicyLineage", "PolicyLineageRef", "PolicyLoweredRef",
+    "PolicyNodeLineage", "PolicyOccurrence", "PolicyStructureNode", "PolicyStructureNodeV0",
+    "PolicyStructureV0", "PolicyUnify",
+]

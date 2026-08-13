@@ -16,7 +16,9 @@ from factgraph.application.protocol import (
     Policy,
     PolicyAll,
     PolicyAny,
+    PolicyCompare,
     PolicyError,
+    PolicyFieldNavigation,
     PolicyLineage,
     PolicyLoweredRef,
     PolicyNodeLineage,
@@ -24,6 +26,7 @@ from factgraph.application.protocol import (
     PolicyUnify,
     SemanticPortAddress,
     SemanticRulePort,
+    FieldPath,
     entity_identity,
     field_endpoint,
 )
@@ -50,6 +53,13 @@ class Person(Entity):
 
 class Unrelated(Entity):
     code: str = Identity()
+
+
+class ComparisonTypes(Entity):
+    comparison_id: str = Identity()
+    count: int = Field()
+    label: str = Field()
+    ratio: float = Field()
 
 
 def _index(*, unrelated: bool = False):
@@ -88,6 +98,35 @@ def _space(bundle, *aliases: str) -> SemanticAddressSpace:
     return SemanticAddressSpace(tuple(manage_rule_occurrence(bundle, alias) for alias in aliases))
 
 
+def _comparison_types_bundle():
+    index = build_schema_index(
+        compile_schema_from_classes([ComparisonTypes], generated_at="2026-08-13T00:00:00Z")
+    )
+    item, count, label, ratio = (
+        Var("$item"),
+        Var("$count"),
+        Var("$label"),
+        Var("$ratio"),
+    )
+    return index, build_resolved_rule(
+        id="comparison_types",
+        version="1",
+        when=(
+            PredAtom("ComparisonTypes:exists", [item]),
+            PredAtom("comparison_types:count", [item, count]),
+            PredAtom("comparison_types:label", [item, label]),
+            PredAtom("comparison_types:ratio", [item, ratio]),
+        ),
+        ports={
+            "item": SemanticRulePort(item, entity_identity("ComparisonTypes")),
+            "count": SemanticRulePort(count, field_endpoint("ComparisonTypes", "count")),
+            "label": SemanticRulePort(label, field_endpoint("ComparisonTypes", "label")),
+            "ratio": SemanticRulePort(ratio, field_endpoint("ComparisonTypes", "ratio")),
+        },
+        schema_index=index,
+    )
+
+
 def _occ(alias: str) -> PolicyOccurrence:
     return PolicyOccurrence(alias)
 
@@ -98,6 +137,10 @@ def _address(alias: str, port: str = "person") -> SemanticPortAddress:
 
 def _unify(left: str, right: str, port: str = "person") -> PolicyUnify:
     return PolicyUnify(_address(left, port), _address(right, port))
+
+
+def _nav(alias: str, field: str = "age") -> PolicyFieldNavigation:
+    return PolicyFieldNavigation(_address(alias), FieldPath("Person", field))
 
 
 class PolicyCompileTests(unittest.TestCase):
@@ -281,6 +324,149 @@ class PolicyCompileTests(unittest.TestCase):
             )
         self.assertEqual(ctx.exception.code, "POLICY_EXECUTION_VAR_COLLISION")
         self.assertEqual(ctx.exception.stage, "policy_lowering_adapter")
+
+
+class PolicyComparisonCompileTests(unittest.TestCase):
+    def test_compare_ast_is_canonical_and_only_an_all_constraint(self) -> None:
+        left, right = _address("left", "age"), _address("right", "age")
+        forward = PolicyCompare.eq(left, right)
+        reversed_ = PolicyCompare.eq(right, left)
+
+        self.assertEqual(forward, reversed_)
+        self.assertEqual(forward.node_id, reversed_.node_id)
+        self.assertEqual((forward.left, forward.right), (left, right))
+
+        with self.assertRaises(PolicyError) as ctx:
+            PolicyAny((_occ("left"), PolicyCompare.gt(left, right)))  # type: ignore[arg-type]
+        self.assertEqual(ctx.exception.code, "INVALID_POLICY_CONSTRAINT_SCOPE")
+
+    def test_direct_scalar_compare_and_navigation_compile_to_total_condition_lineage(self) -> None:
+        bundle = _person_bundle()
+        space = _space(bundle, "left", "right")
+        direct = PolicyCompare.gt(_address("left", "age"), _address("right", "score"))
+        navigation = PolicyCompare.gt(_nav("left"), _nav("right"))
+        policy = Policy(
+            "older_workers",
+            PolicyAll((_occ("left"), _occ("right"), direct, navigation)),
+            version="1",
+        )
+
+        compiled = compile_policy(policy, address_space=space, schema_index=_index())
+
+        compare_nodes = {
+            node.node_id: node for node in compiled.policy_structure.nodes if node.kind == "compare"
+        }
+        self.assertEqual(set(compare_nodes), {direct.node_id, navigation.node_id})
+        direct_refs = next(
+            item.lowered_refs
+            for item in compiled.lineage.authored_nodes
+            if item.node_id == direct.node_id
+        )
+        navigation_refs = next(
+            item.lowered_refs
+            for item in compiled.lineage.authored_nodes
+            if item.node_id == navigation.node_id
+        )
+        self.assertEqual({ref.kind for ref in direct_refs}, {"policy_condition"})
+        self.assertEqual({getattr(ref, "role", None) for ref in direct_refs}, {"compare"})
+        self.assertEqual({ref.kind for ref in navigation_refs}, {"policy_condition"})
+        self.assertEqual(
+            {getattr(ref, "role", None) for ref in navigation_refs},
+            {"left_field", "right_field", "compare"},
+        )
+        self.assertEqual(
+            {
+                ref.branch_id
+                for refs in (direct_refs, navigation_refs)
+                for ref in refs
+            },
+            {compiled.branches[0].branch_id},
+        )
+
+    def test_compare_requires_schema_and_rejects_invalid_navigation_or_endpoint(self) -> None:
+        bundle = _person_bundle()
+        space = _space(bundle, "left", "right")
+        comparison = PolicyCompare.gt(_nav("left"), _nav("right"))
+        policy = Policy("older", PolicyAll((_occ("left"), _occ("right"), comparison)))
+
+        with self.assertRaises(PolicyError) as no_index:
+            compile_policy(policy, address_space=space)
+        self.assertEqual(no_index.exception.code, "POLICY_SCHEMA_INDEX_REQUIRED")
+
+        invalid_navigation = PolicyCompare.gt(
+            PolicyFieldNavigation(_address("left", "age"), FieldPath("Person", "score")),
+            _nav("right"),
+        )
+        with self.assertRaises(PolicyError) as invalid_nav:
+            compile_policy(
+                Policy("bad_navigation", PolicyAll((_occ("left"), _occ("right"), invalid_navigation))),
+                address_space=space,
+                schema_index=_index(),
+            )
+        self.assertEqual(invalid_nav.exception.code, "INVALID_POLICY_NAVIGATION")
+
+        invalid_endpoint = PolicyCompare.gt(_address("left", "person"), _address("right", "age"))
+        with self.assertRaises(PolicyError) as endpoint:
+            compile_policy(
+                Policy("bad_endpoint", PolicyAll((_occ("left"), _occ("right"), invalid_endpoint))),
+                address_space=space,
+                schema_index=_index(),
+            )
+        self.assertEqual(endpoint.exception.code, "UNSUPPORTED_POLICY_COMPARE_ENDPOINT")
+
+    def test_compare_is_branch_total_or_explicitly_branch_local(self) -> None:
+        bundle = _person_bundle()
+        space = _space(bundle, "common", "left", "right")
+        partial = Policy(
+            "partial_compare",
+            PolicyAll((
+                _occ("common"),
+                PolicyAny((_occ("left"), _occ("right"))),
+                PolicyCompare.gt(_nav("common"), _nav("left")),
+            )),
+        )
+        with self.assertRaises(PolicyError) as partial_ctx:
+            compile_policy(partial, address_space=space, schema_index=_index())
+        self.assertEqual(partial_ctx.exception.code, "PARTIAL_BRANCH_CONSTRAINT")
+
+        local = Policy(
+            "local_compare",
+            PolicyAny((
+                PolicyAll((_occ("left"), _occ("right"), PolicyCompare.gt(_nav("left"), _nav("right")))),
+                _occ("common"),
+            )),
+        )
+        compiled = compile_policy(local, address_space=space, schema_index=_index())
+        local_all = next(child for child in local.when.children if isinstance(child, PolicyAll))
+        compare = next(node for node in local_all.children if isinstance(node, PolicyCompare))
+        refs = next(item.lowered_refs for item in compiled.lineage.authored_nodes if item.node_id == compare.node_id)
+        local_branch = next(
+            branch
+            for branch in compiled.branches
+            if set(branch.authored_occurrence_aliases) == {"left", "right"}
+        )
+        self.assertEqual({ref.branch_id for ref in refs}, {local_branch.branch_id})
+
+    def test_compare_rejects_mixed_scalar_domains_and_float_ordering(self) -> None:
+        index, bundle = _comparison_types_bundle()
+        space = _space(bundle, "left", "right")
+        mixed = PolicyCompare.eq(_address("left", "count"), _address("right", "label"))
+        with self.assertRaises(PolicyError) as mixed_ctx:
+            compile_policy(
+                Policy("mixed", PolicyAll((_occ("left"), _occ("right"), mixed))),
+                address_space=space,
+                schema_index=index,
+            )
+        self.assertEqual(mixed_ctx.exception.code, "INCOMPATIBLE_POLICY_COMPARE_DOMAIN")
+
+        float_order = PolicyCompare.gt(_address("left", "ratio"), _address("right", "ratio"))
+        with self.assertRaises(PolicyError) as ordering_ctx:
+            compile_policy(
+                Policy("float_order", PolicyAll((_occ("left"), _occ("right"), float_order))),
+                address_space=space,
+                schema_index=index,
+            )
+        self.assertEqual(ordering_ctx.exception.code, "UNSUPPORTED_POLICY_COMPARE_ORDERING")
 
 
 class PolicyAdmissionTests(unittest.TestCase):

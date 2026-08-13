@@ -252,7 +252,8 @@ remain unchanged.
 The application layer now has a deliberately narrow, head-independent Policy
 compiler. A Policy names the occurrences in one exact `SemanticAddressSpace`,
 combines them with `PolicyAll` / `PolicyAny`, and may explicitly equate two
-direct semantic ports with `PolicyUnify`:
+direct semantic ports with `PolicyUnify` or compare trusted scalar values with
+`PolicyCompare`:
 
 ```python
 from factgraph.application import compile_policy
@@ -294,6 +295,42 @@ inside a `PolicyAll` whose every local DNF branch contains both endpoints. Thus
 `PolicyAll(a, b, ...)` branch is accepted. This rule applies only to managed
 Policy. The existing RuleExpr partial-join lowering remains unchanged.
 
+### Direct comparison and one-hop field navigation
+
+`PolicyCompare` is a direct `PolicyAll` constraint, never a dotted Query path
+or a new Rule. Its operands are either direct scalar field addresses or a
+strict identity-to-field navigation:
+
+```python
+from factgraph.application.protocol import (
+    FieldPath,
+    PolicyCompare,
+    PolicyFieldNavigation,
+    SemanticPortAddress,
+)
+
+older_age = PolicyFieldNavigation(
+    SemanticPortAddress("older", "person"), FieldPath("Person", "age")
+)
+younger_age = PolicyFieldNavigation(
+    SemanticPortAddress("younger", "person"), FieldPath("Person", "age")
+)
+older_than = PolicyCompare.gt(older_age, younger_age)
+```
+
+Compilation requires the same trusted `SchemaIndex` as the managed address
+space. Direct operands must be `single` scalar Field endpoints; navigation
+starts at an EntityIdentity endpoint and can reach only one known scalar field
+of that same entity type. Both sides must have the same scalar domain.
+`eq`/`ne` canonicalize operand order; native ordering is deliberately limited
+to `int` and `time`. Entity references, multi-value fields, literals,
+relationships, multi-hop paths, and Query-level navigation are rejected.
+
+Like `PolicyUnify`, a compare is branch-total in its owning `PolicyAll`.
+Placing it inside the appropriate branch of `PolicyAny` is valid; placing it
+outside a branch where an operand is absent fails with
+`PARTIAL_BRANCH_CONSTRAINT` before lowering.
+
 Compilation accepts only managed Rules whose top-level bodies contain
 `PredAtom` with ordinary Var/Const terms and non-aggregate
 `CmpAtom(eq/ne/gt/ge/lt/le)`. `NotAtom`, `InAtom`,
@@ -305,12 +342,15 @@ before structural lowering or engine execution.
 `CompiledPolicyV0` pins Policy, address-space, Rule, and semantic-contract
 identity. It captures canonical `PolicyStructureV0` directly from authored
 `Policy.when` before lowering, including the root, nested All/Any children,
-occurrence aliases and Unify endpoints. The Policy digest seals that structure,
+occurrence aliases, Unify endpoints, and Compare operands. The Policy digest seals that structure,
 the deterministic branch inventory and bidirectional structural lineage.
 DNF-generated aliases retain their authored occurrence alias explicitly;
 neither structure nor lineage parses generated names or `repr`. Lineage covers
-each authored node and every emitted branch, occurrence, Rule-body atom, and
-Unify coordinate.
+each authored node and every emitted branch, occurrence, Rule-body atom, Unify
+coordinate, and compiler-owned Compare condition. Compare conditions are
+sealed separately from reusable Rule bodies: a navigation lookup (when needed)
+precedes its compare atom, then normal Query bindings, Unify atoms, and the
+synthetic projection head follow.
 
 This artifact is intentionally not executable by itself. It has no result
 head, bindings, assumptions, engine configuration, rows, or explanation. The
@@ -506,8 +546,9 @@ still not a false result.
 
 The older ad-hoc `QueryRuntimeRequest` and SDK `Query` remain unchanged.
 Non-native engines, standalone Query explain integration, candidate acceptance,
-Compare/literals, field navigation, general expectation modes, completeness, What-if, bundle
-persistence, Package, and Agent/Meander wire formats remain later slices.
+literals, relationship/multi-hop navigation, general expectation modes,
+completeness, What-if, bundle persistence, Package, and Agent/Meander wire
+formats remain later slices.
 
 ### Unified resolved Query target v1
 
@@ -551,7 +592,7 @@ because of this provenance label.
 
 String policy ids, registries, Packages, dotted field paths, bare Rules,
 Policy without `address_space=`, generic `expect`, modes, empty-select existence,
-navigation and external Operators are deliberately not accepted by this v1
+Query-level navigation and external Operators are deliberately not accepted by this v1
 facade. `ScenarioFieldSubstitutionV0` and the explicit atomic
 `ScenarioFieldSubstitutionSetV0` may be forwarded through `.evaluate(scenario=...)`.
 Both retain the no-anchor/no-bundle/no-live-evidence boundary; neither is a

@@ -11,6 +11,7 @@ from factgraph.application.explain.evidence_tree import (
     EvidenceAtom,
     EvidenceGraph,
     EvidenceJoin,
+    EvidencePolicyCondition,
     EvidenceRule,
     EvidenceTree,
     Holds,
@@ -38,7 +39,7 @@ from .protocol.evaluation_run_bundle import (
     EvaluationRunBundleV0,
     EvaluationRunProjectionRowV0,
 )
-from .protocol.policy import PolicyLoweredRef
+from .protocol.policy import PolicyConditionLoweredRefV0, PolicyLoweredRef
 from .schema_runtime import build_schema_index
 
 
@@ -65,12 +66,19 @@ def evaluation_run_bundle_evidence(
     envs = (ProbeEnv.from_bindings(binding),)
     schema_index = build_schema_index(json.loads(bundle.schema_bytes.decode("utf-8")))
 
-    body_refs, unify_refs = _selected_lineage(bundle, branch_id)
+    body_refs, condition_refs, unify_refs = _selected_lineage(bundle, branch_id)
     body_count = len(body_refs)
+    policy_condition_count = len(condition_refs)
     query_binding_count = len(bundle.run_anchor.bindings)
     join_count = len(unify_refs)
     head_link_count = len(bundle.run_anchor.selections)
-    if len(branch) != body_count + query_binding_count + join_count + head_link_count:
+    if len(branch) != (
+        body_count
+        + policy_condition_count
+        + query_binding_count
+        + join_count
+        + head_link_count
+    ):
         raise ProtocolShapeError(
             "captured branch cannot be partitioned into Policy, Query, join, and head atoms"
         )
@@ -80,16 +88,22 @@ def evaluation_run_bundle_evidence(
     relation_by_assertion = _relation_assertion_index(bundle)
     atom_condition_keys: list[tuple[str, str]] = []
     atoms_by_occurrence: dict[str, list[EvidenceAtom]] = {}
+    policy_conditions: list[EvidencePolicyCondition] = []
     outside_atoms: list[EvidenceAtom] = []
     query_atom_ids: list[str] = []
     head_atom_ids: list[str] = []
+    policy_condition_atom_ids: list[str] = []
 
     for index, atom in enumerate(branch):
         authored = body_refs.get(index)
+        is_policy_condition = body_count <= index < body_count + policy_condition_count
         atom_id = atom_id_for_condition(
             branch_id,
             index,
-            materialized=authored is None,
+            # Policy conditions are authored Policy leaves, unlike Query binds,
+            # joins and projection-head links.  Keep their stable `atom` ids so
+            # the exact lineage coordinate matches live Explain.
+            materialized=authored is None and not is_policy_condition,
         )
         evidence, condition_key = _captured_atom_evidence(
             atom,
@@ -109,10 +123,27 @@ def evaluation_run_bundle_evidence(
         if authored is not None:
             assert authored.occurrence_alias is not None
             atoms_by_occurrence.setdefault(authored.occurrence_alias, []).append(evidence)
-        elif body_count <= index < body_count + query_binding_count:
+        elif is_policy_condition:
+            ref = condition_refs[index - body_count]
+            if ref.lowered_index != index:
+                raise ProtocolShapeError("Policy condition lineage does not match its branch coordinate")
+            policy_conditions.append(
+                EvidencePolicyCondition(
+                    policy_node_id=ref.policy_node_id,
+                    condition_id=ref.condition_id,
+                    role=ref.role,
+                    atom=evidence,
+                )
+            )
+            policy_condition_atom_ids.append(atom_id)
+        elif (
+            body_count + policy_condition_count
+            <= index
+            < body_count + policy_condition_count + query_binding_count
+        ):
             query_atom_ids.append(atom_id)
             outside_atoms.append(evidence)
-        elif index >= body_count + query_binding_count + join_count:
+        elif index >= body_count + policy_condition_count + query_binding_count + join_count:
             head_atom_ids.append(atom_id)
             outside_atoms.append(evidence)
 
@@ -121,6 +152,7 @@ def evaluation_run_bundle_evidence(
         branch_id=branch_id,
         branch_index=branch_index,
         body_count=body_count,
+        policy_condition_count=policy_condition_count,
         query_binding_count=query_binding_count,
         refs=unify_refs,
         steps=steps,
@@ -161,6 +193,7 @@ def evaluation_run_bundle_evidence(
         "proof_receipt_digest": row.proof_receipt_digest,
         "selected_branch_id": branch_id,
         "outside_policy_lineage_atom_ids": outside_ids,
+        "policy_condition_atom_ids": tuple(policy_condition_atom_ids),
         "query_binding_atom_ids": tuple(query_atom_ids),
         "projection_head_link_atom_ids": tuple(head_atom_ids),
         "atom_condition_keys": tuple(atom_condition_keys),
@@ -174,6 +207,7 @@ def evaluation_run_bundle_evidence(
         status="holds",
         rules=rules,
         joins=joins,
+        policy_conditions=tuple(policy_conditions),
         certainty=certainty,
         metadata=metadata,
     )
@@ -208,28 +242,44 @@ def _selected_branch(where: list[Any], branch_index: int) -> list[tuple[Any, ...
 def _selected_lineage(
     bundle: EvaluationRunBundleV0,
     branch_id: str,
-) -> tuple[dict[int, PolicyLoweredRef], tuple[PolicyLoweredRef, ...]]:
+) -> tuple[
+    dict[int, PolicyLoweredRef],
+    tuple[PolicyConditionLoweredRefV0, ...],
+    tuple[PolicyLoweredRef, ...],
+]:
     body: dict[int, PolicyLoweredRef] = {}
     unify: dict[int, PolicyLoweredRef] = {}
+    conditions: dict[int, PolicyConditionLoweredRefV0] = {}
     for node in bundle.run_anchor.target.policy_lineage.authored_nodes:
         for ref in node.lowered_refs:
             if ref.branch_id != branch_id:
                 continue
-            if ref.kind == "body_atom":
+            if isinstance(ref, PolicyLoweredRef) and ref.kind == "body_atom":
                 assert ref.lowered_index is not None
                 if ref.lowered_index in body:
                     raise ProtocolShapeError("Policy lineage duplicates a body atom coordinate")
                 body[ref.lowered_index] = ref
-            elif ref.kind == "unify":
+            elif isinstance(ref, PolicyLoweredRef) and ref.kind == "unify":
                 assert ref.lowered_index is not None
                 if ref.lowered_index in unify:
                     raise ProtocolShapeError("Policy lineage duplicates a Unify coordinate")
                 unify[ref.lowered_index] = ref
+            elif isinstance(ref, PolicyConditionLoweredRefV0):
+                if ref.lowered_index in conditions:
+                    raise ProtocolShapeError("Policy lineage duplicates a condition coordinate")
+                conditions[ref.lowered_index] = ref
     if tuple(sorted(body)) != tuple(range(len(body))):
         raise ProtocolShapeError("Policy lineage body coordinates are not contiguous")
+    expected_condition_indexes = tuple(range(len(body), len(body) + len(conditions)))
+    if tuple(sorted(conditions)) != expected_condition_indexes:
+        raise ProtocolShapeError("Policy condition lineage coordinates are not contiguous")
     if tuple(sorted(unify)) != tuple(range(len(unify))):
         raise ProtocolShapeError("Policy lineage Unify coordinates are not contiguous")
-    return body, tuple(unify[index] for index in range(len(unify)))
+    return (
+        body,
+        tuple(conditions[index] for index in expected_condition_indexes),
+        tuple(unify[index] for index in range(len(unify))),
+    )
 
 
 def _captured_atom_evidence(
@@ -307,13 +357,14 @@ def _captured_joins(
     branch_id: str,
     branch_index: int,
     body_count: int,
+    policy_condition_count: int,
     query_binding_count: int,
     refs: tuple[PolicyLoweredRef, ...],
     steps: Mapping[str, Any],
 ) -> tuple[tuple[EvidenceJoin, ...], tuple[tuple[str, str], ...]]:
     joins: list[EvidenceJoin] = []
     keys: list[tuple[str, str]] = []
-    offset = body_count + query_binding_count
+    offset = body_count + policy_condition_count + query_binding_count
     for ordinal, ref in enumerate(refs):
         index = offset + ordinal
         atom = branch[index]

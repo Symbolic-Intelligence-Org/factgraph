@@ -89,8 +89,12 @@ def resolve_evaluation_query_target(
     target: ResolvedRuleBundle | Policy | ResolvedEvaluationQueryTargetV1,
     *,
     address_space: SemanticAddressSpace | None = None,
+    schema_index: SchemaIndex | None = None,
 ) -> ResolvedEvaluationQueryTargetV1:
     """Resolve a source target without executing it or consulting a registry."""
+
+    if schema_index is not None and not isinstance(schema_index, SchemaIndex):
+        raise _error("schema_index must be SchemaIndex", "INVALID_QUERY_TARGET_SCHEMA")
 
     if isinstance(target, ResolvedEvaluationQueryTargetV1):
         if address_space is not None:
@@ -99,6 +103,11 @@ def resolve_evaluation_query_target(
                 "QUERY_TARGET_ADDRESS_SPACE_UNEXPECTED",
             )
         _assert_resolved_target_current(target)
+        if schema_index is not None and schema_index.schema_digest != target.run_target.schema_digest:
+            raise _error(
+                "resolved Query target schema does not match this FactGraph",
+                "QUERY_TARGET_SCHEMA_MISMATCH",
+            )
         return target
 
     if isinstance(target, ResolvedRuleBundle):
@@ -109,13 +118,20 @@ def resolve_evaluation_query_target(
             )
         try:
             assert_rule_contract_current(target.rule, target.contract)
+            if schema_index is not None and schema_index.schema_digest != target.contract.schema_digest:
+                raise _error(
+                    "Rule target schema does not match this FactGraph",
+                    "QUERY_TARGET_SCHEMA_MISMATCH",
+                )
             space = SemanticAddressSpace((manage_rule_occurrence(target, "target"),))
             policy = Policy(
                 f"{_RULE_LIFT_PREFIX}{target.rule.id}",
                 PolicyOccurrence("target"),
                 version=target.rule.version,
             )
-            compiled = compile_policy(policy, address_space=space)
+            compiled = compile_policy(policy, address_space=space, schema_index=schema_index)
+        except EvaluationQueryTargetError:
+            raise
         except (SemanticPortResolutionError, ValueError) as exc:
             raise _error("resolved Rule target is no longer current", "QUERY_RULE_TARGET_STALE") from exc
         run_target = build_evaluation_run_target_v0(
@@ -139,8 +155,19 @@ def resolve_evaluation_query_target(
                 "QUERY_POLICY_RESERVED_NAMESPACE",
             )
         try:
-            compiled = compile_policy(target, address_space=address_space)
             schema_digest = _schema_digest_for_space(address_space)
+            if schema_index is not None and schema_index.schema_digest != schema_digest:
+                raise _error(
+                    "Policy target schema does not match this FactGraph",
+                    "QUERY_TARGET_SCHEMA_MISMATCH",
+                )
+            compiled = compile_policy(
+                target,
+                address_space=address_space,
+                schema_index=schema_index,
+            )
+        except EvaluationQueryTargetError:
+            raise
         except (SemanticPortResolutionError, ValueError) as exc:
             raise _error("Policy target could not be resolved", "QUERY_POLICY_TARGET_INVALID") from exc
         run_target = build_evaluation_run_target_v0(

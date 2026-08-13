@@ -95,6 +95,7 @@ class CompiledEvaluationQueryV0:
             self.compiled_policy._body_plan, head=expected_head,
             query_digest=self.query_digest, head_links=_query_head_links(self.selections),
             value_bindings=_query_value_bindings(self.bindings),
+            policy_conditions=self.compiled_policy._policy_conditions,
         )
         if self._lowering_plan != expected_plan:
             raise ValueError("compiled EvaluationQuery lowering plan is not compiler-derived")
@@ -150,6 +151,7 @@ def compile_evaluation_query(
             compiled_policy._body_plan, head=head, query_digest=query_digest,
             head_links=_query_head_links(normalized_selections),
             value_bindings=_query_value_bindings(normalized_bindings),
+            policy_conditions=compiled_policy._policy_conditions,
         )
         return CompiledEvaluationQueryV0(
             query_digest, compiled_policy.policy_digest, address_space.address_space_digest,

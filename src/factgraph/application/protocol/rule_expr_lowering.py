@@ -151,6 +151,45 @@ class _RuleExprQueryValueBinding:
             raise RuleExprError("query value binding must contain Const")
 
 
+PolicyConditionRole = Literal["left_field", "right_field", "compare"]
+
+
+@dataclass(frozen=True)
+class RuleExprPolicyCondition:
+    """One compiler-owned Policy condition to inject after Rule bodies.
+
+    The RuleExpr lowerer intentionally knows no Policy AST or schema.  It only
+    receives an already-resolved Atom plus the stable authored Policy node and
+    condition coordinates needed for trace/evidence ownership.
+    """
+
+    branch_id: str
+    policy_node_id: str
+    condition_id: str
+    role: PolicyConditionRole
+    atom: PredAtom | CmpAtom
+
+    def __post_init__(self) -> None:
+        for name in ("branch_id", "policy_node_id", "condition_id"):
+            _require_non_empty_str(getattr(self, name), field_name=name)
+        if self.role not in {"left_field", "right_field", "compare"}:
+            raise RuleExprError("RuleExprPolicyCondition.role is invalid")
+        if self.role in {"left_field", "right_field"} and not isinstance(self.atom, PredAtom):
+            raise RuleExprError("Policy field condition must materialize a PredAtom")
+        if self.role == "compare" and not isinstance(self.atom, CmpAtom):
+            raise RuleExprError("Policy compare condition must materialize a CmpAtom")
+
+    @property
+    def canonical_key(self) -> tuple[object, ...]:
+        return (
+            self.branch_id,
+            self.policy_node_id,
+            self.condition_id,
+            self.role,
+            repr(self.atom),
+        )
+
+
 @dataclass(frozen=True)
 class RuleExprLoweringBranch:
     branch_id: str
@@ -179,6 +218,7 @@ class RuleExprLoweringPlan:
     canonical_key: tuple[object, ...]
     query_head_links: tuple[_RuleExprQueryHeadLink, ...] = ()
     query_value_bindings: tuple[_RuleExprQueryValueBinding, ...] = ()
+    policy_conditions: tuple[RuleExprPolicyCondition, ...] = ()
 
     def __post_init__(self) -> None:
         if self.source_kind not in {"rule", "rule_expr"}:
@@ -199,7 +239,13 @@ class RuleExprLoweringPlan:
             field_name="query_value_bindings",
             item_type=_RuleExprQueryValueBinding,
         )
+        _require_tuple(
+            self.policy_conditions,
+            field_name="policy_conditions",
+            item_type=RuleExprPolicyCondition,
+        )
         _validate_query_extensions(self)
+        _validate_policy_conditions(self)
 
 
 @dataclass(frozen=True)
@@ -240,6 +286,22 @@ class RuleExprHeadPortLinkMaterialization:
 
 
 @dataclass(frozen=True)
+class RuleExprPolicyConditionMaterialization:
+    branch_id: str
+    policy_node_id: str
+    condition_id: str
+    role: PolicyConditionRole
+    materialized_condition_index: int
+
+    def __post_init__(self) -> None:
+        for name in ("branch_id", "policy_node_id", "condition_id"):
+            _require_non_empty_str(getattr(self, name), field_name=name)
+        if self.role not in {"left_field", "right_field", "compare"}:
+            raise RuleExprError("RuleExprPolicyConditionMaterialization.role is invalid")
+        _require_non_negative_int(self.materialized_condition_index, field_name="materialized_condition_index")
+
+
+@dataclass(frozen=True)
 class RuleExprEvaluationTrace:
     canonical_key: tuple[object, ...]
     engine: RuleExprAdapterEngine
@@ -250,6 +312,7 @@ class RuleExprEvaluationTrace:
     join_materializations: tuple[RuleExprJoinMaterialization, ...]
     head_binding: RuleExprHeadBinding
     head_port_link_materializations: tuple[RuleExprHeadPortLinkMaterialization, ...] = ()
+    policy_condition_materializations: tuple[RuleExprPolicyConditionMaterialization, ...] = ()
     support_digest: str | None = None
     support_kind: str | None = None
 
@@ -271,6 +334,11 @@ class RuleExprEvaluationTrace:
             self.head_port_link_materializations,
             field_name="head_port_link_materializations",
             item_type=RuleExprHeadPortLinkMaterialization,
+        )
+        _require_tuple(
+            self.policy_condition_materializations,
+            field_name="policy_condition_materializations",
+            item_type=RuleExprPolicyConditionMaterialization,
         )
         if not isinstance(self.head_binding, RuleExprHeadBinding):
             raise RuleExprError("RuleExprEvaluationTrace.head_binding must be RuleExprHeadBinding")
@@ -442,7 +510,7 @@ def _materialize_adapter_derivation_plan(
     traces: list[RuleExprEvaluationTrace] = []
     head_vars = _head_var_names(plan)
     for runtime_case_index, branch in enumerate(plan.branches):
-        body, joins, head_links = _materialize_branch(branch, plan)
+        body, joins, head_links, policy_conditions = _materialize_branch(branch, plan)
         materialized_branches.append(body)
         traces.append(
             RuleExprEvaluationTrace(
@@ -454,6 +522,7 @@ def _materialize_adapter_derivation_plan(
                 occurrence_map=plan.occurrence_map,
                 join_materializations=joins,
                 head_port_link_materializations=head_links,
+                policy_condition_materializations=policy_conditions,
                 head_binding=plan.head_binding,
             )
         )
@@ -1001,6 +1070,7 @@ def _attach_evaluation_query_head(
     query_digest: str,
     head_links: tuple[_RuleExprQueryHeadLink, ...],
     value_bindings: tuple[_RuleExprQueryValueBinding, ...],
+    policy_conditions: tuple[RuleExprPolicyCondition, ...] = (),
 ) -> RuleExprLoweringPlan:
     """Attach exact query projection metadata without changing legacy plans."""
 
@@ -1013,6 +1083,10 @@ def _attach_evaluation_query_head(
         query_value_bindings=tuple(
             sorted(value_bindings, key=lambda item: (item.branch_id, item.occurrence_alias, item.port_name))
         ),
+        # Condition ids are stable authored/compiler coordinates, but their
+        # lexical order is deliberately not the evaluation order.  A field
+        # lookup has to bind before the comparison which consumes it.
+        policy_conditions=tuple(sorted(policy_conditions, key=_policy_condition_sort_key)),
     )
 
 
@@ -1147,11 +1221,28 @@ def _materialize_branch(
     list[object],
     tuple[RuleExprJoinMaterialization, ...],
     tuple[RuleExprHeadPortLinkMaterialization, ...],
+    tuple[RuleExprPolicyConditionMaterialization, ...],
 ]:
     materialized_atoms: list[Atom] = list(branch.body_atoms)
     if plan.head_binding.kind == "external":
         head_var_map = _head_alias_var_map(plan.head)
         materialized_atoms.extend(_rewrite_atom(atom, head_var_map) for atom in plan.head.when)
+
+    policy_conditions: list[RuleExprPolicyConditionMaterialization] = []
+    for condition in plan.policy_conditions:
+        if condition.branch_id != branch.branch_id:
+            continue
+        materialized_index = len(materialized_atoms)
+        materialized_atoms.append(condition.atom)
+        policy_conditions.append(
+            RuleExprPolicyConditionMaterialization(
+                branch_id=branch.branch_id,
+                policy_node_id=condition.policy_node_id,
+                condition_id=condition.condition_id,
+                role=condition.role,
+                materialized_condition_index=materialized_index,
+            )
+        )
 
     for query_binding in plan.query_value_bindings:
         if query_binding.branch_id != branch.branch_id:
@@ -1213,7 +1304,12 @@ def _materialize_branch(
                 )
             )
 
-    return lower_ast_to_where_ir(AndExpr(materialized_atoms)), tuple(joins), tuple(head_links)
+    return (
+        lower_ast_to_where_ir(AndExpr(materialized_atoms)),
+        tuple(joins),
+        tuple(head_links),
+        tuple(policy_conditions),
+    )
 
 
 def _declared_port_branch_source(
@@ -1349,6 +1445,48 @@ def _validate_query_extensions(plan: RuleExprLoweringPlan) -> None:
         raise RuleExprError("query value bindings must be unique per branch port")
     for query_binding in plan.query_value_bindings:
         _query_port_binding(plan, query_binding.branch_id, query_binding.occurrence_alias, query_binding.port_name)
+
+
+def _validate_policy_conditions(plan: RuleExprLoweringPlan) -> None:
+    """Keep Policy compiler injections branch-local and unique.
+
+    This is intentionally independent from Query extension validation: Policy
+    conditions are valid on a head-independent compiled Policy as well as on a
+    synthetic Query projection plan.
+    """
+
+    if not plan.policy_conditions:
+        return
+    branch_ids = {branch.branch_id for branch in plan.branches}
+    seen: set[tuple[str, str, str]] = set()
+    last_by_compare: dict[tuple[str, str], int] = {}
+    role_order = {"left_field": 0, "right_field": 1, "compare": 2}
+    for condition in plan.policy_conditions:
+        if condition.branch_id not in branch_ids:
+            raise RuleExprError("Policy condition references an absent lowering branch")
+        key = (condition.branch_id, condition.policy_node_id, condition.condition_id)
+        if key in seen:
+            raise RuleExprError("Policy condition coordinates must be unique")
+        seen.add(key)
+        # Conditions are canonically ordered by role within a compare, so its
+        # lookup(s) always precede the comparison atom that consumes them.
+        compare_key = (condition.branch_id, condition.policy_node_id)
+        current = role_order[condition.role]
+        previous = last_by_compare.get(compare_key, -1)
+        if current < previous:
+            raise RuleExprError("Policy conditions must preserve lookup-before-compare order")
+        last_by_compare[compare_key] = current
+
+
+def _policy_condition_sort_key(condition: RuleExprPolicyCondition) -> tuple[object, ...]:
+    role_order = {"left_field": 0, "right_field": 1, "compare": 2}
+    return (
+        condition.branch_id,
+        condition.policy_node_id,
+        role_order[condition.role],
+        condition.condition_id,
+        repr(condition.atom),
+    )
 
 
 def _canonical_children(children: tuple[_RuleExpr, ...]) -> tuple[_RuleExpr, ...]:

@@ -14,7 +14,7 @@ PolicyExplanationState: TypeAlias = Literal[
 PolicyBranchParticipation: TypeAlias = Literal[
     "contributes", "policy_failed", "outside_policy_filtered", "blocked", "unknown",
 ]
-PolicyEvidenceKind: TypeAlias = Literal["atom", "join"]
+PolicyEvidenceKind: TypeAlias = Literal["atom", "join", "condition"]
 _STATES = {"holds", "fails", "not_reached", "not_applicable", "indeterminate"}
 _TREE_STATES = {"holds", "fails", "not_reached"}
 _PARTICIPATION = {
@@ -39,24 +39,49 @@ class PolicyEvidenceLocatorV0:
     occurrence_alias: str | None = None
     left: SemanticPortAddress | None = None
     right: SemanticPortAddress | None = None
+    policy_node_id: str | None = None
+    condition_id: str | None = None
+    condition_role: Literal["left_field", "right_field", "compare"] | None = None
     source_refs: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         _text(self.branch_id, "branch_id")
         _text(self.evidence_id, "evidence_id")
-        if self.evidence_kind not in {"atom", "join"}:
-            raise ProtocolShapeError("Policy evidence kind must be atom or join")
+        if self.evidence_kind not in {"atom", "join", "condition"}:
+            raise ProtocolShapeError("Policy evidence kind must be atom, join, or condition")
         if self.status not in _TREE_STATES:
             raise ProtocolShapeError("Policy evidence status is invalid")
-        atom_shape = self.occurrence_alias is not None and self.left is None and self.right is None
+        atom_shape = (
+            self.occurrence_alias is not None
+            and self.left is None
+            and self.right is None
+            and self.policy_node_id is None
+            and self.condition_id is None
+            and self.condition_role is None
+        )
         join_shape = (
             self.occurrence_alias is None
             and isinstance(self.left, SemanticPortAddress)
             and isinstance(self.right, SemanticPortAddress)
             and self.left != self.right
+            and self.policy_node_id is None
+            and self.condition_id is None
+            and self.condition_role is None
+        )
+        condition_shape = (
+            self.occurrence_alias is None
+            and self.left is None
+            and self.right is None
+            and isinstance(self.policy_node_id, str)
+            and bool(self.policy_node_id)
+            and isinstance(self.condition_id, str)
+            and bool(self.condition_id)
+            and self.condition_role in {"left_field", "right_field", "compare"}
         )
         if (self.evidence_kind == "atom" and not atom_shape) or (
             self.evidence_kind == "join" and not join_shape
+        ) or (
+            self.evidence_kind == "condition" and not condition_shape
         ):
             raise ProtocolShapeError("Policy evidence fields do not match evidence kind")
         if self.occurrence_alias is not None:
@@ -75,13 +100,13 @@ class PolicyNodeBranchStateV0:
 @dataclass(frozen=True)
 class PolicyNodeEvaluationV0:
     node_id: str
-    kind: Literal["occurrence", "all", "any", "unify"]
+    kind: Literal["occurrence", "all", "any", "unify", "compare"]
     state: PolicyExplanationState
     branch_states: tuple[PolicyNodeBranchStateV0, ...]
 
     def __post_init__(self) -> None:
         _text(self.node_id, "node_id")
-        if self.kind not in {"occurrence", "all", "any", "unify"}:
+        if self.kind not in {"occurrence", "all", "any", "unify", "compare"}:
             raise ProtocolShapeError("Policy explanation node kind is invalid")
         _state(self.state, "state")
         _typed_tuple(self.branch_states, PolicyNodeBranchStateV0, "branch_states")
@@ -241,12 +266,15 @@ class PolicyExplanationViewV0:
             _token("policy_explanation_view_v0", _plain(values)),
         )
 
-def _locator_key(locator: PolicyEvidenceLocatorV0) -> tuple[str, str, str, str]:
+def _locator_key(locator: PolicyEvidenceLocatorV0) -> tuple[str, str, str, str, str, str, str]:
     return (
         locator.branch_id,
         locator.evidence_kind,
         locator.evidence_id,
         locator.occurrence_alias or "",
+        locator.policy_node_id or "",
+        locator.condition_id or "",
+        locator.condition_role or "",
     )
 
 def _typed_tuple(value: object, item_type: type[object], name: str) -> None:

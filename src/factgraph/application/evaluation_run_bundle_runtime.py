@@ -63,12 +63,16 @@ from .protocol.evaluation_run_bundle import (
     _token,
 )
 from .protocol.policy import (
+    PolicyCompareStructureNodeV0,
+    PolicyConditionLoweredRefV0,
+    PolicyFieldNavigation,
     PolicyLineage,
     PolicyLoweredRef,
     PolicyNodeLineage,
     PolicyStructureNodeV0,
     PolicyStructureV0,
 )
+from .protocol.schema_runtime import FieldPath
 from .protocol.semantic_address import SemanticPortAddress
 from .protocol.rule_expr_lowering import _materialize_adapter_derivation_plan
 
@@ -916,9 +920,13 @@ _WIRE_TYPES = {
     cls.__name__: cls
     for cls in (
         SemanticPortAddress,
+        FieldPath,
+        PolicyFieldNavigation,
         PolicyStructureNodeV0,
+        PolicyCompareStructureNodeV0,
         PolicyStructureV0,
         PolicyLoweredRef,
+        PolicyConditionLoweredRefV0,
         PolicyNodeLineage,
         PolicyLineage,
         EvaluationRunRulePinV0,

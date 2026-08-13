@@ -439,9 +439,17 @@ historical completeness claim. `underdetermined` and `unsupported` remain
 explicit future-profile states. An expected Query rejects `capture=` and
 `scenario=` because current F4/F5A contracts do not seal expectation inventory.
 It has no string lookup, registry, Package, generic `expect`, modes,
-empty-select existence, navigation, Operator, or non-native configuration
+empty-select existence, Query-level navigation, Operator, or non-native configuration
 surface. Ordinary capture/evidence remains the existing F4 path;
 the Run anchor records whether its source was a direct Policy or a Rule lift.
+
+A direct Policy may itself contain the narrow application-level
+`PolicyCompare` constraint. Its operands are either direct scalar
+`SemanticPortAddress` values or a structured `PolicyFieldNavigation` from an
+identity port to one scalar field. That navigation is compiled and evidenced as
+Policy-owned lookup/compare conditions; it is not accepted by `.bind(...)` or
+`.select(...)`. See `src/factgraph/application/docs/rule.md` for the exact
+schema, branch-total, and native-domain limits.
 
 `builder.evaluate(scenario=...)` forwards either the existing narrow
 `ScenarioFieldSubstitutionV0(...)` operation or the atomic

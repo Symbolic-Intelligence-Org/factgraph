@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, replace
 from typing import Literal, cast
 
@@ -8,6 +8,7 @@ from .explain.evidence_tree import (
     EvidenceAtom,
     EvidenceGraph,
     EvidenceJoin,
+    EvidencePolicyCondition,
     EvidenceRule,
     EvidenceTimeline,
     EvidenceTree,
@@ -17,7 +18,15 @@ from .explain.evidence_tree import (
     Source,
 )
 from .protocol.evaluation_run import EvaluationRunAnchorV0
-from .protocol.policy import PolicyLoweredRef, PolicyNodeLineage, PolicyStructureNodeV0
+from .protocol.policy import (
+    PolicyCompareStructureNodeV0,
+    PolicyConditionLoweredRefV0,
+    PolicyFieldNavigation,
+    PolicyLoweredRef,
+    PolicyNodeLineage,
+    PolicyStructureNode,
+    PolicyStructureNodeV0,
+)
 from .protocol.policy_explanation import (
     PolicyBranchEvaluationV0,
     PolicyBranchParticipation,
@@ -33,7 +42,7 @@ from .protocol.policy_explanation import (
 )
 from .protocol.semantic_address import SemanticPortAddress
 _TreeState = Literal["holds", "fails", "not_reached"]
-_EvidenceKey = tuple[str, Literal["atom", "join"], str]
+_EvidenceKey = tuple[str, Literal["atom", "join", "condition"], str]
 @dataclass(frozen=True)
 class _AtomRecord:
     rule: EvidenceRule
@@ -43,12 +52,19 @@ class _AtomRecord:
 class _JoinRecord:
     join: EvidenceJoin
     locator: PolicyEvidenceLocatorV0
+
+
+@dataclass(frozen=True)
+class _ConditionRecord:
+    condition: EvidencePolicyCondition
+    locator: PolicyEvidenceLocatorV0
 @dataclass(frozen=True)
 class _TreeIndex:
     tree: EvidenceTree
     body_rules: dict[str, EvidenceRule]
     atoms: dict[str, _AtomRecord]
     joins: dict[str, _JoinRecord]
+    conditions: dict[str, _ConditionRecord]
 def project_policy_explanation_v0(
     run_anchor: EvaluationRunAnchorV0,
     evidence: EvidenceGraph,
@@ -107,6 +123,16 @@ def project_policy_explanation_v0(
                 _mark_mapped(mapped_evidence, locators)
             elif node.kind == "unify":
                 state, locators = _project_unify(branch_id, lineage_node, index)
+                states_by_node[node_id][branch_id] = state
+                direct_locators[node_id].extend(locators)
+                _mark_mapped(mapped_evidence, locators)
+            elif node.kind == "compare":
+                if not isinstance(node, PolicyCompareStructureNodeV0):
+                    raise _projection_error(
+                        "POLICY_STRUCTURE_LINEAGE_MISMATCH",
+                        f"Compare node {node_id!r} has an invalid persisted structure shape",
+                    )
+                state, locators = _project_compare(branch_id, node, lineage_node, index)
                 states_by_node[node_id][branch_id] = state
                 direct_locators[node_id].extend(locators)
                 _mark_mapped(mapped_evidence, locators)
@@ -178,6 +204,7 @@ def project_policy_explanation_v0(
         for locator in (
             *(record.locator for record in index.atoms.values()),
             *(record.locator for record in index.joins.values()),
+            *(record.locator for record in index.conditions.values()),
         )
     }
     if not mapped_evidence <= set(all_evidence):
@@ -326,6 +353,7 @@ def _index_tree(tree: EvidenceTree) -> _TreeIndex:
     body_rules: dict[str, EvidenceRule] = {}
     atoms: dict[str, _AtomRecord] = {}
     joins: dict[str, _JoinRecord] = {}
+    conditions: dict[str, _ConditionRecord] = {}
     for rule in tree.rules:
         if not isinstance(rule, EvidenceRule) or rule.role not in {"head", "body"}:
             raise _projection_error(
@@ -382,17 +410,41 @@ def _index_tree(tree: EvidenceTree) -> _TreeIndex:
                 right=right,
             ),
         )
-    return _TreeIndex(tree, body_rules, atoms, joins)
+    for condition in tree.policy_conditions:
+        if not isinstance(condition, EvidencePolicyCondition):
+            raise _projection_error("INVALID_EVIDENCE_SHAPE", "Policy condition evidence is invalid")
+        atom = condition.atom
+        if not isinstance(atom.atom_id, str) or not atom.atom_id:
+            raise _projection_error("INVALID_EVIDENCE_SHAPE", "Policy condition atom id is invalid")
+        if atom.atom_id in conditions or atom.atom_id in atoms:
+            raise _projection_error(
+                "DUPLICATE_EVIDENCE_COORDINATE",
+                f"Policy condition atom {atom.atom_id!r} overlaps another evidence atom",
+            )
+        conditions[atom.atom_id] = _ConditionRecord(
+            condition,
+            PolicyEvidenceLocatorV0(
+                branch_id=tree.tree_id,
+                evidence_kind="condition",
+                evidence_id=atom.atom_id,
+                status=_verdict_state(atom),
+                policy_node_id=condition.policy_node_id,
+                condition_id=condition.condition_id,
+                condition_role=condition.role,
+                source_refs=_source_refs(atom),
+            ),
+        )
+    return _TreeIndex(tree, body_rules, atoms, joins, conditions)
 def _project_occurrence(
     branch_id: str,
     node: PolicyStructureNodeV0,
     lineage: PolicyNodeLineage,
     index: _TreeIndex,
-    rule_pin_by_alias: dict[str, object],
+    rule_pin_by_alias: Mapping[str, object],
 ) -> tuple[PolicyExplanationState, tuple[PolicyEvidenceLocatorV0, ...]]:
-    branch_refs = _refs(lineage, branch_id, "branch")
-    occurrence_refs = _refs(lineage, branch_id, "occurrence")
-    body_refs = _refs(lineage, branch_id, "body_atom")
+    branch_refs = _legacy_refs(lineage, branch_id, "branch")
+    occurrence_refs = _legacy_refs(lineage, branch_id, "occurrence")
+    body_refs = _legacy_refs(lineage, branch_id, "body_atom")
     if not branch_refs:
         if occurrence_refs or body_refs:
             raise _projection_error(
@@ -471,7 +523,7 @@ def _project_unify(
     lineage: PolicyNodeLineage,
     index: _TreeIndex,
 ) -> tuple[PolicyExplanationState, tuple[PolicyEvidenceLocatorV0, ...]]:
-    refs = _refs(lineage, branch_id, "unify")
+    refs = _legacy_refs(lineage, branch_id, "unify")
     if not refs:
         return "not_applicable", ()
     if len(refs) != 1:
@@ -515,10 +567,80 @@ def _project_unify(
             f"Authored Unify evidence {expected_id!r} has mismatched endpoints",
         )
     return record.locator.status, (record.locator,)
+
+
+def _project_compare(
+    branch_id: str,
+    node: PolicyCompareStructureNodeV0,
+    lineage: PolicyNodeLineage,
+    index: _TreeIndex,
+) -> tuple[PolicyExplanationState, tuple[PolicyEvidenceLocatorV0, ...]]:
+    """Project exact compiler-owned lookup/compare evidence to one compare leaf."""
+
+    condition_refs = _condition_refs(lineage, branch_id)
+    # Compare is deliberately not assigned a coarse ``branch`` lineage ref.
+    # Its compiler-owned condition refs are both its precise branch membership
+    # and its atom coordinates.  Requiring a legacy branch ref here would turn
+    # a fully materialized direct comparison into a false ``not_applicable``.
+    if not condition_refs:
+        return "not_applicable", ()
+    branch_refs = _legacy_refs(lineage, branch_id, "branch")
+    if len(branch_refs) > 1:
+        raise _projection_error(
+            "POLICY_LINEAGE_MAPPING_INCOMPLETE",
+            f"Compare {node.node_id!r} has ambiguous legacy branch lineage in {branch_id!r}",
+        )
+    if any(ref.policy_node_id != node.node_id for ref in condition_refs):
+        raise _projection_error(
+            "POLICY_LINEAGE_MAPPING_INCOMPLETE",
+            f"Compare {node.node_id!r} condition lineage names another Policy node",
+        )
+
+    expected_roles = {"compare"}
+    if isinstance(node.left, PolicyFieldNavigation):
+        expected_roles.add("left_field")
+    if isinstance(node.right, PolicyFieldNavigation):
+        expected_roles.add("right_field")
+    refs_by_role = {ref.role: ref for ref in condition_refs}
+    if (
+        len(refs_by_role) != len(condition_refs)
+        or set(refs_by_role) != expected_roles
+    ):
+        raise _projection_error(
+            "POLICY_LINEAGE_MAPPING_INCOMPLETE",
+            f"Compare {node.node_id!r} condition roles are incomplete or ambiguous",
+        )
+
+    locators: list[PolicyEvidenceLocatorV0] = []
+    statuses: list[_TreeState] = []
+    for role in ("left_field", "right_field", "compare"):
+        ref = refs_by_role.get(role)
+        if ref is None:
+            continue
+        expected_atom_id = f"{branch_id}:atom:{ref.lowered_index}"
+        record = index.conditions.get(expected_atom_id)
+        if record is None:
+            raise _projection_error(
+                "POLICY_LINEAGE_MAPPING_INCOMPLETE",
+                f"Policy condition {expected_atom_id!r} is missing from EvidenceTree",
+            )
+        locator = record.locator
+        if (
+            locator.policy_node_id != node.node_id
+            or locator.condition_id != ref.condition_id
+            or locator.condition_role != ref.role
+        ):
+            raise _projection_error(
+                "POLICY_LINEAGE_MAPPING_INCOMPLETE",
+                f"Policy condition {expected_atom_id!r} has mismatched authored coordinates",
+            )
+        statuses.append(locator.status)
+        locators.append(locator)
+    return _fold_all(statuses), tuple(locators)
 def _project_structural_state(
     node_id: str,
     branch_id: str,
-    structure_by_id: dict[str, PolicyStructureNodeV0],
+    structure_by_id: dict[str, PolicyStructureNode],
     lineage_by_id: dict[str, PolicyNodeLineage],
     states_by_node: dict[str, dict[str, PolicyExplanationState]],
     memo: dict[str, PolicyExplanationState],
@@ -530,7 +652,7 @@ def _project_structural_state(
     if node_id in active:
         raise _projection_error("INVALID_POLICY_STRUCTURE", "Policy structure contains a cycle")
     node = structure_by_id[node_id]
-    if node.kind in {"occurrence", "unify"}:
+    if node.kind in {"occurrence", "unify", "compare"}:
         state = states_by_node[node_id].get(branch_id)
         if state is None:
             raise _projection_error(
@@ -540,7 +662,7 @@ def _project_structural_state(
         memo[node_id] = state
         return state
     active.add(node_id)
-    applicable = bool(_refs(lineage_by_id[node_id], branch_id, "branch"))
+    applicable = bool(_legacy_refs(lineage_by_id[node_id], branch_id, "branch"))
     if not applicable:
         state = "not_applicable"
     else:
@@ -575,13 +697,28 @@ def _project_structural_state(
     memo[node_id] = state
     states_by_node[node_id][branch_id] = state
     return state
-def _refs(
+def _legacy_refs(
     lineage: PolicyNodeLineage,
     branch_id: str,
     kind: str,
 ) -> tuple[PolicyLoweredRef, ...]:
     return tuple(
-        ref for ref in lineage.lowered_refs if ref.branch_id == branch_id and ref.kind == kind
+        ref
+        for ref in lineage.lowered_refs
+        if isinstance(ref, PolicyLoweredRef)
+        and ref.branch_id == branch_id
+        and ref.kind == kind
+    )
+
+
+def _condition_refs(
+    lineage: PolicyNodeLineage,
+    branch_id: str,
+) -> tuple[PolicyConditionLoweredRefV0, ...]:
+    return tuple(
+        ref
+        for ref in lineage.lowered_refs
+        if isinstance(ref, PolicyConditionLoweredRefV0) and ref.branch_id == branch_id
     )
 def _fold_all(states: tuple[_TreeState, ...] | list[_TreeState]) -> _TreeState:
     if not states:
@@ -653,12 +790,15 @@ def _mark_mapped(
         mapped.add(key)
 def _locator_key(locator: PolicyEvidenceLocatorV0) -> _EvidenceKey:
     return locator.branch_id, locator.evidence_kind, locator.evidence_id
-def _protocol_locator_key(locator: PolicyEvidenceLocatorV0) -> tuple[str, str, str, str]:
+def _protocol_locator_key(locator: PolicyEvidenceLocatorV0) -> tuple[str, str, str, str, str, str, str]:
     return (
         locator.branch_id,
         locator.evidence_kind,
         locator.evidence_id,
         locator.occurrence_alias or "",
+        locator.policy_node_id or "",
+        locator.condition_id or "",
+        locator.condition_role or "",
     )
 def _projection_error(code: str, message: str) -> PolicyExplanationProjectionError:
     return PolicyExplanationProjectionError(message, code=code)

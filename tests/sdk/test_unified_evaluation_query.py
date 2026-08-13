@@ -10,6 +10,8 @@ from factgraph.application import (
     build_schema_index,
     compile_evaluation_query,
     compile_policy,
+    evaluation_run_bundle_bytes,
+    evaluation_run_bundle_from_bytes,
     evaluation_run_bundle_evidence,
     manage_rule_occurrence,
     project_policy_explanation_v0,
@@ -24,6 +26,9 @@ from factgraph.application.protocol import (
     EvaluationQuerySelection,
     FieldPath,
     Policy,
+    PolicyAll,
+    PolicyCompare,
+    PolicyFieldNavigation,
     PolicyOccurrence,
     ScenarioFieldSubstitutionV0,
     ScenarioFieldSubstitutionSetV0,
@@ -165,6 +170,113 @@ class UnifiedEvaluationQueryTests(unittest.TestCase):
         self.assertEqual(result.run_anchor.target.original_target_kind, "policy")
         self.assertEqual(result.run_anchor.target.normalization_kind, "policy_direct_v0")
         self.assertEqual(result.run_anchor.target.target_id, "people")
+
+    def test_direct_policy_field_navigation_comparison_executes_explains_and_captures(self) -> None:
+        graph = SDKStore([Person])
+        _seed(graph, "alice", age=22, score=9)
+        _seed(graph, "bob", age=19, score=7)
+        bundle = _bundle(graph)
+        space = SemanticAddressSpace((
+            manage_rule_occurrence(bundle, "older"),
+            manage_rule_occurrence(bundle, "younger"),
+        ))
+        older_age = PolicyFieldNavigation(
+            _address("older", "person"), FieldPath("Person", "age"),
+        )
+        younger_age = PolicyFieldNavigation(
+            _address("younger", "person"), FieldPath("Person", "age"),
+        )
+        direct_comparison = PolicyCompare.gt(
+            _address("older", "age"), _address("younger", "age"),
+        )
+        comparison = PolicyCompare.gt(older_age, younger_age)
+        policy = Policy(
+            "older_pair",
+            PolicyAll((
+                PolicyOccurrence("older"),
+                PolicyOccurrence("younger"),
+                direct_comparison,
+                comparison,
+            )),
+            version="1",
+        )
+        compiled = (
+            graph.query(policy, address_space=space)
+            .select("older_age", _address("older", "age"))
+            .select("younger_age", _address("younger", "age"))
+            .compile()
+        )
+
+        result = graph.eval.evaluate(compiled, capture="run_bundle_v0")
+        self.assertEqual(
+            {
+                (row.bindings["older_age"]["value"], row.bindings["younger_age"]["value"])
+                for row in result.rows
+            },
+            {(22, 19)},
+        )
+        self.assertIsNotNone(result.run_anchor)
+        self.assertIsNotNone(result.run_bundle)
+        assert result.run_anchor is not None and result.run_bundle is not None
+        detached_bundle = evaluation_run_bundle_from_bytes(
+            evaluation_run_bundle_bytes(result.run_bundle)
+        )
+        self.assertEqual(detached_bundle, result.run_bundle)
+        live_explanation = result[0].explain()
+        self.assertEqual(live_explanation.status, "passed")
+        assert live_explanation.evidence is not None
+        live_tree = live_explanation.evidence.paths[0]
+        policy_conditions = live_tree.policy_conditions
+        self.assertEqual(len(policy_conditions), 4)
+        self.assertEqual(
+            [condition.role for condition in policy_conditions].count("compare"),
+            2,
+        )
+        self.assertEqual(
+            {condition.role for condition in policy_conditions},
+            {"left_field", "right_field", "compare"},
+        )
+        policy_condition_atom_ids = {condition.atom.atom_id for condition in policy_conditions}
+        body_rule_atom_ids = {
+            atom.atom_id
+            for rule in live_tree.rules
+            if rule.role == "body"
+            for atom in rule.atoms
+        }
+        self.assertFalse(policy_condition_atom_ids & body_rule_atom_ids)
+
+        captured = detached_bundle.rows[0]
+        evidence = evaluation_run_bundle_evidence(
+            detached_bundle,
+            row_capture_digest=captured.row_capture_digest,
+        )
+        projection = project_policy_explanation_v0(
+            result.run_anchor,
+            evidence,
+            semantic_row_anchor_digest=result.run_anchor.row_anchors[0].semantic_anchor_digest,
+        )
+        direct_evaluation = next(
+            node for node in projection.evaluation.nodes if node.node_id == direct_comparison.node_id
+        )
+        compare_evaluation = next(
+            node for node in projection.evaluation.nodes if node.node_id == comparison.node_id
+        )
+        direct_provenance = next(
+            node for node in projection.provenance.node_evidence if node.node_id == direct_comparison.node_id
+        )
+        compare_provenance = next(
+            node for node in projection.provenance.node_evidence if node.node_id == comparison.node_id
+        )
+        self.assertEqual(direct_evaluation.kind, "compare")
+        self.assertEqual(direct_evaluation.state, "holds")
+        self.assertEqual(len(direct_provenance.locators), 1)
+        self.assertEqual(compare_evaluation.kind, "compare")
+        self.assertEqual(compare_evaluation.state, "holds")
+        self.assertEqual(len(compare_provenance.locators), 3)
+        self.assertEqual(
+            {locator.evidence_kind for locator in compare_provenance.locators},
+            {"condition"},
+        )
 
     def test_builder_forwards_narrow_scenario_without_creating_evidence(self) -> None:
         graph = SDKStore([Person])
@@ -376,6 +488,13 @@ class UnifiedEvaluationQueryTests(unittest.TestCase):
         builder = graph.query(bundle)
         with self.assertRaisesRegex(SDKStoreError, "binding address"):
             builder.bind("target.age", 22)  # type: ignore[arg-type]
+        with self.assertRaisesRegex(SDKStoreError, "selection address"):
+            builder.select(
+                "illegal_navigation",
+                PolicyFieldNavigation(
+                    _address("target", "person"), FieldPath("Person", "age"),
+                ),  # type: ignore[arg-type]
+            )
         with patch("factgraph.sdk.store.evaluate_derivation_plans") as evaluator:
             with self.assertRaisesRegex(SDKStoreError, "compilation rejected"):
                 builder.select("age", _address("target", "missing")).evaluate()

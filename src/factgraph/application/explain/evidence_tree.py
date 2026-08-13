@@ -10,6 +10,7 @@ from factgraph.application.protocol.certainty import BOOLEAN_CERTAINTY, Certaint
 
 TreeStatus = Literal["holds", "fails", "not_reached"]
 RuleRole = Literal["head", "body"]
+PolicyConditionRole = Literal["left_field", "right_field", "compare"]
 LayoutHint = Literal["tree", "timeline"]
 
 LAYOUT_TREE: LayoutHint = "tree"
@@ -113,6 +114,37 @@ class EvidenceJoin:
 
 
 @dataclass(frozen=True)
+class EvidencePolicyCondition:
+    """One compiler-injected, authored-Policy condition.
+
+    Policy field lookups and comparisons are deliberately not represented as
+    ``EvidenceRule`` atoms: they were not authored inside any reusable Rule.
+    The wrapped ``EvidenceAtom`` retains the normal typed form, verdict and
+    provenance while the surrounding coordinates make its Policy ownership
+    explicit and replayable.
+    """
+
+    policy_node_id: str
+    condition_id: str
+    role: PolicyConditionRole
+    atom: EvidenceAtom
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.policy_node_id, str) or not self.policy_node_id:
+            raise ValueError("policy_node_id must be a non-empty string")
+        if not isinstance(self.condition_id, str) or not self.condition_id:
+            raise ValueError("condition_id must be a non-empty string")
+        if self.role not in {"left_field", "right_field", "compare"}:
+            raise ValueError("policy condition role is invalid")
+        if not isinstance(self.atom, EvidenceAtom):
+            raise ValueError("policy condition atom must be EvidenceAtom")
+
+    @property
+    def status(self) -> TreeStatus:
+        return _verdict_status(self.atom.verdict)
+
+
+@dataclass(frozen=True)
 class EvidenceRule:
     occurrence_alias: str
     rule_id: str
@@ -134,8 +166,21 @@ class EvidenceTree:
     joins: tuple[EvidenceJoin, ...] = ()
     certainty: Certainty | None = BOOLEAN_CERTAINTY
     metadata: Mapping[str, Any] = dc_field(default_factory=dict)
+    # Keep this after the pre-F5C positional fields.  Old positional callers
+    # therefore retain their ``joins, certainty, metadata`` argument layout.
+    policy_conditions: tuple[EvidencePolicyCondition, ...] = ()
 
     def __post_init__(self) -> None:
+        if not isinstance(self.policy_conditions, tuple) or not all(
+            isinstance(item, EvidencePolicyCondition) for item in self.policy_conditions
+        ):
+            raise ValueError("tree.policy_conditions must be an EvidencePolicyCondition tuple")
+        coordinates = tuple(
+            (item.policy_node_id, item.condition_id, item.role)
+            for item in self.policy_conditions
+        )
+        if len(coordinates) != len(set(coordinates)):
+            raise ValueError("tree.policy_conditions must have unique coordinates")
         object.__setattr__(self, "metadata", MappingProxyType(dict(self.metadata)))
 
 
@@ -205,7 +250,7 @@ def evidence_graph_from_dict(row: Mapping[str, Any]) -> EvidenceGraph:
 
 def _path_to_dict(path: EvidenceTree | EvidenceTimeline) -> dict[str, Any]:
     if isinstance(path, EvidenceTree):
-        return {
+        row = {
             "kind": "tree",
             "tree_id": path.tree_id,
             "status": path.status,
@@ -214,6 +259,14 @@ def _path_to_dict(path: EvidenceTree | EvidenceTimeline) -> dict[str, Any]:
             "certainty": _certainty_to_dict(path.certainty),
             "metadata": _to_jsonable(path.metadata),
         }
+        # Preserve the pre-F5C JSON shape when a tree has no Policy-owned
+        # conditions.  Readers nevertheless accept the field when present.
+        if path.policy_conditions:
+            row["policy_conditions"] = [
+                _policy_condition_to_dict(condition)
+                for condition in path.policy_conditions
+            ]
+        return row
     if isinstance(path, EvidenceTimeline):
         return {
             "kind": "timeline",
@@ -233,15 +286,22 @@ def _path_from_dict(row: Any) -> EvidenceTree | EvidenceTimeline:
     if kind == "tree":
         raw_rules = row.get("rules")
         raw_joins = row.get("joins", [])
+        raw_policy_conditions = row.get("policy_conditions", [])
         if not isinstance(raw_rules, list):
             raise ValueError("tree.rules must be list")
         if not isinstance(raw_joins, list):
             raise ValueError("tree.joins must be list")
+        if not isinstance(raw_policy_conditions, list):
+            raise ValueError("tree.policy_conditions must be list")
         return EvidenceTree(
             tree_id=_require_str(row.get("tree_id"), "tree.tree_id"),
             status=_require_tree_status(row.get("status"), "tree.status"),
             rules=tuple(_rule_from_dict(rule) for rule in raw_rules),
             joins=tuple(_join_from_dict(join) for join in raw_joins),
+            policy_conditions=tuple(
+                _policy_condition_from_dict(condition)
+                for condition in raw_policy_conditions
+            ),
             certainty=_certainty_from_dict(row.get("certainty")),
             metadata=_require_mapping(row.get("metadata", {}), "tree.metadata"),
         )
@@ -305,6 +365,26 @@ def _join_from_dict(row: Any) -> EvidenceJoin:
         right=_port_ref_from_dict(row.get("right")),
         status=_require_tree_status(row.get("status"), "join.status"),
         join_id=_require_str(row.get("join_id"), "join.join_id"),
+    )
+
+
+def _policy_condition_to_dict(condition: EvidencePolicyCondition) -> dict[str, Any]:
+    return {
+        "policy_node_id": condition.policy_node_id,
+        "condition_id": condition.condition_id,
+        "role": condition.role,
+        "atom": _atom_to_dict(condition.atom),
+    }
+
+
+def _policy_condition_from_dict(row: Any) -> EvidencePolicyCondition:
+    if not isinstance(row, Mapping):
+        raise ValueError("policy condition row must be Mapping[str, Any]")
+    return EvidencePolicyCondition(
+        policy_node_id=_require_str(row.get("policy_node_id"), "policy_condition.policy_node_id"),
+        condition_id=_require_str(row.get("condition_id"), "policy_condition.condition_id"),
+        role=_require_policy_condition_role(row.get("role")),
+        atom=_atom_from_dict(row.get("atom")),
     )
 
 
@@ -557,6 +637,20 @@ def _require_role(value: Any) -> RuleRole:
     return value
 
 
+def _require_policy_condition_role(value: Any) -> PolicyConditionRole:
+    if value not in {"left_field", "right_field", "compare"}:
+        raise ValueError("policy condition role must be left_field, right_field, or compare")
+    return value
+
+
+def _verdict_status(verdict: Verdict) -> TreeStatus:
+    if isinstance(verdict, Holds):
+        return "holds"
+    if isinstance(verdict, Fails):
+        return "fails"
+    return "not_reached"
+
+
 def _require_layout_hint(value: Any) -> LayoutHint:
     if value not in {LAYOUT_TREE, LAYOUT_TIMELINE}:
         raise ValueError("row.layout_hint must be tree or timeline")
@@ -581,6 +675,7 @@ __all__ = [
     "EvidenceAtom",
     "EvidenceGraph",
     "EvidenceJoin",
+    "EvidencePolicyCondition",
     "EvidenceProbeResult",
     "EvidenceRule",
     "EvidenceTimeline",
@@ -593,6 +688,7 @@ __all__ = [
     "LayoutHint",
     "NotReached",
     "PortRef",
+    "PolicyConditionRole",
     "RuleRole",
     "Source",
     "TreeStatus",

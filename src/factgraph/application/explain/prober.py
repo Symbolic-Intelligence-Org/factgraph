@@ -29,6 +29,7 @@ from .evidence_tree import (
     Const,
     EvidenceAtom,
     EvidenceJoin,
+    EvidencePolicyCondition,
     EvidenceProbeResult,
     EvidenceRule,
     EvidenceTree,
@@ -112,6 +113,10 @@ def _probe_branch(
     failed_upstream = False
     join_indexes = {join.materialized_condition_index for join in trace.join_materializations}
     head_link_indexes = {link.materialized_condition_index for link in trace.head_port_link_materializations}
+    policy_condition_indexes = {
+        condition.materialized_condition_index
+        for condition in trace.policy_condition_materializations
+    }
 
     for idx, atom in enumerate(atoms):
         before_envs = envs
@@ -159,9 +164,11 @@ def _probe_branch(
         atom_results,
         terminal_envs=display_terminal_envs,
         head_atom_indexes=head_atom_indexes,
+        policy_condition_indexes=policy_condition_indexes,
         rules_by_id=rules_by_id,
     )
     joins = _joins_for_trace(trace, atom_results)
+    policy_conditions = _policy_conditions_for_trace(trace, atom_results)
     body_status = _tree_status((*body_rules,)) if body_rules else "holds"
     head_status = _atom_status(head_atoms) if head_atoms else body_status
     head_rule = _head_rule_for_plan(
@@ -172,12 +179,16 @@ def _probe_branch(
         atoms=head_atoms,
         subject_binding=subject_binding,
     )
-    status = _fold_join_status(_tree_status((head_rule, *body_rules)), joins)
+    status = _fold_policy_condition_status(
+        _fold_join_status(_tree_status((head_rule, *body_rules)), joins),
+        policy_conditions,
+    )
     return EvidenceTree(
         tree_id=trace.branch_id,
         status=status,
         rules=(head_rule, *body_rules),
         joins=joins,
+        policy_conditions=policy_conditions,
         certainty=BOOLEAN_CERTAINTY,
         metadata={"branch_id": trace.branch_id, "runtime_case_index": trace.runtime_case_index},
     )
@@ -298,14 +309,21 @@ def _body_rules_for_branch(
     terminal_envs: tuple[ProbeEnv, ...],
     head_atom_indexes: set[int],
     rules_by_id: Mapping[str, Any],
+    policy_condition_indexes: set[int] | None = None,
 ) -> tuple[EvidenceRule, ...]:
     occurrence_by_alias = {occ.alias: occ for occ in plan.occurrence_map}
     join_indexes = {join.materialized_condition_index for join in trace.join_materializations}
     head_link_indexes = {link.materialized_condition_index for link in trace.head_port_link_materializations}
+    condition_indexes = policy_condition_indexes or set()
     grouped: dict[str, list[EvidenceAtom]] = {alias: [] for alias in lowered_branch.occurrence_aliases}
     fallback_alias = lowered_branch.occurrence_aliases[0] if lowered_branch.occurrence_aliases else ""
     for idx, atom, evidence_atom, _envs in atom_results:
-        if idx in join_indexes or idx in head_link_indexes or idx in head_atom_indexes:
+        if (
+            idx in join_indexes
+            or idx in head_link_indexes
+            or idx in condition_indexes
+            or idx in head_atom_indexes
+        ):
             continue
         alias = alias_for_atom(atom, lowered_branch.occurrence_aliases) or fallback_alias
         grouped.setdefault(alias, []).append(evidence_atom)
@@ -336,9 +354,13 @@ def _head_atom_indexes_for_branch(
 ) -> set[int]:
     join_indexes = {join.materialized_condition_index for join in trace.join_materializations}
     head_link_indexes = {link.materialized_condition_index for link in trace.head_port_link_materializations}
+    policy_condition_indexes = {
+        condition.materialized_condition_index
+        for condition in trace.policy_condition_materializations
+    }
     out: set[int] = set()
     for idx, atom, _evidence_atom, _envs in atom_results:
-        if idx in join_indexes or idx in head_link_indexes:
+        if idx in join_indexes or idx in head_link_indexes or idx in policy_condition_indexes:
             continue
         if alias_for_atom(atom, lowered_branch.occurrence_aliases) is not None:
             continue
@@ -479,6 +501,39 @@ def _joins_for_trace(
             )
         )
     return tuple(joins)
+
+
+def _policy_conditions_for_trace(
+    trace: RuleExprEvaluationTrace,
+    atom_results: list[tuple[int, tuple[Any, ...], EvidenceAtom, tuple[ProbeEnv, ...]]],
+) -> tuple[EvidencePolicyCondition, ...]:
+    """Attach compiler-owned Policy conditions outside ``EvidenceRule``.
+
+    The trace is the ownership authority.  We intentionally do not infer this
+    from generated variable names or atom position: either shortcut would let a
+    lowering change silently contaminate reusable Rule evidence.
+    """
+
+    atom_by_index = {idx: evidence_atom for idx, _atom, evidence_atom, _envs in atom_results}
+    conditions: list[EvidencePolicyCondition] = []
+    seen_indexes: set[int] = set()
+    for materialization in trace.policy_condition_materializations:
+        index = materialization.materialized_condition_index
+        if index in seen_indexes:
+            raise ValueError("Policy condition trace has duplicate materialized index")
+        seen_indexes.add(index)
+        evidence_atom = atom_by_index.get(index)
+        if evidence_atom is None:
+            raise ValueError("Policy condition trace references an absent materialized atom")
+        conditions.append(
+            EvidencePolicyCondition(
+                policy_node_id=materialization.policy_node_id,
+                condition_id=materialization.condition_id,
+                role=materialization.role,
+                atom=evidence_atom,
+            )
+        )
+    return tuple(conditions)
 
 
 def _ports_for_occurrence(
@@ -1071,6 +1126,22 @@ def _fold_join_status(status: TreeStatus, joins: tuple[EvidenceJoin, ...]) -> Tr
     if any(join.status == "fails" for join in joins):
         return "fails"
     if status == "holds" and any(join.status == "not_reached" for join in joins):
+        return "not_reached"
+    return status
+
+
+def _fold_policy_condition_status(
+    status: TreeStatus,
+    conditions: tuple[EvidencePolicyCondition, ...],
+) -> TreeStatus:
+    """Policy conditions are AND-conjuncts but never masquerade as Rule atoms."""
+
+    if not conditions:
+        return status
+    condition_statuses = tuple(condition.status for condition in conditions)
+    if any(item == "fails" for item in condition_statuses):
+        return "fails"
+    if status == "holds" and any(item == "not_reached" for item in condition_statuses):
         return "not_reached"
     return status
 

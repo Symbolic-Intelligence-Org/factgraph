@@ -32,6 +32,10 @@ class Person(Entity):
     age: int = Field()
 
 
+class Extra(Entity):
+    code: str = Identity()
+
+
 def _index():
     return build_schema_index(
         compile_schema_from_classes([Person], generated_at="2026-08-13T00:00:00Z")
@@ -57,6 +61,27 @@ def _bundle(index=None):
 
 
 class EvaluationQueryTargetRuntimeTests(unittest.TestCase):
+    def test_schema_mismatch_keeps_its_precise_target_error(self) -> None:
+        expected_index, bundle = _index(), _bundle()
+        mismatched_index = build_schema_index(
+            compile_schema_from_classes([Person, Extra], generated_at="2026-08-13T00:00:00Z")
+        )
+        self.assertNotEqual(expected_index.schema_digest, mismatched_index.schema_digest)
+        space = SemanticAddressSpace((manage_rule_occurrence(bundle, "person"),))
+        policy = Policy("people", PolicyOccurrence("person"))
+
+        for target, kwargs in (
+            (bundle, {}),
+            (policy, {"address_space": space}),
+        ):
+            with self.assertRaises(EvaluationQueryTargetError) as context:
+                resolve_evaluation_query_target(
+                    target,
+                    schema_index=mismatched_index,
+                    **kwargs,
+                )
+            self.assertEqual(context.exception.code, "QUERY_TARGET_SCHEMA_MISMATCH")
+
     def test_resolved_rule_lift_has_exact_target_topology_and_identity(self) -> None:
         target = resolve_evaluation_query_target(_bundle())
 
