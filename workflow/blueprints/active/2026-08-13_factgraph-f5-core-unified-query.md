@@ -1,6 +1,6 @@
 # Task Blueprint: FactGraph F5-Core unified Query target
 
-- Status: implementing
+- Status: implemented
 - Created: 2026-08-13
 - Last Updated: 2026-08-13
 - Related Modules:
@@ -74,14 +74,14 @@ thin SDK builder, not a new evaluator, new rows, or a general What-if system.
 
 ## 7. Acceptance
 
-- [ ] Rule lift and direct Policy targets produce valid compiled Query wrappers.
-- [ ] Query builder bind/select behavior matches the direct F3A compiler.
-- [ ] Rule-lift ordinary execution/capture/detached Policy projection works;
+- [x] Rule lift and direct Policy targets produce valid compiled Query wrappers.
+- [x] Query builder bind/select behavior matches the direct F3A compiler.
+- [x] Rule-lift ordinary execution/capture/detached Policy projection works;
   direct Policy anchor remains direct.
-- [ ] Builder-forwarded F5A Scenario is equivalent to direct evaluation and
+- [x] Builder-forwarded F5A Scenario is equivalent to direct evaluation and
   retains every no-provenance guard.
-- [ ] Invalid target/address shapes fail before the evaluator.
-- [ ] Existing focused Query/F4/F5A suites and lint pass; module docs are synced.
+- [x] Invalid target/address shapes fail before the evaluator.
+- [x] Existing focused Query/F4/F5A suites and lint pass; module docs are synced.
 
 ## 8. Implementation Plan
 
@@ -101,7 +101,34 @@ thin SDK builder, not a new evaluator, new rows, or a general What-if system.
 
 ## 10. Outcome / Deviations
 
-Pending implementation and verification.
+Implemented in `a905fc0e` and hardened in `5fa6dadb`.
+
+- `SDKStore.query()` now accepts a `ResolvedRuleBundle` or `Policy` with its
+  exact `SemanticAddressSpace`, and delegates typed bind/select compilation to
+  the existing F3 Query compiler.
+- A Rule is lifted only as the sealed, one-occurrence `target` Policy shape;
+  F4 Run anchors retain `rule_lift_v0` source identity while direct Policies
+  retain `policy_direct_v0` identity.
+- The wrapper revalidates its Query, Policy, address-space, schema and source
+  target before native evaluation. A post-review hardening patch rejects a
+  cross-address-space replacement, preserves typed compiler error codes, and
+  revalidates an explicitly passed Run target seal at the internal anchor seam.
+- Ordinary Rule-lift capture, bundle verification, detached evidence and
+  Policy projection work; builder-forwarded Q7 Scenario remains deliberately
+  detached with no Run anchor, bundle, close or live Explain.
+
+Verification on the pinned `factpy` environment:
+
+- `pytest -q -p no:cacheprovider tests/application tests/sdk` —
+  `529 passed, 159 subtests passed`.
+- Focused target / Query / F4 / F5A cohorts and three independent read-only
+  reviews — CLEAR after closing the two target-integrity findings.
+- Ruff and `git diff --check` pass.
+
+The repository-root test invocation is not a valid whole-project gate in this
+environment: collection is already blocked outside this slice by the missing
+`factgraph.audit.evidence_graph.render_evidence_graph_html` import and bundled
+third-party test layout. No attempt was made to change those unrelated areas.
 
 ## 11. Scope Freeze
 

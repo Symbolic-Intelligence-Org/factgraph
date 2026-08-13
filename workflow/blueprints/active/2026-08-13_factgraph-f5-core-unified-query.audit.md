@@ -10,6 +10,7 @@
 | 2026-08-13 | preflight | Compact independent source audit complete | Target normalization, Scenario provenance boundary, and Operator/L3 exclusions independently checked before scope freeze. |
 | 2026-08-13 | scoped | F5-Core boundary frozen | `expect`, completeness, generic Scenario evidence/replay, Operator, Meander and Agent surfaces remain explicit non-goals. |
 | 2026-08-13 | implementing | Target-normalization implementation started | The branch adds a sealed Rule/Policy Query-target wrapper over the existing F3/F4 evaluator; no second evaluator or Scenario-evidence path is introduced. |
+| 2026-08-13 | implemented | F5-Core verification complete | `a905fc0e` implemented the slice; `5fa6dadb` closed independent-review findings for exact address-space binding, typed compiler error propagation and direct anchor-target seal revalidation. `tests/application tests/sdk`: 529 passed, 159 subtests passed; three reviews CLEAR. |
 
 ## Decision Notes
 
