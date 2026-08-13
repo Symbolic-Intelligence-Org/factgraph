@@ -70,6 +70,33 @@ class ScenarioFieldSubstitutionV0:
         _require_non_empty_str(self.premise_id, field_name="ScenarioFieldSubstitutionV0.premise_id")
 
 
+@dataclass(frozen=True)
+class ScenarioFieldSubstitutionSetV0:
+    """One atomic, run-local set of direct scalar field replacements.
+
+    This is intentionally a collection of the already narrow v0 member type,
+    not a general premise language.  Runtime resolution canonicalizes trusted
+    schema targets and rejects duplicate targets before either evaluator call.
+    """
+
+    substitutions: tuple[ScenarioFieldSubstitutionV0, ...]
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.substitutions, tuple) or len(self.substitutions) < 2:
+            raise ProtocolShapeError(
+                "ScenarioFieldSubstitutionSetV0.substitutions must be a tuple of at least two members"
+            )
+        if not all(isinstance(item, ScenarioFieldSubstitutionV0) for item in self.substitutions):
+            raise ProtocolShapeError(
+                "ScenarioFieldSubstitutionSetV0.substitutions must contain ScenarioFieldSubstitutionV0"
+            )
+        premise_ids = tuple(item.premise_id for item in self.substitutions)
+        if len(set(premise_ids)) != len(premise_ids):
+            raise ProtocolShapeError(
+                "ScenarioFieldSubstitutionSetV0 premise_id values must be unique"
+            )
+
+
 @dataclass(frozen=True, repr=False)
 class ScenarioScalarValueV0:
     """Canonical storage value used by an evaluated Scenario resolution."""
@@ -229,6 +256,153 @@ class ScenarioResolutionV0:
         )
 
 
+@dataclass(frozen=True)
+class ScenarioFieldSubstitutionOperationV0:
+    """One trusted-schema-resolved member of a Scenario substitution set.
+
+    ``operation_digest`` commits only this member's canonical target and value
+    transition.  It deliberately does not include the final relation digest,
+    avoiding a cyclic set-resolution identity.
+    """
+
+    premise_id: str
+    entity_ref: str
+    field: FieldPath
+    baseline_value: ScenarioScalarValueV0
+    effective_value: ScenarioScalarValueV0
+    semantic_value_changed: bool
+    effective_source_changed: Literal[True]
+    operation_digest: str = field(init=False)
+    origin_kind: Literal["scenario_hypothesis_set_v0"] = "scenario_hypothesis_set_v0"
+
+    def __post_init__(self) -> None:
+        _require_non_empty_str(
+            self.premise_id, field_name="ScenarioFieldSubstitutionOperationV0.premise_id"
+        )
+        _require_non_empty_str(
+            self.entity_ref, field_name="ScenarioFieldSubstitutionOperationV0.entity_ref"
+        )
+        if not isinstance(self.field, FieldPath):
+            raise ProtocolShapeError("ScenarioFieldSubstitutionOperationV0.field must be FieldPath")
+        if not isinstance(self.baseline_value, ScenarioScalarValueV0):
+            raise ProtocolShapeError(
+                "ScenarioFieldSubstitutionOperationV0.baseline_value must be ScenarioScalarValueV0"
+            )
+        if not isinstance(self.effective_value, ScenarioScalarValueV0):
+            raise ProtocolShapeError(
+                "ScenarioFieldSubstitutionOperationV0.effective_value must be ScenarioScalarValueV0"
+            )
+        if self.baseline_value.tag != self.effective_value.tag:
+            raise ProtocolShapeError(
+                "ScenarioFieldSubstitutionOperationV0 values must have the same scalar tag"
+            )
+        _require_bool(
+            self.semantic_value_changed,
+            field_name="ScenarioFieldSubstitutionOperationV0.semantic_value_changed",
+        )
+        if self.semantic_value_changed != (self.baseline_value != self.effective_value):
+            raise ProtocolShapeError(
+                "ScenarioFieldSubstitutionOperationV0.semantic_value_changed must match value equality"
+            )
+        if self.effective_source_changed is not True:
+            raise ProtocolShapeError(
+                "ScenarioFieldSubstitutionOperationV0.effective_source_changed must be True"
+            )
+        if self.origin_kind != "scenario_hypothesis_set_v0":
+            raise ProtocolShapeError(
+                "ScenarioFieldSubstitutionOperationV0.origin_kind must be scenario_hypothesis_set_v0"
+            )
+        object.__setattr__(
+            self,
+            "operation_digest",
+            _token(
+                "scenario_field_substitution_set_operation_v0",
+                {
+                    "premise_id": self.premise_id,
+                    "entity_ref": self.entity_ref,
+                    "field": (self.field.entity_type, self.field.field_name),
+                    "baseline_value": (self.baseline_value.tag, self.baseline_value.value),
+                    "effective_value": (self.effective_value.tag, self.effective_value.value),
+                    "semantic_value_changed": self.semantic_value_changed,
+                    "effective_source_changed": self.effective_source_changed,
+                    "origin_kind": self.origin_kind,
+                },
+            ),
+        )
+
+
+@dataclass(frozen=True)
+class ScenarioFieldSubstitutionSetResolutionV0:
+    """Typed result metadata for one atomic direct-field substitution set.
+
+    This metadata is integrity-sealed, not authenticated.  Its relation digests
+    identify run-local evaluator inputs, never durable snapshots or evidence.
+    """
+
+    operations: tuple[ScenarioFieldSubstitutionOperationV0, ...]
+    base_view_digest: str
+    baseline_relation_digest: str
+    effective_relation_digest: str
+    result_diff: ScenarioResultDiffV0 | None = None
+    scenario_digest: str = field(init=False)
+    origin_kind: Literal["scenario_hypothesis_set_v0"] = "scenario_hypothesis_set_v0"
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.operations, tuple) or len(self.operations) < 2:
+            raise ProtocolShapeError(
+                "ScenarioFieldSubstitutionSetResolutionV0.operations must be a tuple of at least two members"
+            )
+        if not all(isinstance(item, ScenarioFieldSubstitutionOperationV0) for item in self.operations):
+            raise ProtocolShapeError(
+                "ScenarioFieldSubstitutionSetResolutionV0.operations must contain ScenarioFieldSubstitutionOperationV0"
+            )
+        premise_ids = tuple(item.premise_id for item in self.operations)
+        if len(set(premise_ids)) != len(premise_ids):
+            raise ProtocolShapeError(
+                "ScenarioFieldSubstitutionSetResolutionV0 operations must have unique premise ids"
+            )
+        canonical_keys = tuple((item.entity_ref, item.field.entity_type, item.field.field_name) for item in self.operations)
+        if canonical_keys != tuple(sorted(canonical_keys)):
+            raise ProtocolShapeError(
+                "ScenarioFieldSubstitutionSetResolutionV0.operations must use canonical target order"
+            )
+        if len(set(canonical_keys)) != len(canonical_keys):
+            raise ProtocolShapeError(
+                "ScenarioFieldSubstitutionSetResolutionV0 operations must have unique canonical targets"
+            )
+        for name in (
+            "base_view_digest",
+            "baseline_relation_digest",
+            "effective_relation_digest",
+        ):
+            _sha256_token(
+                getattr(self, name), f"ScenarioFieldSubstitutionSetResolutionV0.{name}"
+            )
+        if self.result_diff is not None and not isinstance(self.result_diff, ScenarioResultDiffV0):
+            raise ProtocolShapeError(
+                "ScenarioFieldSubstitutionSetResolutionV0.result_diff must be ScenarioResultDiffV0 or None"
+            )
+        if self.origin_kind != "scenario_hypothesis_set_v0":
+            raise ProtocolShapeError(
+                "ScenarioFieldSubstitutionSetResolutionV0.origin_kind must be scenario_hypothesis_set_v0"
+            )
+        object.__setattr__(
+            self,
+            "scenario_digest",
+            _token(
+                "scenario_field_substitution_set_v0",
+                {
+                    "operation_digests": tuple(item.operation_digest for item in self.operations),
+                    "base_view_digest": self.base_view_digest,
+                    "baseline_relation_digest": self.baseline_relation_digest,
+                    "effective_relation_digest": self.effective_relation_digest,
+                    "result_diff_digest": None if self.result_diff is None else self.result_diff.diff_digest,
+                    "origin_kind": self.origin_kind,
+                },
+            ),
+        )
+
+
 def _sha256_token(value: object, field_name: str) -> None:
     if not isinstance(value, str) or not value.startswith("sha256:"):
         raise ProtocolShapeError(f"{field_name} must be a sha256 token")
@@ -253,6 +427,9 @@ def _token(label: str, payload: object) -> str:
 
 __all__ = [
     "ScenarioFieldSubstitutionV0",
+    "ScenarioFieldSubstitutionSetV0",
+    "ScenarioFieldSubstitutionOperationV0",
+    "ScenarioFieldSubstitutionSetResolutionV0",
     "ScenarioInputValue",
     "ScenarioResolutionV0",
     "ScenarioResultDiffV0",

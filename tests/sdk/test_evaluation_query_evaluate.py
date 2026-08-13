@@ -36,6 +36,7 @@ from factgraph.application.protocol import (
     PolicyOccurrence,
     ProtocolShapeError,
     Rule,
+    ScenarioFieldSubstitutionSetV0,
     ScenarioFieldSubstitutionV0,
     SemanticPortAddress,
     SemanticRulePort,
@@ -1051,6 +1052,12 @@ class EvaluationQueryScenarioFieldSubstitutionTests(unittest.TestCase):
         )
 
     @staticmethod
+    def _scenario_set(
+        *substitutions: ScenarioFieldSubstitutionV0,
+    ) -> ScenarioFieldSubstitutionSetV0:
+        return ScenarioFieldSubstitutionSetV0(substitutions)
+
+    @staticmethod
     def _support_state(graph: SDKStore) -> tuple[object, ...]:
         store = graph._store
         return (
@@ -1225,6 +1232,140 @@ class EvaluationQueryScenarioFieldSubstitutionTests(unittest.TestCase):
         ), self.assertRaisesRegex(SDKStoreError, "view changed"):
             graph.eval.evaluate(compiled, scenario=self._scenario(value=35))
         self.assertEqual(call_count, 1)
+
+    def test_scenario_set_applies_all_members_atomically_with_two_evaluations(self) -> None:
+        graph = SDKStore([Person])
+        alice_ref = _seed_person(graph, "alice", age=22, score=9)
+        bob_ref = _seed_person(graph, "bob", age=19, score=7)
+        compiled, _bundle = _compiled_person_query(
+            graph,
+            selections=(("person", "person"), ("age", "age"), ("score", "score")),
+        )
+        scenario = self._scenario_set(
+            ScenarioFieldSubstitutionV0(
+                EntityRef("Person", {"employee_id": "alice"}),
+                FieldPath("Person", "age"),
+                35,
+                "alice-age",
+            ),
+            ScenarioFieldSubstitutionV0(
+                EntityRef("Person", {"employee_id": "bob"}),
+                FieldPath("Person", "score"),
+                11,
+                "bob-score",
+            ),
+        )
+        claims_before = tuple(graph.ledger.find_claims())
+        support_before = self._support_state(graph)
+        import factgraph.sdk.store as store_module
+
+        with patch(
+            "factgraph.sdk.store._evaluate_derivation_plans_with_native_effective_relation",
+            wraps=store_module._evaluate_derivation_plans_with_native_effective_relation,
+        ) as evaluator, patch.object(
+            graph._store,
+            "_remember_support_artifact",
+            wraps=graph._store._remember_support_artifact,
+        ) as remember_artifact:
+            result = graph.eval.evaluate(compiled, scenario=scenario)
+
+        self.assertEqual(evaluator.call_count, 2)
+        self.assertIs(evaluator.call_args_list[0].args[0].plans[0], evaluator.call_args_list[1].args[0].plans[0])
+        remember_artifact.assert_not_called()
+        self.assertEqual(tuple(graph.ledger.find_claims()), claims_before)
+        self.assertEqual(self._support_state(graph), support_before)
+        self.assertIsNone(result.run_anchor)
+        self.assertIsNone(result.run_bundle)
+        assert result.scenario is not None
+        self.assertEqual(type(result.scenario).__name__, "ScenarioFieldSubstitutionSetResolutionV0")
+        self.assertEqual(tuple(item.premise_id for item in result.scenario.operations), ("alice-age", "bob-score"))
+        self.assertTrue(result.scenario.result_diff is not None and result.scenario.result_diff.result_changed)
+        rows = {row.bindings["person"]["value"]: row.bindings for row in result.rows}
+        self.assertEqual(rows[alice_ref]["age"]["value"], 35)
+        self.assertEqual(rows[alice_ref]["score"]["value"], 9)
+        self.assertEqual(rows[bob_ref]["age"]["value"], 19)
+        self.assertEqual(rows[bob_ref]["score"]["value"], 11)
+
+    def test_scenario_set_permutation_is_canonical(self) -> None:
+        graph = SDKStore([Person])
+        _seed_person(graph, "alice", age=22, score=9)
+        _seed_person(graph, "bob", age=19, score=7)
+        compiled, _bundle = _compiled_person_query(graph, selections=(("age", "age"), ("score", "score")))
+        alice = ScenarioFieldSubstitutionV0(
+            EntityRef("Person", {"employee_id": "alice"}), FieldPath("Person", "age"), 35, "alice-age"
+        )
+        bob = ScenarioFieldSubstitutionV0(
+            EntityRef("Person", {"employee_id": "bob"}), FieldPath("Person", "score"), 11, "bob-score"
+        )
+        forward = graph.eval.evaluate(compiled, scenario=self._scenario_set(alice, bob))
+        reverse = graph.eval.evaluate(compiled, scenario=self._scenario_set(bob, alice))
+        assert forward.scenario is not None and reverse.scenario is not None
+        self.assertEqual(forward.scenario.scenario_digest, reverse.scenario.scenario_digest)
+        self.assertEqual(forward.scenario.effective_relation_digest, reverse.scenario.effective_relation_digest)
+        self.assertEqual(
+            forward.scenario.result_diff.effective_semantic_rows_digest,
+            reverse.scenario.result_diff.effective_semantic_rows_digest,
+        )
+
+    def test_scenario_set_rejects_duplicate_or_invalid_member_before_evaluation(self) -> None:
+        graph = SDKStore([Person])
+        _seed_person(graph, "alice", age=22, score=9)
+        _seed_person(graph, "bob", age=19, score=7)
+        compiled, _bundle = _compiled_person_query(graph)
+        valid = ScenarioFieldSubstitutionV0(
+            EntityRef("Person", {"employee_id": "alice"}), FieldPath("Person", "age"), 35, "one"
+        )
+        duplicate_target = ScenarioFieldSubstitutionV0(
+            EntityRef("Person", {"employee_id": "alice"}, encoded_ref="idref_v1:Person:forged"),
+            FieldPath("Person", "age"),
+            22,
+            "two",
+        )
+        invalid = ScenarioFieldSubstitutionV0(
+            EntityRef("Person", {"employee_id": "bob"}), FieldPath("Person", "score"), "bad", "three"
+        )
+        import factgraph.sdk.store as store_module
+
+        for scenario, expected in (
+            (self._scenario_set(valid, duplicate_target), "SCENARIO_DUPLICATE_TARGET"),
+            (self._scenario_set(valid, invalid), "SCENARIO_VALUE_TYPE_MISMATCH"),
+        ):
+            with self.subTest(expected=expected), patch(
+                "factgraph.sdk.store._evaluate_derivation_plans_with_native_effective_relation",
+                wraps=store_module._evaluate_derivation_plans_with_native_effective_relation,
+            ) as evaluator, self.assertRaisesRegex(SDKStoreError, expected):
+                graph.eval.evaluate(compiled, scenario=scenario)
+            evaluator.assert_not_called()
+
+    def test_scenario_set_keeps_capture_and_expectation_boundaries(self) -> None:
+        graph = SDKStore([Person])
+        _seed_person(graph, "alice", age=22, score=9)
+        _seed_person(graph, "bob", age=19, score=7)
+        compiled, _bundle = _compiled_person_query(graph)
+        scenario = self._scenario_set(
+            ScenarioFieldSubstitutionV0(EntityRef("Person", {"employee_id": "alice"}), FieldPath("Person", "age"), 35, "a"),
+            ScenarioFieldSubstitutionV0(EntityRef("Person", {"employee_id": "bob"}), FieldPath("Person", "score"), 11, "b"),
+        )
+        for capture in (None, "run_bundle_v0"):
+            with self.subTest(capture=capture), self.assertRaisesRegex(SDKStoreError, "does not support capture"):
+                graph.eval.evaluate(compiled, scenario=scenario, capture=capture)
+        result = graph.eval.evaluate(compiled, scenario=scenario)
+        with self.assertRaisesRegex(DetachedRowError, "ScenarioFieldSubstitutionSetV0"):
+            result[0].close()
+        self.assertEqual(result[0].explain().status, "unsupported")
+
+        expected = (
+            graph.query(_bundle)
+            .select("age", SemanticPortAddress("target", "age"))
+            .expect_contains("age", age=35)
+            .compile()
+        )
+        with patch("factgraph.sdk.store.evaluate_derivation_plans") as evaluator, self.assertRaisesRegex(
+            SDKStoreError,
+            "expectations do not support scenario",
+        ):
+            graph.eval.evaluate(expected, scenario=scenario)
+        evaluator.assert_not_called()
 
 
 if __name__ == "__main__":

@@ -26,6 +26,7 @@ from factgraph.application.protocol import (
     Policy,
     PolicyOccurrence,
     ScenarioFieldSubstitutionV0,
+    ScenarioFieldSubstitutionSetV0,
     SemanticPortAddress,
     SemanticRulePort,
     entity_identity,
@@ -192,6 +193,42 @@ class UnifiedEvaluationQueryTests(unittest.TestCase):
         self.assertEqual(result[0].explain().status, "unsupported")
         with self.assertRaisesRegex(SDKStoreError, "does not support capture"):
             graph.eval.evaluate(compiled, scenario=scenario, capture="run_bundle_v0")
+
+    def test_builder_forwards_atomic_scenario_set_without_creating_evidence(self) -> None:
+        graph = SDKStore([Person])
+        alice_ref = _seed(graph, "alice", age=22, score=9)
+        bob_ref = _seed(graph, "bob", age=19, score=7)
+        scenario = ScenarioFieldSubstitutionSetV0((
+            ScenarioFieldSubstitutionV0(
+                EntityRef("Person", {"employee_id": "alice"}),
+                FieldPath("Person", "age"),
+                35,
+                "alice-age",
+            ),
+            ScenarioFieldSubstitutionV0(
+                EntityRef("Person", {"employee_id": "bob"}),
+                FieldPath("Person", "score"),
+                11,
+                "bob-score",
+            ),
+        ))
+        result = (
+            graph.query(_bundle(graph))
+            .select("person", _address("target", "person"))
+            .select("age", _address("target", "age"))
+            .select("score", _address("target", "score"))
+            .evaluate(scenario=scenario)
+        )
+        self.assertIsNone(result.run_anchor)
+        self.assertIsNone(result.run_bundle)
+        assert result.scenario is not None
+        self.assertEqual(type(result.scenario).__name__, "ScenarioFieldSubstitutionSetResolutionV0")
+        rows = {row.bindings["person"]["value"]: row.bindings for row in result.rows}
+        self.assertEqual(rows[alice_ref]["age"]["value"], 35)
+        self.assertEqual(rows[bob_ref]["score"]["value"], 11)
+        with self.assertRaises(DetachedRowError):
+            result[0].close()
+        self.assertEqual(result[0].explain().status, "unsupported")
 
     def test_builder_contains_expectation_observes_rows_without_changing_query(self) -> None:
         graph = SDKStore([Person])

@@ -1,7 +1,7 @@
 # FactGraph SDK Documentation
 
 - Applicable scope: `src/factgraph/sdk`
-- Last updated: 2026-08-01
+- Last updated: 2026-08-13
 - Audience: SDK users and maintainers of the Python product surface
 
 `factgraph.sdk` provides schema declarations, the `FactGraph` lifecycle,

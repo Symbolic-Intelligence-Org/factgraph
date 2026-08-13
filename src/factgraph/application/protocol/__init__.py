@@ -41,6 +41,9 @@ from .evaluation_expectation import (
     ResolvedExpectationValueV0,
 )
 from .evaluation_scenario import (
+    ScenarioFieldSubstitutionOperationV0,
+    ScenarioFieldSubstitutionSetResolutionV0,
+    ScenarioFieldSubstitutionSetV0,
     ScenarioFieldSubstitutionV0,
     ScenarioInputValue,
     ScenarioResolutionV0,
@@ -272,6 +275,9 @@ __all__ = [
     "ExpectationStatusV0",
     "ResolvedExpectationValueV0",
     "ScenarioFieldSubstitutionV0",
+    "ScenarioFieldSubstitutionSetV0",
+    "ScenarioFieldSubstitutionOperationV0",
+    "ScenarioFieldSubstitutionSetResolutionV0",
     "ScenarioInputValue",
     "ScenarioResolutionV0",
     "ScenarioResultDiffV0",

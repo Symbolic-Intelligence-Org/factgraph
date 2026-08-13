@@ -552,9 +552,10 @@ because of this provenance label.
 String policy ids, registries, Packages, dotted field paths, bare Rules,
 Policy without `address_space=`, generic `expect`, modes, empty-select existence,
 navigation and external Operators are deliberately not accepted by this v1
-facade. `ScenarioFieldSubstitutionV0` may be forwarded through
-`.evaluate(scenario=...)`, with its existing no-anchor/no-bundle/no-live-evidence
-boundary unchanged.
+facade. `ScenarioFieldSubstitutionV0` and the explicit atomic
+`ScenarioFieldSubstitutionSetV0` may be forwarded through `.evaluate(scenario=...)`.
+Both retain the no-anchor/no-bundle/no-live-evidence boundary; neither is a
+general What-if language.
 
 F5B1 adds one result-observation extension:
 
@@ -637,6 +638,36 @@ an F4 anchor or bundle.  Current F4 proof receipts describe asserted ledger
 facts, so presenting them as evidence for a hypothetical value would be false
 provenance.  Scenario-aware evidence, replay, multi-premise truth algebra,
 and general `ScenarioPlan` remain separate future contracts.
+
+### Atomic Scenario field-substitution set v0
+
+`ScenarioFieldSubstitutionSetV0` is the only multi-member extension. It holds
+at least two of the already narrow direct field substitutions; it does not add
+facts, delete facts, change Rules/Policies, navigate ports, or admit arbitrary
+premise logic:
+
+```python
+scenario = ScenarioFieldSubstitutionSetV0((
+    ScenarioFieldSubstitutionV0(EntityRef("Person", {"employee_id": "alice"}), FieldPath("Person", "age"), 35, "alice-age"),
+    ScenarioFieldSubstitutionV0(EntityRef("Person", {"employee_id": "bob"}), FieldPath("Person", "score"), 11, "bob-score"),
+))
+result = fg.eval.evaluate(compiled_query, scenario=scenario)
+```
+
+Before either evaluator call, FactGraph derives one dependency-complete baseline
+relation, re-materializes each entity through the trusted schema, validates all
+fields and values, and rejects duplicate `premise_id` or canonical
+`(entity_ref, predicate)` targets. It then applies every replacement to one
+immutable effective relation. Input order is therefore not semantic and a bad
+member produces no partial result. The native evaluator runs exactly twice:
+once for baseline and once for the complete effective relation.
+
+`result.scenario.operations` exposes canonical operation metadata plus the
+set-level relation/diff digest. These are integrity identifiers, not an
+authenticated artifact, ledger snapshot, source-truth claim, or provenance.
+Like the single form, the set rejects every `capture=` use, has no Run anchor
+or bundle, and rows cannot `close()` or live-`explain()`. An F5B1 expected Query
+rejects **all** Scenario forms, including this set.
 
 Compiled Policy/Query and Run-anchor values are compiler-issued, in-process
 artifacts. Their integrity checks detect inconsistent splicing; they are not

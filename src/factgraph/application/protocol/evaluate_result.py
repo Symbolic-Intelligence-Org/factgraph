@@ -22,7 +22,10 @@ from factgraph.application.protocol.common import ErrorDTO, ProtocolShapeError, 
 from factgraph.application.protocol.certainty import BOOLEAN_CERTAINTY, Certainty
 from factgraph.application.protocol.evaluation_run import EvaluationRunAnchorV0
 from factgraph.application.protocol.evaluation_run_bundle import EvaluationRunBundleV0
-from factgraph.application.protocol.evaluation_scenario import ScenarioResolutionV0
+from factgraph.application.protocol.evaluation_scenario import (
+    ScenarioFieldSubstitutionSetResolutionV0,
+    ScenarioResolutionV0,
+)
 from factgraph.application.protocol.evaluation_expectation import ExpectationResultV0
 from factgraph.application.protocol.explanation_render import narrate_evidence, walk_evidence
 from factgraph.application.protocol.rule import Rule, _is_projection_rule
@@ -150,7 +153,11 @@ class EvaluateResult:
     engine_meta: Mapping[str, Any]
     run_anchor: EvaluationRunAnchorV0 | None = field(default=None, kw_only=True)
     run_bundle: EvaluationRunBundleV0 | None = field(default=None, kw_only=True, repr=False)
-    scenario: ScenarioResolutionV0 | None = field(default=None, kw_only=True, repr=False)
+    scenario: ScenarioResolutionV0 | ScenarioFieldSubstitutionSetResolutionV0 | None = field(
+        default=None,
+        kw_only=True,
+        repr=False,
+    )
     expectation_results: tuple[ExpectationResultV0, ...] = field(default=(), kw_only=True)
     _schema_index: object | None = field(default=None, repr=False, compare=False, hash=False)
     _row_close_builder: Callable[[EvaluateRow, EvaluateResult], Rule] | None = field(
@@ -177,6 +184,13 @@ class EvaluateResult:
         compare=False,
         hash=False,
     )
+    _scenario_resolution_digest_pin: str | None = field(
+        default=None,
+        kw_only=True,
+        repr=False,
+        compare=False,
+        hash=False,
+    )
 
     def __post_init__(self) -> None:
         _require_token_prefix(self.result_id, prefix=_RESULT_ID_PREFIX, field_name="EvaluateResult.result_id")
@@ -195,12 +209,22 @@ class EvaluateResult:
         if self._row_graph_builder is not None and not callable(self._row_graph_builder):
             raise ProtocolShapeError("EvaluateResult._row_graph_builder must be callable or None")
         if self.scenario is not None:
-            if not isinstance(self.scenario, ScenarioResolutionV0):
-                raise ProtocolShapeError("EvaluateResult.scenario must be ScenarioResolutionV0 or None")
+            if not isinstance(
+                self.scenario,
+                (ScenarioResolutionV0, ScenarioFieldSubstitutionSetResolutionV0),
+            ):
+                raise ProtocolShapeError(
+                    "EvaluateResult.scenario must be ScenarioResolutionV0, "
+                    "ScenarioFieldSubstitutionSetResolutionV0 or None"
+                )
             if self.run_anchor is not None or self.run_bundle is not None:
                 raise ProtocolShapeError(
                     "Scenario EvaluateResult must not carry EvaluationRun anchor or bundle"
                 )
+        elif self._scenario_resolution_digest_pin is not None:
+            raise ProtocolShapeError(
+                "non-Scenario EvaluateResult must not retain a Scenario resolution seal"
+            )
         if (
             not isinstance(self.expectation_results, tuple)
             or not all(isinstance(item, ExpectationResultV0) for item in self.expectation_results)
@@ -243,6 +267,14 @@ class EvaluateResult:
             support_artifacts=row_support_artifacts,
             provenance_envelopes=row_provenance_envelopes,
         )
+        if self.scenario is not None:
+            scenario_digest = self.scenario.scenario_digest
+            if self._scenario_resolution_digest_pin is None:
+                object.__setattr__(self, "_scenario_resolution_digest_pin", scenario_digest)
+            elif self._scenario_resolution_digest_pin != scenario_digest:
+                raise ProtocolShapeError(
+                    "Scenario EvaluateResult resolution changed after it was sealed to the result"
+                )
         _validate_expectation_results(self)
         _validate_run_anchor(self)
         _validate_run_bundle(self)
@@ -773,6 +805,11 @@ def _explain_live_row(
         raise ProtocolShapeError("result must be EvaluateResult")
 
     if result.scenario is not None:
+        scenario_name = (
+            "ScenarioFieldSubstitutionV0"
+            if isinstance(result.scenario, ScenarioResolutionV0)
+            else "ScenarioFieldSubstitutionSetV0"
+        )
         return Explanation(
             status="unsupported",
             evidence=None,
@@ -781,7 +818,7 @@ def _explain_live_row(
             errors=(
                 ErrorDTO(
                     code="SCENARIO_EXPLAIN_UNSUPPORTED",
-                    message="ScenarioFieldSubstitutionV0 rows have no ledger-backed EvidenceGraph",
+                    message=f"{scenario_name} rows have no ledger-backed EvidenceGraph",
                     details={"row_id": row.row_id},
                 ),
             ),
@@ -860,8 +897,13 @@ def _close_live_row(row: EvaluateRow, result: EvaluateResult) -> Rule:
     if not isinstance(result, EvaluateResult):
         raise ProtocolShapeError("result must be EvaluateResult")
     if result.scenario is not None:
+        scenario_name = (
+            "ScenarioFieldSubstitutionV0"
+            if isinstance(result.scenario, ScenarioResolutionV0)
+            else "ScenarioFieldSubstitutionSetV0"
+        )
         raise DetachedRowError(
-            "ScenarioFieldSubstitutionV0 rows cannot be closed against ledger facts"
+            f"{scenario_name} rows cannot be closed against ledger facts"
         )
     if result._row_close_builder is not None:
         return result._row_close_builder(row, result)

@@ -13,6 +13,8 @@ from factgraph.application.protocol import (
     Explanation,
     ResultFingerprint,
     Rule,
+    ScenarioFieldSubstitutionOperationV0,
+    ScenarioFieldSubstitutionSetResolutionV0,
     ScenarioResolutionV0,
 )
 from factgraph.application.protocol.common import ProtocolShapeError
@@ -562,6 +564,79 @@ class EvaluateResultDTOTests(unittest.TestCase):
                     ),
                 ),
             )
+
+        with self.assertRaisesRegex(ProtocolShapeError, "resolution changed"):
+            replace(
+                scenario_result,
+                scenario=replace(
+                    scenario,
+                    effective_value=ScenarioScalarValueV0("int", 999),
+                ),
+            )
+
+    def test_set_scenario_resolution_cannot_be_spliced_after_result_seal(self) -> None:
+        from factgraph.application.protocol import FieldPath, ScenarioResultDiffV0, ScenarioScalarValueV0
+
+        result = _single_row_result()
+        effective_digest = result.fingerprint.view_snapshot_digest
+        diff = ScenarioResultDiffV0(
+            1,
+            1,
+            _token("baseline"),
+            _scenario_semantic_rows_digest(result.rows),
+            True,
+        )
+        age = ScenarioFieldSubstitutionOperationV0(
+            premise_id="age-hypothesis",
+            entity_ref="idref_v1:Person:alice",
+            field=FieldPath("Person", "age"),
+            baseline_value=ScenarioScalarValueV0("int", 22),
+            effective_value=ScenarioScalarValueV0("int", 35),
+            semantic_value_changed=True,
+            effective_source_changed=True,
+        )
+        score = ScenarioFieldSubstitutionOperationV0(
+            premise_id="score-hypothesis",
+            entity_ref="idref_v1:Person:bob",
+            field=FieldPath("Person", "score"),
+            baseline_value=ScenarioScalarValueV0("int", 7),
+            effective_value=ScenarioScalarValueV0("int", 11),
+            semantic_value_changed=True,
+            effective_source_changed=True,
+        )
+        scenario = ScenarioFieldSubstitutionSetResolutionV0(
+            operations=(age, score),
+            base_view_digest=_token("base"),
+            baseline_relation_digest=_token("before"),
+            effective_relation_digest=effective_digest,
+            result_diff=diff,
+        )
+        scenario_result = _evaluate_result(
+            result_id=result.result_id,
+            rows=result.rows,
+            head=result.head,
+            engine=result.engine,
+            expr_digest=result.fingerprint.expr_digest,
+            rule_set_digest=result.fingerprint.rule_set_digest,
+            view_snapshot_digest=result.fingerprint.view_snapshot_digest,
+            config_digest=result.fingerprint.config_digest,
+            result_digest=result.fingerprint.result_digest,
+            run_id=result.fingerprint.run_id,
+            scenario=scenario,
+        )
+        forged_age = replace(
+            age,
+            effective_value=ScenarioScalarValueV0("int", 999),
+        )
+        forged = ScenarioFieldSubstitutionSetResolutionV0(
+            operations=(forged_age, score),
+            base_view_digest=scenario.base_view_digest,
+            baseline_relation_digest=scenario.baseline_relation_digest,
+            effective_relation_digest=scenario.effective_relation_digest,
+            result_diff=scenario.result_diff,
+        )
+        with self.assertRaisesRegex(ProtocolShapeError, "resolution changed"):
+            replace(scenario_result, scenario=forged)
 
     def test_row_provenance_envelopes_reject_unknown_row_id(self) -> None:
         result = _single_row_result()

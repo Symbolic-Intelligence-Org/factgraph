@@ -7,6 +7,9 @@ from factgraph.application.protocol import (
     EntityRef,
     FieldPath,
     ProtocolShapeError,
+    ScenarioFieldSubstitutionOperationV0,
+    ScenarioFieldSubstitutionSetResolutionV0,
+    ScenarioFieldSubstitutionSetV0,
     ScenarioFieldSubstitutionV0,
     ScenarioResolutionV0,
     ScenarioResultDiffV0,
@@ -52,6 +55,25 @@ class ScenarioProtocolTests(unittest.TestCase):
             with self.subTest(tag=tag, value=value), self.assertRaises(ProtocolShapeError):
                 ScenarioScalarValueV0(tag, value)  # type: ignore[arg-type]
 
+    def test_substitution_set_requires_multiple_unique_premises(self) -> None:
+        age = ScenarioFieldSubstitutionV0(
+            EntityRef("Person", {"employee_id": "alice"}),
+            FieldPath("Person", "age"),
+            22,
+            "age-hypothesis",
+        )
+        score = ScenarioFieldSubstitutionV0(
+            EntityRef("Person", {"employee_id": "alice"}),
+            FieldPath("Person", "score"),
+            9,
+            "score-hypothesis",
+        )
+        value = ScenarioFieldSubstitutionSetV0((age, score))
+        self.assertEqual(value.substitutions, (age, score))
+        for substitutions in ((), (age,), [age, score], (age, replace(score, premise_id="age-hypothesis"))):
+            with self.subTest(substitutions=substitutions), self.assertRaises(ProtocolShapeError):
+                ScenarioFieldSubstitutionSetV0(substitutions)  # type: ignore[arg-type]
+
     def test_result_and_resolution_seal_their_derived_digests(self) -> None:
         baseline = _token("baseline")
         effective = _token("effective")
@@ -80,6 +102,48 @@ class ScenarioProtocolTests(unittest.TestCase):
         )
         with self.assertRaises(ProtocolShapeError):
             replace(resolution, semantic_value_changed=False)
+
+    def test_set_resolution_is_canonical_and_integrity_only(self) -> None:
+        baseline = _token("baseline")
+        effective = _token("effective")
+        diff = ScenarioResultDiffV0(1, 1, baseline, effective, True)
+        alice_age = ScenarioFieldSubstitutionOperationV0(
+            premise_id="age",
+            entity_ref="idref_v1:Person:alice",
+            field=FieldPath("Person", "age"),
+            baseline_value=ScenarioScalarValueV0("int", 22),
+            effective_value=ScenarioScalarValueV0("int", 35),
+            semantic_value_changed=True,
+            effective_source_changed=True,
+        )
+        bob_score = ScenarioFieldSubstitutionOperationV0(
+            premise_id="score",
+            entity_ref="idref_v1:Person:bob",
+            field=FieldPath("Person", "score"),
+            baseline_value=ScenarioScalarValueV0("int", 7),
+            effective_value=ScenarioScalarValueV0("int", 9),
+            semantic_value_changed=True,
+            effective_source_changed=True,
+        )
+        resolution = ScenarioFieldSubstitutionSetResolutionV0(
+            operations=(alice_age, bob_score),
+            base_view_digest=_token("view"),
+            baseline_relation_digest=baseline,
+            effective_relation_digest=effective,
+            result_diff=diff,
+        )
+        self.assertTrue(resolution.scenario_digest.startswith("sha256:"))
+        self.assertNotEqual(
+            resolution.scenario_digest,
+            replace(resolution, result_diff=None).scenario_digest,
+        )
+        with self.assertRaises(ProtocolShapeError):
+            ScenarioFieldSubstitutionSetResolutionV0(
+                operations=(bob_score, alice_age),
+                base_view_digest=_token("view"),
+                baseline_relation_digest=baseline,
+                effective_relation_digest=effective,
+            )
 
 
 if __name__ == "__main__":

@@ -47,8 +47,9 @@ atomically before either native evaluator call.
 
 ### 4.1 Set admission and canonical identity
 
-- A set is a non-empty immutable tuple of Q7 `ScenarioFieldSubstitutionV0`
-  inputs.  The old single-substitution object remains supported unchanged.
+- A set is an immutable tuple of at least two Q7
+  `ScenarioFieldSubstitutionV0` inputs. The old single-substitution object
+  remains supported unchanged.
 - Every `premise_id` must be unique.  Every schema-canonical `(entity_ref,
   predicate)` target must be unique, even if its requested replacement value
   is equal.  A duplicate rejects the *whole* request before evaluation.

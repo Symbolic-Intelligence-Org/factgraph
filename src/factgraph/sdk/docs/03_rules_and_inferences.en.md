@@ -443,8 +443,9 @@ empty-select existence, navigation, Operator, or non-native configuration
 surface. Ordinary capture/evidence remains the existing F4 path;
 the Run anchor records whether its source was a direct Policy or a Rule lift.
 
-`builder.evaluate(scenario=ScenarioFieldSubstitutionV0(...))` forwards only the
-existing narrow Scenario operation and therefore retains its no-anchor,
+`builder.evaluate(scenario=...)` forwards either the existing narrow
+`ScenarioFieldSubstitutionV0(...)` operation or the atomic
+`ScenarioFieldSubstitutionSetV0((...))` form. Both retain the no-anchor,
 no-bundle, no-live-Explain boundary.
 
 ### Low-level compiled EvaluationQuery execution (v0)
@@ -542,6 +543,30 @@ otherwise make a hypothetical value look like a ledger fact.  The returned
 `result.scenario` records the canonical operation, base/effective relation
 identities, and a semantic result diff.  Its effective-view digest identifies
 the scenario relation; it is not a historical ledger snapshot.
+
+#### Atomic scenario field-substitution set (v0)
+
+`ScenarioFieldSubstitutionSetV0` groups at least two of the same direct scalar
+field substitutions into one atomic hypothetical relation:
+
+```python
+from factgraph.sdk import ScenarioFieldSubstitutionSetV0
+
+scenario = ScenarioFieldSubstitutionSetV0((
+    ScenarioFieldSubstitutionV0(EntityRef("Person", {"employee_id": "alice"}), FieldPath("Person", "age"), 35, "alice-age"),
+    ScenarioFieldSubstitutionV0(EntityRef("Person", {"employee_id": "bob"}), FieldPath("Person", "score"), 11, "bob-score"),
+))
+result = builder.evaluate(scenario=scenario)
+```
+
+FactGraph resolves every member against one dependency-complete baseline before
+either native evaluation, rejects any invalid member or duplicate canonical
+`(entity_ref, field)` target, and then evaluates the baseline and complete
+effective relation exactly once each. Input order does not change the
+resolution identity. This remains a replacement-only Scenario—not a general
+What-if, fact overlay, rule/policy override, source claim, or replay surface.
+The same `capture=`, expectation, anchor, bundle, `close()`, and live
+`explain()` exclusions apply.
 
 ### Rule and RuleExpr snapshot matching
 

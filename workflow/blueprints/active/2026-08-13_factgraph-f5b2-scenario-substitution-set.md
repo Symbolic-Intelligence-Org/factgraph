@@ -101,4 +101,24 @@ effective result.
 
 ## 10. Outcome / Deviations
 
-To be completed after implementation and independent review.
+Implementation is complete pending the final independent review. The set
+resolver shares one dependency-complete baseline, resolves all members before
+execution, and passes one immutable baseline/effective relation pair to the
+same native evaluator. Q7's public DTO/digest formulas remain unchanged.
+
+An implementation review found a result-to-Scenario metadata splice seam. The
+slice adds a private `EvaluateResult` Scenario-resolution digest pin: it is
+assigned on the first valid attachment and rejects later `dataclasses.replace()`
+metadata substitution. This strengthens both the inherited Q7 result path and
+the new set path without changing either public Scenario digest.
+
+Verification before final review:
+
+- focused protocol/Query cross-slice cohort: `92 passed, 37 subtests passed`;
+- full application + SDK suite: `548 passed, 167 subtests passed`;
+- focused Ruff and `git diff --check`: passed.
+
+The repository-wide Ruff invocation still reports six pre-existing `Any`
+annotations missing an import in
+`src/factgraph/application/protocol/rule_expr_inspect.py`; that file is outside
+this slice and is not modified here.

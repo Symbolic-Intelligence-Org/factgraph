@@ -23,6 +23,7 @@ from factgraph.application.derivation_runtime import (
 )
 from factgraph.application.evaluation_scenario_runtime import (
     ScenarioResolutionError,
+    resolve_scenario_field_substitution_set_v0,
     resolve_scenario_field_substitution_v0,
 )
 from factgraph.application.evaluation_query_runtime import (
@@ -81,6 +82,7 @@ from factgraph.application.protocol import (
     Rule as ApplicationRule,
     RuleExprError,
     ScenarioFieldSubstitutionV0,
+    ScenarioFieldSubstitutionSetV0,
     ScenarioResultDiffV0,
 )
 from factgraph.application.protocol.certainty import BOOLEAN_CERTAINTY, Certainty
@@ -3279,13 +3281,22 @@ class SDKStore:
         capture = kwargs.pop("capture", None)
         scenario = kwargs.pop("scenario", None)
         expectations = () if source_target is None else source_target.expectations
-        if scenario is not None and not isinstance(scenario, ScenarioFieldSubstitutionV0):
+        if scenario is not None and not isinstance(
+            scenario,
+            (ScenarioFieldSubstitutionV0, ScenarioFieldSubstitutionSetV0),
+        ):
             raise SDKStoreError(
-                "evaluate(compiled_query) scenario= must be ScenarioFieldSubstitutionV0"
+                "evaluate(compiled_query) scenario= must be ScenarioFieldSubstitutionV0 "
+                "or ScenarioFieldSubstitutionSetV0"
             )
         if scenario is not None and capture_supplied:
+            scenario_name = (
+                "ScenarioFieldSubstitutionSetV0"
+                if isinstance(scenario, ScenarioFieldSubstitutionSetV0)
+                else "ScenarioFieldSubstitutionV0"
+            )
             raise SDKStoreError(
-                "evaluate(compiled_query) ScenarioFieldSubstitutionV0 does not support capture="
+                f"evaluate(compiled_query) {scenario_name} does not support capture="
             )
         if expectations and capture_supplied:
             raise SDKStoreError(
@@ -3353,16 +3364,31 @@ class SDKStore:
             ) from exc
         if scenario is not None:
             try:
-                resolved_scenario = resolve_scenario_field_substitution_v0(
-                    scenario,
-                    compiled_query=compiled_query,
-                    materialized_body=compiled_plan.body_ir,
-                    store=self._store,
-                    schema_index=self._application_schema_index,
-                    base_view_digest=view_snapshot_digest,
-                )
+                if isinstance(scenario, ScenarioFieldSubstitutionSetV0):
+                    resolved_scenario = resolve_scenario_field_substitution_set_v0(
+                        scenario,
+                        compiled_query=compiled_query,
+                        materialized_body=compiled_plan.body_ir,
+                        store=self._store,
+                        schema_index=self._application_schema_index,
+                        base_view_digest=view_snapshot_digest,
+                    )
+                else:
+                    resolved_scenario = resolve_scenario_field_substitution_v0(
+                        scenario,
+                        compiled_query=compiled_query,
+                        materialized_body=compiled_plan.body_ir,
+                        store=self._store,
+                        schema_index=self._application_schema_index,
+                        base_view_digest=view_snapshot_digest,
+                    )
             except ScenarioResolutionError as exc:
-                raise SDKStoreError(f"ScenarioFieldSubstitutionV0 rejected: {exc.code}") from exc
+                scenario_name = (
+                    "ScenarioFieldSubstitutionSetV0"
+                    if isinstance(scenario, ScenarioFieldSubstitutionSetV0)
+                    else "ScenarioFieldSubstitutionV0"
+                )
+                raise SDKStoreError(f"{scenario_name} rejected: {exc.code}") from exc
             self._assert_evaluation_query_execution_current(compiled_query, view_snapshot_digest)
             request = DerivationEvaluateRequest(plans=(compiled_plan,), engine="native")
             baseline_outputs = _evaluate_derivation_plans_with_native_effective_relation(
