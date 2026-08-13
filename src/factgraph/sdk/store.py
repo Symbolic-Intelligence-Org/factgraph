@@ -3325,6 +3325,13 @@ class SDKStore:
             raise SDKStoreError(
                 "compiled EvaluationQuery schema does not match this FactGraph"
             )
+        if source_target is not None:
+            try:
+                assert_targeted_evaluation_query_current(source_target)
+            except ValueError as exc:
+                raise SDKStoreError(
+                    "targeted compiled Query failed its pre-evaluation integrity check"
+                ) from exc
         if (
             self._store.premise_exclusions
             or self._store.premise_allowances
@@ -3440,6 +3447,13 @@ class SDKStore:
             view_snapshot_digest_override=view_snapshot_digest,
         )
         self._assert_evaluation_query_execution_current(compiled_query, view_snapshot_digest)
+        if source_target is not None:
+            try:
+                assert_targeted_evaluation_query_current(source_target)
+            except ValueError as exc:
+                raise SDKStoreError(
+                    "targeted compiled Query changed during execution"
+                ) from exc
         if expectations:
             try:
                 result = replace(
@@ -3454,6 +3468,12 @@ class SDKStore:
             except EvaluationExpectationError as exc:
                 raise SDKStoreError(f"compiled Query expectation failed: {exc}", code=exc.code) from exc
             self._assert_evaluation_query_execution_current(compiled_query, view_snapshot_digest)
+            try:
+                assert_targeted_evaluation_query_current(source_target)
+            except ValueError as exc:
+                raise SDKStoreError(
+                    "targeted compiled Query changed while attaching expectation outcomes"
+                ) from exc
         if capture == "run_bundle_v0":
             if result._row_support_artifacts is None:
                 raise SDKStoreError("native EvaluationQuery capture did not produce one complete execution record")

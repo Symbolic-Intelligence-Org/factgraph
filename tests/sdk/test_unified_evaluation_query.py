@@ -265,6 +265,31 @@ class UnifiedEvaluationQueryTests(unittest.TestCase):
                 graph.eval.evaluate(expected)
         evaluator.assert_not_called()
 
+    def test_expectation_wrapper_change_after_initial_guard_fails_before_outcome(self) -> None:
+        graph = SDKStore([Person])
+        _seed(graph, "alice", age=22, score=9)
+        expected = (
+            graph.query(_bundle(graph))
+            .select("age", _address("target", "age"))
+            .expect_contains("alice_age", age=22)
+            .compile()
+        )
+        import factgraph.sdk.store as store_module
+
+        original = store_module.evaluate_derivation_plans
+
+        def mutate_expectation_after_evaluate(*args, **kwargs):
+            outputs = original(*args, **kwargs)
+            object.__setattr__(expected.expectations[0], "query_digest", "0" * 64)
+            return outputs
+
+        with patch(
+            "factgraph.sdk.store.evaluate_derivation_plans",
+            side_effect=mutate_expectation_after_evaluate,
+        ):
+            with self.assertRaisesRegex(SDKStoreError, "changed during execution"):
+                graph.eval.evaluate(expected)
+
     def test_expectation_outcome_splice_is_rejected_by_result_validation(self) -> None:
         graph = SDKStore([Person])
         _seed(graph, "alice", age=22, score=9)
