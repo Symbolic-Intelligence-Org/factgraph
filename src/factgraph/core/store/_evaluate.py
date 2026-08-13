@@ -27,6 +27,7 @@ from factgraph.core.store._support import (
     _WITNESS_BEARING_SUPPORT_KINDS,
     ENGINE_NO_WITNESS_KIND,
     BindingSupportCapture,
+    ProofReceipt,
     ProjectedFact,
     compute_support_digest,
     normalize_binding_items,
@@ -57,6 +58,9 @@ _NativeEffectiveRelationSnapshot: TypeAlias = Mapping[
 ]
 _NativeEffectiveRelationObserver: TypeAlias = Callable[
     [_NativeEffectiveRelationSnapshot], None
+]
+_NativeEffectiveRelationSupportArtifactObserver: TypeAlias = Callable[
+    [str, ProofReceipt], None
 ]
 
 
@@ -116,6 +120,9 @@ def _evaluate_store(
     _native_effective_relation_observer: _NativeEffectiveRelationObserver | None = None,
     _native_effective_relation_override: _NativeEffectiveRelationSnapshot | None = None,
     _record_support_artifacts: bool = True,
+    _native_effective_relation_support_artifact_observer: (
+        _NativeEffectiveRelationSupportArtifactObserver | None
+    ) = None,
 ) -> list[DerivationOutput]:
     if mode == "python":
         raise ValueError("mode='python' is removed; use mode='native'")
@@ -185,6 +192,21 @@ def _evaluate_store(
             raise ValueError(
                 "_native_effective_relation_override does not support premise-filtered evaluation"
             )
+    if _native_effective_relation_support_artifact_observer is not None:
+        if not callable(_native_effective_relation_support_artifact_observer):
+            raise TypeError(
+                "_native_effective_relation_support_artifact_observer must be callable or None"
+            )
+        if (
+            mode != "native"
+            or registry is not None
+            or _native_effective_relation_override is None
+            or _record_support_artifacts
+        ):
+            raise ValueError(
+                "_native_effective_relation_support_artifact_observer requires "
+                "native effective-relation execution with durable support disabled"
+            )
 
     if isinstance(head, dict) and head.get("callee_kind") == "entity_type":
         if mode in {"souffle", "problog", "pyreason"}:
@@ -222,6 +244,9 @@ def _evaluate_store(
             _native_effective_relation_observer=_native_effective_relation_observer,
             _native_effective_relation_override=_native_effective_relation_override,
             _record_support_artifacts=_record_support_artifacts,
+            _native_effective_relation_support_artifact_observer=(
+                _native_effective_relation_support_artifact_observer
+            ),
         )
         if not captures:
             return []
@@ -278,6 +303,9 @@ def _evaluate_store(
         _native_effective_relation_observer=_native_effective_relation_observer,
         _native_effective_relation_override=_native_effective_relation_override,
         _record_support_artifacts=_record_support_artifacts,
+        _native_effective_relation_support_artifact_observer=(
+            _native_effective_relation_support_artifact_observer
+        ),
     )
     if not captures:
         return []
@@ -356,6 +384,9 @@ def _evaluate_where_over_view_with_support(
     _native_effective_relation_observer: _NativeEffectiveRelationObserver | None = None,
     _native_effective_relation_override: _NativeEffectiveRelationSnapshot | None = None,
     _record_support_artifacts: bool = True,
+    _native_effective_relation_support_artifact_observer: (
+        _NativeEffectiveRelationSupportArtifactObserver | None
+    ) = None,
 ) -> list[BindingSupportCapture]:
     if _native_effective_relation_observer is not None and registry is not None:
         raise ValueError(
@@ -363,6 +394,20 @@ def _evaluate_where_over_view_with_support(
         )
     if not isinstance(_record_support_artifacts, bool):
         raise TypeError("_record_support_artifacts must be bool")
+    if _native_effective_relation_support_artifact_observer is not None:
+        if not callable(_native_effective_relation_support_artifact_observer):
+            raise TypeError(
+                "_native_effective_relation_support_artifact_observer must be callable or None"
+            )
+        if (
+            _native_effective_relation_override is None
+            or _record_support_artifacts
+            or registry is not None
+        ):
+            raise ValueError(
+                "_native_effective_relation_support_artifact_observer requires "
+                "an override relation and disabled durable support"
+            )
     if _native_effective_relation_override is not None:
         if _native_effective_relation_observer is not None:
             raise ValueError(
@@ -435,7 +480,10 @@ def _evaluate_where_over_view_with_support(
     if not bindings:
         return []
 
-    if not _record_support_artifacts:
+    if (
+        not _record_support_artifacts
+        and _native_effective_relation_support_artifact_observer is None
+    ):
         captures = [
             BindingSupportCapture(
                 binding_items=normalize_binding_items(binding),
@@ -470,7 +518,11 @@ def _evaluate_where_over_view_with_support(
             rule_ref_edges=rule_ref_edges,
         )
         support_digest = compute_support_digest(artifact)
-        store._remember_support_artifact(support_digest, artifact)
+        if _record_support_artifacts:
+            store._remember_support_artifact(support_digest, artifact)
+        else:
+            assert _native_effective_relation_support_artifact_observer is not None
+            _native_effective_relation_support_artifact_observer(support_digest, artifact)
         captures.append(
             BindingSupportCapture(
                 binding_items=artifact.binding_items,

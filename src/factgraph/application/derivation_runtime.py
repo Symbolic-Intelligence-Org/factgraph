@@ -26,6 +26,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 from collections.abc import Mapping, Sequence
+from types import MappingProxyType
 from typing import Any
 
 from factgraph.core.derivation.accept import (
@@ -38,9 +39,10 @@ from factgraph.core.store import _accept as _store_accept
 from factgraph.core.store._evaluate import (
     _NativeEffectiveRelationObserver,
     _NativeEffectiveRelationSnapshot,
+    _NativeEffectiveRelationSupportArtifactObserver,
     _evaluate_store,
 )
-from factgraph.core.store._support import ProjectedFact
+from factgraph.core.store._support import ProofReceipt, ProjectedFact, compute_support_digest
 from factgraph.core.store.runtime import Store
 
 from .protocol import (
@@ -157,6 +159,64 @@ def _evaluate_derivation_plans_with_native_effective_relation(
     )
 
 
+def _evaluate_derivation_plans_with_native_effective_relation_capture(
+    request: DerivationEvaluateRequest,
+    *,
+    store: Store,
+    effective_relation: Mapping[str, Sequence[ProjectedFact]],
+) -> tuple[list[DerivationOutput], Mapping[str, ProofReceipt]]:
+    """Capture native receipts for an in-memory Scenario relation without Store writes.
+
+    This is intentionally private.  Unlike ordinary EvaluationRun capture, the
+    relation may contain Scenario-only synthetic witnesses.  Receipts therefore
+    live only in the returned immutable mapping and never enter a support
+    sidecar or candidate-support index.
+    """
+
+    if (
+        request.engine != "native"
+        or len(request.plans) != 1
+        or len(request.plans[0].heads) != 1
+    ):
+        raise DerivationRuntimeError(
+            "native effective relation capture requires one native plan with one head",
+            code="NATIVE_EFFECTIVE_RELATION_CAPTURE_SCOPE",
+        )
+    artifacts: dict[str, ProofReceipt] = {}
+
+    def _observe(digest: str, artifact: ProofReceipt) -> None:
+        existing = artifacts.get(digest)
+        if existing is not None and existing != artifact:
+            raise DerivationRuntimeError(
+                "native effective relation capture observed a support digest collision",
+                code="NATIVE_EFFECTIVE_RELATION_SUPPORT_COLLISION",
+            )
+        artifacts[digest] = artifact
+
+    observer: _NativeEffectiveRelationSupportArtifactObserver = _observe
+    outputs = _evaluate_derivation_plans(
+        request,
+        store=store,
+        registry=None,
+        _native_effective_relation_observer=None,
+        _native_effective_relation_override=effective_relation,
+        _record_support_artifacts=False,
+        _native_effective_relation_support_artifact_observer=observer,
+    )
+    for output in outputs:
+        artifact = artifacts.get(output.support_digest)
+        if (
+            output.support_kind != "native_binding_v1"
+            or artifact is None
+            or compute_support_digest(artifact) != output.support_digest
+        ):
+            raise DerivationRuntimeError(
+                "native effective relation capture did not retain an exact receipt for every output",
+                code="NATIVE_EFFECTIVE_RELATION_CAPTURE_INCOMPLETE",
+            )
+    return outputs, MappingProxyType(dict(sorted(artifacts.items())))
+
+
 def _evaluate_derivation_plans(
     request: DerivationEvaluateRequest,
     *,
@@ -165,6 +225,9 @@ def _evaluate_derivation_plans(
     _native_effective_relation_observer: _NativeEffectiveRelationObserver | None,
     _native_effective_relation_override: Mapping[str, Sequence[ProjectedFact]] | None = None,
     _record_support_artifacts: bool = True,
+    _native_effective_relation_support_artifact_observer: (
+        _NativeEffectiveRelationSupportArtifactObserver | None
+    ) = None,
 ) -> list[DerivationOutput]:
     outputs: list[DerivationOutput] = []
     for plan in request.plans:
@@ -177,6 +240,9 @@ def _evaluate_derivation_plans(
                 _native_effective_relation_observer=_native_effective_relation_observer,
                 _native_effective_relation_override=_native_effective_relation_override,
                 _record_support_artifacts=_record_support_artifacts,
+                _native_effective_relation_support_artifact_observer=(
+                    _native_effective_relation_support_artifact_observer
+                ),
             )
         )
     if request.run_id is not None and len(request.plans) > 1:
@@ -193,6 +259,9 @@ def _evaluate_plan(
     _native_effective_relation_observer: _NativeEffectiveRelationObserver | None,
     _native_effective_relation_override: Mapping[str, Sequence[ProjectedFact]] | None,
     _record_support_artifacts: bool,
+    _native_effective_relation_support_artifact_observer: (
+        _NativeEffectiveRelationSupportArtifactObserver | None
+    ),
 ) -> list[DerivationOutput]:
     engine_options = dict(plan.engine_options) if plan.engine_options else None
     if plan.head_spec is not None:
@@ -217,6 +286,9 @@ def _evaluate_plan(
                 _native_effective_relation_observer=_native_effective_relation_observer,
                 _native_effective_relation_override=_native_effective_relation_override,
                 _record_support_artifacts=_record_support_artifacts,
+                _native_effective_relation_support_artifact_observer=(
+                    _native_effective_relation_support_artifact_observer
+                ),
             )
         )
 
@@ -238,6 +310,9 @@ def _evaluate_plan(
             _native_effective_relation_observer=_native_effective_relation_observer,
             _native_effective_relation_override=_native_effective_relation_override,
             _record_support_artifacts=_record_support_artifacts,
+            _native_effective_relation_support_artifact_observer=(
+                _native_effective_relation_support_artifact_observer
+            ),
         )
         results.extend(head_results)
     return results
@@ -345,4 +420,5 @@ __all__ = [
     "accept_derivation_candidate_set",
     "accept_derivation_candidate_sets",
     "evaluate_derivation_plans",
+    "_evaluate_derivation_plans_with_native_effective_relation_capture",
 ]

@@ -8,6 +8,7 @@ from unittest.mock import patch
 
 from factgraph.application import evaluate_derivation_plans
 from factgraph.application.derivation_runtime import (
+    _evaluate_derivation_plans_with_native_effective_relation_capture,
     _evaluate_derivation_plans_with_native_relation_capture,
     _evaluate_derivation_plans_with_native_effective_relation,
 )
@@ -75,6 +76,72 @@ def _stable_outputs(outputs: list[object]) -> list[tuple[object, ...]]:
 
 
 class NativeEffectiveRelationCoreTests(unittest.TestCase):
+    def test_private_effective_relation_capture_keeps_receipts_in_memory_only(self) -> None:
+        store = _store_with_people("alice")
+        request = DerivationEvaluateRequest(
+            plans=(_plan([("pred", "Person:exists", ["$x"])]),),
+            engine="native",
+        )
+        relation = project_view_facts_with_witness(store.ledger, store.schema_ir)
+        effective = {"Person:exists": tuple(relation["Person:exists"])}
+        support_before = dict(store._support_artifacts)
+        candidates_before = dict(store._candidate_support_index)
+
+        with patch.object(store, "_remember_support_artifact", wraps=store._remember_support_artifact) as artifacts, patch.object(
+            store,
+            "_remember_candidate_support",
+            wraps=store._remember_candidate_support,
+        ) as candidates:
+            outputs, receipts = _evaluate_derivation_plans_with_native_effective_relation_capture(
+                request,
+                store=store,
+                effective_relation=effective,
+            )
+
+        self.assertEqual(len(outputs), 1)
+        self.assertEqual(outputs[0].support_kind, "native_binding_v1")
+        self.assertEqual(set(receipts), {outputs[0].support_digest})
+        self.assertEqual(receipts[outputs[0].support_digest].kind, "native_binding_v1")
+        artifacts.assert_not_called()
+        candidates.assert_not_called()
+        self.assertEqual(store._support_artifacts, support_before)
+        self.assertEqual(store._candidate_support_index, candidates_before)
+        with self.assertRaises(TypeError):
+            receipts["sha256:" + "0" * 64] = receipts[outputs[0].support_digest]  # type: ignore[index]
+
+    def test_private_receipt_observer_is_fail_closed_outside_override_scope(self) -> None:
+        store = _store_with_people("alice")
+        relation = project_view_facts_with_witness(store.ledger, store.schema_ir)
+        effective = {"Person:exists": tuple(relation["Person:exists"])}
+
+        def observer(_digest: str, _receipt: object) -> None:
+            return None
+
+        kwargs = dict(
+            store=store,
+            derivation_id="override",
+            version="1",
+            target_pred_id="override:row",
+            head_vars=["$x"],
+            where=[("pred", "Person:exists", ["$x"])],
+            mode="native",
+            engine_evaluate=store.evaluate_engine,
+            _native_effective_relation_support_artifact_observer=observer,
+        )
+        with self.assertRaisesRegex(ValueError, "requires native effective-relation"):
+            evaluate_module._evaluate_store(**kwargs)
+        with self.assertRaisesRegex(ValueError, "requires _record_support_artifacts=False"):
+            evaluate_module._evaluate_store(
+                **kwargs,
+                _native_effective_relation_override=effective,
+            )
+        with self.assertRaisesRegex(ValueError, "does not support registry-backed"):
+            evaluate_module._evaluate_store(
+                **kwargs,
+                _native_effective_relation_override=effective,
+                _record_support_artifacts=False,
+                registry=object(),
+            )
     def test_private_effective_relation_execution_is_no_provenance_and_requires_exact_dependencies(self) -> None:
         store = _store_with_people("alice")
         request = DerivationEvaluateRequest(
