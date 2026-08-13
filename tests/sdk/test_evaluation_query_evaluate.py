@@ -25,15 +25,18 @@ from factgraph.application import (
 from factgraph.application.protocol import (
     EntityRef,
     EntitySelector,
+    DetachedRowError,
     EvaluateResult,
     EvaluationQuery,
     EvaluationQueryBinding,
     EvaluationQuerySelection,
     EvaluationRunBundleV0,
+    FieldPath,
     Policy,
     PolicyOccurrence,
     ProtocolShapeError,
     Rule,
+    ScenarioFieldSubstitutionV0,
     SemanticPortAddress,
     SemanticRulePort,
     entity_identity,
@@ -53,6 +56,7 @@ class Person(Entity):
     employee_id: str = Identity()
     age: int = Field()
     score: int = Field()
+    unrelated: int = Field()
 
 
 class Other(Entity):
@@ -298,6 +302,36 @@ class EvaluationQueryNativeEvaluateTests(unittest.TestCase):
 
         with self.assertRaisesRegex(SDKStoreError, "only accepted for CompiledEvaluationQueryV0"):
             graph.eval.evaluate({"derivation_id": "not-a-query"}, capture="run_bundle_v0")
+
+    def test_non_query_evaluate_and_candidate_paths_reject_scenario_keyword(self) -> None:
+        import factgraph.sdk as sdk
+
+        graph = SDKStore([Person])
+        _seed_person(graph, "alice", age=22, score=9)
+        scenario = ScenarioFieldSubstitutionV0(
+            EntityRef("Person", {"employee_id": "alice"}),
+            FieldPath("Person", "age"),
+            35,
+            "must-not-be-silent",
+        )
+        with sdk.vars("person") as (person,):
+            inference = sdk.Inference(
+                id="legacy-person",
+                version="1",
+                when=[sdk.Pred("Person:exists", person)],
+                emits=sdk.EmitSpec("Person:exists", [person]),
+            )
+        for operation, input_value in (
+            (graph.eval.evaluate, inference),
+            (graph.eval.evaluate, inference.to_authoring_payload()),
+            (graph.eval.evaluate_candidates, inference),
+            (graph.eval.evaluate_candidates, inference.to_authoring_payload()),
+        ):
+            with self.subTest(operation=operation.__name__, input_type=type(input_value).__name__), self.assertRaisesRegex(
+                SDKStoreError,
+                "scenario=",
+            ):
+                operation(input_value, scenario=scenario)
 
     def test_bundle_annotation_and_public_evaluate_signatures_are_reflectable(self) -> None:
         import factgraph.application.derivation_runtime as runtime
@@ -966,6 +1000,22 @@ class EvaluationQueryNativeEvaluateTests(unittest.TestCase):
             {"kind": "literal", "tag": "float64", "value": "0x3ff8000000000000"},
         )
 
+        scenario_result = graph.eval.evaluate(
+            compiled,
+            scenario=ScenarioFieldSubstitutionV0(
+                EntityRef("Record", {"record_id": "r1"}),
+                FieldPath("Record", "observed_at"),
+                456,
+                "time-value-only",
+            ),
+        )
+        self.assertEqual(
+            scenario_result[0].bindings["observed_at"],
+            {"kind": "literal", "tag": "time", "value": 456},
+        )
+        assert scenario_result.scenario is not None
+        self.assertEqual(scenario_result.scenario.effective_value.tag, "time")
+
     def test_query_view_bytes_normalization_is_address_independent(self) -> None:
         from factgraph.sdk.store import _evaluation_query_digest_safe
 
@@ -989,6 +1039,192 @@ class EvaluationQueryNativeEvaluateTests(unittest.TestCase):
             bindings={"value": {"kind": "literal", "tag": "string", "value": encoded}},
         )
         self.assertEqual(graph._display_bindings_for_row(legacy_row)["value"], "Person alice")
+
+
+class EvaluationQueryScenarioFieldSubstitutionTests(unittest.TestCase):
+    def _scenario(self, *, value: object, field: FieldPath | None = None) -> ScenarioFieldSubstitutionV0:
+        return ScenarioFieldSubstitutionV0(
+            entity=EntityRef("Person", {"employee_id": "alice"}, encoded_ref="idref_v1:Person:forged"),
+            field=field or FieldPath("Person", "age"),
+            value=value,
+            premise_id="review-age-hypothesis",
+        )
+
+    @staticmethod
+    def _support_state(graph: SDKStore) -> tuple[object, ...]:
+        store = graph._store
+        return (
+            dict(store._support_artifacts),
+            dict(store._candidate_support_index),
+            dict(store._candidate_support_kind_index),
+            dict(store._candidate_confidence_kind_index),
+            dict(store._candidate_pred_index),
+        )
+
+    def test_scenario_replaces_one_existing_field_with_same_query_evaluator_and_no_persistence(self) -> None:
+        graph = SDKStore([Person])
+        alice_ref = _seed_person(graph, "alice", age=22, score=9)
+        compiled, _bundle = _compiled_person_query(
+            graph,
+            employee_id="alice",
+            selections=(("person", "person"), ("age", "age"), ("score", "score")),
+        )
+        claims_before = tuple(graph.ledger.find_claims())
+        support_before = self._support_state(graph)
+
+        import factgraph.sdk.store as store_module
+
+        with patch(
+            "factgraph.sdk.store._evaluate_derivation_plans_with_native_effective_relation",
+            wraps=store_module._evaluate_derivation_plans_with_native_effective_relation,
+        ) as evaluator, patch.object(
+            graph._store,
+            "_remember_support_artifact",
+            wraps=graph._store._remember_support_artifact,
+        ) as remember_artifact, patch.object(
+            graph._store,
+            "_remember_candidate_support",
+            wraps=graph._store._remember_candidate_support,
+        ) as remember_candidate:
+            result = graph.eval.evaluate(compiled, scenario=self._scenario(value=35))
+
+        self.assertEqual(evaluator.call_count, 2)
+        self.assertIs(evaluator.call_args_list[0].args[0].plans[0], evaluator.call_args_list[1].args[0].plans[0])
+        remember_artifact.assert_not_called()
+        remember_candidate.assert_not_called()
+        self.assertIsInstance(result, EvaluateResult)
+        self.assertIsNone(result.run_anchor)
+        self.assertIsNone(result.run_bundle)
+        self.assertEqual(dict(result[0].bindings)["person"], {"kind": "entity_ref", "value": alice_ref})
+        self.assertEqual(dict(result[0].bindings)["age"], {"kind": "literal", "tag": "int", "value": 35})
+        self.assertEqual(dict(result[0].bindings)["score"], {"kind": "literal", "tag": "int", "value": 9})
+        assert result.scenario is not None
+        self.assertEqual(result.scenario.entity_ref, alice_ref)
+        self.assertEqual(result.scenario.baseline_value.value, 22)
+        self.assertEqual(result.scenario.effective_value.value, 35)
+        self.assertTrue(result.scenario.semantic_value_changed)
+        self.assertTrue(result.scenario.effective_source_changed)
+        self.assertIsNotNone(result.scenario.result_diff)
+        assert result.scenario.result_diff is not None
+        self.assertTrue(result.scenario.result_diff.result_changed)
+        self.assertEqual(tuple(graph.ledger.find_claims()), claims_before)
+        self.assertEqual(self._support_state(graph), support_before)
+        self.assertEqual(
+            dict(graph.eval.evaluate(compiled)[0].bindings)["age"],
+            {"kind": "literal", "tag": "int", "value": 22},
+        )
+
+    def test_same_value_and_unselected_change_are_distinguished_from_result_change(self) -> None:
+        graph = SDKStore([Person])
+        _seed_person(graph, "alice", age=22, score=9)
+        selected_age, _bundle = _compiled_person_query(graph, employee_id="alice")
+        same = graph.eval.evaluate(selected_age, scenario=self._scenario(value=22))
+        assert same.scenario is not None and same.scenario.result_diff is not None
+        self.assertFalse(same.scenario.semantic_value_changed)
+        self.assertTrue(same.scenario.effective_source_changed)
+        self.assertFalse(same.scenario.result_diff.result_changed)
+
+        selected_score, _bundle = _compiled_person_query(
+            graph,
+            employee_id="alice",
+            selections=(("score", "score"),),
+        )
+        unselected = graph.eval.evaluate(selected_score, scenario=self._scenario(value=35))
+        assert unselected.scenario is not None and unselected.scenario.result_diff is not None
+        self.assertTrue(unselected.scenario.semantic_value_changed)
+        self.assertFalse(unselected.scenario.result_diff.result_changed)
+
+    def test_scenario_disables_ledger_evidence_closure_and_capture(self) -> None:
+        graph = SDKStore([Person])
+        _seed_person(graph, "alice", age=22, score=9)
+        compiled, _bundle = _compiled_person_query(graph, employee_id="alice")
+        result = graph.eval.evaluate(compiled, scenario=self._scenario(value=35))
+        with self.assertRaisesRegex(DetachedRowError, "ScenarioFieldSubstitutionV0"):
+            result[0].close()
+        explanation = result[0].explain()
+        self.assertEqual(explanation.status, "unsupported")
+        self.assertIn("ScenarioFieldSubstitutionV0", explanation.errors[0].message)
+        for capture in (None, "run_bundle_v0"):
+            with self.subTest(capture=capture), self.assertRaisesRegex(
+                SDKStoreError,
+                "does not support capture",
+            ):
+                graph.eval.evaluate(compiled, scenario=self._scenario(value=35), capture=capture)
+        ordinary = graph.eval.evaluate(compiled)
+        self.assertIsNotNone(ordinary.run_anchor)
+        self.assertEqual(ordinary[0].explain().status, "passed")
+        self.assertIsInstance(ordinary[0].close(), Rule)
+
+    def test_scenario_rejects_invalid_target_shape_and_value_before_execution(self) -> None:
+        graph = SDKStore([Person])
+        _seed_person(graph, "alice", age=22, score=9)
+        compiled, _bundle = _compiled_person_query(graph, employee_id="alice")
+        import factgraph.sdk.store as store_module
+
+        for scenario, expected in (
+            (self._scenario(value=True), "SCENARIO_VALUE_TYPE_MISMATCH"),
+            (self._scenario(value="22"), "SCENARIO_VALUE_TYPE_MISMATCH"),
+            (self._scenario(value=35, field=FieldPath("Person", "employee_id")), "SCENARIO_FIELD_UNSUPPORTED"),
+            (self._scenario(value=35, field=FieldPath("Person", "unrelated")), "SCENARIO_TARGET_OUTSIDE_QUERY"),
+        ):
+            with self.subTest(expected=expected), patch(
+                "factgraph.sdk.store._evaluate_derivation_plans_with_native_effective_relation",
+                wraps=store_module._evaluate_derivation_plans_with_native_effective_relation,
+            ) as evaluator, self.assertRaisesRegex(SDKStoreError, expected):
+                graph.eval.evaluate(compiled, scenario=scenario)
+            evaluator.assert_not_called()
+
+    def test_scenario_rejects_missing_visible_target_and_view_change(self) -> None:
+        graph = SDKStore([Person])
+        _seed_person(graph, "alice", age=22, score=9)
+        compiled, _bundle = _compiled_person_query(graph, employee_id="alice")
+        age_pred = field_predicate(build_schema_index(graph.schema_ir), "Person", "age").pred_id
+        import factgraph.application.evaluation_scenario_runtime as scenario_runtime
+        import factgraph.sdk.store as store_module
+
+        original_projector = scenario_runtime.project_view_facts_with_witness
+        missing_target = original_projector(graph.ledger, graph.schema_ir)
+        missing_target[age_pred] = []
+        with patch.object(
+            scenario_runtime,
+            "project_view_facts_with_witness",
+            return_value=missing_target,
+        ), self.assertRaisesRegex(SDKStoreError, "SCENARIO_TARGET_UNAVAILABLE"):
+            graph.eval.evaluate(compiled, scenario=self._scenario(value=35))
+
+        ambiguous_target = original_projector(graph.ledger, graph.schema_ir)
+        ambiguous_target[age_pred] = [
+            *ambiguous_target[age_pred],
+            ambiguous_target[age_pred][0],
+        ]
+        with patch.object(
+            scenario_runtime,
+            "project_view_facts_with_witness",
+            return_value=ambiguous_target,
+        ), patch(
+            "factgraph.sdk.store._evaluate_derivation_plans_with_native_effective_relation",
+            wraps=store_module._evaluate_derivation_plans_with_native_effective_relation,
+        ) as evaluator, self.assertRaisesRegex(SDKStoreError, "SCENARIO_TARGET_UNAVAILABLE"):
+            graph.eval.evaluate(compiled, scenario=self._scenario(value=35))
+        evaluator.assert_not_called()
+
+        original_evaluator = store_module._evaluate_derivation_plans_with_native_effective_relation
+        call_count = 0
+
+        def mutate_after_baseline(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            outputs = original_evaluator(*args, **kwargs)
+            if call_count == 1:
+                _seed_person(graph, "bob", age=19, score=7)
+            return outputs
+
+        with patch(
+            "factgraph.sdk.store._evaluate_derivation_plans_with_native_effective_relation",
+            side_effect=mutate_after_baseline,
+        ), self.assertRaisesRegex(SDKStoreError, "view changed"):
+            graph.eval.evaluate(compiled, scenario=self._scenario(value=35))
+        self.assertEqual(call_count, 1)
 
 
 if __name__ == "__main__":

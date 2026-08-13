@@ -89,6 +89,7 @@ class EvaluateResult:
     engine_meta: Mapping[str, Any]
     run_anchor: EvaluationRunAnchorV0 | None = None
     run_bundle: EvaluationRunBundleV0 | None = None
+    scenario: ScenarioResolutionV0 | None = None
 ```
 
 Private fields (not compared / not repr'd):
@@ -126,6 +127,15 @@ effective dependency relations, rows and ProofReceipts. It is integrity-sealed
 but not authenticated, has caller-managed custody, and exposes neither replay
 nor detached Explain. Ordinary evaluation leaves `run_bundle=None`; capture
 cannot be added post hoc.
+
+The only exception is a `ScenarioFieldSubstitutionV0` compiled Query result.
+It has `scenario: ScenarioResolutionV0`, but it **must not** carry a run anchor
+or run bundle.  Its fingerprint's view-identity position is the sealed
+run-local effective-relation identity, not a claim of a ledger snapshot.
+Scenario rows deliberately reject `close()` and return an unsupported result
+from `explain()`: the existing live-EvidenceGraph contract refers to asserted
+ledger facts and is not valid evidence for a hypothetical replacement.  See
+`src/factgraph/application/docs/rule.md` for the replacement-only scope.
 
 The separate F4C `PolicyExplanationViewV0` is intentionally not an
 `Explanation` field and is not produced by `EvaluateRow.explain()`. Its normal

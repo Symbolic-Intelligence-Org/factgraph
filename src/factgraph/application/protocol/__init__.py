@@ -31,6 +31,15 @@ from .evaluation_query import (
     EvaluationQuerySelection,
     EvaluationQueryValue,
 )
+from .evaluation_scenario import (
+    ScenarioFieldSubstitutionV0,
+    ScenarioInputValue,
+    ScenarioResolutionV0,
+    ScenarioResultDiffV0,
+    ScenarioScalarStorage,
+    ScenarioScalarTag,
+    ScenarioScalarValueV0,
+)
 from .evaluation_run import (
     EvaluationRunAnchorV0,
     EvaluationRunBindingV0,
@@ -246,6 +255,13 @@ __all__ = [
     "EvaluationQueryError",
     "EvaluationQuerySelection",
     "EvaluationQueryValue",
+    "ScenarioFieldSubstitutionV0",
+    "ScenarioInputValue",
+    "ScenarioResolutionV0",
+    "ScenarioResultDiffV0",
+    "ScenarioScalarStorage",
+    "ScenarioScalarTag",
+    "ScenarioScalarValueV0",
     "EvaluationRunAnchorV0",
     "EvaluationRunBindingV0",
     "EvaluationRunExecutionProfileV0",

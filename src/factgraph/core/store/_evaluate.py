@@ -25,9 +25,11 @@ from factgraph.core.store._support import (
     _DEGRADED_SUPPORT_KINDS,
     _PROVENANCE_BEARING_SUPPORT_KINDS,
     _WITNESS_BEARING_SUPPORT_KINDS,
+    ENGINE_NO_WITNESS_KIND,
     BindingSupportCapture,
     ProjectedFact,
     compute_support_digest,
+    normalize_binding_items,
 )
 from factgraph.core.store._support_capture import (
     build_support_artifact_for_binding,
@@ -112,6 +114,8 @@ def _evaluate_store(
     engine_options: EngineOptionsIR = None,
     semantics_profile: Any | None = None,
     _native_effective_relation_observer: _NativeEffectiveRelationObserver | None = None,
+    _native_effective_relation_override: _NativeEffectiveRelationSnapshot | None = None,
+    _record_support_artifacts: bool = True,
 ) -> list[DerivationOutput]:
     if mode == "python":
         raise ValueError("mode='python' is removed; use mode='native'")
@@ -152,6 +156,35 @@ def _evaluate_store(
             raise ValueError(
                 "_native_effective_relation_observer does not support registry-backed evaluation"
             )
+    if not isinstance(_record_support_artifacts, bool):
+        raise TypeError("_record_support_artifacts must be bool")
+    if not _record_support_artifacts and mode != "native":
+        raise ValueError("_record_support_artifacts=False is only supported for mode='native'")
+    if _native_effective_relation_override is not None:
+        if mode != "native":
+            raise ValueError(
+                "_native_effective_relation_override is only supported for mode='native'"
+            )
+        if registry is not None:
+            raise ValueError(
+                "_native_effective_relation_override does not support registry-backed evaluation"
+            )
+        if _native_effective_relation_observer is not None:
+            raise ValueError(
+                "_native_effective_relation_override cannot be combined with native relation capture"
+            )
+        if _record_support_artifacts:
+            raise ValueError(
+                "_native_effective_relation_override requires _record_support_artifacts=False"
+            )
+        if (
+            getattr(store, "premise_exclusions", ())
+            or getattr(store, "premise_allowances", ())
+            or getattr(store, "premise_blocks", ())
+        ):
+            raise ValueError(
+                "_native_effective_relation_override does not support premise-filtered evaluation"
+            )
 
     if isinstance(head, dict) and head.get("callee_kind") == "entity_type":
         if mode in {"souffle", "problog", "pyreason"}:
@@ -187,6 +220,8 @@ def _evaluate_store(
             root_result_kind="entity",
             registry=registry,
             _native_effective_relation_observer=_native_effective_relation_observer,
+            _native_effective_relation_override=_native_effective_relation_override,
+            _record_support_artifacts=_record_support_artifacts,
         )
         if not captures:
             return []
@@ -198,7 +233,8 @@ def _evaluate_store(
             rows=captures,
             confidence_kind_resolver=confidence_kind_resolver,
         )
-        _remember_output_support_backrefs(store, outputs)
+        if _record_support_artifacts:
+            _remember_output_support_backrefs(store, outputs)
         return outputs
 
     if mode in {"souffle", "problog", "pyreason"}:
@@ -240,6 +276,8 @@ def _evaluate_store(
         root_result_kind="fact",
         registry=registry,
         _native_effective_relation_observer=_native_effective_relation_observer,
+        _native_effective_relation_override=_native_effective_relation_override,
+        _record_support_artifacts=_record_support_artifacts,
     )
     if not captures:
         return []
@@ -266,7 +304,8 @@ def _evaluate_store(
             rows=captures,
             confidence_kind_resolver=confidence_kind_resolver,
         )
-    _remember_output_support_backrefs(store, outputs)
+    if _record_support_artifacts:
+        _remember_output_support_backrefs(store, outputs)
     return outputs
 
 
@@ -277,6 +316,7 @@ def _evaluate_where_over_view(
     registry: Any | None = None,
     witness_facts: Mapping[str, Sequence[ProjectedFact]] | None = None,
     ledger: Any | None = None,
+    _record_support_artifacts: bool = True,
 ) -> Any:
     if ledger is None:
         # Premise admissibility: the native projection is the only fact
@@ -299,7 +339,11 @@ def _evaluate_where_over_view(
         where,
         registry=registry,
         witness_facts=cast(Any, witness_facts),
-        remember_support_artifact=store._remember_support_artifact if witness_facts is not None else None,
+        remember_support_artifact=(
+            store._remember_support_artifact
+            if witness_facts is not None and _record_support_artifacts
+            else None
+        ),
     )
 
 
@@ -310,24 +354,54 @@ def _evaluate_where_over_view_with_support(
     root_result_kind: str,
     registry: Any | None = None,
     _native_effective_relation_observer: _NativeEffectiveRelationObserver | None = None,
+    _native_effective_relation_override: _NativeEffectiveRelationSnapshot | None = None,
+    _record_support_artifacts: bool = True,
 ) -> list[BindingSupportCapture]:
     if _native_effective_relation_observer is not None and registry is not None:
         raise ValueError(
             "_native_effective_relation_observer does not support registry-backed evaluation"
         )
-    # One premise-scoped view per evaluate call, shared between the witness
-    # projection and the native where evaluation; visibility is decided live
-    # per access inside the view (see premise_filter.py).
-    ledger = premise_scoped_ledger(
-        store.ledger,
-        getattr(store, "premise_exclusions", ()),
-        getattr(store, "premise_allowances", ()),
-        getattr(store, "premise_blocks", ()),
-    )
-    witness_facts: Mapping[str, Sequence[ProjectedFact]] = project_view_facts_with_witness(
-        ledger,
-        store.schema_ir,
-    )
+    if not isinstance(_record_support_artifacts, bool):
+        raise TypeError("_record_support_artifacts must be bool")
+    if _native_effective_relation_override is not None:
+        if _native_effective_relation_observer is not None:
+            raise ValueError(
+                "_native_effective_relation_override cannot be combined with native relation capture"
+            )
+        if _record_support_artifacts:
+            raise ValueError(
+                "_native_effective_relation_override requires _record_support_artifacts=False"
+            )
+        if (
+            getattr(store, "premise_exclusions", ())
+            or getattr(store, "premise_allowances", ())
+            or getattr(store, "premise_blocks", ())
+        ):
+            raise ValueError(
+                "_native_effective_relation_override does not support premise-filtered evaluation"
+            )
+        dependency_predicates = _native_where_dependency_predicates(where)
+        actual_predicates = tuple(sorted(_native_effective_relation_override))
+        expected_predicates = tuple(sorted(dependency_predicates))
+        if actual_predicates != expected_predicates:
+            raise ValueError(
+                "native effective relation override must exactly cover query dependencies"
+            )
+        witness_facts: Mapping[str, Sequence[ProjectedFact]] = _immutable_effective_relation_copy(
+            _native_effective_relation_override
+        )
+        ledger = store.ledger
+    else:
+        # One premise-scoped view per evaluate call, shared between the witness
+        # projection and the native where evaluation; visibility is decided live
+        # per access inside the view (see premise_filter.py).
+        ledger = premise_scoped_ledger(
+            store.ledger,
+            getattr(store, "premise_exclusions", ()),
+            getattr(store, "premise_allowances", ()),
+            getattr(store, "premise_blocks", ()),
+        )
+        witness_facts = project_view_facts_with_witness(ledger, store.schema_ir)
     if _native_effective_relation_observer is not None:
         dependency_predicates = _native_where_dependency_predicates(where)
         reduced_relation = {
@@ -355,10 +429,23 @@ def _evaluate_where_over_view_with_support(
         registry=registry,
         witness_facts=witness_facts,
         ledger=ledger,
+        _record_support_artifacts=_record_support_artifacts,
     )
     bindings = evaluation.bindings
     if not bindings:
         return []
+
+    if not _record_support_artifacts:
+        captures = [
+            BindingSupportCapture(
+                binding_items=normalize_binding_items(binding),
+                support_digest=f"sha256:{'0' * 64}",
+                support_kind=ENGINE_NO_WITNESS_KIND,
+            )
+            for binding in bindings
+        ]
+        captures.sort(key=lambda row: (row.binding_items, row.support_digest, row.support_kind))
+        return captures
 
     captures: list[BindingSupportCapture] = []
     for binding in bindings:

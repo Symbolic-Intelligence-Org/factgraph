@@ -509,6 +509,57 @@ Non-native engines, standalone Query explain integration, candidate acceptance,
 Compare/literals, field navigation, `expect`, completeness, What-if, bundle
 persistence, Package, and Agent/Meander wire formats remain later slices.
 
+### Scenario field substitution v0
+
+`ScenarioFieldSubstitutionV0` is the first deliberately narrow Scenario
+operation.  It is **not** a general What-if/Premise API.  It is supplied to the
+same compiled Query call, rather than to a second evaluator:
+
+```python
+from factgraph.application.protocol import (
+    EntityRef,
+    FieldPath,
+    ScenarioFieldSubstitutionV0,
+)
+
+result = fg.eval.evaluate(
+    compiled_query,
+    scenario=ScenarioFieldSubstitutionV0(
+        entity=EntityRef("Person", {"employee_id": "alice"}),
+        field=FieldPath("Person", "age"),
+        value=22,
+        premise_id="review-age-hypothesis",
+    ),
+)
+```
+
+The runtime re-materializes the entity identity through the trusted schema,
+requires a complete active identity bundle, and allows only exactly one current
+visible, scalar, `single`, non-identity field fact.  Its predicate must be an
+exact dependency of the already materialized Query plan.  Missing values,
+multi-value/relationship/identity fields, field-navigation syntax, policy or
+rule overlays, and premise filtering all fail closed.
+
+An ordinary scalar `time` field can be replaced under the same value contract.
+That does not provide temporal/as-of/versioned or historical-fact semantics;
+those remain out of scope.
+
+The normal materialized native evaluator runs twice over immutable in-memory
+relations: once for the baseline and once after replacing that one projected
+row with a synthetic hypothesis witness.  Neither relation writes the ledger,
+proof sidecar, or candidate-support index.  `result.scenario` reports the
+typed old/new values, relation identities and a stable row-multiset diff.  A
+same-value replacement is still a new effective source, so it records
+`semantic_value_changed=False` and `effective_source_changed=True`.
+
+Scenario rows intentionally have no ledger-backed `close()` or `explain()`;
+the former raises `DetachedRowError` and the latter returns an unsupported
+`Explanation`.  Scenario also rejects every `capture=` use and never attaches
+an F4 anchor or bundle.  Current F4 proof receipts describe asserted ledger
+facts, so presenting them as evidence for a hypothetical value would be false
+provenance.  Scenario-aware evidence, replay, multi-premise truth algebra,
+and general `ScenarioPlan` remain separate future contracts.
+
 Compiled Policy/Query and Run-anchor values are compiler-issued, in-process
 artifacts. Their integrity checks detect inconsistent splicing; they are not
 authentication or a MAC. Any future codec or rehydration path must recompile

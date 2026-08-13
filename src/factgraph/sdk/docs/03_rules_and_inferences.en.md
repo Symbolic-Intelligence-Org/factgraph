@@ -430,7 +430,7 @@ This v0 execution path is deliberately native-only and rejects `config=`,
 helpers: they fail closed if the FactGraph view has changed since evaluation.
 Premise exclusions, allowances and predicate blocks are not yet captured with
 that live view, so a non-empty or later-changed premise policy also fails closed.
-Each successful compiled Query result carries `result.run_anchor`, a pure-data
+Each ordinary successful compiled Query result carries `result.run_anchor`, a pure-data
 identity anchor for the exact target, Query, Policy structure/lineage, Rule
 pins, bind/select intent, execution profile, view, result and rows. Its semantic
 row anchors exclude random run ids; its query-summary anchor also covers a
@@ -461,6 +461,46 @@ Store, but the artifact deliberately has no `replay()` or detached `explain()`
 method and reports replay not implemented. Non-fact logical verification,
 historical replay, persistence, completeness, truncation and expectation
 semantics remain later slices.
+
+#### Narrow scenario field substitution (v0)
+
+`scenario=` adds one deliberately narrow, read-only What-if form to the same
+compiled Query call surface.  It substitutes one visible, single-valued,
+non-identity scalar field for one existing entity in the exact Query dependency
+relation, then evaluates both the unchanged and effective relations:
+
+```python
+from factgraph.sdk import EntityRef, FieldPath, ScenarioFieldSubstitutionV0
+
+result = fg.eval.evaluate(
+    compiled_query,
+    scenario=ScenarioFieldSubstitutionV0(
+        entity=EntityRef("Person", {"employee_id": "alice"}),
+        field=FieldPath("Person", "age"),
+        value=22,
+        premise_id="review-age-hypothesis",
+    ),
+)
+
+assert result.scenario is not None
+print(result.scenario.result_diff)
+```
+
+This is not a general Scenario, claim overlay, rule override, persistence, or
+replay API.  The field must be schema-owned and directly relevant to the
+compiled Query; the entity must already be active and visible; and exactly one
+visible fact for that field must exist.  All other shapes fail closed.
+An ordinary scalar `time` value is allowed, but temporal/as-of/versioned and
+historical-fact semantics are not part of this v0 contract.
+
+Scenario execution is native-only, rejects `config=`, non-empty premise policy,
+and **any** `capture=` argument (including `capture=None`).  It intentionally
+does not attach a Run anchor or bundle.  Its rows cannot be closed and their
+explanations are reported unsupported: the current evidence model would
+otherwise make a hypothetical value look like a ledger fact.  The returned
+`result.scenario` records the canonical operation, base/effective relation
+identities, and a semantic result diff.  Its effective-view digest identifies
+the scenario relation; it is not a historical ledger snapshot.
 
 ### Rule and RuleExpr snapshot matching
 

@@ -18,7 +18,12 @@ from factgraph.application.schema_mutation_runtime import (
 from factgraph.application.workspace_runtime import resolve_workspace_paths
 from factgraph.application.derivation_runtime import (
     _evaluate_derivation_plans_with_native_relation_capture,
+    _evaluate_derivation_plans_with_native_effective_relation,
     evaluate_derivation_plans,
+)
+from factgraph.application.evaluation_scenario_runtime import (
+    ScenarioResolutionError,
+    resolve_scenario_field_substitution_v0,
 )
 from factgraph.application.evaluation_query_runtime import (
     CompiledEvaluationQueryV0,
@@ -67,6 +72,8 @@ from factgraph.application.protocol import (
     FieldPath,
     Rule as ApplicationRule,
     RuleExprError,
+    ScenarioFieldSubstitutionV0,
+    ScenarioResultDiffV0,
 )
 from factgraph.application.protocol.certainty import BOOLEAN_CERTAINTY, Certainty
 from factgraph.application.protocol.evaluate_result import (
@@ -80,6 +87,7 @@ from factgraph.application.protocol.evaluate_result import (
     _legacy_candidate_payload_for_row_result,
     _public_term_value,
     _row_digest_for,
+    _scenario_semantic_rows_digest,
     canonical_bytes_for_evaluate,
     closed_head_digest_for,
     expr_digest_for_payload,
@@ -2932,6 +2940,10 @@ class SDKStore:
             raise SDKStoreError(
                 "evaluate() capture= is only accepted for CompiledEvaluationQueryV0"
             )
+        if "scenario" in kwargs:
+            raise SDKStoreError(
+                "evaluate() scenario= is only accepted for CompiledEvaluationQueryV0"
+            )
         if args and isinstance(args[0], (ApplicationRule, _RuleExpr)):
             return self._evaluate_rule_expr_input(
                 args,
@@ -2976,6 +2988,11 @@ class SDKStore:
         )
 
     def _evaluate_candidates(self, *args: Any, **kwargs: Any) -> list[DerivationOutput]:
+        if "scenario" in kwargs:
+            raise SDKStoreError(
+                "evaluate_candidates() does not accept scenario=; "
+                "use evaluate(compiled_query, scenario=...)"
+            )
         if "view" in kwargs:
             raise SDKStoreError(
                 "method-level view= is not supported by evaluate_candidates(); use FactGraph.attach(db, view=view) instead"
@@ -3215,7 +3232,17 @@ class SDKStore:
             raise SDKStoreError(
                 "evaluate(compiled_query) accepts exactly one CompiledEvaluationQueryV0"
             )
+        capture_supplied = "capture" in kwargs
         capture = kwargs.pop("capture", None)
+        scenario = kwargs.pop("scenario", None)
+        if scenario is not None and not isinstance(scenario, ScenarioFieldSubstitutionV0):
+            raise SDKStoreError(
+                "evaluate(compiled_query) scenario= must be ScenarioFieldSubstitutionV0"
+            )
+        if scenario is not None and capture_supplied:
+            raise SDKStoreError(
+                "evaluate(compiled_query) ScenarioFieldSubstitutionV0 does not support capture="
+            )
         if capture is not None and (
             type(capture) is not str or capture != "run_bundle_v0"
         ):
@@ -3265,6 +3292,71 @@ class SDKStore:
             raise SDKStoreError(
                 "compiled EvaluationQuery could not be materialized for native execution"
             ) from exc
+        if scenario is not None:
+            try:
+                resolved_scenario = resolve_scenario_field_substitution_v0(
+                    scenario,
+                    compiled_query=compiled_query,
+                    materialized_body=compiled_plan.body_ir,
+                    store=self._store,
+                    schema_index=self._application_schema_index,
+                    base_view_digest=view_snapshot_digest,
+                )
+            except ScenarioResolutionError as exc:
+                raise SDKStoreError(f"ScenarioFieldSubstitutionV0 rejected: {exc.code}") from exc
+            self._assert_evaluation_query_execution_current(compiled_query, view_snapshot_digest)
+            request = DerivationEvaluateRequest(plans=(compiled_plan,), engine="native")
+            baseline_outputs = _evaluate_derivation_plans_with_native_effective_relation(
+                request,
+                store=self._store,
+                effective_relation=resolved_scenario.baseline_relation,
+            )
+            self._assert_evaluation_query_execution_current(compiled_query, view_snapshot_digest)
+            effective_outputs = _evaluate_derivation_plans_with_native_effective_relation(
+                request,
+                store=self._store,
+                effective_relation=resolved_scenario.effective_relation,
+            )
+            self._assert_evaluation_query_execution_current(compiled_query, view_snapshot_digest)
+            baseline_result = self._derivation_outputs_to_evaluate_result(
+                baseline_outputs,
+                compiled_plans=[compiled_plan],
+                head=compiled_query.projection_head,
+                engine="native",
+                semantics_profile=None,
+                lowering_plan=compiled_query._lowering_plan,
+                lowering_rules_by_id=_rule_expr_rules_by_id(
+                    compiled_query.compiled_policy.rule_expr,
+                    head=compiled_query.projection_head,
+                ),
+                evaluation_query=compiled_query,
+                view_snapshot_digest_override=view_snapshot_digest,
+                attach_run_anchor=False,
+                collect_support_artifacts=False,
+            )
+            result = self._derivation_outputs_to_evaluate_result(
+                effective_outputs,
+                compiled_plans=[compiled_plan],
+                head=compiled_query.projection_head,
+                engine="native",
+                semantics_profile=None,
+                lowering_plan=compiled_query._lowering_plan,
+                lowering_rules_by_id=_rule_expr_rules_by_id(
+                    compiled_query.compiled_policy.rule_expr,
+                    head=compiled_query.projection_head,
+                ),
+                evaluation_query=compiled_query,
+                view_snapshot_digest_override=resolved_scenario.resolution.effective_relation_digest,
+                attach_run_anchor=False,
+                collect_support_artifacts=False,
+            )
+            result_diff = _scenario_result_diff(baseline_result, result)
+            result = replace(
+                result,
+                scenario=replace(resolved_scenario.resolution, result_diff=result_diff),
+            )
+            self._assert_evaluation_query_execution_current(compiled_query, view_snapshot_digest)
+            return result
         if capture == "run_bundle_v0":
             outputs, effective_relation = _evaluate_derivation_plans_with_native_relation_capture(
                 DerivationEvaluateRequest(plans=(compiled_plan,), engine="native"),
@@ -3436,6 +3528,8 @@ class SDKStore:
         lowering_rules_by_id: Mapping[str, ApplicationRule] | None = None,
         evaluation_query: CompiledEvaluationQueryV0 | None = None,
         view_snapshot_digest_override: str | None = None,
+        attach_run_anchor: bool = True,
+        collect_support_artifacts: bool = True,
     ) -> EvaluateResult:
         run_id = new_run_id()
         if evaluation_query is None:
@@ -3492,8 +3586,16 @@ class SDKStore:
                 )
                 for output in outputs
             )
-            row_support_artifacts = self._row_support_artifacts_for_outputs(outputs, rows)
-            row_provenance_envelopes = self._row_provenance_envelopes_for_outputs(outputs, rows)
+            row_support_artifacts = (
+                self._row_support_artifacts_for_outputs(outputs, rows)
+                if collect_support_artifacts
+                else {}
+            )
+            row_provenance_envelopes = (
+                self._row_provenance_envelopes_for_outputs(outputs, rows)
+                if collect_support_artifacts
+                else {}
+            )
             row_digests = tuple(_row_digest_for(row, result_id=result_id, claim_name=head.id) for row in rows)
             engine_version = (
                 NATIVE_WHERE_SEMANTICS_VERSION
@@ -3563,7 +3665,7 @@ class SDKStore:
                 _row_support_artifacts=row_support_artifacts,
                 _row_provenance_envelopes=row_provenance_envelopes,
             )
-            if evaluation_query is not None:
+            if evaluation_query is not None and attach_run_anchor:
                 result = replace(
                     result,
                     run_anchor=build_evaluation_run_anchor_v0(evaluation_query, result),
@@ -5217,6 +5319,23 @@ def _public_bindings_for_row(row: Any) -> dict[str, Any]:
     if not isinstance(row_bindings, Mapping):
         return {}
     return {str(port_name): _public_term_value(value) for port_name, value in row_bindings.items()}
+
+
+def _scenario_result_diff(
+    baseline: EvaluateResult,
+    effective: EvaluateResult,
+) -> ScenarioResultDiffV0:
+    """Summarize rows without run/result identities or proof references."""
+
+    baseline_digest = _scenario_semantic_rows_digest(baseline.rows)
+    effective_digest = _scenario_semantic_rows_digest(effective.rows)
+    return ScenarioResultDiffV0(
+        baseline_row_count=len(baseline.rows),
+        effective_row_count=len(effective.rows),
+        baseline_semantic_rows_digest=baseline_digest,
+        effective_semantic_rows_digest=effective_digest,
+        result_changed=baseline_digest != effective_digest,
+    )
 
 
 def _normalize_problog_goal_value(value: Any) -> str:

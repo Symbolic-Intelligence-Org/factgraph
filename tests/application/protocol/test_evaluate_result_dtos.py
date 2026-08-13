@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import fields
+from dataclasses import fields, replace
 import unittest
 
 from factgraph.application.protocol import (
@@ -13,12 +13,14 @@ from factgraph.application.protocol import (
     Explanation,
     ResultFingerprint,
     Rule,
+    ScenarioResolutionV0,
 )
 from factgraph.application.protocol.common import ProtocolShapeError
 from factgraph.application.protocol.evaluate_result import (
     _derivation_output_to_evaluate_row,
     _explain_live_row,
     _row_digest_for,
+    _scenario_semantic_rows_digest,
     canonical_bytes_for_evaluate,
     claim_digest_for,
     closed_head_digest_for,
@@ -498,6 +500,68 @@ class EvaluateResultDTOTests(unittest.TestCase):
         self.assertIsNone(result.run_anchor)
         self.assertIs(result.first(), result[0])
         self.assertIs(result[0]._require_live_result(), result)
+
+    def test_scenario_result_cannot_carry_run_anchor_or_bundle(self) -> None:
+        from factgraph.application.protocol import FieldPath, ScenarioResultDiffV0, ScenarioScalarValueV0
+
+        result = _single_row_result()
+        effective_digest = result.fingerprint.view_snapshot_digest
+        diff = ScenarioResultDiffV0(
+            1,
+            1,
+            _token("baseline"),
+            _scenario_semantic_rows_digest(result.rows),
+            True,
+        )
+        scenario = ScenarioResolutionV0(
+            premise_id="hypothesis",
+            entity_ref="idref_v1:Person:test",
+            field=FieldPath("Person", "age"),
+            baseline_value=ScenarioScalarValueV0("int", 22),
+            effective_value=ScenarioScalarValueV0("int", 35),
+            base_view_digest=_token("base"),
+            baseline_relation_digest=_token("before"),
+            effective_relation_digest=effective_digest,
+            semantic_value_changed=True,
+            effective_source_changed=True,
+            result_diff=diff,
+        )
+        scenario_result = _evaluate_result(
+            result_id=result.result_id,
+            rows=result.rows,
+            head=result.head,
+            engine=result.engine,
+            expr_digest=result.fingerprint.expr_digest,
+            rule_set_digest=result.fingerprint.rule_set_digest,
+            view_snapshot_digest=result.fingerprint.view_snapshot_digest,
+            config_digest=result.fingerprint.config_digest,
+            result_digest=result.fingerprint.result_digest,
+            run_id=result.fingerprint.run_id,
+            scenario=scenario,
+        )
+        self.assertIs(scenario_result.scenario, scenario)
+
+        with self.assertRaisesRegex(ProtocolShapeError, "effective relation digest"):
+            replace(
+                scenario_result,
+                scenario=replace(scenario, effective_relation_digest=_token("wrong")),
+            )
+        with self.assertRaisesRegex(ProtocolShapeError, "requires a result diff"):
+            replace(scenario_result, scenario=replace(scenario, result_diff=None))
+        with self.assertRaisesRegex(ProtocolShapeError, "effective rows"):
+            replace(
+                scenario_result,
+                scenario=replace(
+                    scenario,
+                    result_diff=ScenarioResultDiffV0(
+                        1,
+                        1,
+                        _token("baseline"),
+                        _token("wrong-rows"),
+                        True,
+                    ),
+                ),
+            )
 
     def test_row_provenance_envelopes_reject_unknown_row_id(self) -> None:
         result = _single_row_result()

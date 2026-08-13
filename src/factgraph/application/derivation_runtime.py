@@ -25,6 +25,7 @@ Commit 2a parity:
 from __future__ import annotations
 
 from dataclasses import replace
+from collections.abc import Mapping, Sequence
 from typing import Any
 
 from factgraph.core.derivation.accept import (
@@ -39,6 +40,7 @@ from factgraph.core.store._evaluate import (
     _NativeEffectiveRelationSnapshot,
     _evaluate_store,
 )
+from factgraph.core.store._support import ProjectedFact
 from factgraph.core.store.runtime import Store
 
 from .protocol import (
@@ -123,12 +125,46 @@ def _evaluate_derivation_plans_with_native_relation_capture(
     return outputs, observed[0]
 
 
+def _evaluate_derivation_plans_with_native_effective_relation(
+    request: DerivationEvaluateRequest,
+    *,
+    store: Store,
+    effective_relation: Mapping[str, Sequence[ProjectedFact]],
+) -> list[DerivationOutput]:
+    """Private no-provenance seam for one in-memory native Query relation.
+
+    This is intentionally distinct from EvaluationRun capture: the supplied
+    relation may contain a synthetic Scenario hypothesis witness and must never
+    be recorded in a Store proof sidecar or candidate-support index.
+    """
+
+    if (
+        request.engine != "native"
+        or len(request.plans) != 1
+        or len(request.plans[0].heads) != 1
+    ):
+        raise DerivationRuntimeError(
+            "native effective relation execution requires one native plan with one head",
+            code="NATIVE_EFFECTIVE_RELATION_SCOPE",
+        )
+    return _evaluate_derivation_plans(
+        request,
+        store=store,
+        registry=None,
+        _native_effective_relation_observer=None,
+        _native_effective_relation_override=effective_relation,
+        _record_support_artifacts=False,
+    )
+
+
 def _evaluate_derivation_plans(
     request: DerivationEvaluateRequest,
     *,
     store: Store,
     registry: Any | None,
     _native_effective_relation_observer: _NativeEffectiveRelationObserver | None,
+    _native_effective_relation_override: Mapping[str, Sequence[ProjectedFact]] | None = None,
+    _record_support_artifacts: bool = True,
 ) -> list[DerivationOutput]:
     outputs: list[DerivationOutput] = []
     for plan in request.plans:
@@ -139,6 +175,8 @@ def _evaluate_derivation_plans(
                 store=store,
                 registry=registry,
                 _native_effective_relation_observer=_native_effective_relation_observer,
+                _native_effective_relation_override=_native_effective_relation_override,
+                _record_support_artifacts=_record_support_artifacts,
             )
         )
     if request.run_id is not None and len(request.plans) > 1:
@@ -153,6 +191,8 @@ def _evaluate_plan(
     store: Store,
     registry: Any | None,
     _native_effective_relation_observer: _NativeEffectiveRelationObserver | None,
+    _native_effective_relation_override: Mapping[str, Sequence[ProjectedFact]] | None,
+    _record_support_artifacts: bool,
 ) -> list[DerivationOutput]:
     engine_options = dict(plan.engine_options) if plan.engine_options else None
     if plan.head_spec is not None:
@@ -175,6 +215,8 @@ def _evaluate_plan(
                 engine_options=engine_options,
                 semantics_profile=request.semantics_profile,
                 _native_effective_relation_observer=_native_effective_relation_observer,
+                _native_effective_relation_override=_native_effective_relation_override,
+                _record_support_artifacts=_record_support_artifacts,
             )
         )
 
@@ -194,6 +236,8 @@ def _evaluate_plan(
             engine_options=engine_options,
             semantics_profile=request.semantics_profile,
             _native_effective_relation_observer=_native_effective_relation_observer,
+            _native_effective_relation_override=_native_effective_relation_override,
+            _record_support_artifacts=_record_support_artifacts,
         )
         results.extend(head_results)
     return results

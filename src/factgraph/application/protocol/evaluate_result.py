@@ -22,6 +22,7 @@ from factgraph.application.protocol.common import ErrorDTO, ProtocolShapeError, 
 from factgraph.application.protocol.certainty import BOOLEAN_CERTAINTY, Certainty
 from factgraph.application.protocol.evaluation_run import EvaluationRunAnchorV0
 from factgraph.application.protocol.evaluation_run_bundle import EvaluationRunBundleV0
+from factgraph.application.protocol.evaluation_scenario import ScenarioResolutionV0
 from factgraph.application.protocol.explanation_render import narrate_evidence, walk_evidence
 from factgraph.application.protocol.rule import Rule, _is_projection_rule
 from factgraph.application.protocol.rule_expr import RuleExprError
@@ -148,6 +149,7 @@ class EvaluateResult:
     engine_meta: Mapping[str, Any]
     run_anchor: EvaluationRunAnchorV0 | None = field(default=None, kw_only=True)
     run_bundle: EvaluationRunBundleV0 | None = field(default=None, kw_only=True, repr=False)
+    scenario: ScenarioResolutionV0 | None = field(default=None, kw_only=True, repr=False)
     _schema_index: object | None = field(default=None, repr=False, compare=False, hash=False)
     _row_close_builder: Callable[[EvaluateRow, EvaluateResult], Rule] | None = field(
         default=None,
@@ -190,6 +192,13 @@ class EvaluateResult:
             raise ProtocolShapeError("EvaluateResult._row_close_builder must be callable or None")
         if self._row_graph_builder is not None and not callable(self._row_graph_builder):
             raise ProtocolShapeError("EvaluateResult._row_graph_builder must be callable or None")
+        if self.scenario is not None:
+            if not isinstance(self.scenario, ScenarioResolutionV0):
+                raise ProtocolShapeError("EvaluateResult.scenario must be ScenarioResolutionV0 or None")
+            if self.run_anchor is not None or self.run_bundle is not None:
+                raise ProtocolShapeError(
+                    "Scenario EvaluateResult must not carry EvaluationRun anchor or bundle"
+                )
 
         if not isinstance(self.rows, tuple):
             raise ProtocolShapeError("EvaluateResult.rows must be tuple[EvaluateRow, ...]")
@@ -213,6 +222,11 @@ class EvaluateResult:
         object.__setattr__(self, "_row_support_artifacts", row_support_artifacts)
         object.__setattr__(self, "_row_provenance_envelopes", row_provenance_envelopes)
         object.__setattr__(self, "rows", tuple(bound_rows))
+        _validate_scenario_result(
+            self,
+            support_artifacts=row_support_artifacts,
+            provenance_envelopes=row_provenance_envelopes,
+        )
         _validate_run_anchor(self)
         _validate_run_bundle(self)
 
@@ -741,6 +755,21 @@ def _explain_live_row(
     if not isinstance(result, EvaluateResult):
         raise ProtocolShapeError("result must be EvaluateResult")
 
+    if result.scenario is not None:
+        return Explanation(
+            status="unsupported",
+            evidence=None,
+            row=row,
+            result_id=result.result_id,
+            errors=(
+                ErrorDTO(
+                    code="SCENARIO_EXPLAIN_UNSUPPORTED",
+                    message="ScenarioFieldSubstitutionV0 rows have no ledger-backed EvidenceGraph",
+                    details={"row_id": row.row_id},
+                ),
+            ),
+        )
+
     checked_scope = _checked_scope_for_row_result(result, row)
     matched = next((candidate for candidate in result.rows if candidate.row_id == row.row_id), None)
     if matched is None:
@@ -813,6 +842,10 @@ def _close_live_row(row: EvaluateRow, result: EvaluateResult) -> Rule:
         raise ProtocolShapeError("row must be EvaluateRow")
     if not isinstance(result, EvaluateResult):
         raise ProtocolShapeError("result must be EvaluateResult")
+    if result.scenario is not None:
+        raise DetachedRowError(
+            "ScenarioFieldSubstitutionV0 rows cannot be closed against ledger facts"
+        )
     if result._row_close_builder is not None:
         return result._row_close_builder(row, result)
     return _build_closed_head_from_row(row, result, schema_index=result._schema_index)
@@ -1100,6 +1133,57 @@ def _validate_row_provenance_envelopes(
             )
         normalized[row_id] = envelope
     return MappingProxyType(normalized)
+
+
+def _scenario_semantic_rows_digest(rows: Sequence[EvaluateRow]) -> str:
+    """Stable Scenario result identity excluding run/result/proof identities."""
+
+    row_tokens: list[str] = []
+    for row in rows:
+        payload = {
+            "kind": row.kind,
+            "claim_digest": row.digest,
+            "bindings": row.bindings,
+            "closed_head_digest": row.closed_head_digest,
+            "certainty": _certainty_payload(row.certainty),
+        }
+        row_tokens.append(
+            sha256_token(canonical_bytes_for_evaluate("scenario_query_row_semantic_v0", payload))
+        )
+    return sha256_token(
+        canonical_bytes_for_evaluate("scenario_query_row_multiset_v0", tuple(sorted(row_tokens)))
+    )
+
+
+def _validate_scenario_result(
+    result: EvaluateResult,
+    *,
+    support_artifacts: Mapping[str, ProofReceipt],
+    provenance_envelopes: Mapping[str, ProvenanceEnvelope],
+) -> None:
+    """Bind the hypothetical effective relation and its diff to this result."""
+
+    scenario = result.scenario
+    if scenario is None:
+        return
+    if result.fingerprint.view_snapshot_digest != scenario.effective_relation_digest:
+        raise ProtocolShapeError(
+            "Scenario EvaluateResult fingerprint must commit its effective relation digest"
+        )
+    if support_artifacts or provenance_envelopes:
+        raise ProtocolShapeError(
+            "Scenario EvaluateResult must not carry ledger-backed support or provenance"
+        )
+    if scenario.result_diff is None:
+        raise ProtocolShapeError("Scenario EvaluateResult requires a result diff")
+    if scenario.result_diff.effective_row_count != len(result.rows):
+        raise ProtocolShapeError(
+            "Scenario result diff effective row count must match EvaluateResult rows"
+        )
+    if scenario.result_diff.effective_semantic_rows_digest != _scenario_semantic_rows_digest(result.rows):
+        raise ProtocolShapeError(
+            "Scenario result diff effective rows must match EvaluateResult rows"
+        )
 
 
 def _checked_scope_for_row_result(result: EvaluateResult, row: EvaluateRow) -> Mapping[str, Any]:

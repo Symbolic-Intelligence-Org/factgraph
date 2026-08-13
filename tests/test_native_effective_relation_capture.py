@@ -9,6 +9,7 @@ from unittest.mock import patch
 from factgraph.application import evaluate_derivation_plans
 from factgraph.application.derivation_runtime import (
     _evaluate_derivation_plans_with_native_relation_capture,
+    _evaluate_derivation_plans_with_native_effective_relation,
 )
 from factgraph.application.protocol import (
     CompiledDerivationPlan,
@@ -18,8 +19,9 @@ from factgraph.application.protocol import (
 from factgraph.core.store import Store
 from factgraph.core.store import _evaluate as evaluate_module
 from factgraph.core.store.ledger import Claim
+from factgraph.core.store.premise_filter import MetaExclusion
 from factgraph.core.view.projector import project_view_facts_with_witness
-from factgraph.sdk import Entity, Field, Identity, compile_schema_from_classes
+from factgraph.sdk import Entity, Field, Identity, MetaKeyPolicy, compile_schema_from_classes
 
 
 class Person(Entity):
@@ -73,6 +75,91 @@ def _stable_outputs(outputs: list[object]) -> list[tuple[object, ...]]:
 
 
 class NativeEffectiveRelationCoreTests(unittest.TestCase):
+    def test_private_effective_relation_execution_is_no_provenance_and_requires_exact_dependencies(self) -> None:
+        store = _store_with_people("alice")
+        request = DerivationEvaluateRequest(
+            plans=(_plan([("pred", "Person:exists", ["$x"])]),),
+            engine="native",
+        )
+        relation = project_view_facts_with_witness(store.ledger, store.schema_ir)
+        effective = {"Person:exists": tuple(relation["Person:exists"])}
+        support_before = dict(store._support_artifacts)
+        candidates_before = dict(store._candidate_support_index)
+
+        with patch.object(store, "_remember_support_artifact", wraps=store._remember_support_artifact) as artifacts, patch.object(
+            store,
+            "_remember_candidate_support",
+            wraps=store._remember_candidate_support,
+        ) as candidates:
+            outputs = _evaluate_derivation_plans_with_native_effective_relation(
+                request,
+                store=store,
+                effective_relation=effective,
+            )
+
+        self.assertEqual(len(outputs), 1)
+        self.assertEqual(outputs[0].support_kind, "engine_no_witness_v1")
+        artifacts.assert_not_called()
+        candidates.assert_not_called()
+        self.assertEqual(store._support_artifacts, support_before)
+        self.assertEqual(store._candidate_support_index, candidates_before)
+        with self.assertRaisesRegex(ValueError, "exactly cover"):
+            _evaluate_derivation_plans_with_native_effective_relation(
+                request,
+                store=store,
+                effective_relation={},
+            )
+
+    def test_effective_relation_override_requires_no_provenance_and_no_premise_filter(self) -> None:
+        store = _store_with_people("alice")
+        request = DerivationEvaluateRequest(
+            plans=(_plan([("pred", "Person:exists", ["$x"])]),),
+            engine="native",
+        )
+        relation = project_view_facts_with_witness(store.ledger, store.schema_ir)
+        effective = {"Person:exists": tuple(relation["Person:exists"])}
+        with self.assertRaisesRegex(ValueError, "requires _record_support_artifacts=False"):
+            evaluate_module._evaluate_store(
+                store,
+                derivation_id="override",
+                version="1",
+                target_pred_id="override:row",
+                head_vars=["$x"],
+                where=[("pred", "Person:exists", ["$x"])],
+                mode="native",
+                engine_evaluate=store.evaluate_engine,
+                _native_effective_relation_override=effective,
+            )
+        with self.assertRaisesRegex(ValueError, "requires _record_support_artifacts=False"):
+            evaluate_module._evaluate_where_over_view_with_support(
+                store,
+                [("pred", "Person:exists", ["$x"])],
+                root_result_kind="fact",
+                _native_effective_relation_override=effective,
+            )
+        premise_schema = compile_schema_from_classes(
+            [Person],
+            meta_keys={"source": MetaKeyPolicy(premise_eligible=True)},
+        )
+        filtered_store = Store(
+            premise_schema,
+            premise_exclusions=MetaExclusion("source", frozenset({"blocked"})),
+        )
+        with self.assertRaisesRegex(ValueError, "does not support premise-filtered"):
+            _evaluate_derivation_plans_with_native_effective_relation(
+                request,
+                store=filtered_store,
+                effective_relation=effective,
+            )
+        with self.assertRaisesRegex(ValueError, "does not support premise-filtered"):
+            evaluate_module._evaluate_where_over_view_with_support(
+                filtered_store,
+                [("pred", "Person:exists", ["$x"])],
+                root_result_kind="fact",
+                _native_effective_relation_override=effective,
+                _record_support_artifacts=False,
+            )
+
     def test_dependency_scan_does_not_treat_tuple_constants_as_atoms(self) -> None:
         self.assertEqual(
             evaluate_module._native_where_dependency_predicates(
