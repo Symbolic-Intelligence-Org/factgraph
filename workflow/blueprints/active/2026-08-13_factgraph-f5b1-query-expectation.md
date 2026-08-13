@@ -1,6 +1,6 @@
 # Task Blueprint: FactGraph F5B1 Query expectation
 
-- Status: implementing
+- Status: implemented
 - Created: 2026-08-13
 - Last Updated: 2026-08-13
 - Related Modules:
@@ -81,15 +81,15 @@ that F4's historical anchor captured completeness.
 
 ## 7. Acceptance
 
-- [ ] Builder supports one or more typed `expect_contains` calls without
+- [x] Builder supports one or more typed `expect_contains` calls without
   changing ordinary compile/evaluate behavior when absent.
-- [ ] Compiler/runtime seals reject expectation, alias, value or wrapper splice.
-- [ ] Positive, complete-negative, underdetermined and unsupported pure cases
+- [x] Compiler/runtime seals reject expectation, alias, value or wrapper splice.
+- [x] Positive, complete-negative, underdetermined and unsupported pure cases
   have distinct tested statuses and diagnostic codes.
-- [ ] Runtime attaches matching row references only after the one native
+- [x] Runtime attaches matching row references only after the one native
   evaluator completes and all live guards pass.
-- [ ] F4 anchor summary, F4 capture and F5A Scenario boundaries remain intact.
-- [ ] Targeted Query, raw Query, legacy result and protocol tests plus lint pass;
+- [x] F4 anchor summary, F4 capture and F5A Scenario boundaries remain intact.
+- [x] Targeted Query, raw Query, legacy result and protocol tests plus lint pass;
   application and SDK docs state the limited semantics.
 
 ## 8. Implementation Plan
@@ -109,4 +109,20 @@ that F4's historical anchor captured completeness.
 
 ## 10. Outcome / Deviations
 
-To be completed after implementation and independent review.
+Implemented as a narrow result-local observation.  `expect_contains` compiles
+against selected ports and attaches sealed `ExpectationResultV0` values only
+after the existing sole native evaluation completes.  It does not alter Query
+lowering, row identity/order, result digest, F4 summary semantics, or policy
+truth.
+
+Independent review initially found one P1 artifact-splice path: a caller could
+use `dataclasses.replace()` to attach expectation results to an existing bundle
+or Scenario result.  The final implementation rejects that combination in
+`EvaluateResult` itself, with bundle and Scenario regression coverage.  The
+independent final verdict was CLEAR after that repair.
+
+Validation: `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src:. factpy pytest -q -p
+no:cacheprovider tests/application tests/sdk` completed with **540 passed,
+159 subtests passed**; `ruff check --no-cache` and `git diff --check` passed.
+The pinned `factpy` environment does not carry `mypy`; no type-check result is
+claimed for that environment.
