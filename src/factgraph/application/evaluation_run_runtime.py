@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 from datetime import date, datetime
+from typing import Literal
 
 from factgraph.core.protocol.digests import sha256_token
 
 from .evaluation_query_runtime import CompiledEvaluationQueryV0, _assert_compiled_evaluation_query_current
+from .policy_runtime import CompiledPolicyV0, _assert_compiled_policy_current
 from .protocol.evaluate_result import EvaluateResult, canonical_bytes_for_evaluate
 from .protocol.evaluation_run import (
     EvaluationRunAnchorV0, EvaluationRunBindingV0, EvaluationRunExecutionProfileV0,
@@ -20,34 +22,22 @@ EVALUATION_QUERY_PROJECTION_ADAPTER_VERSION = "evaluation_query_projection_v0"
 def build_evaluation_run_anchor_v0(
     compiled_query: CompiledEvaluationQueryV0,
     result: EvaluateResult,
+    *,
+    source_target: EvaluationRunTargetV0 | None = None,
 ) -> EvaluationRunAnchorV0:
     """Capture an identity-only live Run anchor; this is not replay material."""
     _assert_compiled_evaluation_query_current(compiled_query)
     if not isinstance(result, EvaluateResult) or result.run_anchor is not None:
         raise ValueError("EvaluationRun anchor requires one unanchored EvaluateResult")
     policy = compiled_query.compiled_policy
-    rule_pins = tuple(EvaluationRunRulePinV0(
-        pin.occurrence_alias, pin.rule_id, pin.rule_version,
-        pin.rule_content_digest, pin.semantic_contract_digest,
-    ) for pin in policy.rule_pins)
-    target_values = (
-        "policy", "policy_direct_v0", policy.policy_id, policy.policy_version,
-        policy.policy_id, policy.policy_version, policy.policy_digest,
-        policy.address_space_digest, compiled_query.schema_digest,
-        policy.policy_structure, policy.lineage, rule_pins,
-    )
-    target_digest = _token("evaluation_run_target_v0", _plain(target_values))
-    target = EvaluationRunTargetV0(
-        original_target_kind="policy", normalization_kind="policy_direct_v0",
-        target_id=policy.policy_id, target_version=policy.policy_version,
-        normalized_policy_id=policy.policy_id,
-        normalized_policy_version=policy.policy_version,
-        policy_digest=policy.policy_digest,
-        address_space_digest=policy.address_space_digest,
+    target = source_target or build_evaluation_run_target_v0(
+        compiled_policy=policy,
         schema_digest=compiled_query.schema_digest,
-        policy_structure=policy.policy_structure, policy_lineage=policy.lineage,
-        rule_pins=rule_pins, target_digest=target_digest,
+        original_target_kind="policy",
+        target_id=policy.policy_id,
+        target_version=policy.policy_version,
     )
+    _assert_anchor_target_matches_query(target, compiled_query)
     bindings = tuple(EvaluationRunBindingV0(
         item.address, item.value_type, item.value_digest,
     ) for item in compiled_query.bindings)
@@ -121,10 +111,96 @@ def build_evaluation_run_anchor_v0(
     )
 
 
+def build_evaluation_run_target_v0(
+    *,
+    compiled_policy: CompiledPolicyV0,
+    schema_digest: str,
+    original_target_kind: Literal["rule", "policy"],
+    target_id: str,
+    target_version: str | None,
+) -> EvaluationRunTargetV0:
+    """Seal one source target against an exact normalized compiled Policy.
+
+    This accepts only application runtime values. It is deliberately separate
+    from the F3 compiled Query so that target origin never changes Query
+    lowering or its digest.
+    """
+
+    if not isinstance(compiled_policy, CompiledPolicyV0):
+        raise ValueError("compiled_policy must be trusted CompiledPolicyV0")
+    _assert_compiled_policy_current(compiled_policy)
+    if original_target_kind not in {"rule", "policy"}:
+        raise ValueError("original_target_kind must be rule or policy")
+    if not isinstance(target_id, str) or not target_id:
+        raise ValueError("target_id must be non-empty string")
+    if target_version is not None and (not isinstance(target_version, str) or not target_version):
+        raise ValueError("target_version must be non-empty string or None")
+    if original_target_kind == "policy" and (
+        target_id, target_version
+    ) != (compiled_policy.policy_id, compiled_policy.policy_version):
+        raise ValueError("direct Policy source identity must match compiled Policy")
+    if original_target_kind == "rule" and (
+        compiled_policy.policy_id != f"__factgraph_rule_lift__:{target_id}"
+        or compiled_policy.policy_version != target_version
+    ):
+        raise ValueError("Rule source identity does not match normalized Policy")
+    rule_pins = tuple(EvaluationRunRulePinV0(
+        pin.occurrence_alias, pin.rule_id, pin.rule_version,
+        pin.rule_content_digest, pin.semantic_contract_digest,
+    ) for pin in compiled_policy.rule_pins)
+    normalization_kind = "rule_lift_v0" if original_target_kind == "rule" else "policy_direct_v0"
+    target_values = (
+        original_target_kind, normalization_kind, target_id, target_version,
+        compiled_policy.policy_id, compiled_policy.policy_version,
+        compiled_policy.policy_digest, compiled_policy.address_space_digest,
+        schema_digest, compiled_policy.policy_structure, compiled_policy.lineage,
+        rule_pins,
+    )
+    return EvaluationRunTargetV0(
+        original_target_kind=original_target_kind,
+        normalization_kind=normalization_kind,
+        target_id=target_id,
+        target_version=target_version,
+        normalized_policy_id=compiled_policy.policy_id,
+        normalized_policy_version=compiled_policy.policy_version,
+        policy_digest=compiled_policy.policy_digest,
+        address_space_digest=compiled_policy.address_space_digest,
+        schema_digest=schema_digest,
+        policy_structure=compiled_policy.policy_structure,
+        policy_lineage=compiled_policy.lineage,
+        rule_pins=rule_pins,
+        target_digest=_token("evaluation_run_target_v0", _plain(target_values)),
+    )
+
+
+def _assert_anchor_target_matches_query(
+    target: EvaluationRunTargetV0,
+    compiled_query: CompiledEvaluationQueryV0,
+) -> None:
+    if not isinstance(target, EvaluationRunTargetV0):
+        raise ValueError("EvaluationRun source target is invalid")
+    policy = compiled_query.compiled_policy
+    expected_pins = tuple(EvaluationRunRulePinV0(
+        pin.occurrence_alias, pin.rule_id, pin.rule_version,
+        pin.rule_content_digest, pin.semantic_contract_digest,
+    ) for pin in policy.rule_pins)
+    if (
+        target.policy_digest != policy.policy_digest
+        or target.address_space_digest != policy.address_space_digest
+        or target.schema_digest != compiled_query.schema_digest
+        or target.normalized_policy_id != policy.policy_id
+        or target.normalized_policy_version != policy.policy_version
+        or target.policy_structure != policy.policy_structure
+        or target.policy_lineage != policy.lineage
+        or target.rule_pins != expected_pins
+    ):
+        raise ValueError("EvaluationRun source target does not match compiled Query")
+
+
 def _certainty(value: object) -> object:
     if value is None:
         return None
     return {"lo": getattr(value, "lo"), "hi": getattr(value, "hi"), "kind": getattr(value, "kind")}
 
 
-__all__ = ["build_evaluation_run_anchor_v0"]
+__all__ = ["build_evaluation_run_anchor_v0", "build_evaluation_run_target_v0"]

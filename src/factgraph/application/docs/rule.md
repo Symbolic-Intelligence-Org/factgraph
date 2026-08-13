@@ -509,6 +509,53 @@ Non-native engines, standalone Query explain integration, candidate acceptance,
 Compare/literals, field navigation, `expect`, completeness, What-if, bundle
 persistence, Package, and Agent/Meander wire formats remain later slices.
 
+### Unified resolved Query target v1
+
+The SDK additionally exposes one narrow convenience entry point that makes a
+resolved Rule and a managed Policy peers **at Query invocation time**, without
+making them the same authored object:
+
+```python
+compiled = (
+    fg.query(resolved_rule)
+      .bind(SemanticPortAddress("target", "person"),
+            EntityRef("Person", {"employee_id": "alice"}))
+      .select("age", SemanticPortAddress("target", "age"))
+      .compile()
+)
+result = fg.eval.evaluate(compiled, capture="run_bundle_v0")
+```
+
+`resolved_rule` must be a `ResolvedRuleBundle`, not a bare `Rule`. The facade
+deterministically lifts it to a one-occurrence Policy with alias `target` and
+normalized id `__factgraph_rule_lift__:<rule-id>`. A Policy can be queried
+directly only with its exact semantic address space:
+
+```python
+compiled = (
+    fg.query(policy, address_space=addresses)
+      .bind(SemanticPortAddress("person1", "person"), alice)
+      .select("other_age", SemanticPortAddress("person2", "age"))
+      .compile()
+)
+```
+
+The facade delegates all bind/select, branch-total, value-normalization and
+lowering checks to `EvaluationQuery`; it creates neither a second compiler nor
+a second evaluator/result model. Its small in-process wrapper seals the existing
+compiled Query together with a separately sealed source target. Consequently a
+Rule-lift Run anchor reports `original_target_kind="rule"` and
+`normalization_kind="rule_lift_v0"`; a direct Policy keeps
+`policy_direct_v0`. The underlying Query digest and lowering plan do not change
+because of this provenance label.
+
+String policy ids, registries, Packages, dotted field paths, bare Rules,
+Policy without `address_space=`, `expect`, modes, empty-select existence,
+navigation and external Operators are deliberately not accepted by this v1
+facade. `ScenarioFieldSubstitutionV0` may be forwarded through
+`.evaluate(scenario=...)`, with its existing no-anchor/no-bundle/no-live-evidence
+boundary unchanged.
+
 ### Scenario field substitution v0
 
 `ScenarioFieldSubstitutionV0` is the first deliberately narrow Scenario

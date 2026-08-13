@@ -386,7 +386,8 @@ Identity Claim retracts raise `INV_7C_IDENTITY_PROTECTED`; legacy
 
 | Method | One-liner |
 |---|---|
-| `evaluate(inference_or_expr_or_compiled_query, *, head=None, engine=None, config=None, capture=None, scenario=None)` | Evaluate an `Inference`, `Rule`, `RuleExpr`, or application-compiled `CompiledEvaluationQueryV0`; returns `EvaluateResult`. Ordinary Query v0 consumes its own projection head, is native-only, rejects `config=`, and adds an identity-only `run_anchor`. It alone accepts `capture="run_bundle_v0"`, which atomically attaches a detached, strict-codec `run_bundle`; this artifact is not replay and contains sensitive cleartext under caller-managed custody. A Query v0 alone also accepts `scenario=ScenarioFieldSubstitutionV0(...)`: a narrow direct scalar-field substitution that returns `result.scenario`, has no Run anchor/bundle/close/explain path, and rejects any `capture=` argument. It is not a general What-if or overlay API. Other inputs reject `capture` and `scenario` and retain their documented engine/config behavior with `run_anchor=None` and `run_bundle=None`. |
+| `query(resolved_rule_or_policy, *, address_space=None)` | Start the native resolved Query builder. A `ResolvedRuleBundle` is lifted under alias `target`; a `Policy` requires its exact `SemanticAddressSpace`. `.bind(SemanticPortAddress, value).select(alias, SemanticPortAddress).compile()/evaluate()` delegates to the existing compiled Query path. It does not accept bare Rules, string lookup, modes/expect, navigation or Operators. |
+| `evaluate(inference_or_expr_or_compiled_query, *, head=None, engine=None, config=None, capture=None, scenario=None)` | Evaluate an `Inference`, `Rule`, `RuleExpr`, an application-compiled `CompiledEvaluationQueryV0`, or the `TargetedCompiledEvaluationQueryV0` produced by `fg.query(...)`; returns `EvaluateResult`. Ordinary Query v0 consumes its own projection head, is native-only, rejects `config=`, and adds an identity-only `run_anchor`. It alone accepts `capture="run_bundle_v0"`, which atomically attaches a detached, strict-codec `run_bundle`; this artifact is not replay and contains sensitive cleartext under caller-managed custody. A Query v0 alone also accepts `scenario=ScenarioFieldSubstitutionV0(...)`: a narrow direct scalar-field substitution that returns `result.scenario`, has no Run anchor/bundle/close/explain path, and rejects any `capture=` argument. It is not a general What-if or overlay API. Other inputs reject `capture` and `scenario` and retain their documented engine/config behavior with `run_anchor=None` and `run_bundle=None`. |
 | `explain(expr, *, head, engine=None, config=None)` | Replay a closed-head explanation; `head=` is required (no default). `engine=` resolves the same way as `evaluate`. Returns `Explanation`. |
 | `preview_config(profile)` | Inspect public semantics wrappers or canonical `SemanticsProfile`. |
 
@@ -672,7 +673,7 @@ SDK path. Evaluation is read-only; explicit writes go through `fg.fields.*`,
 `fg.eval.evaluate_candidates(...)` remains only as temporary cross-repository
 compatibility debt for shipped Meander code. It returns the internal
 `DerivationOutput` class (also reachable under the legacy `CandidateSet` alias),
-must not be used with `CompiledEvaluationQueryV0`, and is not recommended for
+must not be used with `CompiledEvaluationQueryV0` or `TargetedCompiledEvaluationQueryV0`, and is not recommended for
 new integrations.
 
 ---

@@ -1,6 +1,6 @@
 # Task Blueprint: FactGraph F5-Core unified Query target
 
-- Status: scoped
+- Status: implementing
 - Created: 2026-08-13
 - Last Updated: 2026-08-13
 - Related Modules:

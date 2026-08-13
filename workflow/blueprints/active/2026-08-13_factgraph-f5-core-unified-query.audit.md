@@ -9,6 +9,7 @@
 | 2026-08-13 | draft | Blueprint created | Scope narrowed to resolved Rule/Policy target normalization and existing Query execution. |
 | 2026-08-13 | preflight | Compact independent source audit complete | Target normalization, Scenario provenance boundary, and Operator/L3 exclusions independently checked before scope freeze. |
 | 2026-08-13 | scoped | F5-Core boundary frozen | `expect`, completeness, generic Scenario evidence/replay, Operator, Meander and Agent surfaces remain explicit non-goals. |
+| 2026-08-13 | implementing | Target-normalization implementation started | The branch adds a sealed Rule/Policy Query-target wrapper over the existing F3/F4 evaluator; no second evaluator or Scenario-evidence path is introduced. |
 
 ## Decision Notes
 

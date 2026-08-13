@@ -29,6 +29,10 @@ from factgraph.application.evaluation_query_runtime import (
     CompiledEvaluationQueryV0,
     _assert_compiled_evaluation_query_current,
 )
+from factgraph.application.evaluation_query_target_runtime import (
+    TargetedCompiledEvaluationQueryV0,
+    assert_targeted_evaluation_query_current,
+)
 from factgraph.application.evaluation_run_bundle_runtime import _build_evaluation_run_bundle_v0
 from factgraph.application.evaluation_run_runtime import (
     EVALUATION_QUERY_PROJECTION_ADAPTER_VERSION,
@@ -2253,6 +2257,23 @@ class SDKStore:
     def schema_ir(self) -> dict[str, Any]:
         return self._schema_ir
 
+    def query(self, target: Any, *, address_space: Any | None = None) -> Any:
+        """Start a typed native Query over one resolved Rule or managed Policy.
+
+        This is a target-normalization facade, not a registry lookup or a new
+        evaluator. ``bind`` and ``select`` accept only SemanticPortAddress
+        values; expectation, modes, navigation, and generic Scenario algebra
+        are intentionally outside this v1 surface.
+        """
+
+        from .evaluation_query_builder import build_evaluation_query_builder
+
+        return build_evaluation_query_builder(
+            self,
+            target,
+            address_space=address_space,
+        )
+
     @property
     def assertion_views(self) -> _SDKAssertionViewsManager:
         return self._assertion_views_manager
@@ -2929,6 +2950,13 @@ class SDKStore:
             raise SDKStoreError(
                 "string derivation DSL is not supported in SDK v1; use Inference object or structured derivation dict"
             )
+        if args and isinstance(args[0], TargetedCompiledEvaluationQueryV0):
+            return self._evaluate_targeted_compiled_evaluation_query_input(
+                args,
+                kwargs,
+                raw_engine=raw_engine,
+                raw_config=raw_config,
+            )
         if args and isinstance(args[0], CompiledEvaluationQueryV0):
             return self._evaluate_compiled_evaluation_query_input(
                 args,
@@ -3023,6 +3051,11 @@ class SDKStore:
                 "evaluate_candidates() does not accept CompiledEvaluationQueryV0; "
                 "use evaluate(compiled_query) and consume its projection rows"
             )
+        if args and isinstance(args[0], TargetedCompiledEvaluationQueryV0):
+            raise SDKStoreError(
+                "evaluate_candidates() does not accept TargetedCompiledEvaluationQueryV0; "
+                "use evaluate(compiled_query) and consume its projection rows"
+            )
         if args and isinstance(args[0], (ApplicationRule, _RuleExpr)):
             # RuleExpr/Rule candidates come from the SAME lowering + evaluation as
             # evaluate(rule_expr, head=): the returned outputs are exactly the
@@ -3069,6 +3102,11 @@ class SDKStore:
         )
 
     def _explain(self, *args: Any, **kwargs: Any) -> Explanation:
+        if args and isinstance(args[0], TargetedCompiledEvaluationQueryV0):
+            raise SDKStoreError(
+                "eval.explain() does not accept TargetedCompiledEvaluationQueryV0; "
+                "evaluate it first and call row.explain()"
+            )
         if args and isinstance(args[0], CompiledEvaluationQueryV0):
             raise SDKStoreError(
                 "eval.explain() does not accept CompiledEvaluationQueryV0; "
@@ -3227,6 +3265,7 @@ class SDKStore:
         *,
         raw_engine: Any,
         raw_config: Any,
+        source_target: Any | None = None,
     ) -> EvaluateResult:
         if len(args) != 1:
             raise SDKStoreError(
@@ -3382,6 +3421,7 @@ class SDKStore:
                 head=compiled_query.projection_head,
             ),
             evaluation_query=compiled_query,
+            evaluation_query_source_target=source_target,
             view_snapshot_digest_override=view_snapshot_digest,
         )
         self._assert_evaluation_query_execution_current(compiled_query, view_snapshot_digest)
@@ -3402,6 +3442,33 @@ class SDKStore:
                 raise SDKStoreError(f"failed to capture EvaluationRun bundle: {exc}") from exc
             self._assert_evaluation_query_execution_current(compiled_query, view_snapshot_digest)
         return result
+
+    def _evaluate_targeted_compiled_evaluation_query_input(
+        self,
+        args: tuple[Any, ...],
+        kwargs: dict[str, Any],
+        *,
+        raw_engine: Any,
+        raw_config: Any,
+    ) -> EvaluateResult:
+        if len(args) != 1:
+            raise SDKStoreError(
+                "evaluate(targeted_compiled_query) accepts exactly one TargetedCompiledEvaluationQueryV0"
+            )
+        targeted = args[0]
+        try:
+            assert_targeted_evaluation_query_current(targeted)
+        except ValueError as exc:
+            raise SDKStoreError(
+                "targeted compiled Query failed its execution-time integrity check"
+            ) from exc
+        return self._evaluate_compiled_evaluation_query_input(
+            (targeted.compiled_query,),
+            kwargs,
+            raw_engine=raw_engine,
+            raw_config=raw_config,
+            source_target=targeted.target.run_target,
+        )
 
     @staticmethod
     def _assert_evaluation_query_artifact_current(
@@ -3527,6 +3594,7 @@ class SDKStore:
         lowering_plan: RuleExprLoweringPlan | None = None,
         lowering_rules_by_id: Mapping[str, ApplicationRule] | None = None,
         evaluation_query: CompiledEvaluationQueryV0 | None = None,
+        evaluation_query_source_target: Any | None = None,
         view_snapshot_digest_override: str | None = None,
         attach_run_anchor: bool = True,
         collect_support_artifacts: bool = True,
@@ -3668,7 +3736,11 @@ class SDKStore:
             if evaluation_query is not None and attach_run_anchor:
                 result = replace(
                     result,
-                    run_anchor=build_evaluation_run_anchor_v0(evaluation_query, result),
+                    run_anchor=build_evaluation_run_anchor_v0(
+                        evaluation_query,
+                        result,
+                        source_target=evaluation_query_source_target,
+                    ),
                 )
             return result
         except Exception as exc:

@@ -406,7 +406,38 @@ aggregate-containing branches before adapter invocation with `SDKStoreError`
 guidance that names the engine, unsupported feature, rejection source, and
 known alternative engines.
 
-### Compiled EvaluationQuery execution (v0)
+### Unified resolved Query target (v1)
+
+For new native callers, `fg.query(...)` is the compact entry point over the
+same compiled Query path. It accepts either a semantically resolved Rule bundle
+or a Policy plus its exact `SemanticAddressSpace`:
+
+```python
+compiled = (
+    fg.query(resolved_rule)
+      .bind(SemanticPortAddress("target", "person"),
+            EntityRef("Person", {"employee_id": "alice"}))
+      .select("age", SemanticPortAddress("target", "age"))
+      .compile()
+)
+result = fg.eval.evaluate(compiled, engine="native")
+```
+
+The Rule form deterministically lifts one `target` occurrence into the internal
+Policy `__factgraph_rule_lift__:<rule-id>`; it does not make a Rule and Policy
+the same authored object. For a direct Policy use
+`fg.query(policy, address_space=addresses)`. The builder accepts only
+structured `SemanticPortAddress` values and delegates to the existing
+`EvaluationQuery` compiler. It has no string lookup, registry, Package,
+`expect`, modes, empty-select existence, navigation, Operator, or non-native
+configuration surface. Ordinary capture/evidence remains the existing F4 path;
+the Run anchor records whether its source was a direct Policy or a Rule lift.
+
+`builder.evaluate(scenario=ScenarioFieldSubstitutionV0(...))` forwards only the
+existing narrow Scenario operation and therefore retains its no-anchor,
+no-bundle, no-live-Explain boundary.
+
+### Low-level compiled EvaluationQuery execution (v0)
 
 The initial Policy-query bridge accepts an application-compiled
 `CompiledEvaluationQueryV0` on the same result surface:
