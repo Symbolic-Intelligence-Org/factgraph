@@ -11,7 +11,7 @@
   - [Q16 query-scoped EffectiveSnapshot v1](./2026-08-13_q16-query-effective-snapshot-v1-decision.md)
   - Current native evaluator, premise filter, and Fact Overlay runtime.
 - Outputs / Downstream:
-  - [D09 native absence/closure observation blueprint](../../../blueprints/active/2026-08-13_factgraph-d09-native-absence-closure-observation.md)
+- [D09 native absence/closure observation blueprint](../../../blueprints/archive/2026-08-13_factgraph-d09-native-absence-closure-observation.md)
 - Related:
   - Candidate design discussion: [premise-effective-view-and-scenario-resolution.zh.md](../../design-points/active/premise-effective-view-and-scenario-resolution.zh.md)
   - Candidate unified-design discussion: [meander-factgraph-unified-design-review-candidate.zh.md](../../design-points/active/meander-factgraph-unified-design-review-candidate.zh.md)
