@@ -28,6 +28,21 @@ earlier ones, but each notebook stands on its own (no cross-notebook state).
 Every code cell asserts on the structured result it produced, so any drift
 in the underlying capabilities surfaces the next time the notebook is run.
 
+## V1 Query / Scenario walkthrough
+
+[`07_v1_query_scenario_closure.ipynb`](07_v1_query_scenario_closure.ipynb)
+is a self-contained FactGraph V1 tutorial. It demonstrates the common
+`fg.query(...).bind(...).select(...).plan().run()` path for Rule and Policy
+targets, Scenario effective worlds, explicit detached Explain/replay,
+expectations, providers, candidate comparison, and the
+`portable_deterministic_v1` Native/Soufflé/ProbLog profile.
+
+The portable cells make a deliberately narrow claim: canonical selected-row
+set parity for the supported positive deterministic fragment. They do not
+claim cross-engine proof, provenance, certainty, or arbitrary-language
+equivalence. The final cross-entity field-navigation/comparison example is
+included specifically to exercise two occurrences of the same predicate.
+
 ## Canonical script
 
 ```bash
