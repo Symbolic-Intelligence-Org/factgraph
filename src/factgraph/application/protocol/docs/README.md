@@ -1,12 +1,13 @@
-# Application Protocol — EvaluateResult & Explain Surface
+# Application Protocol — V0 EvaluateResult and V1 GoalPlan / Run Surface
 
 - Scope: `src/factgraph/application/protocol/evaluate_result.py` + `explanation_render.py`
 - Last updated: 2026-08-13
 - Audience: SDK layer maintainers, adapter writers, and test authors
 
-This document covers the evaluate-result / explain slice of `protocol/`.
-Other protocol files (`derivation.py`, `entity_read.py`, etc.) are covered by the
-application overview doc at `src/factgraph/application/docs/01_overview_en.md`.
+This document covers the V0 evaluate-result / explain slice and the separate
+Q18 V1 GoalPlan / Scenario / EvaluationRun protocol family. Other protocol
+files (`derivation.py`, `entity_read.py`, etc.) are covered by the application
+overview doc at `src/factgraph/application/docs/01_overview_en.md`.
 
 ---
 
@@ -292,6 +293,122 @@ Used by `Explanation.repr`. Each path in `graph.paths` is rendered recursively:
 
 ---
 
+## 2.7 Q18 V1 GoalPlan / Scenario / EvaluationRun
+
+The following protocol modules form a new, independently versioned contract:
+
+- `goal_plan_v1.py` — immutable target, result-mode, expectation, selected-row,
+  summary-anchor, and technical-assessment DTOs;
+- `scenario_v1.py` — grounded Scenario declaration, exact-local closure,
+  evidence-admission scope, resolved operations, and frozen effective world;
+- `relation_provider_v1.py` — one restricted pre-engine finite-relation
+  materialization boundary; and
+- `evaluation_run_v1.py` — execution profile, per-engine frame, sealed replay
+  payload/program envelope, explicit Explain target, and completed Run.
+
+They do not revise V0 `EvaluateResult`, `EvaluationRunBundleV0`,
+`CapturedEvaluationQueryRunV0`, or `ScenarioRunV0`. A caller may retain those
+values and their original codecs while separately creating a `GoalPlanV1`.
+
+### 2.7.1 GoalPlan, modes, and expectations
+
+`GoalPlanV1` seals an exact target pin, compiler-owned Query digest, ordered
+typed selections, one of `rows` / `exists` / `count` / `set`, optional
+Scenario/profile digests, a typed expectation inventory, and an optional
+independent Rule/Policy candidate pin. It has no current Store, adapter,
+source-authority, or product-verdict reference.
+
+`GoalResultV1` is a canonical **set** of `GoalResultRowV1` values. A proof
+path is not a second row. Result completeness is independently one of
+`complete`, `incomplete`, `resource_limited`, `unsupported`, or `unknown`.
+`exists=false`, absent `contains_row`, and a count/set expectation can be
+`not_satisfied` only when their required enumeration is complete. Otherwise
+the expectation outcome remains `underdetermined` or `unsupported`.
+
+`ExactLocalAbsenceExpectationV1` is different: it names an
+`ExactLocalClosureTargetV1` created by the same resolved Scenario. Its outcome
+is checked against the sealed effective relation rather than inferred from an
+empty selected result or from engine negation.
+
+`GoalTechnicalAssessmentV1` reports technical axes (contract, Scenario
+resolution/closure, execution, parity, completeness, expectation, Explain,
+replay, and capability). It never means `SUPPORTED`, `VALID`, source-authoritative,
+or approved in a product sense.
+
+### 2.7.2 Scenario and evidence admission
+
+`ScenarioSpecV1` is an unordered tuple of typed, grounded premise operations.
+The resolver validates every entity/field/relation/value/cardinality condition,
+canonicalizes the whole set, retains opaque origin references, and either emits
+one immutable baseline/effective-world pair or a typed failure. It never
+partially applies a scenario or writes a premise into the ledger.
+
+`EvidenceScopeV1` only removes named baseline assertion ids from admission.
+It has no negative or closure semantics. `ScenarioWithout*` operations instead
+create exact local closure for their exact field/member/relation/entity/assertion
+target. Generic `NotAtom`, global closed-world reasoning, signed negative
+facts, and source-priority selection are outside this protocol.
+
+### 2.7.3 Provider boundary and profiles
+
+`RelationProviderV1` can be `compute` or `lookup`, but both must materialize
+one finite typed relation and receipt **before** the evaluator sees a world.
+`ProviderRequestV1` binds the provider digest, required structured Query
+bindings, dependency/supplied predicate inventory, and an opaque request
+digest. `ProviderMaterializationV1` replaces exactly the provider's declared
+predicate subset; an explicit empty output is therefore meaningful. Provider
+code is not treated as a FactGraph proof.
+
+The callback receives no Store argument, but an in-process callback remains
+trusted code rather than a sandbox. The GoalPlan runtime pins the source view
+immediately before and after materialization and rejects a persistent change;
+this detects a callback that mutates the captured world, but it is not a
+rollback or authorization mechanism.
+
+`EvaluationExecutionProfileV1` has a zero-config native deterministic form or
+the strict portable deterministic form. The portable form attempts native,
+real Soufflé, and real ProbLog over the same declared positive subset with no
+fallback. Per-engine outputs remain separate `succeeded`/`failed`/`unsupported`
+frames; only three successful matching normalized selected-row sets may be
+called equivalent.
+
+### 2.7.4 Run, replay, Explain, and candidate comparison
+
+`EvaluationRunV1` seals the primary plan/profile, baseline/effective world
+captures, canonical and per-engine results, technical assessments, optional
+candidate-effective result, and a bounded replay payload. The payload has a
+strict codec and contains relation facts, schema/program envelope, allowed
+provider receipts, and exact world/closure pins. Integrity seals detect
+inconsistent mutation/splicing; they are not artifact authentication.
+
+`replay_evaluation_run_v1(...)` reads only this capture and re-executes the
+sealed program/relation. It does not call a provider or access the current
+Store. A re-execution mismatch is a typed replay observation, not hidden
+fallback or proof of an external cause.
+
+`ExplainTargetV1` must name a side plus one exact row or summary anchor.
+`explain_evaluation_run_v1(...)` never selects a first row by position. A
+positive row can report only its observed `holds` conclusion; a summary,
+including a zero-row summary, has `logical_conclusion="not_claimed"` and is
+not a negative proof. The structural envelope may include the sealed authored
+`PolicyStructureV0` and resolved Scenario operation patch, but labels engine
+evidence, negative proof, and cross-engine proof parity as not captured/not
+claimed unless a separately captured evidence protocol provides them.
+
+`compare_policy_variants_v1(...)` compares independently pinned primary and
+candidate compiled programs on the same effective world. It returns structural
+and normalized row-set differences only; it deliberately makes no causal
+attribution to a Rule, fact, provider, or Scenario operation.
+
+`diff_scenario_run_v1(...)` is available only for a Run that sealed an
+explicit `ScenarioSpecV1`. It derives baseline/effective world pins, resolved
+operation references, and normalized selected-row-set differences from that
+Run's capture. It makes neither an EvidenceGraph claim nor a causal claim;
+ordinary Query runs cannot obtain a Scenario diff merely because the V1 Run
+shape always has baseline/effective sides.
+
+---
+
 ## 3. Non-responsibilities
 
 - `evaluate_result.py` does not own adapter converters (`problog_trace_to_evidence_graph` etc.)
@@ -312,6 +429,9 @@ Used by `Explanation.repr`. Each path in `graph.paths` is rendered recursively:
   prober. Souffle, ProbLog, and PyReason rich evidence is wired through
   adapter-specific SDK builders.
 - `_row_provenance_envelopes` and `_row_support_artifacts` are private fields and are not part of the stable contract for external callers.
+- V1 engine pins are sealed declarations, not a runtime environment attestation.
+- V1 replay is relation/program replay. It is not historical ledger replay,
+  artifact authentication, provider re-invocation, or an authorization decision.
 
 ---
 
@@ -331,6 +451,12 @@ python -m pytest tests/test_pyreason_provenance_v0.py
 
 # SDK exports / fingerprint
 python -m pytest tests/sdk/test_evaluate_result_exports.py
+
+# Q18 V1 protocol/runtime/export smoke tests
+python -m pytest tests/application/protocol/test_goal_plan_v1.py
+python -m pytest tests/application/protocol/test_evaluation_run_v1.py
+python -m pytest tests/application/test_evaluation_run_v1_runtime.py
+python -m pytest tests/test_v1_public_surface_exports.py
 ```
 
 ---

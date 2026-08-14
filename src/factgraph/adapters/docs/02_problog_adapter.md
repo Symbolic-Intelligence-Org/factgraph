@@ -81,6 +81,22 @@ via mode:
 3. Calling `Store.evaluate(mode="problog")` enters
    `evaluate_problog(...)`
 
+### V1 sealed portable-query boundary
+
+`portable_deterministic_v1` is a separate FactGraph application contract, not
+a probabilistic `Store.evaluate` extension. It materializes one finite,
+dependency-complete positive relation in a fresh isolated Store and invokes
+the existing ProbLog adapter beside native and Soufflé. The V1 compiler rejects
+probabilities, uncertainty projection, branch weights, negation, recursion,
+aggregates, builtins and all other constructs outside its deterministic common
+subset before execution. Adapter unavailability, failure, or an invalid output
+becomes a typed per-engine frame; no hidden native fallback occurs.
+
+Only canonical selected-row-set parity is comparable under this profile.
+ProbLog probability, trace/provenance, certainty and Explain semantics remain
+adapter-specific and are never promoted to common V1 proof evidence. The
+adapter workflows below otherwise keep their original behavior.
+
 ## 4. Typical workflow
 
 Main flow of `evaluate_problog(...)`:

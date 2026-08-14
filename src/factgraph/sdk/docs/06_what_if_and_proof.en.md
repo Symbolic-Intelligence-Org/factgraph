@@ -1,5 +1,48 @@
 # Evidence, Replay, And Captured ScenarioRun
 
+## V1 Scenario / GoalPlan path
+
+The V0 paths below remain compatibility contracts. The current general
+FactGraph What-if surface is the separately versioned terminal
+`fg.query(...).what_if(ScenarioSpecV1).plan(...).run()` path documented in
+[`03_rules_and_inferences.en.md`](03_rules_and_inferences.en.md). It returns
+`GoalPlanRunV1`, whose durable `EvaluationRunV1` captures both baseline and
+effective worlds.
+
+```python
+outcome = (
+    fg.query(resolved_rule)
+      .bind(person_address, alice)
+      .select("age", age_address)
+      .what_if(scenario_spec)
+      .plan()
+      .run()
+)
+
+assert isinstance(outcome, GoalPlanRunV1)
+scenario_diff = outcome.scenario_diff       # captured-only; no re-evaluation
+replay = outcome.replay()                   # no Store/provider callback
+explanation = outcome.explain(explicit_target)
+```
+
+`ScenarioSpecV1` supports the finite Q18 algebra: scalar set, member
+ensure/exact-set/removal, constrained extensional relation changes, ephemeral
+entity creation/removal, and the SDK/debug exact assertion removal form. It
+is always resolved against one admitted input relation before execution;
+`EvidenceScopeV1` remains a separate admission filter, not a deletion or
+absence statement. `ScenarioWithout*` only creates exact local closure for its
+resolved target. It is neither a ledger mutation nor a global negative fact.
+
+`scenario_diff` reports sealed input/world pins, operation references and
+normalized selected-row differences. It deliberately labels evidence and
+causality `not_claimed`; use an explicit row Explain for a positive observed
+conclusion, and never interpret a zero-row summary as proof of negation.
+
+The portable V1 profile can replay a captured positive deterministic world in
+native, Soufflé and ProbLog. It compares selected-row sets only, records
+per-engine succeeded/failed/unsupported frames, and never falls back to native
+when an external adapter cannot execute the contract.
+
 T5 removed the public candidate-universe and `what_if.*` evidence shells from
 the SDK user path. The supported evidence workflow is:
 

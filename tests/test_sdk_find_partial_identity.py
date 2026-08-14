@@ -153,9 +153,13 @@ class SDKFindPartialIdentityTests(unittest.TestCase):
         # C3 withdrew policy-free SchemaTransitionInput from the SDK namespace,
         # returning the intentional surface to 87 names. Slice 3b Phase 3 adds
         # the typed MetaKeyPolicy authoring DTO, bringing the deliberate total
-        # to 88.
+        # to 88. The subsequent shipped service/query surface had already
+        # grown the base to 105. Q18 deliberately adds 46 V1 GoalPlan,
+        # Scenario, provider, execution-profile, Run/Explain/replay, and
+        # immutable-comparison names (including explicit assertion absence and
+        # the non-causal Scenario diff), bringing the explicit total to 151.
         # Intent unchanged: no ACCIDENTAL name creep.
-        self.assertEqual(len(sdk_module.__all__), 88)
+        self.assertEqual(len(sdk_module.__all__), 151)
         self.assertIn("compile_derivation_plan", sdk_module.__all__)
         self.assertIn("RuleProgram", sdk_module.__all__)
         self.assertIn("RuleProgramFact", sdk_module.__all__)

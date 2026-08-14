@@ -1,6 +1,6 @@
 # Task Blueprint: FactGraph final Query / Scenario closure
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-08-14
 - Last Updated: 2026-08-14
 - Branch: codex/v0.3.0-factgraph-final-closure-2026-08-14
@@ -16,6 +16,7 @@
   - [Final-closure audit](../../audit/active/2026-08-14_factgraph-final-closure-vs-shipped.md)
 - Audit Log:
   - [paired audit](./2026-08-14_factgraph-final-closure.audit.md)
+  - [final verification](../../audit/active/2026-08-14_factgraph-final-closure-final-verification.md)
 
 ## 1. Problem
 
@@ -120,7 +121,9 @@ inputs. Assessment reports technical axes without product verdicts.
   unresolved.
 - No result row becomes an Explain target by position/implicit first-row.
 - A candidate Policy is an independent immutable target, never an overlay.
-- External providers are materialized before engine execution and cannot write.
+- External providers are materialized before engine execution. An in-process
+  callback is trusted code rather than a sandbox; persistent source-view
+  mutation is detected and fails closed.
 - The only parity claim is normalized row equivalence in the declared portable
   profile. Engine evidence is not made artificially identical.
 - Existing Query/Scenario v0 behavior remains available and must pass its
@@ -128,18 +131,18 @@ inputs. Assessment reports technical axes without product verdicts.
 
 ## 7. Acceptance
 
-- [ ] Scenario v1 supports every Q18-supported premise operation, conflicts
+- [x] Scenario v1 supports every Q18-supported premise operation, conflicts
   and exact boundary rejection.
-- [ ] QueryPlan v1 supports Rule/Policy/provider targets, all result modes and
+- [x] QueryPlan v1 supports Rule/Policy/provider targets, all result modes and
   all Q18 expectation forms with independent completeness state.
-- [ ] Effective-world and Policy-variant executions capture baseline/effective
+- [x] Effective-world and Policy-variant executions capture baseline/effective
   differences and explicit anchors.
-- [ ] Native, Soufflé and ProbLog all execute the portable corpus against the
+- [x] Native, Soufflé and ProbLog all execute the portable corpus against the
   exact captured world with no fallback.
-- [ ] Replay/explain read no mutable Store; mutation and splice probes fail
+- [x] Replay/explain read no mutable Store; mutation and splice probes fail
   closed.
-- [ ] Assessment/evidence boundaries are typed and module docs are clear.
-- [ ] Focused legacy cohorts and the new conformance corpus pass; lint/type/
+- [x] Assessment/evidence boundaries are typed and module docs are clear.
+- [x] Focused legacy cohorts and the new conformance corpus pass; lint/type/
   diff checks pass; final audit documents any unrelated baseline failure.
 
 ## 8. Implementation Plan
@@ -176,6 +179,24 @@ the only reason to stop and request a decision.
 
 ## 10. Outcome / Deviations
 
-In progress. This section will list the exact protocol versions, real-engine
-conformance results, rejected cells, compatibility proof, audit findings and
-any explicit Q18-consistent narrowing.
+Implemented as a parallel V1 family without widening any V0 wire/digest
+contract. The delivered surface is `fg.query(...).plan(...)` / V1
+`what_if(...)`, grounded `ScenarioSpecV1`, `GoalPlanV1`, restricted
+pre-engine `RelationProviderV1`, sealed `EvaluationRunV1`, explicit detached
+Explain/replay, immutable candidate comparison, and captured-only
+`ScenarioDiffV1`.
+
+Native, real Soufflé and real ProbLog run the same materialized positive
+relation under `portable_deterministic_v1`; parity is only a normalized
+selected-row-set assessment. Engine proof/evidence/certainty parity remains
+explicitly rejected. Generic NAF, global closure, signed negative facts,
+Actions, Provider sandboxing, source authority and Meander Plan/Package/
+Translator ownership remain out of scope exactly as Q18 specifies.
+
+Final direct verification on the pinned `factpy` environment: 680 passed and
+175 subtests across `tests/application`, `tests/sdk`, and public-surface
+checks; scoped Ruff, MyPy, formatter and diff checks passed. The whole
+repository's bare `pytest` collection is blocked by a pre-existing missing
+`render_evidence_graph_html` import used by service/agent tests and unrelated
+third-party test layout. Those paths are unchanged from the baseline; see the
+final verification record for precise commands and evidence.

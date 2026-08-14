@@ -19,6 +19,114 @@ Legacy `run`, `accept`, `accept_many`, direct `check` / `diagnose` /
 `why_not`, and `what_if.*` shells are not part of the T5 public evidence
 path.
 
+## V1 GoalPlan Query / Scenario path
+
+The existing `fg.eval.evaluate(...)`, `EvaluationQueryBuilderV1.evaluate()`,
+`capture()`, and V0 Scenario terminals remain compatibility APIs. They do not
+silently acquire Scenario algebra, a provider callback, or portable execution.
+
+For the Q18 V1 path, start with the same resolved Rule or managed `Policy`,
+declare structured `bind` / ordered `select` intent, then call the new
+terminal `.plan(...)`:
+
+```python
+from factgraph.sdk import (
+    ExistsExpectationV1,
+    GoalPlanFailureV1,
+    GoalPlanRunV1,
+    native_deterministic_profile_v1,
+)
+
+invocation = (
+    fg.query(target, address_space=addresses)
+      .bind(person_address, alice_ref)
+      .select("age", age_address)
+      .plan(
+          result_mode="rows",
+          expectations=(ExistsExpectationV1("person_is_found", True),),
+          profile=native_deterministic_profile_v1(),
+      )
+)
+outcome = invocation.run()
+if isinstance(outcome, GoalPlanFailureV1):
+    # A resolver/provider/capability failure is typed; it is never a false
+    # zero-row answer.
+    raise RuntimeError(outcome.code)
+assert isinstance(outcome, GoalPlanRunV1)
+run = outcome.run
+```
+
+`plan()` returns an immutable V1 plan/invocation. `run()` captures the current
+admitted relation once, resolves an optional `ScenarioSpecV1`, and produces a
+sealed `EvaluationRunV1`; `outcome.replay()` then reads only its captured
+inputs. The V1 modes are `"rows"`, `"exists"`, `"count"`, and `"set"`; all
+row modes have set semantics, so duplicate proof paths never inflate a count.
+
+Use typed V1 expectations rather than the legacy `.expect_contains(...)`:
+
+- `ContainsRowExpectationV1` over a `GoalRowExpectationV1` of `GoalValueV1`
+  values;
+- `ExistsExpectationV1`, `CountEqExpectationV1`, and
+  `SetEqualsExpectationV1` over the complete normalized row set; and
+- `ExactLocalAbsenceExpectationV1` only for the exact closure target created
+  by the same Scenario. A zero Query row is not a negative fact.
+
+### Scenario / What-if
+
+`ScenarioSpecV1` is a collection of grounded, typed operations such as
+`ScenarioSetEffectiveValueV1`, `ScenarioEnsureMemberV1`,
+`ScenarioSetExactMembersV1`, `ScenarioWithoutFieldV1`,
+`ScenarioWithoutValueV1`, `ScenarioEnsureRelationV1`,
+`ScenarioWithoutRelationV1`, `ScenarioWithoutEntityV1`, and
+`ScenarioWithoutAssertionV1`, and `ScenarioCreateEphemeralEntityV1`. Values are expressed as
+`ScenarioValueV1(tag, value)` and every operation may carry opaque
+`origin_refs`.
+
+The ergonomic form is either `query.plan(scenario=scenario)` or
+`query.what_if(scenario).plan()`. Both lead to the same V1 plan; the latter
+only freezes the Scenario argument earlier. Scenario resolution is
+deterministic, operates on a captured relation, and never writes the ledger.
+`EvidenceScopeV1` only removes admitted baseline assertion ids. It is not a
+closure declaration and cannot prove absence. Only a `ScenarioWithout*`
+operation provides exact local closure for its own explicit target.
+
+### Providers, Policy variants, and portable engines
+
+Attach a `RelationProviderV1` through `.using(provider)` (or the explicit
+`ProviderQueryTargetV1` wrapper). A provider receives a sealed
+`ProviderRequestV1`, returns finite typed `ProviderRelationRowV1` values in a
+`ProviderMaterializationV1`, and is invoked exactly once before Scenario
+resolution and before an engine runs. It replaces only its declared supplied
+predicate subset. It is not an arbitrary engine functor: implicit engine-time
+network access, untyped outputs, and a claim that FactGraph proved provider
+internals are outside the contract. An in-process provider callback is trusted
+code, not a sandbox; V1 detects a persistent source-view change across the
+callback and fails closed, but cannot undo a malicious write. Use
+`provider_binding_slot_v1` to name a provider's required structured Query
+binding without introducing a dotted address grammar.
+
+Pass an independently compiled Rule or Policy as `candidate=` to compare it
+with the primary target on the same resolved effective world. This is an
+immutable comparison, not a Policy mutation or publication operation.
+
+`native_deterministic_profile_v1()` is the zero-config native profile.
+`portable_deterministic_profile_v1()` requires the declared positive,
+deterministic subset to execute in native, real Soufflé, and real ProbLog with
+no fallback. It compares only normalized selected-row sets; it does not claim
+that their proof/evidence structures are equivalent. Unsupported syntax or an
+unavailable engine yields a typed assessment/frame instead of falling back.
+
+Detached V1 Explain always requires an explicit `ExplainTargetV1` that names
+one row or summary anchor. It never chooses a first row implicitly. The
+captured relation, Scenario resolution, engine pins, and provider receipts are
+replayable; ordinary current-store evaluation and the older V0 capture codecs
+remain separate contracts.
+
+When a Scenario was explicit, `outcome.scenario_diff` is available without a
+second evaluation. It compares only sealed input/world pins and normalized row
+sets. A difference is not an EvidenceGraph explanation and is never a causal
+attribution to one premise or rule node.
+
 ### Engine runtime options
 
 - Public `Rule` and `Inference` objects are engine-independent business

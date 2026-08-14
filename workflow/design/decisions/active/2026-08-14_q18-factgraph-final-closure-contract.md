@@ -350,3 +350,4 @@ rename a deferred/rejected cell as implicitly supported.
 | Date | Stage | Event | Notes |
 | --- | --- | --- | --- |
 | 2026-08-14 | adopted | User authorized final FactGraph closure | Replaces fragmented v0 non-scope boundaries with one explicit complete/rejected matrix. |
+| 2026-08-14 | implemented | V1 contract delivered on isolated branch | New V1 protocols/runtime/SDK entrypoint preserve V0 contracts; final verification records real three-engine parity, replay/Scenario/provider adversarial probes, and the unrelated full-suite collection blocker. |

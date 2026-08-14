@@ -2282,14 +2282,19 @@ class SDKStore:
         return self._schema_ir
 
     def query(self, target: Any, *, address_space: Any | None = None) -> Any:
-        """Start a typed native Query over one resolved Rule or managed Policy.
+        """Start a typed Query over one resolved Rule or managed Policy.
 
-        This is a target-normalization facade, not a registry lookup or a new
-        evaluator. ``bind`` accepts only SemanticPortAddress values; ``select``
-        supports direct ports and the documented one-hop field navigation, and
-        ``expect_contains`` is the sole expectation form. Other query modes,
-        broader navigation, and generic Scenario algebra remain outside this
-        v1 surface.
+        This is a target-normalization facade, never a string registry lookup.
+        ``bind`` accepts only :class:`SemanticPortAddress`; ``select`` accepts
+        direct ports and the documented field-navigation projection.
+
+        The established terminal methods (``compile()``, ``evaluate()``,
+        ``capture()``, and V0 ``what_if(...)``) retain their V0 compatibility
+        contracts.  The separate terminal ``plan(...)`` creates an immutable
+        GoalPlan V1, which can carry typed result modes/expectations, a V1
+        Scenario, a restricted materialized relation provider, and either a
+        native or portable deterministic execution profile.  It returns a
+        sealed V1 run/replay artifact rather than widening a V0 result wire.
         """
 
         from .evaluation_query_builder import build_evaluation_query_builder

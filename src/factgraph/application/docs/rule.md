@@ -852,6 +852,85 @@ authentication or a MAC. Any future codec or rehydration path must recompile
 from authenticated source inputs or add an explicit artifact-authentication
 contract.
 
+### Sealed GoalPlan / Scenario v1 (Q18)
+
+`GoalPlanV1` is the separate, versioned final Query contract. It does **not**
+widen `TargetedCompiledEvaluationQueryV0`, `EvaluationRunBundleV0`,
+`CapturedEvaluationQueryRunV0`, `ScenarioRunV0`, or their established wire and
+digest behavior. The SDK enters it only through the terminal
+`fg.query(...).plan(...)` (or `fg.query(...).what_if(ScenarioSpecV1).plan()`)
+path.
+
+The Query compiler still owns structured direct-port addressing, branch-total
+bind/select checking, Policy lowering, and one-hop field navigation. The V1
+terminal seals that compiled Query with:
+
+- a direct immutable Rule or Policy target, ordered selected columns, typed
+  result mode and typed expectation inventory;
+- an optional independently compiled Rule/Policy candidate on the same
+  effective world (comparison is never a Policy mutation);
+- an optional `ScenarioSpecV1` and an `EvidenceScopeV1` admission filter;
+- an exact native or portable execution profile; and
+- optionally one restricted `RelationProviderV1` materialization.
+
+`RelationProviderV1` is a pre-engine boundary, not an arbitrary logical
+functor. Its compute/lookup callback receives a sealed request and returns a
+finite, typed relation plus a receipt. It runs once before Scenario resolution,
+replaces exactly its declared supplied predicate subset, and is never invoked
+implicitly by an engine. The callback receives no Store capability, but an
+in-process Python closure is still trusted code rather than a sandbox: V1 pins
+the source view immediately before/after materialization and fails closed on a
+persistent change, without claiming it can roll a malicious write back.
+FactGraph records its input/output receipt but does not claim a proof of
+provider internals.
+
+`ScenarioSpecV1` is an unordered set of grounded, schema-checked operations:
+single-value set, multi-value member ensure/exact-set/remove, relation
+ensure/remove, ephemeral entity creation, entity removal, and the explicitly
+scoped assertion removal form. The resolver canonicalizes the full set or
+fails before execution; it never partially applies caller statements,
+privileges an origin, writes a Scenario world to the ledger, or treats a
+caller premise as true. `origin_refs` remain opaque caller provenance labels.
+
+`ScenarioWithout*` produces exact **local** closure only for the exact field,
+member, relation, entity, or assertion target it resolved. An
+`ExactLocalAbsenceExpectationV1` may check that same sealed effective-world
+target. `EvidenceScopeV1` merely excludes baseline assertions and provides no
+closure. Neither mechanism creates a global negative fact, generic NAF,
+historical snapshot, source-authority claim, or durable Scenario state.
+
+V1 result modes (`rows`, `exists`, `count`, `set`) operate on canonical
+selected-row **sets**, never proof-path bags. `ContainsRowExpectationV1`,
+`ExistsExpectationV1`, `CountEqExpectationV1`, and
+`SetEqualsExpectationV1` are evaluated against the captured normalized rows.
+An absent expected row is `not_satisfied` only after complete enumeration;
+otherwise it remains underdetermined/unsupported. Exact-local absence is a
+separate resolver-and-closure check rather than an inference from a zero row.
+
+The native deterministic profile uses one pinned native executor. The portable
+deterministic profile accepts only the declared positive deterministic subset
+and executes the sealed relation in native, real Soufflé, and real ProbLog
+without fallback. Each adapter has a typed succeeded/failed/unsupported frame;
+only three successful matching normalized selected-row sets warrant an
+`equivalent` parity assessment. Engine proof/certainty/provenance structures
+are deliberately not made equal by the common V1 result.
+
+`EvaluationRunV1` captures the baseline/effective worlds, plan/target/profile
+pins, engine frames, completeness/expectation/technical assessment, and any
+permitted provider receipt. Detached replay consumes only that sealed capture;
+it never silently reads the current Store, latest Rule/Policy, current schema,
+or current engine config. Detached Explain requires an explicit named
+`ExplainTargetV1` row or summary anchor and must report unavailable/unsupported
+evidence rather than fabricate a proof. `GoalTechnicalAssessmentV1` reports
+FactGraph technical axes only; authority, truthfulness, source authority,
+agent intent, review, and enforcement remain caller/Meander concerns.
+
+For an explicit Scenario, `GoalPlanRunV1.scenario_diff` is a sealed derivative
+of the captured baseline/effective worlds and normalized selected row sets. It
+can show that inputs or outputs differ, but it does not state that one premise
+or Policy node caused a result; its evidence and causal relations are both
+`not_claimed`. It is `None` for an ordinary Query run.
+
 ## Bridge Rejections
 
 The new application Rule path rejects legacy SDK authoring forms that are still

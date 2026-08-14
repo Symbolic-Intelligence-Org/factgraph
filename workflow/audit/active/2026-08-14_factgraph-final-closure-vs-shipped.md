@@ -1,6 +1,6 @@
 # FactGraph Final Closure: design versus shipped audit
 
-- Status: active
+- Status: completed
 - Created: 2026-08-14
 - Authority: input to Q18 and the final FactGraph closure blueprint; it is not
   itself an implementation authorization.
@@ -97,3 +97,22 @@ be called complete because every capability cell is either implemented,
 compatibility-preserved, explicitly rejected, or documented as Meander-owned;
 it must not claim universal Datalog/ProbLog equivalence, source authority, or
 Action authorization.
+
+## 7. Implementation verification outcome
+
+Q18 has now been implemented as a parallel V1 contract on its isolated branch.
+The final surface covers the supported Scenario algebra, Rule/Policy Query
+targets, constrained providers, all declared result/expectation modes,
+immutable candidate comparison, captured Scenario diff, explicit detached
+Explain/replay, and native/Soufflé/ProbLog selected-row parity. It preserves
+the earlier V0 Query/Scenario/Run protocols rather than mutating them.
+
+The final closure test command passed **680 tests and 175 subtests** in the
+pinned FactGraph environment. Static format/lint/type/diff checks also passed,
+and an independent adversarial review found no remaining reproducible P0/P1.
+The bare repository-wide test command remains blocked during collection by a
+baseline `service.static_ui` import of missing
+`factgraph.audit.evidence_graph.render_evidence_graph_html`, plus independent
+third-party test package layout errors. Neither source path changed on this
+branch; this is recorded as an unrelated carry-forward rather than silently
+fixed in the FactGraph closure.

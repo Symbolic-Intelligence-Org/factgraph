@@ -188,7 +188,32 @@ Use `from factgraph.sdk import build_application_rule` and
 | `IngestResult` | Result of `fg.schema.ingest(...)`: counts, ids, validation report |
 | `ValidationReport` | Per-row provenance/shape validation outcome |
 
-### 1.5 Errors and error codes
+### 1.5 Q18 V1 Query / Scenario / Run
+
+V1 is a deliberate, separately versioned public surface. It is entered through
+`fg.query(...).plan(...)`; it does not change the behavior or wire shape of
+V0 `fg.eval.evaluate(...)`, `capture()`, or `ScenarioRunV0`.
+
+| Symbols | Purpose |
+|---|---|
+| `EvaluationQueryBuilderV1`, `ScenarioGoalPlanBuilderV1` | Returned by `fg.query(...)` / V1 `what_if(...)`; build immutable V1 intent before `.plan()` / `.run()` |
+| `ProviderQueryTargetV1` | Explicit alternate wrapper for a resolved Rule/Policy plus one `RelationProviderV1`; `.using(provider)` is the usual fluent form |
+| `GoalPlanInvocationV1`, `GoalPlanRunV1`, `GoalPlanFailureV1` | In-process plan, completed sealed run wrapper, or fail-closed pre-run outcome |
+| `GoalPlanV1`, `GoalResultV1`, `GoalResultRowV1`, `GoalTechnicalAssessmentV1`, `GoalValueV1` | Immutable plan/result/technical-assessment protocol values (row results use set semantics) |
+| `GoalRowExpectationV1`, `ContainsRowExpectationV1`, `ExistsExpectationV1`, `CountEqExpectationV1`, `SetEqualsExpectationV1`, `ExactLocalAbsenceExpectationV1` | Typed V1 expectation constructors; absence names an exact Scenario closure target rather than a zero Query row |
+| `ScenarioSpecV1`, `ScenarioValueV1`, `ScenarioSetEffectiveValueV1`, `ScenarioEnsureMemberV1`, `ScenarioSetExactMembersV1`, `ScenarioWithoutFieldV1`, `ScenarioWithoutValueV1`, `ScenarioWithoutAssertionV1`, `ScenarioCreateEphemeralEntityV1`, `ScenarioEnsureRelationV1`, `ScenarioWithoutRelationV1`, `ScenarioWithoutEntityV1` | Grounded declarative Scenario input; resolved worlds are non-persistent and all-or-fail |
+| `EvidenceScopeV1`, `ExactLocalClosureTargetV1` | Baseline admission filter and exact local absence target; neither creates global negative facts |
+| `RelationProviderV1`, `ProviderRequestV1`, `ProviderRelationRowV1`, `ProviderMaterializationV1`, `provider_binding_slot_v1` | Restricted finite, typed pre-engine relation provider boundary |
+| `EvaluationEnginePinV1`, `EvaluationExecutionProfileV1`, `native_deterministic_profile_v1`, `portable_deterministic_profile_v1` | Exact zero-config native or all-three-engine portable profile declaration |
+| `EvaluationRunV1`, `ExplainTargetV1`, `EvaluationRunExplanationV1`, `EvaluationRunReplayV1`, `PolicyVariantComparisonV1`, `ScenarioDiffV1` | Sealed run, explicit detached Explain target, replay observation, immutable candidate comparison, and non-causal captured Scenario diff |
+
+Use a structured `SemanticPortAddress` for every V1 binding. There is no
+string policy registry, dotted port grammar, generic public NAF, Action, or
+engine fallback in this interface. See
+[`03_rules_and_inferences.en.md`](03_rules_and_inferences.en.md) for a flow and
+the application protocol docs for exact codec/assessment semantics.
+
+### 1.6 Errors and error codes
 
 | Class | Triggered by |
 |---|---|
