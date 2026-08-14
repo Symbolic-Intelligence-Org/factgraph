@@ -66,23 +66,28 @@ claim cross-engine proof, provenance, certainty, or arbitrary-language
 equivalence. The final cross-entity field-navigation/comparison example is
 included specifically to exercise two occurrences of the same predicate.
 
-## Product Scenario / execution V2 walkthrough
+## Complete Q20 product workflow
 
 [`09_product_scenario_execution_v2.ipynb`](09_product_scenario_execution_v2.ipynb)
-is the runnable Q20 product-interface tutorial. It introduces the symmetric
-`rule_builder` / `build_rule` and `policy_builder` / `build_policy` authoring
-surface (and executes the staged builder forms), `AssetMeta`, rich typed Policy comparisons, and the same
+is the complete runnable Q20 product workflow. It executes both the symmetric
+`rule_builder` / `build_rule` and `policy_builder` / `build_policy` forms,
+`AssetMeta`, rich typed Policy comparisons, and the same
 `fg.query(...).bind(...).select(...).plan(...).run()` terminal. It then shows
-the parallel V2 Scenario metadata lanes, target-scoped deterministic and
-ProbLog profiles, explicit exclusive `WeightedChoice`, structured V2
-Result/Explain views, declared-decimal → `problog_float64_v1` materialization
-(including the explicit `p=0` omission), and detached replay.
+deterministic Scenario CRUD (`set` / `add` / `set_exact` / `without`) without a
+ledger write, an independently authored candidate Policy pinned with
+`for_target(..., side='candidate')` over the shared deterministic Scenario
+world, named baseline/effective/candidate ResultViews, target-scoped
+deterministic and ProbLog profiles, explicit exclusive `WeightedChoice`,
+structured Result/Explain views, declared-decimal → `problog_float64_v1`
+materialization (including the explicit `p=0` omission), and detached replay.
 
 It intentionally makes the current probability/evidence boundary visible:
 ProbLog is the sole V2 point-probability engine, while Native and Soufflé are
 recorded as `unsupported` frames; an EvidenceGraph that was not captured is
-reported as unavailable rather than fabricated. The notebook is self-contained
-and each executable cell asserts its observed contract.
+reported as unavailable rather than fabricated. Candidate comparison is an
+immutable logical variant comparison, not a mutable Policy patch or causal
+claim. The notebook is self-contained and each executable cell asserts its
+observed contract.
 
 ## Canonical script
 

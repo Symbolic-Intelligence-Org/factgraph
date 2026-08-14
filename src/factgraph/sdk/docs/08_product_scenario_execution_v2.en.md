@@ -12,13 +12,16 @@ The SDK entry points construct strict values, then the V2 Query terminal
 captures/resolves/runs them against one sealed world.
 
 ```python
-alice = fg.entities.ref(Person, person_id="alice")
+from factgraph.sdk import EntityRef
+
+alice_e_ref = fg.entities.ref(Person, person_id="alice")  # managed e_ref for Scenario fields
+alice = EntityRef("Person", {"person_id": "alice"})  # typed EntityRef for Query binds
 
 scenario = (
     fg.scenario()
       .set(
           Person.risk_flag,
-          alice,
+          alice_e_ref,
           True,
           meta={
               "raw_kind": "probabilistic",
@@ -35,9 +38,15 @@ scenario = (
 )
 ```
 
-`fg.scenario()` never writes to the ledger.  Its entity argument is a managed
-`e_ref` (from `fg.entities.ref(...)` or `fg.entities.create(...)`), an
-`EntityRef`, or an entity snapshot exposing `.ref`.  It offers:
+`fg.scenario()` never writes to the ledger. Its normal field-input spelling is
+a managed `e_ref` string (from `fg.entities.ref(...)` or
+`fg.entities.create(...)`), as `alice_e_ref` above. This is distinct from a
+typed `EntityRef`, which is the normal value for `fg.query(...).bind(...)`.
+For interop the Scenario builder also accepts an `EntityRef` or a snapshot
+exposing `.ref`; it validates the entity type and preserves a supplied
+`EntityRef` (including one without an `encoded_ref`) rather than resolving it
+through the managed ledger. It does not turn either spelling into a source
+record. It offers:
 
 - `set(Field, entity, value, *, meta=None, premise_id=None)` for a
   single-value field;
@@ -52,6 +61,17 @@ scenario = (
 ambiguous probability or provenance annotation from being copied onto a
 different member after canonical ordering.  There is no generic `origin_refs`
 escape hatch on this product surface.
+
+A Scenario only describes run-local fact operations: `set`, `add`,
+`set_exact`, and `without`. It cannot add, remove, or patch a Rule or Policy;
+author a separate immutable target when logical comparison is required.
+
+The captured `outcome.effective.scenario.world.facts` collection is the
+effective fact world, not a source-ledger `Field` getter: it distinguishes
+baseline support from Scenario-synthetic facts. To inspect how a Scenario
+changed that world, use `world.operation_evidence`: its metadata bindings
+retain each premise and provenance, while `synthetic_witness_ids` and
+`masked_witness_ids` identify the materialized overlay and replaced support.
 
 ## Strict Scenario metadata
 
@@ -114,6 +134,39 @@ branch-name input.
 A Rule-level attachment and an occurrence-level attachment for that same Rule
 in the same Policy target side are rejected.  They would otherwise create two
 semantic owners for one compiler lowering slot.
+The complete tutorial intentionally combines an occurrence attachment for
+`person_values` with a Rule-level attachment for a *different*
+`direct_person_values` Rule; it never uses both attachment kinds for one Rule.
+
+For a deterministic primary/candidate comparison, pin the independently
+authored candidate explicitly. The candidate must preserve the primary
+Query's typed bind/select shape; it is not a mutable patch of the primary
+Policy:
+
+```python
+comparison_profile = (
+    fg.execution.native_deterministic(target=primary_policy)
+      .for_target(candidate_policy, side="candidate")
+      .build()
+)
+
+run = (
+    fg.query(primary_policy)
+      .bind(older.person, alice)  # `alice` is an EntityRef
+      .select("age", older.age)
+      .plan(
+          scenario=deterministic_scenario,  # built with managed `alice_e_ref`
+          profile=comparison_profile,
+          candidate=candidate_policy,
+      )
+      .run()
+)
+```
+
+The sealed run exposes named `baseline`, `effective`, and
+`candidate_effective` ResultViews through `outcome_from_run_v2(run)`. The
+primary and candidate effective views retain separate target/side captures,
+while their captured semantic world can be the same Scenario world.
 
 Use `fg.execution.native_deterministic(target=...)` for deterministic V2.
 It builds immediately after `.build()` and rejects probability attachments.
@@ -142,7 +195,7 @@ authoring binding; callers do not re-register a target by name.
 ```python
 raw_run = (
     fg.query(ranked_policy)
-      .bind(older.person, alice)
+      .bind(older.person, alice)  # typed EntityRef for Query binding
       .select("person", older.person)
       .plan(scenario=scenario, profile=profile)
       .run()
@@ -199,11 +252,12 @@ an engine by itself.
 ## Runnable end-to-end tutorial
 
 [`examples/09_product_scenario_execution_v2.ipynb`](../../../../examples/09_product_scenario_execution_v2.ipynb)
-exercises the complete product flow against the real SDK/runtime: product Rule
-and Policy builders, `AssetMeta`, typed comparisons, Scenario V2 metadata,
-Native and ProbLog profiles, `WeightedChoice`, sealed V2 Result/Explain views,
-declared-decimal → `problog_float64_v1` materialization (including explicit
-`p=0` omission), and detached replay.  It also asserts the explicit current
-boundaries: Native and Soufflé have `unsupported` V2 probability frames and a
-V2 EvidenceGraph is reported unavailable when it was not captured rather than
-reconstructed.
+exercises the complete product flow against the real SDK/runtime: direct and
+staged product Rule/Policy builders, `AssetMeta`, typed comparisons,
+deterministic Scenario CRUD, an independently authored candidate Policy
+comparison over one shared Scenario world, Native and ProbLog profiles,
+`WeightedChoice`, sealed V2 Result/Explain views, declared-decimal →
+`problog_float64_v1` materialization (including explicit `p=0` omission), and
+detached replay. It also asserts the explicit current boundaries: Native and
+Soufflé have `unsupported` V2 probability frames and a V2 EvidenceGraph is
+reported unavailable when it was not captured rather than reconstructed.
