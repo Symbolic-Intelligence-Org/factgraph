@@ -8,6 +8,7 @@
 | --- | --- | --- | --- |
 | 2026-08-14 | draft | Blueprint created | Q20 user-locked scope recorded from the completed versus-shipped audit. |
 | 2026-08-14 | preflight | Independent readback complete | PF-1 through PF-9 required amendments applied before scope anchoring. |
+| 2026-08-14 | scoped | Scope anchored | User's continuous-delivery authorization plus PF-1 through PF-9 self-check passed; implementation may begin. |
 
 ## Decision Notes
 
