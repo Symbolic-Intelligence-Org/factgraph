@@ -37,6 +37,10 @@ targets, Scenario effective worlds, explicit detached Explain/replay,
 expectations, providers, candidate comparison, and the
 `portable_deterministic_v1` Native/Soufflé/ProbLog profile.
 
+Its execution calls are SDK surface. Its direct `PolicyAll` / `PolicyAny` /
+`SemanticAddressSpace` construction is intentionally labelled as advanced
+application/compiler authoring, not as the desired business-user Policy API.
+
 The portable cells make a deliberately narrow claim: canonical selected-row
 set parity for the supported positive deterministic fragment. They do not
 claim cross-engine proof, provenance, certainty, or arbitrary-language
