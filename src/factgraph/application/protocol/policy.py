@@ -5,6 +5,7 @@ import json
 from typing import Any, Literal, TypeAlias
 
 from factgraph.core.protocol.digests import sha256_hex
+from factgraph.core.protocol.tup_v1 import claim_args_from_rest_terms
 
 from .common import ErrorDTO
 from .schema_runtime import FieldPath
@@ -77,7 +78,38 @@ class PolicyFieldNavigation:
             raise _shape("PolicyFieldNavigation.field must be FieldPath", "INVALID_POLICY_NAVIGATION")
 
 
-PolicyComparisonOperand: TypeAlias = SemanticPortAddress | PolicyFieldNavigation
+@dataclass(frozen=True)
+class PolicyLiteral:
+    """One canonical scalar literal admissible in a managed Policy comparison.
+
+    The initial public envelope deliberately mirrors the only ordering domains
+    the native, Souffle, and ProbLog profile already share: signed-int64
+    ``int`` and epoch-nanosecond ``time``.  It is typed here rather than being
+    inferred from a Python value so a literal's Policy identity stays stable
+    before compiler admission resolves its peer endpoint.
+    """
+
+    scalar_domain: Literal["int", "time"]
+    value: int
+
+    def __post_init__(self) -> None:
+        if self.scalar_domain not in {"int", "time"}:
+            raise _shape("PolicyLiteral.scalar_domain must be int or time", "INVALID_POLICY_LITERAL")
+        try:
+            normalized = claim_args_from_rest_terms(
+                [(self.scalar_domain, self.value)]
+            )[0][1]
+        except (TypeError, ValueError) as exc:
+            raise _shape(
+                "PolicyLiteral.value must be a signed int64 matching its scalar domain",
+                "INVALID_POLICY_LITERAL",
+            ) from exc
+        if not isinstance(normalized, int) or isinstance(normalized, bool):  # pragma: no cover - tup_v1 invariant.
+            raise _shape("PolicyLiteral.value is not canonical", "INVALID_POLICY_LITERAL")
+        object.__setattr__(self, "value", normalized)
+
+
+PolicyComparisonOperand: TypeAlias = SemanticPortAddress | PolicyFieldNavigation | PolicyLiteral
 
 
 @dataclass(frozen=True)
@@ -98,10 +130,18 @@ class PolicyCompare:
     def __post_init__(self) -> None:
         if self.op not in {"eq", "ne", "gt", "ge", "lt", "le"}:
             raise _shape("PolicyCompare.op is unsupported", "INVALID_POLICY_COMPARE")
-        if not isinstance(self.left, (SemanticPortAddress, PolicyFieldNavigation)) or not isinstance(
-            self.right, (SemanticPortAddress, PolicyFieldNavigation)
+        if not isinstance(self.left, (SemanticPortAddress, PolicyFieldNavigation, PolicyLiteral)) or not isinstance(
+            self.right, (SemanticPortAddress, PolicyFieldNavigation, PolicyLiteral)
         ):
-            raise _shape("PolicyCompare operands must be semantic addresses or field navigation", "INVALID_POLICY_COMPARE")
+            raise _shape(
+                "PolicyCompare operands must be semantic addresses, field navigation, or PolicyLiteral",
+                "INVALID_POLICY_COMPARE",
+            )
+        if isinstance(self.left, PolicyLiteral) and isinstance(self.right, PolicyLiteral):
+            raise _shape(
+                "PolicyCompare requires at least one semantic address or field navigation operand",
+                "INVALID_POLICY_COMPARE",
+            )
         left, right = self.left, self.right
         if self.op in {"eq", "ne"}:
             left, right = sorted((left, right), key=_comparison_operand_key)
@@ -242,10 +282,12 @@ class PolicyCompareStructureNodeV0:
     def __post_init__(self) -> None:
         if self.op not in {"eq", "ne", "gt", "ge", "lt", "le"}:
             raise _shape("Policy compare structure op is invalid", "INVALID_POLICY_STRUCTURE")
-        if not isinstance(self.left, (SemanticPortAddress, PolicyFieldNavigation)) or not isinstance(
-            self.right, (SemanticPortAddress, PolicyFieldNavigation)
+        if not isinstance(self.left, (SemanticPortAddress, PolicyFieldNavigation, PolicyLiteral)) or not isinstance(
+            self.right, (SemanticPortAddress, PolicyFieldNavigation, PolicyLiteral)
         ):
             raise _shape("Policy compare structure operands are invalid", "INVALID_POLICY_STRUCTURE")
+        if isinstance(self.left, PolicyLiteral) and isinstance(self.right, PolicyLiteral):
+            raise _shape("Policy compare structure requires a semantic operand", "INVALID_POLICY_STRUCTURE")
         left, right = self.left, self.right
         if self.op in {"eq", "ne"}:
             canonical = tuple(sorted((left, right), key=_comparison_operand_key))
@@ -449,6 +491,8 @@ def _address_key(address: SemanticPortAddress) -> tuple[str, str]:
 def _comparison_operand_key(value: PolicyComparisonOperand) -> tuple[object, ...]:
     if isinstance(value, SemanticPortAddress):
         return ("address", *_address_key(value))
+    if isinstance(value, PolicyLiteral):
+        return ("literal", value.scalar_domain, value.value)
     return (
         "navigation",
         *_address_key(value.base),
@@ -484,7 +528,7 @@ def _shape(message: str, code: str) -> PolicyError:
 __all__ = [
     "Policy", "PolicyAll", "PolicyAny", "PolicyCompare", "PolicyComparisonOperand",
     "PolicyCompareStructureNodeV0", "PolicyConditionLoweredRefV0", "PolicyError",
-    "PolicyFieldNavigation", "PolicyLineage", "PolicyLineageRef", "PolicyLoweredRef",
+    "PolicyFieldNavigation", "PolicyLineage", "PolicyLineageRef", "PolicyLiteral", "PolicyLoweredRef",
     "PolicyNodeLineage", "PolicyOccurrence", "PolicyStructureNode", "PolicyStructureNodeV0",
     "PolicyStructureV0", "PolicyUnify",
 ]

@@ -1,6 +1,6 @@
 # Task Blueprint: FactGraph Policy authoring SDK
 
-- Status: scoped
+- Status: implementing
 - Created: 2026-08-14
 - Last Updated: 2026-08-14
 - Related Modules:
@@ -99,5 +99,5 @@ less strict.
 
 ## 10. Outcome / Deviations
 
-Scope frozen on 2026-08-14. To be completed after implementation and
-independent review.
+Implementation began on 2026-08-14 after the scoped audit and Q19 decision.
+Outcome is completed after documentation and independent review.

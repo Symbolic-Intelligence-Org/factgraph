@@ -23,6 +23,8 @@ from factgraph.application.evaluation_run_bundle_runtime import (
     _validate_native_where_bytes,
     _validate_proof_receipt_bytes,
     _where_from_wire,
+    _wire,
+    _unwire,
 )
 from factgraph.application.protocol import (
     EntitySelector,
@@ -30,6 +32,7 @@ from factgraph.application.protocol import (
     EvaluationQueryBinding,
     EvaluationQuerySelection,
     Policy,
+    PolicyLiteral,
     PolicyOccurrence,
     ProtocolShapeError,
     SemanticPortAddress,
@@ -230,6 +233,17 @@ class EvaluationRunBundleRuntimeTests(unittest.TestCase):
                 b'"binding":[],"pred_witnesses":[],"non_fact_steps":['
                 b'{"step_key":"c0.a0","kind":"cmp","status":"holds",'
                 b'"details":[["value",NaN]]}],"rule_refs":[],"rule_ref_edges":[]}'
+            )
+
+    def test_bundle_wire_whitelists_canonical_policy_literal_only(self) -> None:
+        literal = PolicyLiteral("time", 123456789)
+        self.assertEqual(_unwire(_wire(literal)), literal)
+        with self.assertRaises(ProtocolShapeError):
+            _unwire(
+                {
+                    "$type": "PolicyLiteral",
+                    "fields": {"scalar_domain": "time", "value": True},
+                }
             )
 
     def test_codec_fails_closed_for_shape_splice_size_and_plan_tag(self) -> None:

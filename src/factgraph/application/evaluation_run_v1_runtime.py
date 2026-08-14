@@ -103,6 +103,7 @@ from .protocol.policy import (
     PolicyConditionLoweredRefV0,
     PolicyFieldNavigation,
     PolicyLineage,
+    PolicyLiteral,
     PolicyLoweredRef,
     PolicyNodeLineage,
     PolicyStructureNodeV0,
@@ -636,7 +637,7 @@ def _field_path_from_wire(value: object, *, label: str) -> FieldPath:
 
 
 def _policy_operand_to_wire(
-    value: SemanticPortAddress | PolicyFieldNavigation,
+    value: SemanticPortAddress | PolicyFieldNavigation | PolicyLiteral,
 ) -> dict[str, object]:
     if isinstance(value, SemanticPortAddress):
         return {"kind": "address", "address": _semantic_address_to_wire(value)}
@@ -646,6 +647,12 @@ def _policy_operand_to_wire(
             "base": _semantic_address_to_wire(value.base),
             "field": _field_path_to_wire(value.field),
         }
+    if isinstance(value, PolicyLiteral):
+        return {
+            "kind": "literal",
+            "scalar_domain": value.scalar_domain,
+            "value": value.value,
+        }
     raise EvaluationRunRuntimeErrorV1(
         "policy structure comparison operand is malformed",
         code="EVALUATION_RUN_V1_PROGRAM_SHAPE_INVALID",
@@ -654,7 +661,7 @@ def _policy_operand_to_wire(
 
 def _policy_operand_from_wire(
     value: object, *, label: str
-) -> SemanticPortAddress | PolicyFieldNavigation:
+) -> SemanticPortAddress | PolicyFieldNavigation | PolicyLiteral:
     if not isinstance(value, Mapping) or not isinstance(value.get("kind"), str):
         raise EvaluationRunRuntimeErrorV1(
             f"{label} is malformed",
@@ -669,6 +676,18 @@ def _policy_operand_from_wire(
             return PolicyFieldNavigation(
                 _semantic_address_from_wire(row["base"], label=f"{label}.base"),
                 _field_path_from_wire(row["field"], label=f"{label}.field"),
+            )
+        except (TypeError, ValueError) as exc:
+            raise EvaluationRunRuntimeErrorV1(
+                f"{label} is malformed",
+                code="EVALUATION_RUN_V1_PROGRAM_SHAPE_INVALID",
+            ) from exc
+    if value["kind"] == "literal":
+        row = _exact_keys(value, frozenset({"kind", "scalar_domain", "value"}), label=label)
+        try:
+            return PolicyLiteral(
+                row["scalar_domain"],  # type: ignore[arg-type]
+                row["value"],  # type: ignore[arg-type]
             )
         except (TypeError, ValueError) as exc:
             raise EvaluationRunRuntimeErrorV1(

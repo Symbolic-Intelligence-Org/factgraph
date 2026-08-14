@@ -39,6 +39,7 @@ from factgraph.application.protocol import (
     PolicyAny,
     PolicyCompare,
     PolicyFieldNavigation,
+    PolicyLiteral,
     PolicyOccurrence,
     PolicyUnify,
     SemanticPortAddress,
@@ -60,7 +61,7 @@ class Person(Entity):
     score: int = Field()
 
 
-def _compiled_query_and_relation() -> tuple[
+def _compiled_query_and_relation(*, literal_threshold: int | None = None) -> tuple[
     CompiledDerivationPlan, dict, dict[str, tuple[ProjectedFact, ...]]
 ]:
     source = SDKStore([Person])
@@ -109,9 +110,20 @@ def _compiled_query_and_relation() -> tuple[
         schema_index=index,
     )
     space = SemanticAddressSpace((manage_rule_occurrence(rule, "pair"),))
+    root = PolicyOccurrence("pair")
     policy = compile_policy(
-        Policy("portable-person", PolicyOccurrence("pair")),
+        Policy(
+            "portable-person",
+            root if literal_threshold is None else PolicyAll((
+                root,
+                PolicyCompare.gt(
+                    SemanticPortAddress("pair", "age"),
+                    PolicyLiteral("int", literal_threshold),
+                ),
+            )),
+        ),
         address_space=space,
+        schema_index=index if literal_threshold is not None else None,
     )
     compiled = compile_evaluation_query(
         EvaluationQuery(
@@ -553,6 +565,28 @@ class PortableEvaluationRuntimeTests(unittest.TestCase):
             result.executions[0].rows[0].terms[1],
             ("int", 22),
         )
+
+    def test_real_compiled_policy_literal_runs_all_three_engines(self) -> None:
+        plan, schema_ir, relation = _compiled_query_and_relation(literal_threshold=12)
+
+        contract = validate_portable_deterministic_v1(
+            plan,
+            schema_ir=schema_ir,
+            effective_relations=relation,
+        )
+        self.assertEqual(contract.selected_head_var_names, ("$__projection_0", "$__projection_1"))
+        result = execute_portable_deterministic_v1(
+            plan,
+            schema_ir=schema_ir,
+            effective_relations=relation,
+        )
+
+        self.assertEqual(
+            tuple(item.engine for item in result.executions), ("native", "souffle", "problog")
+        )
+        self.assertEqual(len({item.selected_row_set_digest for item in result.executions}), 1)
+        self.assertEqual(len(result.executions[0].rows), 1)
+        self.assertEqual(result.executions[0].rows[0].terms[1], ("int", 22))
 
     def test_materialized_world_is_new_and_does_not_need_a_source_store(self) -> None:
         plan, schema_ir, relation = _compiled_query_and_relation()

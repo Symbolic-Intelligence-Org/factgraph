@@ -45,6 +45,11 @@ from factgraph.application.semantic_address_runtime import SemanticAddressSpace
 from factgraph.application.semantic_port_runtime import ResolvedRuleBundle
 
 from .errors import SDKStoreError
+from .policy_authoring import (
+    AuthoredPolicyTargetV1,
+    PolicyFieldHandle,
+    PolicyPortHandle,
+)
 
 if TYPE_CHECKING:
     from factgraph.application.goal_plan_v1_runtime import GoalPlanInvocationV1
@@ -62,7 +67,7 @@ class ProviderQueryTargetV1:
     still owns structured bind/select and branch-total checks.
     """
 
-    target: ResolvedRuleBundle | Policy | ResolvedEvaluationQueryTargetV1
+    target: ResolvedRuleBundle | Policy | ResolvedEvaluationQueryTargetV1 | AuthoredPolicyTargetV1
     provider: RelationProviderV1
 
     def __post_init__(self) -> None:
@@ -81,8 +86,20 @@ class EvaluationQueryBuilderV1:
     _expectations: tuple[ContainsRowExpectationV0, ...] = ()
     _provider: RelationProviderV1 | None = None
 
-    def bind(self, address: SemanticPortAddress, value: Any) -> "EvaluationQueryBuilderV1":
-        """Add one structured direct-port binding; dotted paths are not accepted."""
+    def bind(
+        self,
+        address: SemanticPortAddress | PolicyPortHandle,
+        value: Any,
+    ) -> "EvaluationQueryBuilderV1":
+        """Add one direct-port binding from a structured address or SDK handle."""
+
+        if isinstance(address, PolicyFieldHandle):
+            raise SDKStoreError(
+                "query bind accepts direct Policy ports, not field-navigation handles",
+                code="INVALID_QUERY_BINDING",
+            )
+        if isinstance(address, PolicyPortHandle):
+            address = address.address
 
         try:
             binding = EvaluationQueryBinding(address, value)
@@ -93,13 +110,28 @@ class EvaluationQueryBuilderV1:
     def select(
         self,
         alias: str,
-        source: SemanticPortAddress | EvaluationQueryFieldNavigationV0,
+        source: (
+            SemanticPortAddress
+            | EvaluationQueryFieldNavigationV0
+            | PolicyPortHandle
+            | PolicyFieldHandle
+        ),
     ) -> "EvaluationQueryBuilderV1":
         """Add one ordered direct-port or structured field projection."""
 
         try:
             selection: EvaluationQuerySelectionItem
-            if isinstance(source, SemanticPortAddress):
+            if isinstance(source, PolicyFieldHandle):
+                selection = EvaluationQueryNavigationSelectionV0(
+                    alias,
+                    EvaluationQueryFieldNavigationV0(
+                        source.navigation.base,
+                        source.navigation.field,
+                    ),
+                )
+            elif isinstance(source, PolicyPortHandle):
+                selection = EvaluationQuerySelection(alias, source.address)
+            elif isinstance(source, SemanticPortAddress):
                 selection = EvaluationQuerySelection(alias, source)
             elif isinstance(source, EvaluationQueryFieldNavigationV0):
                 selection = EvaluationQueryNavigationSelectionV0(alias, source)
@@ -156,7 +188,13 @@ class EvaluationQueryBuilderV1:
         scenario: ScenarioSpecV1 | None = None,
         evidence_scope: EvidenceScopeV1 | None = None,
         profile: EvaluationExecutionProfileV1 | None = None,
-        candidate: ResolvedRuleBundle | Policy | ResolvedEvaluationQueryTargetV1 | None = None,
+        candidate: (
+            ResolvedRuleBundle
+            | Policy
+            | ResolvedEvaluationQueryTargetV1
+            | AuthoredPolicyTargetV1
+            | None
+        ) = None,
         candidate_address_space: SemanticAddressSpace | None = None,
     ) -> "GoalPlanInvocationV1":
         """Compile one immutable V1 GoalPlan without evaluating it.
@@ -343,7 +381,13 @@ class ScenarioGoalPlanBuilderV1:
 
 def build_evaluation_query_builder(
     graph: "SDKStore",
-    target: ResolvedRuleBundle | Policy | ResolvedEvaluationQueryTargetV1 | ProviderQueryTargetV1,
+    target: (
+        ResolvedRuleBundle
+        | Policy
+        | ResolvedEvaluationQueryTargetV1
+        | AuthoredPolicyTargetV1
+        | ProviderQueryTargetV1
+    ),
     *,
     address_space: SemanticAddressSpace | None = None,
 ) -> EvaluationQueryBuilderV1:
@@ -353,6 +397,16 @@ def build_evaluation_query_builder(
     if isinstance(target, ProviderQueryTargetV1):
         provider = target.provider
         target = target.target
+    if isinstance(target, AuthoredPolicyTargetV1):
+        if address_space is not None:
+            raise SDKStoreError(
+                "AuthoredPolicyTargetV1 already carries its exact SemanticAddressSpace; "
+                "do not pass address_space=",
+                code="AUTHORED_POLICY_ADDRESS_SPACE_OVERRIDE",
+            )
+        authored_target = target
+        target = authored_target.policy
+        address_space = authored_target.address_space
     try:
         resolved = resolve_evaluation_query_target(
             target,

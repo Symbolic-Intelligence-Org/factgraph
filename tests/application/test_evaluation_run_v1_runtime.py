@@ -3,11 +3,14 @@ from __future__ import annotations
 import inspect
 import unittest
 from collections.abc import Mapping
+from copy import deepcopy
 from dataclasses import replace
 
 from factgraph.application import build_schema_index, encode_entity_ref
 from factgraph.application.evaluation_run_v1_runtime import (
     EvaluationRunRuntimeErrorV1,
+    _authored_policy_structure_from_wire,
+    _authored_policy_structure_to_wire,
     build_evaluation_replay_program_envelope_v1,
     capture_evaluation_replay_payload_v1,
     capture_evaluation_replay_world_v1,
@@ -40,6 +43,7 @@ from factgraph.application.protocol.policy import (
     PolicyCompare,
     PolicyCompareStructureNodeV0,
     PolicyFieldNavigation,
+    PolicyLiteral,
     PolicyOccurrence,
     PolicyStructureNodeV0,
     PolicyStructureV0,
@@ -606,6 +610,48 @@ class EvaluationRunV1RuntimeTests(unittest.TestCase):
         self.assertEqual(partial_comparison.authored_structure_relation, "captured")
         self.assertIsNotNone(partial_comparison.primary_policy_structure_digest)
         self.assertIsNone(partial_comparison.candidate_policy_structure_digest)
+
+    def test_authored_policy_structure_wire_round_trips_literal_and_rejects_noncanonical_value(self) -> None:
+        occurrence = PolicyOccurrence("left")
+        comparison = PolicyCompare.gt(
+            SemanticPortAddress("left", "age"),
+            PolicyLiteral("int", 12),
+        )
+        root = PolicyAll((occurrence, comparison))
+        structure = PolicyStructureV0(
+            root.node_id,
+            tuple(
+                sorted(
+                    (
+                        PolicyStructureNodeV0(
+                            occurrence.node_id,
+                            "occurrence",
+                            occurrence_alias="left",
+                        ),
+                        PolicyCompareStructureNodeV0(
+                            comparison.node_id,
+                            comparison.op,
+                            comparison.left,
+                            comparison.right,
+                        ),
+                        PolicyStructureNodeV0(
+                            root.node_id,
+                            "all",
+                            child_node_ids=tuple(child.node_id for child in root.children),
+                        ),
+                    ),
+                    key=lambda item: item.node_id,
+                )
+            ),
+        )
+        wire = _authored_policy_structure_to_wire(structure)
+        self.assertEqual(_authored_policy_structure_from_wire(wire), structure)
+
+        malformed = deepcopy(wire)
+        compare_wire = next(item for item in malformed["nodes"] if item["kind"] == "compare")
+        compare_wire["right"] = {"kind": "literal", "scalar_domain": "int", "value": True}
+        with self.assertRaises(EvaluationRunRuntimeErrorV1):
+            _authored_policy_structure_from_wire(malformed)
 
 
 if __name__ == "__main__":  # pragma: no cover

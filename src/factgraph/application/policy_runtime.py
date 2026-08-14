@@ -13,7 +13,7 @@ from .protocol.policy import (
     Policy, PolicyAll, PolicyAny, PolicyCompare, PolicyComparisonOperand,
     PolicyCompareStructureNodeV0, PolicyConditionLoweredRefV0, PolicyError,
     PolicyExpression, PolicyFieldNavigation, PolicyLineage, PolicyLineageRef,
-    PolicyLoweredRef, PolicyNode, PolicyNodeLineage, PolicyOccurrence, PolicyStage,
+    PolicyLiteral, PolicyLoweredRef, PolicyNode, PolicyNodeLineage, PolicyOccurrence, PolicyStage,
     PolicyStructureNode, PolicyStructureNodeV0, PolicyStructureV0, PolicyUnify,
 )
 from .protocol.rule import _PROJECTION_ID_PREFIX
@@ -41,9 +41,16 @@ _ORDERING_DOMAINS = frozenset({"int", "time"})
 class _ResolvedPolicyOperand:
     """Compiler-only scalar operand after trusted semantic/schema resolution."""
 
-    source_address: SemanticPortAddress
+    source_address: SemanticPortAddress | None
     scalar_domain: str
     lookup_predicate_id: str | None = None
+    literal: PolicyLiteral | None = None
+
+    def __post_init__(self) -> None:
+        if (self.source_address is None) == (self.literal is None):
+            raise ValueError("resolved Policy operand must be exactly one source or literal")
+        if self.literal is not None and self.lookup_predicate_id is not None:
+            raise ValueError("resolved Policy literal cannot require a field lookup")
 
 
 @dataclass(frozen=True)
@@ -381,11 +388,16 @@ def _validate_schema_index_for_space(
 
 
 def _compare_aliases(compare: PolicyCompare) -> set[str]:
-    return {
-        operand.base.occurrence_alias if isinstance(operand, PolicyFieldNavigation)
-        else operand.occurrence_alias
-        for operand in (compare.left, compare.right)
-    }
+    aliases: set[str] = set()
+    for operand in (compare.left, compare.right):
+        if isinstance(operand, PolicyLiteral):
+            continue
+        aliases.add(
+            operand.base.occurrence_alias
+            if isinstance(operand, PolicyFieldNavigation)
+            else operand.occurrence_alias
+        )
+    return aliases
 
 
 def _resolve_compare(
@@ -422,6 +434,13 @@ def _resolve_compare_operand(
     *,
     path: tuple[str, ...],
 ) -> _ResolvedPolicyOperand:
+    if isinstance(operand, PolicyLiteral):
+        return _ResolvedPolicyOperand(
+            source_address=None,
+            scalar_domain=operand.scalar_domain,
+            literal=operand,
+        )
+
     if isinstance(operand, SemanticPortAddress):
         try:
             resolved = address_space.resolve(operand)
@@ -690,7 +709,10 @@ def _materialize_policy_operand(
     side: Literal["left", "right"],
     operand: _ResolvedPolicyOperand,
     occupied: set[str],
-) -> tuple[Var, tuple[RuleExprPolicyCondition, ...]]:
+) -> tuple[Var | Const, tuple[RuleExprPolicyCondition, ...]]:
+    if operand.literal is not None:
+        return Const(operand.literal.value), ()
+    assert operand.source_address is not None  # _ResolvedPolicyOperand invariant.
     source = _branch_execution_var(
         plan,
         branch.branch_id,

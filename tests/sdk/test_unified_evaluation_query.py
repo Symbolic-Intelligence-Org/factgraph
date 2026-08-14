@@ -30,6 +30,7 @@ from factgraph.application.protocol import (
     PolicyAll,
     PolicyCompare,
     PolicyFieldNavigation,
+    PolicyLiteral,
     PolicyOccurrence,
     ScenarioFieldSubstitutionV0,
     ScenarioFieldSubstitutionSetV0,
@@ -454,6 +455,65 @@ class UnifiedEvaluationQueryTests(unittest.TestCase):
             {locator.evidence_kind for locator in compare_provenance.locators},
             {"condition"},
         )
+
+    def test_direct_policy_literal_comparison_executes_explains_and_captures(self) -> None:
+        graph = SDKStore([Person])
+        _seed(graph, "alice", age=22, score=9)
+        _seed(graph, "bob", age=9, score=7)
+        bundle = _bundle(graph)
+        space = SemanticAddressSpace((manage_rule_occurrence(bundle, "target"),))
+        comparison = PolicyCompare.gt(_address("target", "age"), PolicyLiteral("int", 12))
+        policy = Policy(
+            "adult",
+            PolicyAll((PolicyOccurrence("target"), comparison)),
+            version="1",
+        )
+        compiled = (
+            graph.query(policy, address_space=space)
+            .select("age", _address("target", "age"))
+            .compile()
+        )
+
+        result = graph.eval.evaluate(compiled, capture="run_bundle_v0")
+        self.assertEqual([row.bindings["age"]["value"] for row in result.rows], [22])
+        assert result.run_anchor is not None and result.run_bundle is not None
+        detached = evaluation_run_bundle_from_bytes(
+            evaluation_run_bundle_bytes(result.run_bundle)
+        )
+        self.assertEqual(detached, result.run_bundle)
+
+        live = result[0].explain()
+        self.assertEqual(live.status, "passed")
+        assert live.evidence is not None
+        conditions = live.evidence.paths[0].policy_conditions
+        self.assertEqual(len(conditions), 1)
+        self.assertEqual(conditions[0].role, "compare")
+        self.assertFalse(
+            any(
+                condition.atom.atom_id == atom.atom_id
+                for rule in live.evidence.paths[0].rules
+                if rule.role == "body"
+                for atom in rule.atoms
+                for condition in conditions
+            )
+        )
+
+        captured = detached.rows[0]
+        evidence = evaluation_run_bundle_evidence(
+            detached,
+            row_capture_digest=captured.row_capture_digest,
+        )
+        projection = project_policy_explanation_v0(
+            result.run_anchor,
+            evidence,
+            semantic_row_anchor_digest=result.run_anchor.row_anchors[0].semantic_anchor_digest,
+        )
+        node = next(item for item in projection.evaluation.nodes if item.node_id == comparison.node_id)
+        provenance = next(
+            item for item in projection.provenance.node_evidence if item.node_id == comparison.node_id
+        )
+        self.assertEqual(node.state, "holds")
+        self.assertEqual(len(provenance.locators), 1)
 
     def test_builder_forwards_narrow_scenario_without_creating_evidence(self) -> None:
         graph = SDKStore([Person])

@@ -20,6 +20,7 @@ from factgraph.application.protocol import (
     PolicyError,
     PolicyFieldNavigation,
     PolicyLineage,
+    PolicyLiteral,
     PolicyLoweredRef,
     PolicyNodeLineage,
     PolicyOccurrence,
@@ -467,6 +468,101 @@ class PolicyComparisonCompileTests(unittest.TestCase):
                 schema_index=index,
             )
         self.assertEqual(ordering_ctx.exception.code, "UNSUPPORTED_POLICY_COMPARE_ORDERING")
+
+    def test_literal_is_canonical_typed_and_sealed_into_compare_identity(self) -> None:
+        literal = PolicyLiteral("int", 12)
+        self.assertEqual(literal, PolicyLiteral("int", 12))
+        self.assertNotEqual(literal, PolicyLiteral("int", 13))
+        with self.assertRaises(PolicyError) as bool_ctx:
+            PolicyLiteral("int", True)  # type: ignore[arg-type]
+        self.assertEqual(bool_ctx.exception.code, "INVALID_POLICY_LITERAL")
+        with self.assertRaises(PolicyError) as range_ctx:
+            PolicyLiteral("time", 1 << 63)
+        self.assertEqual(range_ctx.exception.code, "INVALID_POLICY_LITERAL")
+        with self.assertRaises(PolicyError) as domain_ctx:
+            PolicyLiteral("float64", 12)  # type: ignore[arg-type]
+        self.assertEqual(domain_ctx.exception.code, "INVALID_POLICY_LITERAL")
+        with self.assertRaises(PolicyError) as source_ctx:
+            PolicyCompare.gt(PolicyLiteral("int", 1), PolicyLiteral("int", 2))
+        self.assertEqual(source_ctx.exception.code, "INVALID_POLICY_COMPARE")
+
+        bundle = _person_bundle()
+        space = _space(bundle, "left")
+        first = compile_policy(
+            Policy(
+                "adult",
+                PolicyAll((_occ("left"), PolicyCompare.gt(_address("left", "age"), literal))),
+                version="1",
+            ),
+            address_space=space,
+            schema_index=_index(),
+        )
+        same = compile_policy(
+            Policy(
+                "adult",
+                PolicyAll((_occ("left"), PolicyCompare.gt(_address("left", "age"), PolicyLiteral("int", 12)))),
+                version="1",
+            ),
+            address_space=space,
+            schema_index=_index(),
+        )
+        changed = compile_policy(
+            Policy(
+                "adult",
+                PolicyAll((_occ("left"), PolicyCompare.gt(_address("left", "age"), PolicyLiteral("int", 13)))),
+                version="1",
+            ),
+            address_space=space,
+            schema_index=_index(),
+        )
+        self.assertEqual(first.policy_digest, same.policy_digest)
+        self.assertEqual(first.policy_structure, same.policy_structure)
+        self.assertNotEqual(first.policy_digest, changed.policy_digest)
+        self.assertNotEqual(first.policy_structure.structure_digest, changed.policy_structure.structure_digest)
+        compare_refs = next(
+            item.lowered_refs
+            for item in first.lineage.authored_nodes
+            if item.node_kind == "compare"
+        )
+        self.assertEqual({getattr(ref, "role", None) for ref in compare_refs}, {"compare"})
+        condition = first._policy_conditions[0]
+        self.assertEqual(condition.atom, CmpAtom("gt", condition.atom.lhs, Const(12)))
+
+    def test_literal_requires_matching_domain_and_preserves_branch_totality(self) -> None:
+        bundle = _person_bundle()
+        space = _space(bundle, "common", "left", "right")
+        with self.assertRaises(PolicyError) as mismatch_ctx:
+            compile_policy(
+                Policy(
+                    "bad-time",
+                    PolicyAll((_occ("common"), PolicyCompare.gt(_address("common", "age"), PolicyLiteral("time", 1)))),
+                ),
+                address_space=_space(bundle, "common"),
+                schema_index=_index(),
+            )
+        self.assertEqual(mismatch_ctx.exception.code, "INCOMPATIBLE_POLICY_COMPARE_DOMAIN")
+
+        partial = Policy(
+            "partial-literal",
+            PolicyAll((
+                _occ("common"),
+                PolicyAny((_occ("left"), _occ("right"))),
+                PolicyCompare.gt(_address("left", "age"), PolicyLiteral("int", 12)),
+            )),
+        )
+        with self.assertRaises(PolicyError) as partial_ctx:
+            compile_policy(partial, address_space=space, schema_index=_index())
+        self.assertEqual(partial_ctx.exception.code, "PARTIAL_BRANCH_CONSTRAINT")
+        self.assertEqual(partial_ctx.exception.details["not_guaranteed_aliases"], ["left"])
+
+        navigation = PolicyCompare.gt(_nav("common"), PolicyLiteral("int", 12))
+        compiled = compile_policy(
+            Policy("nav-literal", PolicyAll((_occ("common"), navigation))),
+            address_space=_space(bundle, "common"),
+            schema_index=_index(),
+        )
+        refs = next(item.lowered_refs for item in compiled.lineage.authored_nodes if item.node_id == navigation.node_id)
+        self.assertEqual({getattr(ref, "role", None) for ref in refs}, {"left_field", "compare"})
 
 
 class PolicyAdmissionTests(unittest.TestCase):

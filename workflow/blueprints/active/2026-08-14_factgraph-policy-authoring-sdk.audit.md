@@ -8,6 +8,7 @@
 | --- | --- | --- | --- |
 | 2026-08-14 | draft | Blueprint and paired audit created | Q19 is adopted from explicit user direction; implementation waits for scope self-check. |
 | 2026-08-14 | scoped | Scope self-check completed | The façade is additive; Q12 is superseded only for canonical `int`/`time` literal operands. No registry, second evaluator, host-language Boolean syntax or native fallback enters scope. |
+| 2026-08-14 | implementing | Core and façade implementation started | Literal IR/codec/compiler work and the SDK façade run in parallel but converge on the existing Policy/Query compiler path. |
 
 ## Decision Notes
 

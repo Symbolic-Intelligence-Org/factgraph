@@ -2281,14 +2281,28 @@ class SDKStore:
     def schema_ir(self) -> dict[str, Any]:
         return self._schema_ir
 
+    def policy(self, policy_id: str, *, version: str | None = None) -> Any:
+        """Start one typed, in-process Policy authoring draft.
+
+        The draft emits the existing managed Policy and SemanticAddressSpace
+        contract when ``build(...)`` is called. It is not a string registry or
+        a second evaluator; the resulting target enters the normal
+        :meth:`query` compiler path.
+        """
+
+        from .policy_authoring import policy_draft
+
+        return policy_draft(self, policy_id, version=version)
+
     def query(self, target: Any, *, address_space: Any | None = None) -> Any:
         """Start a typed Query over one resolved Rule or managed Policy.
 
         This is a target-normalization facade, never a string registry lookup.
-        ``target`` must be a resolved Rule or managed Policy (or their explicit
-        provider composite); a bare ``RelationProviderV1`` is rejected because
-        it has no independent Query projection. ``bind`` accepts only :class:`SemanticPortAddress`; ``select`` accepts
-        direct ports and the documented field-navigation projection.
+        ``target`` must be a resolved Rule, raw managed Policy, SDK-authored
+        Policy target, or their explicit provider composite; a bare
+        ``RelationProviderV1`` is rejected because it has no independent Query
+        projection. SDK-authored Policy port and navigation handles are accepted
+        by ``bind`` / ``select`` and lower to the same structured address forms.
 
         The established terminal methods (``compile()``, ``evaluate()``,
         ``capture()``, and V0 ``what_if(...)``) retain their V0 compatibility
