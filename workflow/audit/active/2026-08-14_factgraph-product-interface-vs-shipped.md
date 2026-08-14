@@ -14,7 +14,7 @@
     execution semantics, structured Explain, and provenance boundaries
 - Outputs / Downstream:
   - [Q20 product-interface decision](../../design/decisions/active/2026-08-14_q20-factgraph-product-interface-decision.md)
-  - [Q20 implementation blueprint](../../blueprints/active/2026-08-14_factgraph-product-interface.md)
+  - [Q20 implementation blueprint](../../blueprints/archive/2026-08-14_factgraph-product-interface.md)
 - Related:
   - [Q18 final-closure audit](2026-08-14_factgraph-final-closure-vs-shipped.md)
   - [Q19 authoring audit](../archive/2026-08-14_factgraph-policy-authoring-sdk-vs-shipped.md)

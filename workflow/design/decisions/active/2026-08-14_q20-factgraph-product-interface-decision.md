@@ -14,7 +14,7 @@
   - [Q19 Policy authoring](2026-08-14_q19-policy-authoring-sdk-literal-comparison-decision.md)
   - 2026-08-10 Meander product-design session export, as rationale only
 - Outputs / Downstream:
-  - [Q20 implementation blueprint](../../../blueprints/active/2026-08-14_factgraph-product-interface.md)
+  - [Q20 implementation blueprint](../../../blueprints/archive/2026-08-14_factgraph-product-interface.md)
 - Branch: `codex/v0.3.0-impl-factgraph-product-interface-2026-08-14`
 - Depends on: Q18, Q19
 
@@ -249,7 +249,7 @@ The initial V2 models are:
 
 - `DeterministicSemanticsV2`, preserving V1-style behavior; and
 - `ProbLogPointSemanticsV2`, an explicit `independent_bernoulli_v1` model for
-  exact point-probability facts and explicit weighted choices.
+  canonically declared point-probability facts and explicit weighted choices.
 
 Only the latter accepts probabilistic Scenario facts or choice models. A
 `for_choice(...)` attachment may validate/activate an already-authored choice
@@ -275,6 +275,13 @@ only `rows` plus certainty and comparison of those observations. It rejects
 truth conversion until a separately typed probability expectation is adopted.
 Zero rows mean no observed supported row, not a probability/boolean proof.
 Native/Soufflé frames are typed `unsupported`, not fabricated canonical frames.
+
+The declared point decimal is exact at the Scenario/profile boundary, but the
+current ProbLog adapter has an explicit `problog_float64_v1` materialization
+boundary. Every successful frame seals the declared decimal, float64 hex and
+rendered export text (or `omitted_zero`); Result/Explain expose that capture.
+An observed row probability is therefore an engine observation, not a claim
+that ProbLog evaluated arbitrary-precision decimal arithmetic.
 
 `EvaluationRunV2` is a new strict tagged run/replay carrier, never a sidecar
 inside `EvaluationRunV1`. It seals the V2 plan/target and asset bindings,
@@ -408,24 +415,24 @@ their equivalence.
 
 ## 7. Acceptance criteria
 
-- [ ] Rule and Policy have symmetric builder/direct SDK entry points with
+- [x] Rule and Policy have symmetric builder/direct SDK entry points with
   AssetMeta, while raw compatibility APIs remain valid.
-- [ ] Policy use/occurrence remains local, typed and graph-schema-resolved;
+- [x] Policy use/occurrence remains local, typed and graph-schema-resolved;
   no registry/string lookup appears.
-- [ ] WeightedChoice has stable topology/digest/Explain representation and a
+- [x] WeightedChoice has stable topology/digest/Explain representation and a
   typed engine support matrix.
-- [ ] Scenario `meta` strictly lowers into semantic/provenance/display lanes;
+- [x] Scenario `meta` strictly lowers into semantic/provenance/display lanes;
   semantic and resolution-evidence digest lanes are independently verifiable.
-- [ ] Exact-point probabilistic premises execute and replay under the sealed
+- [x] Exact-point probabilistic premises execute and replay under the sealed
   ProbLog V2 profile, while Native/Soufflé/portable reject them explicitly.
-- [ ] Stable Rule/occurrence/choice execution attachments work without lowered
+- [x] Stable Rule/occurrence/choice execution attachments work without lowered
   branch IDs, with duplicate/conflict/splice rejection.
-- [ ] V2 product views and structured explanation data render policy,
+- [x] V2 product views and structured explanation data render policy,
   Scenario, EvidenceGraph and provenance without prose parsing or false
   negative proof.
-- [ ] Agent/source bridge preserves legacy write compatibility and does not
+- [x] Agent/source bridge preserves legacy write compatibility and does not
   submit rejected `confidence` metadata.
-- [ ] Existing V0/V1 and deterministic Native/Soufflé/ProbLog regression
+- [x] Existing V0/V1 and deterministic Native/Soufflé/ProbLog regression
   suites remain green.
 
 ## 8. Decision record
@@ -433,3 +440,4 @@ their equivalence.
 | Date | Stage | Event | Notes |
 | --- | --- | --- | --- |
 | 2026-08-14 | adopted | User locked product-interface direction | Symmetric authoring, strict Scenario meta, stable execution profile, weighted choice, structured Explain and safe provenance were accepted together. |
+| 2026-08-14 | implemented | Q20 implementation and independent review complete | The sealed V2 product surface, strict source bridge and public executable tutorial satisfy the acceptance criteria; support limits remain explicit in module docs. |

@@ -6,7 +6,7 @@
   blueprint before implementation scope is anchored.
 - Inputs:
   - [Q20 decision](../../design/decisions/active/2026-08-14_q20-factgraph-product-interface-decision.md)
-  - [Q20 blueprint](../../blueprints/active/2026-08-14_factgraph-product-interface.md)
+  - [Q20 blueprint](../../blueprints/archive/2026-08-14_factgraph-product-interface.md)
   - Q18/Q19 source and protocol contracts
 - Branch: `codex/v0.3.0-impl-factgraph-product-interface-2026-08-14`
 

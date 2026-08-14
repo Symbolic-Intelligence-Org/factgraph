@@ -1,6 +1,6 @@
 # Task Blueprint: FactGraph product interface
 
-- Status: scoped
+- Status: archived
 - Created: 2026-08-14
 - Last Updated: 2026-08-14
 - Related Modules:
@@ -170,26 +170,26 @@ the invalid `confidence` write metadata path.
 
 ## 7. Acceptance
 
-- [ ] Rule/Policy authoring APIs and AssetMeta obey Q20 §4.1 and Q19 ownership
+- [x] Rule/Policy authoring APIs and AssetMeta obey Q20 §4.1 and Q19 ownership
   constraints, with full raw/legacy regression coverage.
-- [ ] WeightedChoice has deterministic canonical identity, typed failure matrix,
+- [x] WeightedChoice has deterministic canonical identity, typed failure matrix,
   ProbLog execution/replay/Explain coverage and no ordinary-Any reinterpretation.
-- [ ] Scenario V2 strict metadata reaches engine/replay/Explain, distinguishes
+- [x] Scenario V2 strict metadata reaches engine/replay/Explain, distinguishes
   semantic/provenance/display lanes and detects tamper/splice/conflict.
-- [ ] Deterministic and ProbLog V2 profiles reject unsupported combinations,
+- [x] Deterministic and ProbLog V2 profiles reject unsupported combinations,
   pin every attachment, and never use lowered branch strings.
-- [ ] Product result/explanation data works from sealed runs only; V0 renderer
+- [x] Product result/explanation data works from sealed runs only; V0 renderer
   behavior remains unchanged and zero/summary evidence is not fabricated.
-- [ ] Provenance bridge safely represents supported extraction refs, preserves
+- [x] Provenance bridge safely represents supported extraction refs, preserves
   legacy source fields, and no longer sends rejected `confidence` meta.
-- [ ] Baseline/effective paired Explain proves a masked captured witness remains
+- [x] Baseline/effective paired Explain proves a masked captured witness remains
   captured support and only a synthetic effective witness carries Scenario
   provenance.
-- [ ] Profile/asset/choice/world/replay field splices and a same-row changed
+- [x] Profile/asset/choice/world/replay field splices and a same-row changed
   probability are fail-closed or represented as a certainty delta as specified.
-- [ ] Real Native/Soufflé/ProbLog deterministic tests and real ProbLog V2
+- [x] Real Native/Soufflé/ProbLog deterministic tests and real ProbLog V2
   probabilistic tests pass; unavailable engine behavior is typed and tested.
-- [ ] Module docs, API docs and a runnable notebook reflect exact support
+- [x] Module docs, API docs and a runnable notebook reflect exact support
   boundaries.
 
 ## 8. Implementation Plan
@@ -228,4 +228,40 @@ the invalid `confidence` write metadata path.
 
 ## 10. Outcome / Deviations
 
-To be completed only after independent implementation and verification review.
+Implemented as an additive V2 product surface. The main deliverables are:
+
+- Symmetric `fg.rule_builder` / `fg.build_rule` and `fg.policy_builder` /
+  `fg.build_policy` APIs, with separately sealed `AssetMeta`. Product Rule
+  semantic ports accept public SDK descriptors such as
+  `{"person": Person, "age": Person.age}`; no application protocol import is
+  required for the ordinary path.
+- Intrinsic `PolicyWeightedChoice` topology with sealed arm/key identity. It
+  is only lowered by the controlled V2 ProbLog path; raw rewrapping and all
+  legacy/V1 terminals reject it rather than reinterpret it as `Any`.
+- Strict `ScenarioSpecV2` metadata lanes for fact semantics, opaque provenance
+  and display annotations, plus sealed V2 profile/run/replay carriers. The
+  ProbLog point profile records `problog_float64_v1` materialization—including
+  `omitted_zero`—so a submitted Decimal is not confused with an engine row
+  observation.
+- Data-first V2 Result/Explain views and an SDK outcome facade. They expose
+  captured Scenario/provenance, profile, probability materialization and
+  choice topology; they do not fabricate a ProbLog EvidenceGraph or a
+  negative proof. V0 `Explanation.repr`/`.narrate()` remain unchanged.
+- A neutral Agent extraction-provenance bridge and removal of the invalid
+  `confidence` write metadata. This deliberately does **not** migrate all
+  legacy Agent writes into a Meander SourceRecord/FactBinding system.
+
+Independent final verification on the implementation branch:
+
+- `tests/application tests/sdk`: **749 passed, 182 subtests**;
+- Q20 adversarial/protocol/source cohort: **57 passed, 7 subtests**;
+- notebook `examples/09_product_scenario_execution_v2.ipynb`: **11/11** code
+  cells executed by the real `factpy` kernel with no errors;
+- `ruff check`, focused `ruff format --check`, focused mypy, and
+  `git diff --check`: clean.
+
+Intentional boundaries remain: deterministic three-engine parity stays in the
+Q18 portable profile; V2 probability and `WeightedChoice` are ProbLog-only
+with typed Native/Soufflé unsupported frames; V2 native/ProbLog Explain
+reports an explicit unavailable EvidenceGraph when none was captured; full
+SourceRecord custody/admission/retention remains a Meander responsibility.
