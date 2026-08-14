@@ -31,7 +31,7 @@ ScenarioRun, bundle, EvaluateResult, or legacy SDK evaluation semantics.
 
 | Check | Result |
 | --- | --- |
-| `PYTHONPATH=src /Users/zhenzhili/miniforge3/envs/factpy/bin/python -m pytest tests/application tests/sdk tests/test_sdk_find_partial_identity.py tests/test_v1_public_surface_exports.py -q` | **687 passed, 175 subtests passed** after the Explain/portable corrections |
+| `PYTHONPATH=src /Users/zhenzhili/miniforge3/envs/factpy/bin/python -m pytest tests/application tests/sdk tests/test_sdk_find_partial_identity.py tests/test_v1_public_surface_exports.py -q` | **688 passed, 175 subtests passed** after the Explain and portable-parity corrections |
 | Focused Explain / portable / V1 protocol-runtime-SDK corpus | **83 passed, 17 subtests passed** after final type/format hygiene; independent Explain adversarial cohort: **53 passed** |
 | `ruff format --check` over all newly added V1 production/test modules and changed files without inherited formatter debt; `ruff check` over modified Python files | passed |
 | `/Users/zhenzhili/miniforge3/bin/mypy --follow-imports=skip` over the V1 production protocol/runtime modules | passed, no issues |
@@ -46,6 +46,17 @@ ScenarioRun, bundle, EvaluateResult, or legacy SDK evaluation semantics.
   it against the sealed program/target/world pins, then recomputes the graph and
   Policy-node `HOLDS`/`FAILS`/`NOT_REACHED` projection from the captured relation
   only. Repeated tests and a separate adversarial review verify this correction.
+
+- **Resolved portable-parity correction:** a post-closure cross-entity
+  `PolicyFieldNavigation` / `PolicyCompare` probe exposed a Soufflé support
+  reconstruction defect: two occurrences of the same predicate were collapsed
+  by predicate id before hidden bindings were rebuilt. The adapter now keeps
+  witnesses keyed by predicate *occurrence* until reconstruction is complete,
+  then produces the stable predicate-keyed receipt view. A real Native /
+  Soufflé / ProbLog regression covers two distinct `Person` occurrences,
+  field navigation and comparison; selected-row parity now passes. This is
+  still a narrow positive deterministic profile, never a universal syntax or
+  proof-parity claim.
 
 - Whole-repository bare `pytest -q` cannot complete collection in this pinned
   baseline because `src/service/static_ui.py` imports

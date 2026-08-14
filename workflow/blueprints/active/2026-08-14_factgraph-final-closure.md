@@ -204,7 +204,7 @@ explicitly rejected. Generic NAF, global closure, signed negative facts,
 Actions, Provider sandboxing, source authority and Meander Plan/Package/
 Translator ownership remain out of scope exactly as Q18 specifies.
 
-The final direct verification on the pinned `factpy` environment: 687 passed
+The final direct verification on the pinned `factpy` environment: 688 passed
 and 175 subtests across `tests/application`, `tests/sdk`, and public-surface
 checks. Scoped Ruff, MyPy and diff checks pass; formatter checks pass for the
 new V1 modules/tests and modified files without inherited formatting debt. The
@@ -214,3 +214,12 @@ blocked by a pre-existing missing `render_evidence_graph_html` import used by
 service/agent tests and unrelated third-party test layout. Those paths are
 unchanged from the baseline; see the final verification record for precise
 commands and evidence.
+
+After that verification, a deliberately harder portable probe with two
+distinct occurrences of the same predicate, `PolicyFieldNavigation`, and
+`PolicyCompare` found a Soufflé support-reconstruction defect. The adapter now
+keeps selected witnesses keyed by predicate occurrence while rebuilding hidden
+bindings, then emits the compatible predicate-keyed receipt view. A real
+Native/Soufflé/ProbLog row-set regression now passes; this correction is
+recorded in the paired final verification rather than hidden as a baseline
+assumption.

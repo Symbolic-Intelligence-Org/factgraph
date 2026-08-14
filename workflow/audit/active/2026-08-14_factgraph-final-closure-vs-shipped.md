@@ -121,7 +121,7 @@ then deterministically recomputes a positive-row EvidenceGraph and
 Policy-node `HOLDS`/`FAILS`/`NOT_REACHED` projection from the captured relation
 only. It neither treats the graph as directly captured nor claims portable
 proof parity. The repeat pinned-environment application/SDK corpus passed
-**687 tests and 175 subtests**, and the independent adversarial audit was
+**688 tests and 175 subtests**, and the independent adversarial audit was
 **CLEAR**. This audit is therefore final closure evidence, while retaining the
 earlier reopening as historical record.
 The bare repository-wide test command remains blocked during collection by a
@@ -130,3 +130,10 @@ baseline `service.static_ui` import of missing
 third-party test package layout errors. Neither source path changed on this
 branch; this is recorded as an unrelated carry-forward rather than silently
 fixed in the FactGraph closure.
+
+A final portable cross-entity field-navigation/comparison probe then found a
+Soufflé occurrence-identity defect in support-binding reconstruction. Its
+repair preserves each predicate condition's witness identity until bindings
+are complete and is guarded by a real Native/Soufflé/ProbLog parity test. This
+validates the declared positive deterministic profile without expanding it
+into a universal cross-engine proof contract.
