@@ -176,8 +176,7 @@ class EvidenceTree:
         ):
             raise ValueError("tree.policy_conditions must be an EvidencePolicyCondition tuple")
         coordinates = tuple(
-            (item.policy_node_id, item.condition_id, item.role)
-            for item in self.policy_conditions
+            (item.policy_node_id, item.condition_id, item.role) for item in self.policy_conditions
         )
         if len(coordinates) != len(set(coordinates)):
             raise ValueError("tree.policy_conditions must have unique coordinates")
@@ -212,9 +211,61 @@ class EvidenceGraph:
 
 
 @dataclass(frozen=True)
+class EvidenceProbeBranchTerminalBindings:
+    """Canonical native terminal environments for one probed branch.
+
+    This is deliberately an execution-side inventory rather than EvidenceGraph
+    provenance: it records every surviving full environment after the branch's
+    final materialized atom.  A consumer that projects away variables can use
+    it to detect whether one visible row corresponds to several hidden native
+    bindings.  Empty ``environments`` is a valid failed or blocked branch; it
+    does not express a negative proof.
+
+    Values retain their native canonical representation (not display-rendered
+    values).  The prober supplies them already sorted and de-duplicated; this
+    DTO only freezes each mapping so a caller cannot mutate the captured
+    inventory through the public result.
+    """
+
+    branch_id: str
+    environments: tuple[Mapping[str, Any], ...] = ()
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.branch_id, str) or not self.branch_id:
+            raise ValueError("branch_id must be a non-empty string")
+        if not isinstance(self.environments, tuple):
+            raise ValueError("environments must be a tuple")
+        frozen: list[Mapping[str, Any]] = []
+        for environment in self.environments:
+            if not isinstance(environment, Mapping):
+                raise ValueError("environment must be a mapping")
+            if not all(isinstance(name, str) for name in environment):
+                raise ValueError("environment keys must be strings")
+            frozen.append(MappingProxyType(dict(sorted(environment.items()))))
+        object.__setattr__(self, "environments", tuple(frozen))
+
+
+@dataclass(frozen=True)
 class EvidenceProbeResult:
     paths: tuple[EvidenceTree, ...]
     certainty: Certainty | None = BOOLEAN_CERTAINTY
+    terminal_bindings: tuple[EvidenceProbeBranchTerminalBindings, ...] = ()
+
+    def __post_init__(self) -> None:
+        # Preserve the historical construction contract when the opt-in
+        # inventory is absent.  Only validate the new cross-field invariant.
+        if self.terminal_bindings == ():
+            return
+        if not isinstance(self.terminal_bindings, tuple) or not all(
+            isinstance(item, EvidenceProbeBranchTerminalBindings) for item in self.terminal_bindings
+        ):
+            raise ValueError(
+                "terminal_bindings must be an EvidenceProbeBranchTerminalBindings tuple"
+            )
+        path_ids = tuple(path.tree_id for path in self.paths)
+        branch_ids = tuple(item.branch_id for item in self.terminal_bindings)
+        if branch_ids != path_ids:
+            raise ValueError("terminal_bindings must align with paths by branch_id")
 
 
 def evidence_graph_to_dict(graph: EvidenceGraph) -> dict[str, Any]:
@@ -263,8 +314,7 @@ def _path_to_dict(path: EvidenceTree | EvidenceTimeline) -> dict[str, Any]:
         # conditions.  Readers nevertheless accept the field when present.
         if path.policy_conditions:
             row["policy_conditions"] = [
-                _policy_condition_to_dict(condition)
-                for condition in path.policy_conditions
+                _policy_condition_to_dict(condition) for condition in path.policy_conditions
             ]
         return row
     if isinstance(path, EvidenceTimeline):
@@ -272,7 +322,9 @@ def _path_to_dict(path: EvidenceTree | EvidenceTimeline) -> dict[str, Any]:
             "kind": "timeline",
             "timeline_id": path.timeline_id,
             "status": path.status,
-            "events": [_atom_to_dict(event) for event in path.events if isinstance(event, EvidenceAtom)],
+            "events": [
+                _atom_to_dict(event) for event in path.events if isinstance(event, EvidenceAtom)
+            ],
             "certainty": _certainty_to_dict(path.certainty),
             "metadata": _to_jsonable(path.metadata),
         }
@@ -299,8 +351,7 @@ def _path_from_dict(row: Any) -> EvidenceTree | EvidenceTimeline:
             rules=tuple(_rule_from_dict(rule) for rule in raw_rules),
             joins=tuple(_join_from_dict(join) for join in raw_joins),
             policy_conditions=tuple(
-                _policy_condition_from_dict(condition)
-                for condition in raw_policy_conditions
+                _policy_condition_from_dict(condition) for condition in raw_policy_conditions
             ),
             certainty=_certainty_from_dict(row.get("certainty")),
             metadata=_require_mapping(row.get("metadata", {}), "tree.metadata"),
@@ -396,7 +447,9 @@ def _port_ref_from_dict(row: Any) -> PortRef:
     if not isinstance(row, Mapping):
         raise ValueError("port ref row must be Mapping[str, Any]")
     return PortRef(
-        rule_occurrence_alias=_require_str(row.get("rule_occurrence_alias"), "port.rule_occurrence_alias"),
+        rule_occurrence_alias=_require_str(
+            row.get("rule_occurrence_alias"), "port.rule_occurrence_alias"
+        ),
         port_name=_require_str(row.get("port_name"), "port.port_name"),
     )
 
@@ -427,11 +480,24 @@ def _atom_from_dict(row: Any) -> EvidenceAtom:
 
 def _form_to_dict(form: AtomForm) -> dict[str, Any]:
     if isinstance(form, Fact):
-        return {"kind": "fact", "predicate": form.predicate, "terms": [_term_to_dict(term) for term in form.terms]}
+        return {
+            "kind": "fact",
+            "predicate": form.predicate,
+            "terms": [_term_to_dict(term) for term in form.terms],
+        }
     if isinstance(form, Compare):
-        return {"kind": "compare", "op": form.op, "left": _term_to_dict(form.left), "right": _term_to_dict(form.right)}
+        return {
+            "kind": "compare",
+            "op": form.op,
+            "left": _term_to_dict(form.left),
+            "right": _term_to_dict(form.right),
+        }
     if isinstance(form, Builtin):
-        return {"kind": "builtin", "builtin_kind": form.kind, "operands": [_term_to_dict(term) for term in form.operands]}
+        return {
+            "kind": "builtin",
+            "builtin_kind": form.kind,
+            "operands": [_term_to_dict(term) for term in form.operands],
+        }
     if isinstance(form, Aggregate):
         return {
             "kind": "aggregate",
@@ -449,7 +515,9 @@ def _form_from_dict(row: Any) -> AtomForm:
     if kind == "fact":
         return Fact(
             predicate=_require_str(row.get("predicate"), "fact.predicate"),
-            terms=tuple(_term_from_dict(term) for term in _require_list(row.get("terms", []), "fact.terms")),
+            terms=tuple(
+                _term_from_dict(term) for term in _require_list(row.get("terms", []), "fact.terms")
+            ),
         )
     if kind == "compare":
         return Compare(
@@ -460,20 +528,34 @@ def _form_from_dict(row: Any) -> AtomForm:
     if kind == "builtin":
         return Builtin(
             kind=_require_str(row.get("builtin_kind"), "builtin.kind"),
-            operands=tuple(_term_from_dict(term) for term in _require_list(row.get("operands", []), "builtin.operands")),
+            operands=tuple(
+                _term_from_dict(term)
+                for term in _require_list(row.get("operands", []), "builtin.operands")
+            ),
         )
     if kind == "aggregate":
         return Aggregate(
             kind=_require_str(row.get("aggregate_kind"), "aggregate.kind"),
-            body_terms=tuple(_term_from_dict(term) for term in _require_list(row.get("body_terms", []), "aggregate.body_terms")),
-            head_terms=tuple(_term_from_dict(term) for term in _require_list(row.get("head_terms", []), "aggregate.head_terms")),
+            body_terms=tuple(
+                _term_from_dict(term)
+                for term in _require_list(row.get("body_terms", []), "aggregate.body_terms")
+            ),
+            head_terms=tuple(
+                _term_from_dict(term)
+                for term in _require_list(row.get("head_terms", []), "aggregate.head_terms")
+            ),
         )
     raise ValueError("atom form kind must be fact, compare, builtin, or aggregate")
 
 
 def _term_to_dict(term: BoundVar | Const) -> dict[str, Any]:
     if isinstance(term, BoundVar):
-        return {"kind": "bound_var", "name": term.name, "value": _to_jsonable(term.value), "bound_by": term.bound_by}
+        return {
+            "kind": "bound_var",
+            "name": term.name,
+            "value": _to_jsonable(term.value),
+            "bound_by": term.bound_by,
+        }
     if isinstance(term, Const):
         return {"kind": "const", "value": _to_jsonable(term.value)}
     raise ValueError("term must be BoundVar or Const")
@@ -519,12 +601,18 @@ def _verdict_from_dict(row: Any) -> Verdict:
     if kind == "holds":
         return Holds(
             certainty=_certainty_from_dict(row.get("certainty")) or BOOLEAN_CERTAINTY,
-            support=tuple(_source_from_dict(source) for source in _require_list(row.get("support", []), "verdict.support")),
+            support=tuple(
+                _source_from_dict(source)
+                for source in _require_list(row.get("support", []), "verdict.support")
+            ),
         )
     if kind == "fails":
         return Fails(
             certainty=_certainty_from_dict(row.get("certainty")) or BOOLEAN_CERTAINTY,
-            support=tuple(_source_from_dict(source) for source in _require_list(row.get("support", []), "verdict.support")),
+            support=tuple(
+                _source_from_dict(source)
+                for source in _require_list(row.get("support", []), "verdict.support")
+            ),
         )
     if kind == "not_reached":
         return NotReached(blocked_by=_optional_str(row.get("blocked_by"), "verdict.blocked_by"))
@@ -676,6 +764,7 @@ __all__ = [
     "EvidenceGraph",
     "EvidenceJoin",
     "EvidencePolicyCondition",
+    "EvidenceProbeBranchTerminalBindings",
     "EvidenceProbeResult",
     "EvidenceRule",
     "EvidenceTimeline",

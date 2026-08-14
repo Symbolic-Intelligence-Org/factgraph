@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+import json
 import unittest
 from unittest.mock import patch
 
@@ -24,6 +25,7 @@ from factgraph.application.portable_evaluation_runtime import (
 from factgraph.application.evaluation_run_v1_runtime import (
     EvaluationRunRuntimeErrorV1,
     ScenarioDiffV1,
+    _token as _runtime_token,
     replay_evaluation_run_v1,
 )
 from factgraph.application.protocol import (
@@ -31,11 +33,16 @@ from factgraph.application.protocol import (
     EvaluationQueryFieldNavigationV0,
     FieldPath,
     Policy,
+    PolicyAll,
+    PolicyAny,
+    PolicyCompare,
     PolicyOccurrence,
+    PolicyUnify,
     SemanticPortAddress,
     SemanticRulePort,
 )
 from factgraph.application.protocol.evaluation_run_v1 import (
+    EvaluationReplayProgramEnvelopeV1,
     EvaluationRunV1,
     ExplainTargetV1,
 )
@@ -66,7 +73,7 @@ from factgraph.application.protocol.relation_provider_v1 import (
 from factgraph.application.schema_runtime import entity_info, field_predicate, resolve_selector
 from factgraph.core.evidence.write_protocol import set_field
 from factgraph.core.protocol.digests import sha256_token
-from factgraph.core.rules.where_ast import PredAtom, Var
+from factgraph.core.rules.where_ast import CmpAtom, Const, PredAtom, Var
 from factgraph.sdk import Entity, Field, Identity, SDKStore
 from factgraph.sdk.errors import SDKStoreError
 from factgraph.sdk.evaluation_query_builder import ProviderQueryTargetV1
@@ -136,6 +143,29 @@ def _age_with_score_guard_bundle(graph: SDKStore):
             PredAtom("Person:exists", [person]),
             PredAtom("person:age", [person, age]),
             PredAtom("person:score", [person, score]),
+        ),
+        ports={
+            "person": SemanticRulePort(person, entity_identity("Person")),
+            "age": SemanticRulePort(age, field_endpoint("Person", "age")),
+        },
+        schema_index=index,
+    )
+
+
+def _threshold_bundle(graph: SDKStore, *, rule_id: str, threshold: int):
+    """One deterministic, managed Rule used to exercise Policy Any branches."""
+
+    from factgraph.application.protocol import entity_identity, field_endpoint
+
+    index = build_schema_index(graph.schema_ir)
+    person, age = Var("$person"), Var("$age")
+    return build_resolved_rule(
+        id=rule_id,
+        version="1",
+        when=(
+            PredAtom("Person:exists", [person]),
+            PredAtom("person:age", [person, age]),
+            CmpAtom("gt", age, Const(threshold)),
         ),
         ports={
             "person": SemanticRulePort(person, entity_identity("Person")),
@@ -222,12 +252,32 @@ class GoalPlanV1SDKTests(unittest.TestCase):
             row_explanation.policy_structure,
             invocation.primary.target.compiled_policy.policy_structure,
         )
+        self.assertEqual(row_explanation.engine_evidence, "native_detached_recomputed")
+        self.assertIsNotNone(row_explanation.evidence_graph)
+        self.assertIsNotNone(row_explanation.policy_projection)
+        assert row_explanation.evidence_graph is not None
+        assert row_explanation.policy_projection is not None
+        self.assertEqual(row_explanation.policy_projection.evaluation.root_state, "holds")
+        self.assertEqual(row_explanation.proof_parity, "not_claimed")
+        self.assertTrue(
+            any(
+                source.meta.get("source_kind") == "captured_witness"
+                for path in row_explanation.evidence_graph.paths
+                for rule in path.rules
+                for atom in rule.atoms
+                if hasattr(atom.verdict, "support")
+                for source in atom.verdict.support
+            )
+        )
         summary = outcome.run.effective.canonical_result.summary_anchor
         assert summary is not None
         summary_explanation = outcome.explain(
             ExplainTargetV1("effective", "summary", summary.summary_anchor_digest)
         )
         self.assertEqual(summary_explanation.logical_conclusion, "not_claimed")
+        self.assertIsNone(summary_explanation.evidence_graph)
+        self.assertIsNone(summary_explanation.policy_projection)
+        self.assertEqual(summary_explanation.engine_evidence, "not_captured")
         replay = outcome.replay()
         self.assertEqual(replay.status, "matched")
 
@@ -283,7 +333,6 @@ class GoalPlanV1SDKTests(unittest.TestCase):
             {operation.kind for operation in explanation.scenario_operations},
             {"without_field"},
         )
-        self.assertEqual(outcome.replay().status, "matched")
 
         # A closure digest cannot by itself turn a forged world into absence:
         # restore the masked age relation while preserving the sealed closure
@@ -324,6 +373,76 @@ class GoalPlanV1SDKTests(unittest.TestCase):
         ):
             replay_evaluation_run_v1(forged_run)
 
+    def test_detached_explain_rejects_one_selected_row_with_multiple_hidden_bindings(self) -> None:
+        """Projection set semantics cannot silently choose an arbitrary proof."""
+
+        graph = SDKStore([Person])
+        _seed(graph, "alice", age=22, score=9)
+        _seed(graph, "bob", age=22, score=7)
+        outcome = graph.query(_bundle(graph)).select("age", _address("target", "age")).plan().run()
+        self.assertIsInstance(outcome, GoalPlanRunV1)
+        assert isinstance(outcome, GoalPlanRunV1)
+        self.assertEqual(len(outcome.run.effective.canonical_result.rows), 1)
+        row = outcome.run.effective.canonical_result.rows[0]
+        assert row.anchor is not None
+        with self.assertRaisesRegex(
+            EvaluationRunRuntimeErrorV1,
+            "multiple hidden native bindings",
+        ) as raised:
+            outcome.explain(ExplainTargetV1("effective", "row", row.anchor.anchor_digest))
+        self.assertEqual(raised.exception.code, "EVALUATION_RUN_V1_EXPLAIN_AMBIGUOUS_ROW_WITNESS")
+        self.assertEqual(outcome.replay().status, "matched")
+
+    def test_detached_explain_rejects_a_self_sealed_context_target_tamper(self) -> None:
+        """Recomputing a context digest cannot retarget a sealed GoalPlan."""
+
+        graph = SDKStore([Person])
+        _seed(graph, "alice", age=22, score=9)
+        outcome = (
+            graph.query(_age_only_bundle(graph))
+            .bind(_address("target", "person"), EntityRef("Person", {"employee_id": "alice"}))
+            .select("age", _address("target", "age"))
+            .plan()
+            .run()
+        )
+        self.assertIsInstance(outcome, GoalPlanRunV1)
+        assert isinstance(outcome, GoalPlanRunV1)
+        envelope = EvaluationReplayProgramEnvelopeV1.from_bytes(
+            outcome.run.replay_payload.compiled_program_bytes
+        )
+        wire = json.loads(envelope.to_bytes())
+        program = wire["compiled_program"]
+        context = program["primary_native_explain_context"]
+        assert isinstance(context, dict)
+        context["query_digest"] = sha256_token(b"forged-native-explain-query")
+        context["context_digest"] = _runtime_token(
+            "evaluation_run_v1_native_explain_context",
+            {key: value for key, value in context.items() if key != "context_digest"},
+        )
+        forged_envelope = EvaluationReplayProgramEnvelopeV1(
+            envelope.schema_digest,
+            envelope.address_space_digest,
+            envelope.plan_digest,
+            envelope.query_digest,
+            envelope.target_digest,
+            envelope.execution_profile_digest,
+            envelope.compiler_digest,
+            program,
+            envelope.candidate_plan_digest,
+            envelope.candidate_query_digest,
+            envelope.candidate_target_digest,
+        )
+        forged_payload = replace(
+            outcome.run.replay_payload,
+            compiled_program_bytes=forged_envelope.to_bytes(),
+        )
+        forged_run = replace(outcome.run, replay_payload=forged_payload)
+        row = forged_run.effective.canonical_result.rows[0]
+        assert row.anchor is not None
+        with self.assertRaises(EvaluationRunRuntimeErrorV1) as raised:
+            replay_evaluation_run_v1(forged_run)
+        self.assertEqual(raised.exception.code, "EVALUATION_RUN_V1_PROGRAM_PIN_MISMATCH")
+
     def test_scenario_scalar_replacement_keeps_baseline_and_effective_runs_separate(self) -> None:
         graph = SDKStore([Person])
         _seed(graph, "alice", age=22, score=9)
@@ -361,6 +480,69 @@ class GoalPlanV1SDKTests(unittest.TestCase):
         self.assertIn("semantic_world", outcome.scenario_diff.input_difference_axes)
         self.assertEqual(outcome.scenario_diff.evidence_relation, "not_claimed")
         self.assertEqual(outcome.scenario_diff.causal_attribution, "not_claimed")
+        age_predicate = field_predicate(
+            build_schema_index(graph.schema_ir), "Person", "age"
+        ).pred_id
+
+        def age_supports(explanation: object) -> tuple[object, ...]:
+            evidence_graph = getattr(explanation, "evidence_graph")
+            assert evidence_graph is not None
+            return tuple(
+                source
+                for path in evidence_graph.paths
+                for rule in path.rules
+                for atom in rule.atoms
+                if getattr(atom.form, "predicate", None) == age_predicate
+                if hasattr(atom.verdict, "support")
+                for source in atom.verdict.support
+            )
+
+        # The baseline row reads the witness that the Scenario later masks.
+        # It must remain ordinary captured support: a Scenario operation is
+        # provenance of the effective-world overlay, not retroactive causation
+        # of baseline evidence.
+        baseline_row = outcome.run.baseline.canonical_result.rows[0]
+        assert baseline_row.anchor is not None
+        baseline_explanation = outcome.explain(
+            ExplainTargetV1("baseline", "row", baseline_row.anchor.anchor_digest)
+        )
+        baseline_age_supports = age_supports(baseline_explanation)
+        self.assertTrue(baseline_age_supports)
+        assert baseline_explanation.scenario_operations is not None
+        masked_witnesses = {
+            witness_id
+            for operation in baseline_explanation.scenario_operations
+            for witness_id in operation.masked_witness_ids
+        }
+        self.assertTrue(masked_witnesses)
+        self.assertTrue({source.ref for source in baseline_age_supports} & masked_witnesses)
+        self.assertEqual(
+            {source.meta.get("source_kind") for source in baseline_age_supports},
+            {"captured_witness"},
+        )
+        self.assertTrue(
+            all("scenario_operation_digests" not in source.meta for source in baseline_age_supports)
+        )
+
+        # Only the new synthetic effective witness carries the Scenario's
+        # operation provenance.  Its user-facing origin must survive the
+        # detached Explain projection.
+        row = outcome.run.effective.canonical_result.rows[0]
+        assert row.anchor is not None
+        explanation = outcome.explain(ExplainTargetV1("effective", "row", row.anchor.anchor_digest))
+        effective_age_supports = age_supports(explanation)
+        self.assertTrue(effective_age_supports)
+        self.assertEqual(
+            {source.meta.get("source_kind") for source in effective_age_supports},
+            {"scenario_resolved_witness"},
+        )
+        self.assertEqual(
+            {tuple(source.meta.get("origin_refs", ())) for source in effective_age_supports},
+            {("fixture:what-if",)},
+        )
+        self.assertTrue(
+            all(source.meta.get("scenario_operation_digests") for source in effective_age_supports)
+        )
         self.assertEqual(outcome.replay().status, "matched")
 
     def test_scenario_ephemeral_entity_augments_the_sealed_world_not_the_live_store(self) -> None:
@@ -502,6 +684,14 @@ class GoalPlanV1SDKTests(unittest.TestCase):
             for relation in outcome.run.replay_payload.world("effective").relations
         }
         self.assertIn("person:score", captured_predicates)
+        candidate_row = outcome.run.candidate_effective.canonical_result.rows[0]
+        assert candidate_row.anchor is not None
+        candidate_explanation = outcome.explain(
+            ExplainTargetV1("candidate_effective", "row", candidate_row.anchor.anchor_digest)
+        )
+        self.assertEqual(candidate_explanation.engine_evidence, "native_detached_recomputed")
+        assert candidate_explanation.policy_projection is not None
+        self.assertEqual(candidate_explanation.policy_projection.evaluation.root_state, "holds")
         self.assertEqual(outcome.replay().status, "matched")
 
     def test_provider_replaces_only_its_declared_relation_once_and_replay_never_calls_it(
@@ -540,6 +730,11 @@ class GoalPlanV1SDKTests(unittest.TestCase):
             (age_predicate,),
             materialize,
         )
+        # A provider is a sealed pre-engine relation input, not a standalone
+        # Rule-like target with an invented head/projection contract.
+        with self.assertRaises(SDKStoreError) as bare_provider:
+            graph.query(provider)  # type: ignore[arg-type]
+        self.assertEqual(bare_provider.exception.code, "UNSUPPORTED_QUERY_TARGET")
         builder = (
             graph.query(_age_only_bundle(graph))
             .bind(_address("target", "person"), EntityRef("Person", {"employee_id": "alice"}))
@@ -559,6 +754,14 @@ class GoalPlanV1SDKTests(unittest.TestCase):
             30,
         )
         self.assertEqual(len(outcome.run.replay_payload.provider_receipts), 1)
+        row = outcome.run.effective.canonical_result.rows[0]
+        assert row.anchor is not None
+        explanation = outcome.explain(ExplainTargetV1("effective", "row", row.anchor.anchor_digest))
+        # Decoding this composite target validates the provider receipt digest
+        # against the underlying Rule/Policy target before producing a graph.
+        self.assertEqual(explanation.engine_evidence, "native_detached_recomputed")
+        self.assertEqual(explanation.provider_receipt_count, 1)
+        self.assertIsNotNone(explanation.policy_projection)
         self.assertEqual(outcome.replay().status, "matched")
         self.assertEqual(len(calls), 1)
         with self.assertRaisesRegex(SDKStoreError, "candidate cannot carry RelationProviderV1"):
@@ -583,6 +786,11 @@ class GoalPlanV1SDKTests(unittest.TestCase):
             ("native", "souffle", "problog"),
         )
         self.assertEqual(outcome.run.effective.assessment.parity, "equivalent")
+        row = outcome.run.effective.canonical_result.rows[0]
+        assert row.anchor is not None
+        explanation = outcome.explain(ExplainTargetV1("effective", "row", row.anchor.anchor_digest))
+        self.assertEqual(explanation.engine_evidence, "native_detached_recomputed")
+        self.assertEqual(explanation.proof_parity, "not_claimed")
         self.assertEqual(outcome.replay().status, "matched")
 
     def test_provider_persistent_view_mutation_fails_closed_before_result_sealing(self) -> None:
@@ -714,6 +922,139 @@ class GoalPlanV1SDKTests(unittest.TestCase):
         self.assertEqual(
             dict(outcome.run.effective.canonical_result.rows[0].values)["age"].value,
             22,
+        )
+        self.assertEqual(outcome.replay().status, "matched")
+
+    def test_detached_policy_explain_projects_any_all_compare_states(self) -> None:
+        """A V1 detached Explain covers real authored Policy topology.
+
+        The first ``Any`` arm holds for Alice/Bob.  The second arm fails its
+        first comparison and leaves its later comparison not reached.  This is
+        intentionally an end-to-end V1 run rather than a unit test of the
+        reusable Policy projector: it proves that the sealed explain context
+        preserves authored All/Any/Compare lineage through detached native
+        recomputation.
+        """
+
+        graph = SDKStore([Person])
+        _seed(graph, "alice", age=22, score=9)
+        _seed(graph, "bob", age=19, score=7)
+        common = _bundle(graph)
+        eligible = _threshold_bundle(graph, rule_id="v1_eligible", threshold=20)
+        never = _threshold_bundle(graph, rule_id="v1_never", threshold=100)
+        space = SemanticAddressSpace(
+            (
+                manage_rule_occurrence(common, "common"),
+                manage_rule_occurrence(eligible, "eligible"),
+                manage_rule_occurrence(never, "never_left"),
+                manage_rule_occurrence(never, "never_right"),
+            )
+        )
+        policy = Policy(
+            "v1_detached_explain_policy",
+            PolicyAll(
+                (
+                    PolicyOccurrence("common"),
+                    PolicyAny(
+                        (
+                            PolicyOccurrence("eligible"),
+                            PolicyAll(
+                                (
+                                    PolicyOccurrence("never_left"),
+                                    PolicyOccurrence("never_right"),
+                                    PolicyUnify(
+                                        _address("never_left", "person"),
+                                        _address("never_right", "person"),
+                                    ),
+                                    PolicyCompare.gt(
+                                        _address("never_left", "age"),
+                                        _address("never_right", "age"),
+                                    ),
+                                )
+                            ),
+                        )
+                    ),
+                )
+            ),
+            version="1",
+        )
+        outcome = (
+            graph.query(policy, address_space=space)
+            .bind(_address("common", "person"), EntityRef("Person", {"employee_id": "alice"}))
+            .select("age", _address("common", "age"))
+            .plan()
+            .run()
+        )
+        self.assertIsInstance(outcome, GoalPlanRunV1)
+        assert isinstance(outcome, GoalPlanRunV1)
+        row = outcome.run.effective.canonical_result.rows[0]
+        assert row.anchor is not None
+        explanation = outcome.explain(ExplainTargetV1("effective", "row", row.anchor.anchor_digest))
+        self.assertEqual(explanation.engine_evidence, "native_detached_recomputed")
+        assert explanation.policy_projection is not None
+        projection = explanation.policy_projection.evaluation
+        self.assertEqual(projection.root_state, "holds")
+        node_states = {node.state for node in projection.nodes}
+        branch_states = {state.state for node in projection.nodes for state in node.branch_states}
+        self.assertIn("holds", node_states)
+        self.assertIn("fails", branch_states)
+        self.assertIn("not_reached", branch_states)
+        self.assertEqual(
+            {node.kind for node in projection.nodes},
+            {"all", "any", "occurrence", "unify", "compare"},
+        )
+        self.assertEqual(outcome.replay().status, "matched")
+
+    def test_detached_explain_keeps_one_holding_witness_per_any_arm(self) -> None:
+        """Two authored Any arms may support one selected-row-set member.
+
+        Set semantics deduplicate the public row, but Explain must retain both
+        holding Policy paths.  Ambiguity exists only when *one branch* has
+        multiple hidden full bindings; it must not discard a second legitimate
+        authored branch merely because its private variables differ.
+        """
+
+        graph = SDKStore([Person])
+        _seed(graph, "alice", age=22, score=9)
+        _seed(graph, "bob", age=19, score=7)
+        common = _bundle(graph)
+        left = _threshold_bundle(graph, rule_id="v1_any_left", threshold=20)
+        right = _threshold_bundle(graph, rule_id="v1_any_right", threshold=20)
+        space = SemanticAddressSpace(
+            (
+                manage_rule_occurrence(common, "common"),
+                manage_rule_occurrence(left, "left"),
+                manage_rule_occurrence(right, "right"),
+            )
+        )
+        policy = Policy(
+            "v1_two_holding_any_arms",
+            PolicyAll(
+                (
+                    PolicyOccurrence("common"),
+                    PolicyAny((PolicyOccurrence("left"), PolicyOccurrence("right"))),
+                )
+            ),
+            version="1",
+        )
+        outcome = (
+            graph.query(policy, address_space=space)
+            .bind(_address("common", "person"), EntityRef("Person", {"employee_id": "alice"}))
+            .select("age", _address("common", "age"))
+            .plan()
+            .run()
+        )
+        self.assertIsInstance(outcome, GoalPlanRunV1)
+        assert isinstance(outcome, GoalPlanRunV1)
+        self.assertEqual(len(outcome.run.effective.canonical_result.rows), 1)
+        row = outcome.run.effective.canonical_result.rows[0]
+        assert row.anchor is not None
+        explanation = outcome.explain(ExplainTargetV1("effective", "row", row.anchor.anchor_digest))
+        self.assertEqual(explanation.engine_evidence, "native_detached_recomputed")
+        assert explanation.evidence_graph is not None
+        self.assertEqual(
+            len([path for path in explanation.evidence_graph.paths if path.status == "holds"]),
+            2,
         )
         self.assertEqual(outcome.replay().status, "matched")
 

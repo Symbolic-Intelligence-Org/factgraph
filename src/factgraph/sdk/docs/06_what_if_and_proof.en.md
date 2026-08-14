@@ -38,6 +38,13 @@ normalized selected-row differences. It deliberately labels evidence and
 causality `not_claimed`; use an explicit row Explain for a positive observed
 conclusion, and never interpret a zero-row summary as proof of negation.
 
+For an explicit positive row, V1 Explain lazily recomputes canonical Native
+inner evidence only from the sealed relation and captured Explain context. It
+returns an `EvidenceGraph` plus the authored Policy overlay
+`EvaluationRunPolicyProjectionV1`; portable proof parity remains
+`not_claimed`. A summary/zero-row target has no graph or negative proof, and
+an ambiguous projected row or any captured-pin/result mismatch fails closed.
+
 The portable V1 profile can replay a captured positive deterministic world in
 native, Soufflé and ProbLog. It compares selected-row sets only, records
 per-engine succeeded/failed/unsupported frames, and never falls back to native

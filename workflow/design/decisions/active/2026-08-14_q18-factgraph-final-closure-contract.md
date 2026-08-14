@@ -77,7 +77,7 @@ model of those engines is equivalent.
 | Capability | Final disposition | Contract |
 | --- | --- | --- |
 | Resolved Rule and direct Policy target | supported | They share one Query target layer; a Rule uses deterministic sealed lift. |
-| Finite materialized relation target | supported | A relation provider materializes typed tuples before engine execution. |
+| Finite materialized relation input | supported, restricted | A relation provider materializes typed tuples as a sealed pre-engine input to a Rule/Policy Query. Its composite `ProviderQueryTargetV1(base, provider)` identity is pinned with the base target; a bare provider has no projection/head contract and is intentionally rejected. |
 | Pure Compute and bounded Lookup provider | supported, restricted | Both return a sealed finite relation/receipt before engine execution; no engine calls arbitrary code. |
 | Direct entity/match compatibility | supported | Existing match/read surfaces stay intact; an equivalent relation target is available without forcing all reads through Policy. |
 | Bind/select/field navigation/Policy comparison | supported | Existing structured semantic-address contracts remain the only canonical form. |
@@ -116,8 +116,9 @@ model of those engines is equivalent.
 ### 4.1 One immutable QueryPlan v1
 
 A Query builder may still expose fluent convenience methods, but its terminal
-artifact is one immutable QueryPlanV1. It contains a resolved Rule, Policy or
-materialized-relation target; ordered bind/select inventory; typed result mode
+artifact is one immutable QueryPlanV1. It contains a resolved Rule or Policy
+logical target, optionally with one materialized-relation provider input;
+ordered bind/select inventory; typed result mode
 and expectations; an optional ScenarioSpecV1; an exact execution profile; and,
 when requested, an immutable candidate target for comparison.
 
@@ -185,9 +186,14 @@ candidate Policy.
 
 ### 4.5 Relation providers
 
-Rule, Policy and RelationProvider participate in one Query-target interface:
-they expose typed input/output ports and a version/digest contract. They are
-not declared semantically identical.
+Rule and Policy are the logical Query targets. A RelationProvider is a typed,
+pre-engine relation input attached to one of those targets through
+`ProviderQueryTargetV1(base, provider)` / `.using(provider)`. The composite
+has one pinned Query-target identity, but a bare provider is intentionally not
+accepted by `fg.query(...)`: it has no independent projection head, selection
+shape or SemanticAddressSpace from which one could safely be invented. These
+objects share calling, composition and audit contracts; they are not declared
+semantically identical.
 
 ComputeProvider is deterministic, side-effect-free computation with fully
 bound inputs. LookupProvider is a bounded read that materializes a finite
@@ -326,23 +332,24 @@ rename a deferred/rejected cell as implicitly supported.
 
 ## 7. Acceptance criteria
 
-- [ ] All four matrices have tests proving each supported cell and each
+- [x] All four matrices have tests proving each supported cell and each
   rejected/Meander-owned boundary.
-- [ ] Scenario resolution is deterministic, canonical, non-persistent,
+- [x] Scenario resolution is deterministic, canonical, non-persistent,
   conflict-total and usable without Meander.
-- [ ] Rule, Policy and materialized relation providers run through QueryPlanV1
-  without a second evaluator or string address grammar.
-- [ ] Native, real Soufflé and real ProbLog agree on the declared portable
+- [x] Rule and Policy, optionally with a materialized relation-provider input,
+  run through QueryPlanV1 without a second evaluator or string address grammar;
+  bare providers reject before compilation.
+- [x] Native, real Soufflé and real ProbLog agree on the declared portable
   corpus or the run fails with an explicit incompatibility/parity outcome.
-- [ ] Each execution/run captures exact inputs; Explain/replay never reads
+- [x] Each execution/run captures exact inputs; Explain/replay never reads
   current mutable Store state.
-- [ ] Zero-result, incomplete-result, unsupported and not-satisfied states
+- [x] Zero-result, incomplete-result, unsupported and not-satisfied states
   remain distinguishable through Result, Expectation and Assessment.
-- [ ] Policy variant comparison is immutable and keeps base/candidate evidence
+- [x] Policy variant comparison is immutable and keeps base/candidate evidence
   and row anchors separate.
-- [ ] Existing v0 Query, F4 and Scenario codec/behavior cohorts remain
+- [x] Existing v0 Query, F4 and Scenario codec/behavior cohorts remain
   compatible.
-- [ ] Module docs and final capability tables distinguish shipped support from
+- [x] Module docs and final capability tables distinguish shipped support from
   rejected and Meander-owned capabilities.
 
 ## 8. Decision record
@@ -351,3 +358,5 @@ rename a deferred/rejected cell as implicitly supported.
 | --- | --- | --- | --- |
 | 2026-08-14 | adopted | User authorized final FactGraph closure | Replaces fragmented v0 non-scope boundaries with one explicit complete/rejected matrix. |
 | 2026-08-14 | implemented | V1 contract delivered on isolated branch | New V1 protocols/runtime/SDK entrypoint preserve V0 contracts; final verification records real three-engine parity, replay/Scenario/provider adversarial probes, and the unrelated full-suite collection blocker. |
+| 2026-08-14 | verification correction | Reopened before final closure | Independent contract audit found (a) an over-broad provider-target wording, corrected here to the implemented composite-input contract, and (b) a real missing detached native Explain context and Policy/Evidence projection. The latter remains implementation-blocking until the sealed V1 Explain overlay is delivered and reverified. |
+| 2026-08-14 | verification closure | Explain P1 remediated and independently reverified | V1 now seals a restricted native Explain context and reconstructs an explicit positive-row EvidenceGraph plus Policy `HOLDS`/`FAILS`/`NOT_REACHED` projection only from the sealed captured relation. Real portable `PolicyAny`, context/world/provider/candidate tamper, provenance, replay and V0 compatibility checks passed; final result: 687 tests and 175 subtests. |

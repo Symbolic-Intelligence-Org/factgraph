@@ -100,16 +100,30 @@ Action authorization.
 
 ## 7. Implementation verification outcome
 
-Q18 has now been implemented as a parallel V1 contract on its isolated branch.
+Q18's initial V1 implementation landed as a parallel contract on its isolated branch.
 The final surface covers the supported Scenario algebra, Rule/Policy Query
 targets, constrained providers, all declared result/expectation modes,
 immutable candidate comparison, captured Scenario diff, explicit detached
 Explain/replay, and native/Soufflé/ProbLog selected-row parity. It preserves
 the earlier V0 Query/Scenario/Run protocols rather than mutating them.
 
-The final closure test command passed **680 tests and 175 subtests** in the
-pinned FactGraph environment. Static format/lint/type/diff checks also passed,
-and an independent adversarial review found no remaining reproducible P0/P1.
+The initial closure test command passed **680 tests and 175 subtests** in the
+pinned FactGraph environment. Scoped lint/type/diff checks and formatter
+checks for newly added V1 modules/tests passed; the old `sdk/store.py` file
+has baseline formatting debt outside the changed docstring. The initial
+adversarial review found no remaining reproducible P0/P1. Subsequent final
+contract review reopened the slice for one P1: V1 Explain still lacked the
+sealed native Explain context and resulting Policy-node projection. The provider wording
+was also narrowed to its actually implemented composite-input contract.
+
+The remediation is now complete: V1 seals a restricted native Explain context,
+then deterministically recomputes a positive-row EvidenceGraph and
+Policy-node `HOLDS`/`FAILS`/`NOT_REACHED` projection from the captured relation
+only. It neither treats the graph as directly captured nor claims portable
+proof parity. The repeat pinned-environment application/SDK corpus passed
+**687 tests and 175 subtests**, and the independent adversarial audit was
+**CLEAR**. This audit is therefore final closure evidence, while retaining the
+earlier reopening as historical record.
 The bare repository-wide test command remains blocked during collection by a
 baseline `service.static_ui` import of missing
 `factgraph.audit.evidence_graph.render_evidence_graph_html`, plus independent

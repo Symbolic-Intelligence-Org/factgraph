@@ -1042,7 +1042,8 @@ for the post-Phase-2 `fg.rules.*` and `fg.inferences.*` namespace shape.
 - **[`04_api_surface.en.md`](04_api_surface.en.md)** — full API
   reference with every method signature
 - **[`06_what_if_and_proof.en.md`](06_what_if_and_proof.en.md)** —
-  evidence, closed-head replay, and the bounded captured ScenarioRun path
+  V1 Query/Scenario What-if, detached Explain/replay boundaries, and the
+  bounded legacy captured ScenarioRun path
 - **[`07_walker_and_advanced.en.md`](07_walker_and_advanced.en.md)** —
   walker views, recorder lifecycle, raw DTO construction, optional
   domain helpers, engine adapter registration

@@ -2285,7 +2285,9 @@ class SDKStore:
         """Start a typed Query over one resolved Rule or managed Policy.
 
         This is a target-normalization facade, never a string registry lookup.
-        ``bind`` accepts only :class:`SemanticPortAddress`; ``select`` accepts
+        ``target`` must be a resolved Rule or managed Policy (or their explicit
+        provider composite); a bare ``RelationProviderV1`` is rejected because
+        it has no independent Query projection. ``bind`` accepts only :class:`SemanticPortAddress`; ``select`` accepts
         direct ports and the documented field-navigation projection.
 
         The established terminal methods (``compile()``, ``evaluate()``,

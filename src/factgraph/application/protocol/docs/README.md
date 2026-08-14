@@ -351,8 +351,13 @@ facts, and source-priority selection are outside this protocol.
 
 ### 2.7.3 Provider boundary and profiles
 
-`RelationProviderV1` can be `compute` or `lookup`, but both must materialize
-one finite typed relation and receipt **before** the evaluator sees a world.
+Rule and Policy are the only logical Query targets.  `RelationProviderV1` is
+attached to one of those targets through the composite
+`ProviderQueryTargetV1(base, provider)` / SDK `.using(provider)` form; a bare
+provider has neither a head, projection nor address space and is rejected
+before compilation.  A provider can be `compute` or `lookup`, but both must
+materialize one finite typed relation and receipt **before** the evaluator sees
+a world.
 `ProviderRequestV1` binds the provider digest, required structured Query
 bindings, dependency/supplied predicate inventory, and an opaque request
 digest. `ProviderMaterializationV1` replaces exactly the provider's declared
@@ -387,13 +392,19 @@ Store. A re-execution mismatch is a typed replay observation, not hidden
 fallback or proof of an external cause.
 
 `ExplainTargetV1` must name a side plus one exact row or summary anchor.
-`explain_evaluation_run_v1(...)` never selects a first row by position. A
-positive row can report only its observed `holds` conclusion; a summary,
-including a zero-row summary, has `logical_conclusion="not_claimed"` and is
-not a negative proof. The structural envelope may include the sealed authored
-`PolicyStructureV0` and resolved Scenario operation patch, but labels engine
-evidence, negative proof, and cross-engine proof parity as not captured/not
-claimed unless a separately captured evidence protocol provides them.
+`explain_evaluation_run_v1(...)` never selects a first row by position. The
+Run captures a bounded native Explain context (pinned target, lineage, Rule
+pins and restricted lowering material). For an explicit positive row it
+lazily re-executes Native **only over the sealed captured relation**, verifies
+the sealed result again, and returns an inner `EvidenceGraph` plus an
+`EvaluationRunPolicyProjectionV1` that projects the authored Policy nodes as
+`holds` / `fails` / `not_reached`. This is native inner evidence, not
+Soufflé/ProbLog proof parity (`proof_parity="not_claimed"`). A summary,
+including a zero-row summary, has `logical_conclusion="not_claimed"` and no
+graph or negative proof. Older context-less captures remain
+`engine_evidence="not_captured"`; ambiguous projected row witnesses, pin or
+context mismatches, and replay-result mismatches fail closed rather than
+selecting an arbitrary proof.
 
 `compare_policy_variants_v1(...)` compares independently pinned primary and
 candidate compiled programs on the same effective world. It returns structural

@@ -42,7 +42,10 @@ compatibility.
     captured `ScenarioRunV0` lifecycle for detached Scenario evidence and
     isolated verification; and the parallel, query-dependency-scoped
     `QueryEffectiveSnapshotV1` pre-evaluation identity used internally by the
-    replacement-only resolver (not a global or historical snapshot).
+    replacement-only resolver (not a global or historical snapshot); and the
+    parallel GoalPlan/Scenario v1 contract, including captured effective
+    worlds, portable selected-row parity, and explicit detached native-inner
+    EvidenceGraph/Policy-overlay Explain.
 - `src/factgraph/application/explain/docs/README.md`
   - Paths-model evidence tree types (`EvidenceGraph`, `EvidenceTree`,
     `EvidenceRule`, `EvidenceAtom`, `Certainty`, `AtomForm`, `Verdict`) and

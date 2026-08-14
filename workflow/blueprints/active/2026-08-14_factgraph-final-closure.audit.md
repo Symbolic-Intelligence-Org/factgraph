@@ -9,6 +9,10 @@
 | 2026-08-14 | draft | Compact final-closure blueprint created | Q18 provides the four matrices and explicit rejected/Meander-owned cells. |
 | 2026-08-14 | scoped | User delegated bounded continuous execution | The final closure contract is the sole scope authority; internal stages do not need separate user pauses. |
 | 2026-08-14 | implemented | Q18 V1 closure verified | Parallel protocols/runtime/SDK surface delivered; final verification and independent adversarial review are recorded in the paired final report. |
+| 2026-08-14 | verification correction | Inherited formatter debt recorded | `sdk/store.py` fails formatter at both baseline and closure; this slice changes only its V1 docstring, so the final report narrows its formatter claim rather than formatting an unrelated legacy file. |
+| 2026-08-14 | verification reopening | Contract audit found a P1 Explain gap | Existing V1 Explain exposes only captured Policy structure / Scenario operations, not the native EvidenceGraph or Policy `HOLDS`/`FAILS`/`NOT_REACHED` projection required by Q18. The blueprint returns to `implementing` until a sealed detached native-evidence overlay and its adversarial verification land. |
+| 2026-08-14 | contract correction | Provider wording narrowed to implemented semantics | `RelationProviderV1` is a typed pre-engine relation input attached to a Rule/Policy target. A bare provider has no projection/head/address-space contract; composite `ProviderQueryTargetV1(base, provider)` is the supported Query identity. |
+| 2026-08-14 | verification closure | Explain P1 remediated and independently reverified | V1 now seals a restricted native Explain context, revalidates it against the program/target/world pins, and recomputes a positive-row EvidenceGraph plus Policy `HOLDS`/`FAILS`/`NOT_REACHED` projection against captured data only. The final application/SDK corpus passed 687 tests and 175 subtests; independent adversarial review was CLEAR. |
 
 ## Decision Notes
 

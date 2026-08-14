@@ -382,6 +382,12 @@ class EvaluationRunV1RuntimeTests(unittest.TestCase):
         self.assertEqual(explanation.scenario_operations, (operation,))
         self.assertEqual(explanation.scenario_patch_capture, "captured")
         self.assertEqual(explanation.scenario_patch_application, "applied")
+        # This fixture deliberately uses the compatibility envelope without a
+        # restricted native Explain context.  It may retain static structure
+        # and Scenario patch data, but it must not fabricate a graph.
+        self.assertEqual(explanation.engine_evidence, "not_captured")
+        self.assertIsNone(explanation.evidence_graph)
+        self.assertIsNone(explanation.policy_projection)
 
     def test_detached_replay_uses_only_run_and_matches_captured_results(self) -> None:
         run = self._run()

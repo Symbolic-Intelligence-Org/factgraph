@@ -54,6 +54,7 @@ from factgraph.application.goal_plan_v1_runtime import (
 )
 from factgraph.application.evaluation_run_v1_runtime import (
     EvaluationRunExplanationV1,
+    EvaluationRunPolicyProjectionV1,
     EvaluationRunReplayV1,
     PolicyVariantComparisonV1,
     ScenarioDiffV1,
@@ -320,6 +321,7 @@ __all__ = [
     "EvaluationRunV1",
     "ExplainTargetV1",
     "EvaluationRunExplanationV1",
+    "EvaluationRunPolicyProjectionV1",
     "EvaluationRunReplayV1",
     "PolicyVariantComparisonV1",
     "ScenarioDiffV1",

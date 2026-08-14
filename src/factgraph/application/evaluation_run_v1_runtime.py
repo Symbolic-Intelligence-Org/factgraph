@@ -27,14 +27,19 @@ from __future__ import annotations
 import base64
 import binascii
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 import json
 import math
 from typing import Any, Literal
 
-from factgraph.core.protocol.digests import sha256_hex
+from factgraph.core.protocol.digests import sha256_hex, sha256_token
 from factgraph.core.protocol.tup_v1 import claim_args_from_rest_terms
 from factgraph.core.rules.where_ast import (
+    AndExpr,
+    CmpAtom,
+    Const,
+    PredAtom,
+    Var,
     WhereASTError,
     lower_ast_to_where_ir,
     parse_where_ir_to_ast,
@@ -54,8 +59,19 @@ from .portable_evaluation_runtime import (
     observe_portable_deterministic_v1,
     portable_dependency_predicate_ids_v1,
 )
+from .explain.evidence_tree import (
+    EvidenceAtom,
+    EvidenceGraph,
+    EvidenceTree,
+    Fact,
+    Holds,
+    Source,
+)
+from .explain.prober import probe_native
+from .policy_explanation_runtime import project_policy_evidence_v1
 from .protocol.common import ProtocolShapeError
 from .protocol.derivation import CompiledDerivationPlan, CompiledHeadCall
+from .protocol.evaluation_run import EvaluationRunRulePinV0, EvaluationRunTargetV0
 from .protocol.evaluation_run_v1 import (
     EvaluationEngineResultV1,
     EvaluationExecutionProfileV1,
@@ -84,9 +100,32 @@ from .protocol.goal_plan_v1 import (
 )
 from .protocol.policy import (
     PolicyCompareStructureNodeV0,
+    PolicyConditionLoweredRefV0,
     PolicyFieldNavigation,
+    PolicyLineage,
+    PolicyLoweredRef,
+    PolicyNodeLineage,
     PolicyStructureNodeV0,
     PolicyStructureV0,
+)
+from .protocol.policy_explanation import (
+    PolicyEvaluationProjectionV0,
+    PolicyProvenanceIndexV0,
+)
+from .protocol.rule import PortType, Rule, RulePortRef
+from .protocol.rule_expr import RuleJoinConstraint
+from .protocol.rule_expr_lowering import (
+    RuleExprHeadBinding,
+    RuleExprLoweringBranch,
+    RuleExprLoweringPlan,
+    RuleExprOccurrenceBinding,
+    RuleExprPolicyCondition,
+    RuleExprPortBinding,
+    _RuleExprQueryHeadLink,
+    _RuleExprQueryNavigationLookup,
+    _RuleExprQueryValueBinding,
+    _materialize_native_derivation_plan,
+    probe_seed_vars_by_head_port,
 )
 from .protocol.scenario_v1 import (
     ExactLocalClosureTargetV1,
@@ -95,6 +134,7 @@ from .protocol.scenario_v1 import (
 )
 from .protocol.schema_runtime import FieldPath
 from .protocol.semantic_address import SemanticPortAddress
+from .schema_runtime import build_schema_index
 
 
 _PROGRAM_TYPE = "FactGraphEvaluationProgramV1"
@@ -102,6 +142,8 @@ _PROGRAM_RECORD_TYPE = "FactGraphCompiledDerivationPlanV1"
 _STRUCTURAL_VALUE_TYPE = "FactGraphStructuralValueV1"
 _AUTHORED_POLICY_STRUCTURE_TYPE = "FactGraphAuthoredPolicyStructureV1"
 _SCENARIO_PATCH_TYPE = "FactGraphScenarioPatchV1"
+_NATIVE_EXPLAIN_CONTEXT_TYPE = "FactGraphNativePolicyExplainContextV1"
+_NATIVE_EXPLAIN_LOWERING_TYPE = "FactGraphNativeExplainLoweringV1"
 _MAX_STRUCTURAL_DEPTH = 64
 _MAX_STRUCTURAL_NODES = 100_000
 
@@ -522,6 +564,34 @@ def _require_plain_sha256(value: object, *, name: str) -> str:
     return value
 
 
+def _sha_token_from_plain_digest(value: object) -> str:
+    """Normalize a compiler digest into V1's sha-token namespace.
+
+    ``EvaluationRunTargetV0`` historically names this field like a bare
+    digest, but its own sealing helper emits a V1 sha token.  Accept either
+    representation at the boundary and never strip/re-hash an existing token.
+    """
+
+    if isinstance(value, str) and value.startswith("sha256:"):
+        return _require_token(value, name="legacy_digest")
+    return f"sha256:{_require_plain_sha256(value, name='legacy_digest')}"
+
+
+def _provider_composite_target_digest(*, base_target_digest: str, provider_digest: str) -> str:
+    """Match the SDK's sealed ProviderQueryTargetV1 identity exactly."""
+
+    return sha256_token(
+        _canonical_json_bytes(
+            {
+                "format": "relation_provider_query_target_v1",
+                "base_target_digest": _sha_token_from_plain_digest(base_target_digest),
+                "provider_digest": _require_token(provider_digest, name="provider_digest"),
+            },
+            label="provider composite target",
+        )
+    )
+
+
 def _semantic_address_to_wire(address: SemanticPortAddress) -> dict[str, object]:
     if not isinstance(address, SemanticPortAddress):
         raise EvaluationRunRuntimeErrorV1(
@@ -785,6 +855,1247 @@ def _authored_policy_structure_from_wire(value: object) -> PolicyStructureV0:
     return structure
 
 
+@dataclass(frozen=True)
+class DecodedNativePolicyExplainContextV1:
+    """Sealed authored/native coordinates needed for one detached V1 row Explain.
+
+    This is intentionally not a V0 run anchor.  It reuses the already-sealed
+    immutable V0 *target* DTO because target identity, Policy lineage and Rule
+    pins are still the compiler's mapping authority, while V1 retains its own
+    Query/result/run identities.
+    """
+
+    run_target: EvaluationRunTargetV0 = field(repr=False, compare=False)
+    lowering_plan: RuleExprLoweringPlan = field(repr=False, compare=False)
+    context_digest: str = ""
+
+
+def _policy_lineage_ref_to_wire(
+    ref: PolicyLoweredRef | PolicyConditionLoweredRefV0,
+) -> dict[str, object]:
+    if isinstance(ref, PolicyLoweredRef):
+        return {
+            "$type": "PolicyLoweredRefV0",
+            "kind": ref.kind,
+            "branch_id": ref.branch_id,
+            "occurrence_alias": ref.occurrence_alias,
+            "port_name": ref.port_name,
+            "source_index": ref.source_index,
+            "lowered_index": ref.lowered_index,
+            "peer_occurrence_alias": ref.peer_occurrence_alias,
+            "peer_port_name": ref.peer_port_name,
+        }
+    if isinstance(ref, PolicyConditionLoweredRefV0):
+        return {
+            "$type": "PolicyConditionLoweredRefV0",
+            "branch_id": ref.branch_id,
+            "policy_node_id": ref.policy_node_id,
+            "condition_id": ref.condition_id,
+            "role": ref.role,
+            "lowered_index": ref.lowered_index,
+        }
+    raise EvaluationRunRuntimeErrorV1(
+        "Policy lineage reference is malformed",
+        code="EVALUATION_RUN_V1_CAPTURE_INPUT_INVALID",
+    )
+
+
+def _policy_lineage_ref_from_wire(
+    value: object,
+    *,
+    label: str,
+) -> PolicyLoweredRef | PolicyConditionLoweredRefV0:
+    if not isinstance(value, Mapping) or not isinstance(value.get("$type"), str):
+        raise EvaluationRunRuntimeErrorV1(
+            f"{label} is malformed", code="EVALUATION_RUN_V1_PROGRAM_SHAPE_INVALID"
+        )
+    try:
+        if value["$type"] == "PolicyLoweredRefV0":
+            row = _exact_keys(
+                value,
+                frozenset(
+                    {
+                        "$type",
+                        "kind",
+                        "branch_id",
+                        "occurrence_alias",
+                        "port_name",
+                        "source_index",
+                        "lowered_index",
+                        "peer_occurrence_alias",
+                        "peer_port_name",
+                    }
+                ),
+                label=label,
+            )
+            return PolicyLoweredRef(
+                row["kind"],  # type: ignore[arg-type]
+                row["branch_id"],  # type: ignore[arg-type]
+                row["occurrence_alias"],  # type: ignore[arg-type]
+                row["port_name"],  # type: ignore[arg-type]
+                row["source_index"],  # type: ignore[arg-type]
+                row["lowered_index"],  # type: ignore[arg-type]
+                row["peer_occurrence_alias"],  # type: ignore[arg-type]
+                row["peer_port_name"],  # type: ignore[arg-type]
+            )
+        if value["$type"] == "PolicyConditionLoweredRefV0":
+            row = _exact_keys(
+                value,
+                frozenset(
+                    {
+                        "$type",
+                        "branch_id",
+                        "policy_node_id",
+                        "condition_id",
+                        "role",
+                        "lowered_index",
+                    }
+                ),
+                label=label,
+            )
+            return PolicyConditionLoweredRefV0(
+                row["branch_id"],  # type: ignore[arg-type]
+                row["policy_node_id"],  # type: ignore[arg-type]
+                row["condition_id"],  # type: ignore[arg-type]
+                row["role"],  # type: ignore[arg-type]
+                row["lowered_index"],  # type: ignore[arg-type]
+            )
+    except (TypeError, ValueError) as exc:
+        raise EvaluationRunRuntimeErrorV1(
+            f"{label} is malformed", code="EVALUATION_RUN_V1_PROGRAM_SHAPE_INVALID"
+        ) from exc
+    raise EvaluationRunRuntimeErrorV1(
+        f"{label} has an unsupported type", code="EVALUATION_RUN_V1_PROGRAM_SHAPE_INVALID"
+    )
+
+
+def _policy_lineage_to_wire(lineage: PolicyLineage) -> dict[str, object]:
+    if not isinstance(lineage, PolicyLineage):
+        raise EvaluationRunRuntimeErrorV1(
+            "Policy lineage is malformed", code="EVALUATION_RUN_V1_CAPTURE_INPUT_INVALID"
+        )
+    return {
+        "$type": "FactGraphPolicyLineageV1",
+        "authored_nodes": [
+            {
+                "node_id": node.node_id,
+                "node_kind": node.node_kind,
+                "lowered_refs": [_policy_lineage_ref_to_wire(ref) for ref in node.lowered_refs],
+            }
+            for node in lineage.authored_nodes
+        ],
+        "lowered_origins": [
+            {
+                "ref": _policy_lineage_ref_to_wire(ref),
+                "origins": list(origins),
+            }
+            for ref, origins in lineage.lowered_origins
+        ],
+    }
+
+
+def _policy_lineage_from_wire(value: object) -> PolicyLineage:
+    row = _exact_keys(
+        value,
+        frozenset({"$type", "authored_nodes", "lowered_origins"}),
+        label="Policy lineage",
+    )
+    if row["$type"] != "FactGraphPolicyLineageV1":
+        raise EvaluationRunRuntimeErrorV1(
+            "Policy lineage type is invalid", code="EVALUATION_RUN_V1_PROGRAM_SHAPE_INVALID"
+        )
+    raw_nodes, raw_origins = row["authored_nodes"], row["lowered_origins"]
+    if (
+        not isinstance(raw_nodes, Sequence)
+        or isinstance(raw_nodes, (str, bytes, bytearray))
+        or not isinstance(raw_origins, Sequence)
+        or isinstance(raw_origins, (str, bytes, bytearray))
+    ):
+        raise EvaluationRunRuntimeErrorV1(
+            "Policy lineage inventory is malformed",
+            code="EVALUATION_RUN_V1_PROGRAM_SHAPE_INVALID",
+        )
+    nodes: list[PolicyNodeLineage] = []
+    origins: list[tuple[PolicyLoweredRef | PolicyConditionLoweredRefV0, tuple[str, ...]]] = []
+    try:
+        for index, raw in enumerate(raw_nodes):
+            item = _exact_keys(
+                raw,
+                frozenset({"node_id", "node_kind", "lowered_refs"}),
+                label=f"Policy lineage authored_nodes[{index}]",
+            )
+            refs = item["lowered_refs"]
+            if not isinstance(refs, Sequence) or isinstance(refs, (str, bytes, bytearray)):
+                raise EvaluationRunRuntimeErrorV1(
+                    "Policy lineage refs are malformed",
+                    code="EVALUATION_RUN_V1_PROGRAM_SHAPE_INVALID",
+                )
+            nodes.append(
+                PolicyNodeLineage(
+                    item["node_id"],  # type: ignore[arg-type]
+                    item["node_kind"],  # type: ignore[arg-type]
+                    tuple(
+                        _policy_lineage_ref_from_wire(
+                            ref,
+                            label=f"Policy lineage authored_nodes[{index}].lowered_refs[{offset}]",
+                        )
+                        for offset, ref in enumerate(refs)
+                    ),
+                )
+            )
+        for index, raw in enumerate(raw_origins):
+            item = _exact_keys(
+                raw,
+                frozenset({"ref", "origins"}),
+                label=f"Policy lineage lowered_origins[{index}]",
+            )
+            raw_names = item["origins"]
+            if (
+                not isinstance(raw_names, Sequence)
+                or isinstance(raw_names, (str, bytes, bytearray))
+                or not all(isinstance(name, str) for name in raw_names)
+            ):
+                raise EvaluationRunRuntimeErrorV1(
+                    "Policy lineage origins are malformed",
+                    code="EVALUATION_RUN_V1_PROGRAM_SHAPE_INVALID",
+                )
+            origins.append(
+                (
+                    _policy_lineage_ref_from_wire(
+                        item["ref"], label=f"Policy lineage lowered_origins[{index}].ref"
+                    ),
+                    tuple(raw_names),
+                )
+            )
+        lineage = PolicyLineage(tuple(nodes), tuple(origins))
+    except (TypeError, ValueError) as exc:
+        raise EvaluationRunRuntimeErrorV1(
+            "Policy lineage is malformed", code="EVALUATION_RUN_V1_PROGRAM_SHAPE_INVALID"
+        ) from exc
+    if _canonical_json_bytes(
+        _policy_lineage_to_wire(lineage), label="Policy lineage"
+    ) != _canonical_json_bytes(_thaw_json(value), label="Policy lineage"):
+        raise EvaluationRunRuntimeErrorV1(
+            "Policy lineage is not canonical", code="EVALUATION_RUN_V1_PROGRAM_SHAPE_INVALID"
+        )
+    return lineage
+
+
+def _run_target_to_wire(target: EvaluationRunTargetV0) -> dict[str, object]:
+    if not isinstance(target, EvaluationRunTargetV0):
+        raise EvaluationRunRuntimeErrorV1(
+            "native Explain target is malformed", code="EVALUATION_RUN_V1_CAPTURE_INPUT_INVALID"
+        )
+    try:
+        EvaluationRunTargetV0.__post_init__(target)
+    except ProtocolShapeError as exc:
+        raise EvaluationRunRuntimeErrorV1(
+            "native Explain target is malformed", code="EVALUATION_RUN_V1_CAPTURE_INPUT_INVALID"
+        ) from exc
+    return {
+        "$type": "FactGraphEvaluationRunTargetV0Capture",
+        "original_target_kind": target.original_target_kind,
+        "normalization_kind": target.normalization_kind,
+        "target_id": target.target_id,
+        "target_version": target.target_version,
+        "normalized_policy_id": target.normalized_policy_id,
+        "normalized_policy_version": target.normalized_policy_version,
+        "policy_digest": target.policy_digest,
+        "address_space_digest": target.address_space_digest,
+        "schema_digest": target.schema_digest,
+        "policy_structure": _authored_policy_structure_to_wire(target.policy_structure),
+        "policy_lineage": _policy_lineage_to_wire(target.policy_lineage),
+        "rule_pins": [
+            {
+                "occurrence_alias": pin.occurrence_alias,
+                "rule_id": pin.rule_id,
+                "rule_version": pin.rule_version,
+                "rule_content_digest": pin.rule_content_digest,
+                "semantic_contract_digest": pin.semantic_contract_digest,
+            }
+            for pin in target.rule_pins
+        ],
+        "target_digest": target.target_digest,
+    }
+
+
+def _run_target_from_wire(value: object) -> EvaluationRunTargetV0:
+    row = _exact_keys(
+        value,
+        frozenset(
+            {
+                "$type",
+                "original_target_kind",
+                "normalization_kind",
+                "target_id",
+                "target_version",
+                "normalized_policy_id",
+                "normalized_policy_version",
+                "policy_digest",
+                "address_space_digest",
+                "schema_digest",
+                "policy_structure",
+                "policy_lineage",
+                "rule_pins",
+                "target_digest",
+            }
+        ),
+        label="native Explain target",
+    )
+    if row["$type"] != "FactGraphEvaluationRunTargetV0Capture":
+        raise EvaluationRunRuntimeErrorV1(
+            "native Explain target type is invalid",
+            code="EVALUATION_RUN_V1_PROGRAM_SHAPE_INVALID",
+        )
+    raw_pins = row["rule_pins"]
+    if not isinstance(raw_pins, Sequence) or isinstance(raw_pins, (str, bytes, bytearray)):
+        raise EvaluationRunRuntimeErrorV1(
+            "native Explain Rule pins are malformed",
+            code="EVALUATION_RUN_V1_PROGRAM_SHAPE_INVALID",
+        )
+    try:
+        pins = tuple(
+            EvaluationRunRulePinV0(
+                _exact_keys(
+                    raw,
+                    frozenset(
+                        {
+                            "occurrence_alias",
+                            "rule_id",
+                            "rule_version",
+                            "rule_content_digest",
+                            "semantic_contract_digest",
+                        }
+                    ),
+                    label=f"native Explain Rule pins[{index}]",
+                )["occurrence_alias"],  # type: ignore[arg-type]
+                _exact_keys(
+                    raw,
+                    frozenset(
+                        {
+                            "occurrence_alias",
+                            "rule_id",
+                            "rule_version",
+                            "rule_content_digest",
+                            "semantic_contract_digest",
+                        }
+                    ),
+                    label=f"native Explain Rule pins[{index}]",
+                )["rule_id"],  # type: ignore[arg-type]
+                _exact_keys(
+                    raw,
+                    frozenset(
+                        {
+                            "occurrence_alias",
+                            "rule_id",
+                            "rule_version",
+                            "rule_content_digest",
+                            "semantic_contract_digest",
+                        }
+                    ),
+                    label=f"native Explain Rule pins[{index}]",
+                )["rule_version"],  # type: ignore[arg-type]
+                _exact_keys(
+                    raw,
+                    frozenset(
+                        {
+                            "occurrence_alias",
+                            "rule_id",
+                            "rule_version",
+                            "rule_content_digest",
+                            "semantic_contract_digest",
+                        }
+                    ),
+                    label=f"native Explain Rule pins[{index}]",
+                )["rule_content_digest"],  # type: ignore[arg-type]
+                _exact_keys(
+                    raw,
+                    frozenset(
+                        {
+                            "occurrence_alias",
+                            "rule_id",
+                            "rule_version",
+                            "rule_content_digest",
+                            "semantic_contract_digest",
+                        }
+                    ),
+                    label=f"native Explain Rule pins[{index}]",
+                )["semantic_contract_digest"],  # type: ignore[arg-type]
+            )
+            for index, raw in enumerate(raw_pins)
+        )
+        target = EvaluationRunTargetV0(
+            row["original_target_kind"],  # type: ignore[arg-type]
+            row["normalization_kind"],  # type: ignore[arg-type]
+            row["target_id"],  # type: ignore[arg-type]
+            row["target_version"],  # type: ignore[arg-type]
+            row["normalized_policy_id"],  # type: ignore[arg-type]
+            row["normalized_policy_version"],  # type: ignore[arg-type]
+            row["policy_digest"],  # type: ignore[arg-type]
+            row["address_space_digest"],  # type: ignore[arg-type]
+            row["schema_digest"],  # type: ignore[arg-type]
+            _authored_policy_structure_from_wire(row["policy_structure"]),
+            _policy_lineage_from_wire(row["policy_lineage"]),
+            pins,
+            row["target_digest"],  # type: ignore[arg-type]
+        )
+    except (TypeError, ValueError, ProtocolShapeError) as exc:
+        raise EvaluationRunRuntimeErrorV1(
+            "native Explain target is malformed",
+            code="EVALUATION_RUN_V1_PROGRAM_SHAPE_INVALID",
+        ) from exc
+    if _canonical_json_bytes(
+        _run_target_to_wire(target), label="native Explain target"
+    ) != _canonical_json_bytes(_thaw_json(value), label="native Explain target"):
+        raise EvaluationRunRuntimeErrorV1(
+            "native Explain target is not canonical",
+            code="EVALUATION_RUN_V1_PROGRAM_SHAPE_INVALID",
+        )
+    return target
+
+
+def _port_type_to_wire(port_type: PortType) -> dict[str, object]:
+    if not isinstance(port_type, PortType):
+        raise EvaluationRunRuntimeErrorV1(
+            "native Explain port type is malformed",
+            code="EVALUATION_RUN_V1_CAPTURE_INPUT_INVALID",
+        )
+    return {"kind": port_type.kind, "entity_type": port_type.entity_type}
+
+
+def _port_type_from_wire(value: object, *, label: str) -> PortType:
+    row = _exact_keys(value, frozenset({"kind", "entity_type"}), label=label)
+    try:
+        return PortType(row["kind"], row["entity_type"])  # type: ignore[arg-type]
+    except (TypeError, ValueError) as exc:
+        raise EvaluationRunRuntimeErrorV1(
+            f"{label} is malformed", code="EVALUATION_RUN_V1_PROGRAM_SHAPE_INVALID"
+        ) from exc
+
+
+def _occurrence_map_to_wire(
+    occurrences: tuple[RuleExprOccurrenceBinding, ...],
+) -> list[dict[str, object]]:
+    if not isinstance(occurrences, tuple) or not all(
+        isinstance(item, RuleExprOccurrenceBinding) for item in occurrences
+    ):
+        raise EvaluationRunRuntimeErrorV1(
+            "native Explain occurrence map is malformed",
+            code="EVALUATION_RUN_V1_CAPTURE_INPUT_INVALID",
+        )
+    return [
+        {
+            "alias": occurrence.alias,
+            "rule_id": occurrence.rule_id,
+            "content_digest": occurrence.content_digest,
+            "rule_version": occurrence.rule_version,
+            "authored_alias": occurrence.authored_alias,
+            "port_bindings": [
+                {
+                    "occurrence_alias": binding.occurrence_alias,
+                    "port_name": binding.port_name,
+                    "port_type": _port_type_to_wire(binding.port_type),
+                    "source_var": binding.source_var.name,
+                    "alias_local_execution_var": binding.alias_local_execution_var.name,
+                }
+                for binding in occurrence.port_bindings
+            ],
+        }
+        for occurrence in occurrences
+    ]
+
+
+def _occurrence_map_from_wire(value: object) -> tuple[RuleExprOccurrenceBinding, ...]:
+    if not isinstance(value, Sequence) or isinstance(value, (str, bytes, bytearray)):
+        raise EvaluationRunRuntimeErrorV1(
+            "native Explain occurrence map is malformed",
+            code="EVALUATION_RUN_V1_PROGRAM_SHAPE_INVALID",
+        )
+    occurrences: list[RuleExprOccurrenceBinding] = []
+    try:
+        for index, raw in enumerate(value):
+            row = _exact_keys(
+                raw,
+                frozenset(
+                    {
+                        "alias",
+                        "rule_id",
+                        "content_digest",
+                        "rule_version",
+                        "authored_alias",
+                        "port_bindings",
+                    }
+                ),
+                label=f"native Explain occurrence[{index}]",
+            )
+            raw_bindings = row["port_bindings"]
+            if not isinstance(raw_bindings, Sequence) or isinstance(
+                raw_bindings, (str, bytes, bytearray)
+            ):
+                raise EvaluationRunRuntimeErrorV1(
+                    "native Explain occurrence bindings are malformed",
+                    code="EVALUATION_RUN_V1_PROGRAM_SHAPE_INVALID",
+                )
+            bindings = []
+            for offset, raw_binding in enumerate(raw_bindings):
+                binding = _exact_keys(
+                    raw_binding,
+                    frozenset(
+                        {
+                            "occurrence_alias",
+                            "port_name",
+                            "port_type",
+                            "source_var",
+                            "alias_local_execution_var",
+                        }
+                    ),
+                    label=f"native Explain occurrence[{index}].port[{offset}]",
+                )
+                if not isinstance(binding["source_var"], str) or not isinstance(
+                    binding["alias_local_execution_var"], str
+                ):
+                    raise EvaluationRunRuntimeErrorV1(
+                        "native Explain occurrence variable is malformed",
+                        code="EVALUATION_RUN_V1_PROGRAM_SHAPE_INVALID",
+                    )
+                bindings.append(
+                    RuleExprPortBinding(
+                        binding["occurrence_alias"],  # type: ignore[arg-type]
+                        binding["port_name"],  # type: ignore[arg-type]
+                        _port_type_from_wire(
+                            binding["port_type"],
+                            label=f"native Explain occurrence[{index}].port[{offset}].type",
+                        ),
+                        Var(binding["source_var"]),
+                        Var(binding["alias_local_execution_var"]),
+                    )
+                )
+            occurrences.append(
+                RuleExprOccurrenceBinding(
+                    row["alias"],  # type: ignore[arg-type]
+                    row["rule_id"],  # type: ignore[arg-type]
+                    row["content_digest"],  # type: ignore[arg-type]
+                    tuple(bindings),
+                    row["rule_version"],  # type: ignore[arg-type]
+                    row["authored_alias"],  # type: ignore[arg-type]
+                )
+            )
+    except (TypeError, ValueError) as exc:
+        raise EvaluationRunRuntimeErrorV1(
+            "native Explain occurrence map is malformed",
+            code="EVALUATION_RUN_V1_PROGRAM_SHAPE_INVALID",
+        ) from exc
+    result = tuple(occurrences)
+    if len({item.alias for item in result}) != len(result):
+        raise EvaluationRunRuntimeErrorV1(
+            "native Explain occurrence aliases are duplicated",
+            code="EVALUATION_RUN_V1_PROGRAM_SHAPE_INVALID",
+        )
+    return result
+
+
+def _join_to_wire(join: RuleJoinConstraint) -> dict[str, object]:
+    if not isinstance(join, RuleJoinConstraint):
+        raise EvaluationRunRuntimeErrorV1(
+            "native Explain join is malformed", code="EVALUATION_RUN_V1_CAPTURE_INPUT_INVALID"
+        )
+    return {
+        "left_occurrence_alias": join.left.occurrence_alias,
+        "left_port_name": join.left.port_name,
+        "right_occurrence_alias": join.right.occurrence_alias,
+        "right_port_name": join.right.port_name,
+    }
+
+
+def _join_from_wire(
+    value: object,
+    *,
+    by_endpoint: Mapping[tuple[str, str], tuple[RuleExprPortBinding, str]],
+    label: str,
+) -> RuleJoinConstraint:
+    row = _exact_keys(
+        value,
+        frozenset(
+            {
+                "left_occurrence_alias",
+                "left_port_name",
+                "right_occurrence_alias",
+                "right_port_name",
+            }
+        ),
+        label=label,
+    )
+    try:
+        left_key = (row["left_occurrence_alias"], row["left_port_name"])
+        right_key = (row["right_occurrence_alias"], row["right_port_name"])
+        if not all(isinstance(value, str) for value in (*left_key, *right_key)):
+            raise ValueError("join endpoint is not text")
+        left, left_rule_id = by_endpoint[left_key]  # type: ignore[index]
+        right, right_rule_id = by_endpoint[right_key]  # type: ignore[index]
+        return RuleJoinConstraint(
+            RulePortRef(
+                left.occurrence_alias,
+                left_rule_id,
+                left.port_name,
+                left.source_var,
+                left.port_type,
+            ),
+            RulePortRef(
+                right.occurrence_alias,
+                right_rule_id,
+                right.port_name,
+                right.source_var,
+                right.port_type,
+            ),
+        )
+    except (KeyError, StopIteration, TypeError, ValueError) as exc:
+        raise EvaluationRunRuntimeErrorV1(
+            f"{label} is malformed", code="EVALUATION_RUN_V1_PROGRAM_SHAPE_INVALID"
+        ) from exc
+
+
+def _atoms_to_wire(atoms: tuple[object, ...], *, label: str) -> dict[str, object]:
+    """Encode one compiler-materialized conjunction, never an authored AST."""
+
+    try:
+        return _encode_structural(lower_ast_to_where_ir(AndExpr(atoms=list(atoms))))
+    except (TypeError, WhereASTError) as exc:
+        raise EvaluationRunRuntimeErrorV1(
+            f"{label} cannot be canonically lowered",
+            code="EVALUATION_RUN_V1_CAPTURE_INPUT_INVALID",
+        ) from exc
+
+
+def _atoms_from_wire(value: object, *, label: str) -> tuple[object, ...]:
+    try:
+        raw = _decode_structural(value)
+        if not isinstance(raw, list):
+            raise ValueError("atom body is not a list")
+        parsed = parse_where_ir_to_ast(raw)
+        if not isinstance(parsed, AndExpr):
+            raise ValueError("atom body is not one conjunction")
+        atoms = tuple(parsed.atoms)
+        if _canonical_json_bytes(
+            _atoms_to_wire(atoms, label=label), label=label
+        ) != _canonical_json_bytes(_thaw_json(value), label=label):
+            raise ValueError("atom body is not canonical")
+        return atoms
+    except (TypeError, ValueError, WhereASTError) as exc:
+        raise EvaluationRunRuntimeErrorV1(
+            f"{label} is malformed", code="EVALUATION_RUN_V1_PROGRAM_SHAPE_INVALID"
+        ) from exc
+
+
+def _head_binding_to_wire(binding: RuleExprHeadBinding) -> dict[str, object]:
+    if not isinstance(binding, RuleExprHeadBinding):
+        raise EvaluationRunRuntimeErrorV1(
+            "native Explain head binding is malformed",
+            code="EVALUATION_RUN_V1_CAPTURE_INPUT_INVALID",
+        )
+    return {
+        "kind": binding.kind,
+        "head_rule_id": binding.head_rule_id,
+        "head_content_digest": binding.head_content_digest,
+        "projection_occurrence_alias": binding.projection_occurrence_alias,
+    }
+
+
+def _head_binding_from_wire(value: object) -> RuleExprHeadBinding:
+    row = _exact_keys(
+        value,
+        frozenset({"kind", "head_rule_id", "head_content_digest", "projection_occurrence_alias"}),
+        label="native Explain head binding",
+    )
+    try:
+        return RuleExprHeadBinding(
+            row["kind"],  # type: ignore[arg-type]
+            row["head_rule_id"],  # type: ignore[arg-type]
+            row["head_content_digest"],  # type: ignore[arg-type]
+            row["projection_occurrence_alias"],  # type: ignore[arg-type]
+        )
+    except (TypeError, ValueError) as exc:
+        raise EvaluationRunRuntimeErrorV1(
+            "native Explain head binding is malformed",
+            code="EVALUATION_RUN_V1_PROGRAM_SHAPE_INVALID",
+        ) from exc
+
+
+def _native_explain_lowering_to_wire(plan: RuleExprLoweringPlan) -> dict[str, object]:
+    """Capture the restricted compiler coordinates needed for native reprobe.
+
+    This deliberately serializes only compiler-produced DNF/materialization
+    inputs.  It does not accept an arbitrary user RuleExpr, pickle, repr, or
+    current Policy lookup as an Explain substitute.
+    """
+
+    if not isinstance(plan, RuleExprLoweringPlan) or plan.head_binding.kind != "projection":
+        raise EvaluationRunRuntimeErrorV1(
+            "V1 detached Explain requires a projection-head lowering plan",
+            code="EVALUATION_RUN_V1_EXPLAIN_CONTEXT_UNSUPPORTED",
+        )
+    projection_ports = tuple(plan.head.ports)
+    try:
+        expected_head = Rule.projection(*projection_ports)
+    except (TypeError, ValueError) as exc:  # pragma: no cover - Rule plan invariant.
+        raise EvaluationRunRuntimeErrorV1(
+            "native Explain projection head is malformed",
+            code="EVALUATION_RUN_V1_CAPTURE_INPUT_INVALID",
+        ) from exc
+    if (
+        expected_head.id != plan.head.id
+        or expected_head.content_digest != plan.head.content_digest
+        or expected_head.version != plan.head.version
+        or plan.head_binding.head_rule_id != plan.head.id
+        or plan.head_binding.head_content_digest != plan.head.content_digest
+    ):
+        raise EvaluationRunRuntimeErrorV1(
+            "native Explain head is not a current projection head",
+            code="EVALUATION_RUN_V1_CAPTURE_INPUT_INVALID",
+        )
+    payload: dict[str, object] = {
+        "$type": _NATIVE_EXPLAIN_LOWERING_TYPE,
+        "source_kind": plan.source_kind,
+        "projection_ports": list(projection_ports),
+        "head_id": plan.head.id,
+        "head_content_digest": plan.head.content_digest,
+        "head_binding": _head_binding_to_wire(plan.head_binding),
+        "branches": [
+            {
+                "branch_id": branch.branch_id,
+                "path": list(branch.path),
+                "occurrence_aliases": list(branch.occurrence_aliases),
+                "body_atoms": _atoms_to_wire(branch.body_atoms, label="native Explain branch"),
+                "pending_joins": [_join_to_wire(join) for join in branch.pending_joins],
+            }
+            for branch in plan.branches
+        ],
+        "occurrence_map": _occurrence_map_to_wire(plan.occurrence_map),
+        "query_head_links": [
+            {
+                "branch_id": item.branch_id,
+                "head_port_name": item.head_port_name,
+                "occurrence_alias": item.occurrence_alias,
+                "port_name": item.port_name,
+            }
+            for item in plan.query_head_links
+        ],
+        "query_value_bindings": [
+            {
+                "branch_id": item.branch_id,
+                "occurrence_alias": item.occurrence_alias,
+                "port_name": item.port_name,
+                "value": _encode_structural(item.value.value),
+            }
+            for item in plan.query_value_bindings
+        ],
+        "query_navigation_lookups": [
+            {
+                "branch_id": item.branch_id,
+                "head_port_name": item.head_port_name,
+                "occurrence_alias": item.occurrence_alias,
+                "port_name": item.port_name,
+                "field_predicate_id": item.field_predicate_id,
+            }
+            for item in plan.query_navigation_lookups
+        ],
+        "policy_conditions": [
+            {
+                "branch_id": item.branch_id,
+                "policy_node_id": item.policy_node_id,
+                "condition_id": item.condition_id,
+                "role": item.role,
+                "atom": _atoms_to_wire((item.atom,), label="native Explain policy condition"),
+            }
+            for item in plan.policy_conditions
+        ],
+    }
+    payload["lowering_digest"] = _token("evaluation_run_v1_native_explain_lowering", payload)
+    return payload
+
+
+def _native_explain_lowering_from_wire(value: object) -> RuleExprLoweringPlan:
+    expected_keys = frozenset(
+        {
+            "$type",
+            "source_kind",
+            "projection_ports",
+            "head_id",
+            "head_content_digest",
+            "head_binding",
+            "branches",
+            "occurrence_map",
+            "query_head_links",
+            "query_value_bindings",
+            "query_navigation_lookups",
+            "policy_conditions",
+            "lowering_digest",
+        }
+    )
+    row = _exact_keys(value, expected_keys, label="native Explain lowering")
+    if row["$type"] != _NATIVE_EXPLAIN_LOWERING_TYPE:
+        raise EvaluationRunRuntimeErrorV1(
+            "native Explain lowering type is invalid",
+            code="EVALUATION_RUN_V1_PROGRAM_SHAPE_INVALID",
+        )
+    digest_payload = _thaw_json(
+        {name: item for name, item in row.items() if name != "lowering_digest"}
+    )
+    if row["lowering_digest"] != _token(
+        "evaluation_run_v1_native_explain_lowering", digest_payload
+    ):
+        raise EvaluationRunRuntimeErrorV1(
+            "native Explain lowering digest is mismatched",
+            code="EVALUATION_RUN_V1_PROGRAM_PIN_MISMATCH",
+        )
+    projection_ports = row["projection_ports"]
+    if (
+        not isinstance(projection_ports, Sequence)
+        or isinstance(projection_ports, (str, bytes, bytearray))
+        or not all(isinstance(name, str) and name for name in projection_ports)
+    ):
+        raise EvaluationRunRuntimeErrorV1(
+            "native Explain projection ports are malformed",
+            code="EVALUATION_RUN_V1_PROGRAM_SHAPE_INVALID",
+        )
+    try:
+        head = Rule.projection(*projection_ports)
+    except (TypeError, ValueError) as exc:
+        raise EvaluationRunRuntimeErrorV1(
+            "native Explain projection head is malformed",
+            code="EVALUATION_RUN_V1_PROGRAM_SHAPE_INVALID",
+        ) from exc
+    if row["head_id"] != head.id or row["head_content_digest"] != head.content_digest:
+        raise EvaluationRunRuntimeErrorV1(
+            "native Explain projection head is mismatched",
+            code="EVALUATION_RUN_V1_PROGRAM_PIN_MISMATCH",
+        )
+    head_binding = _head_binding_from_wire(row["head_binding"])
+    if (
+        head_binding.kind != "projection"
+        or head_binding.head_rule_id != head.id
+        or head_binding.head_content_digest != head.content_digest
+    ):
+        raise EvaluationRunRuntimeErrorV1(
+            "native Explain projection head binding is mismatched",
+            code="EVALUATION_RUN_V1_PROGRAM_PIN_MISMATCH",
+        )
+    occurrences = _occurrence_map_from_wire(row["occurrence_map"])
+    endpoints = {
+        (binding.occurrence_alias, binding.port_name): (binding, occurrence.rule_id)
+        for occurrence in occurrences
+        for binding in occurrence.port_bindings
+    }
+    if len(endpoints) != sum(len(item.port_bindings) for item in occurrences):
+        raise EvaluationRunRuntimeErrorV1(
+            "native Explain occurrence ports are duplicated",
+            code="EVALUATION_RUN_V1_PROGRAM_SHAPE_INVALID",
+        )
+    raw_branches = row["branches"]
+    if not isinstance(raw_branches, Sequence) or isinstance(raw_branches, (str, bytes, bytearray)):
+        raise EvaluationRunRuntimeErrorV1(
+            "native Explain branches are malformed", code="EVALUATION_RUN_V1_PROGRAM_SHAPE_INVALID"
+        )
+    branches: list[RuleExprLoweringBranch] = []
+    try:
+        for index, raw in enumerate(raw_branches):
+            branch = _exact_keys(
+                raw,
+                frozenset(
+                    {"branch_id", "path", "occurrence_aliases", "body_atoms", "pending_joins"}
+                ),
+                label=f"native Explain branch[{index}]",
+            )
+            path = branch["path"]
+            aliases = branch["occurrence_aliases"]
+            joins = branch["pending_joins"]
+            if (
+                not isinstance(path, Sequence)
+                or isinstance(path, (str, bytes, bytearray))
+                or not all(isinstance(item, int) and not isinstance(item, bool) for item in path)
+                or not isinstance(aliases, Sequence)
+                or isinstance(aliases, (str, bytes, bytearray))
+                or not all(isinstance(item, str) for item in aliases)
+                or not isinstance(joins, Sequence)
+                or isinstance(joins, (str, bytes, bytearray))
+            ):
+                raise EvaluationRunRuntimeErrorV1(
+                    "native Explain branch is malformed",
+                    code="EVALUATION_RUN_V1_PROGRAM_SHAPE_INVALID",
+                )
+            branches.append(
+                RuleExprLoweringBranch(
+                    branch["branch_id"],  # type: ignore[arg-type]
+                    tuple(path),
+                    tuple(aliases),
+                    _atoms_from_wire(branch["body_atoms"], label=f"native Explain branch[{index}]"),
+                    tuple(
+                        _join_from_wire(
+                            item,
+                            by_endpoint=endpoints,
+                            label=f"native Explain branch[{index}].join[{offset}]",
+                        )
+                        for offset, item in enumerate(joins)
+                    ),
+                )
+            )
+    except (TypeError, ValueError) as exc:
+        raise EvaluationRunRuntimeErrorV1(
+            "native Explain branches are malformed", code="EVALUATION_RUN_V1_PROGRAM_SHAPE_INVALID"
+        ) from exc
+
+    def _sequence(raw: object, *, label: str) -> Sequence[object]:
+        if not isinstance(raw, Sequence) or isinstance(raw, (str, bytes, bytearray)):
+            raise EvaluationRunRuntimeErrorV1(
+                f"{label} is malformed", code="EVALUATION_RUN_V1_PROGRAM_SHAPE_INVALID"
+            )
+        return raw
+
+    try:
+        head_links = tuple(
+            _RuleExprQueryHeadLink(
+                _exact_keys(
+                    raw,
+                    frozenset({"branch_id", "head_port_name", "occurrence_alias", "port_name"}),
+                    label=f"native Explain head link[{index}]",
+                )["branch_id"],  # type: ignore[arg-type]
+                _exact_keys(
+                    raw,
+                    frozenset({"branch_id", "head_port_name", "occurrence_alias", "port_name"}),
+                    label=f"native Explain head link[{index}]",
+                )["head_port_name"],  # type: ignore[arg-type]
+                _exact_keys(
+                    raw,
+                    frozenset({"branch_id", "head_port_name", "occurrence_alias", "port_name"}),
+                    label=f"native Explain head link[{index}]",
+                )["occurrence_alias"],  # type: ignore[arg-type]
+                _exact_keys(
+                    raw,
+                    frozenset({"branch_id", "head_port_name", "occurrence_alias", "port_name"}),
+                    label=f"native Explain head link[{index}]",
+                )["port_name"],  # type: ignore[arg-type]
+            )
+            for index, raw in enumerate(
+                _sequence(row["query_head_links"], label="native Explain head links")
+            )
+        )
+        value_bindings = tuple(
+            _RuleExprQueryValueBinding(
+                _exact_keys(
+                    raw,
+                    frozenset({"branch_id", "occurrence_alias", "port_name", "value"}),
+                    label=f"native Explain value binding[{index}]",
+                )["branch_id"],  # type: ignore[arg-type]
+                _exact_keys(
+                    raw,
+                    frozenset({"branch_id", "occurrence_alias", "port_name", "value"}),
+                    label=f"native Explain value binding[{index}]",
+                )["occurrence_alias"],  # type: ignore[arg-type]
+                _exact_keys(
+                    raw,
+                    frozenset({"branch_id", "occurrence_alias", "port_name", "value"}),
+                    label=f"native Explain value binding[{index}]",
+                )["port_name"],  # type: ignore[arg-type]
+                Const(
+                    _decode_structural(
+                        _exact_keys(
+                            raw,
+                            frozenset({"branch_id", "occurrence_alias", "port_name", "value"}),
+                            label=f"native Explain value binding[{index}]",
+                        )["value"]
+                    )
+                ),
+            )
+            for index, raw in enumerate(
+                _sequence(row["query_value_bindings"], label="native Explain value bindings")
+            )
+        )
+        navigations = tuple(
+            _RuleExprQueryNavigationLookup(
+                _exact_keys(
+                    raw,
+                    frozenset(
+                        {
+                            "branch_id",
+                            "head_port_name",
+                            "occurrence_alias",
+                            "port_name",
+                            "field_predicate_id",
+                        }
+                    ),
+                    label=f"native Explain navigation[{index}]",
+                )["branch_id"],  # type: ignore[arg-type]
+                _exact_keys(
+                    raw,
+                    frozenset(
+                        {
+                            "branch_id",
+                            "head_port_name",
+                            "occurrence_alias",
+                            "port_name",
+                            "field_predicate_id",
+                        }
+                    ),
+                    label=f"native Explain navigation[{index}]",
+                )["head_port_name"],  # type: ignore[arg-type]
+                _exact_keys(
+                    raw,
+                    frozenset(
+                        {
+                            "branch_id",
+                            "head_port_name",
+                            "occurrence_alias",
+                            "port_name",
+                            "field_predicate_id",
+                        }
+                    ),
+                    label=f"native Explain navigation[{index}]",
+                )["occurrence_alias"],  # type: ignore[arg-type]
+                _exact_keys(
+                    raw,
+                    frozenset(
+                        {
+                            "branch_id",
+                            "head_port_name",
+                            "occurrence_alias",
+                            "port_name",
+                            "field_predicate_id",
+                        }
+                    ),
+                    label=f"native Explain navigation[{index}]",
+                )["port_name"],  # type: ignore[arg-type]
+                _exact_keys(
+                    raw,
+                    frozenset(
+                        {
+                            "branch_id",
+                            "head_port_name",
+                            "occurrence_alias",
+                            "port_name",
+                            "field_predicate_id",
+                        }
+                    ),
+                    label=f"native Explain navigation[{index}]",
+                )["field_predicate_id"],  # type: ignore[arg-type]
+            )
+            for index, raw in enumerate(
+                _sequence(row["query_navigation_lookups"], label="native Explain navigations")
+            )
+        )
+        conditions: list[RuleExprPolicyCondition] = []
+        for index, raw in enumerate(
+            _sequence(row["policy_conditions"], label="native Explain policy conditions")
+        ):
+            item = _exact_keys(
+                raw,
+                frozenset({"branch_id", "policy_node_id", "condition_id", "role", "atom"}),
+                label=f"native Explain policy condition[{index}]",
+            )
+            atoms = _atoms_from_wire(
+                item["atom"], label=f"native Explain policy condition[{index}]"
+            )
+            if len(atoms) != 1 or not isinstance(atoms[0], (PredAtom, CmpAtom)):
+                raise EvaluationRunRuntimeErrorV1(
+                    "native Explain policy condition atom is malformed",
+                    code="EVALUATION_RUN_V1_PROGRAM_SHAPE_INVALID",
+                )
+            conditions.append(
+                RuleExprPolicyCondition(
+                    item["branch_id"],  # type: ignore[arg-type]
+                    item["policy_node_id"],  # type: ignore[arg-type]
+                    item["condition_id"],  # type: ignore[arg-type]
+                    item["role"],  # type: ignore[arg-type]
+                    atoms[0],
+                )
+            )
+        plan = RuleExprLoweringPlan(
+            row["source_kind"],  # type: ignore[arg-type]
+            head,
+            head_binding,
+            tuple(branches),
+            occurrences,
+            ("evaluation_run_v1_native_explain", head.id, head.content_digest),
+            head_links,
+            value_bindings,
+            navigations,
+            tuple(conditions),
+        )
+    except (TypeError, ValueError) as exc:
+        raise EvaluationRunRuntimeErrorV1(
+            "native Explain lowering is malformed", code="EVALUATION_RUN_V1_PROGRAM_SHAPE_INVALID"
+        ) from exc
+    if _canonical_json_bytes(
+        _native_explain_lowering_to_wire(plan), label="native Explain lowering"
+    ) != _canonical_json_bytes(_thaw_json(value), label="native Explain lowering"):
+        raise EvaluationRunRuntimeErrorV1(
+            "native Explain lowering is not canonical",
+            code="EVALUATION_RUN_V1_PROGRAM_SHAPE_INVALID",
+        )
+    return plan
+
+
+def _assert_native_explain_occurrence_pins(
+    occurrences: Sequence[RuleExprOccurrenceBinding],
+    run_target: EvaluationRunTargetV0,
+    *,
+    code: str,
+) -> None:
+    """Bind every lowered occurrence back to exactly one authored Rule pin.
+
+    DNF lowering is allowed to copy a shared authored occurrence into e.g.
+    ``common__c0`` / ``common__c1``.  Its ``authored_alias`` is the stable
+    lineage bridge; an un-copied occurrence uses its own alias.  A positional
+    one-to-one comparison would therefore reject valid ``PolicyAny`` plans,
+    while ignoring the bridge could project an unrelated Rule onto the
+    authored Policy tree.
+    """
+
+    pins = {item.occurrence_alias: item for item in run_target.rule_pins}
+    seen: set[str] = set()
+    for occurrence in occurrences:
+        authored_alias = occurrence.authored_alias or occurrence.alias
+        pin = pins.get(authored_alias)
+        if pin is None or (
+            occurrence.rule_id != pin.rule_id
+            or occurrence.rule_version != pin.rule_version
+            or occurrence.content_digest != pin.rule_content_digest
+        ):
+            raise EvaluationRunRuntimeErrorV1(
+                "native Explain occurrence map does not match target Rule pins",
+                code=code,
+            )
+        seen.add(authored_alias)
+    if seen != set(pins):
+        raise EvaluationRunRuntimeErrorV1(
+            "native Explain occurrence map does not cover every target Rule pin",
+            code=code,
+        )
+
+
+def _native_explain_context_to_wire(
+    *,
+    run_target: EvaluationRunTargetV0,
+    lowering_plan: RuleExprLoweringPlan,
+    compiled_plan: CompiledDerivationPlan,
+    query_digest: str,
+) -> dict[str, object]:
+    _require_token(query_digest, name="query_digest")
+    lowering = _native_explain_lowering_to_wire(lowering_plan)
+    try:
+        materialized, _traces = _materialize_native_derivation_plan(lowering_plan)
+    except Exception as exc:
+        raise EvaluationRunRuntimeErrorV1(
+            "native Explain lowering cannot be materialized",
+            code="EVALUATION_RUN_V1_CAPTURE_INPUT_INVALID",
+        ) from exc
+    if _compiled_plan_wire(materialized) != _compiled_plan_wire(compiled_plan):
+        raise EvaluationRunRuntimeErrorV1(
+            "native Explain lowering does not reproduce the sealed program",
+            code="EVALUATION_RUN_V1_CAPTURE_INPUT_INVALID",
+        )
+    _assert_native_explain_occurrence_pins(
+        lowering_plan.occurrence_map,
+        run_target,
+        code="EVALUATION_RUN_V1_CAPTURE_INPUT_INVALID",
+    )
+    payload: dict[str, object] = {
+        "$type": _NATIVE_EXPLAIN_CONTEXT_TYPE,
+        "query_digest": query_digest,
+        "run_target": _run_target_to_wire(run_target),
+        "lowering": lowering,
+        "compiled_plan_digest": _compiled_plan_digest(compiled_plan),
+    }
+    payload["context_digest"] = _token("evaluation_run_v1_native_explain_context", payload)
+    return payload
+
+
+def _native_explain_context_from_wire(
+    value: object,
+    *,
+    compiled_plan: CompiledDerivationPlan,
+    schema_pin: str,
+    address_space_digest: str | None,
+    expected_query_digest: str,
+    expected_target_digest: str | None,
+) -> DecodedNativePolicyExplainContextV1:
+    row = _exact_keys(
+        value,
+        frozenset(
+            {
+                "$type",
+                "query_digest",
+                "run_target",
+                "lowering",
+                "compiled_plan_digest",
+                "context_digest",
+            }
+        ),
+        label="native Explain context",
+    )
+    if row["$type"] != _NATIVE_EXPLAIN_CONTEXT_TYPE:
+        raise EvaluationRunRuntimeErrorV1(
+            "native Explain context type is invalid",
+            code="EVALUATION_RUN_V1_PROGRAM_SHAPE_INVALID",
+        )
+    digest_payload = _thaw_json(
+        {name: item for name, item in row.items() if name != "context_digest"}
+    )
+    if row["context_digest"] != _token("evaluation_run_v1_native_explain_context", digest_payload):
+        raise EvaluationRunRuntimeErrorV1(
+            "native Explain context digest is mismatched",
+            code="EVALUATION_RUN_V1_PROGRAM_PIN_MISMATCH",
+        )
+    if row["compiled_plan_digest"] != _compiled_plan_digest(compiled_plan):
+        raise EvaluationRunRuntimeErrorV1(
+            "native Explain context is attached to a different compiled program",
+            code="EVALUATION_RUN_V1_PROGRAM_PIN_MISMATCH",
+        )
+    if row["query_digest"] != expected_query_digest:
+        raise EvaluationRunRuntimeErrorV1(
+            "native Explain context Query does not match sealed plan",
+            code="EVALUATION_RUN_V1_PROGRAM_PIN_MISMATCH",
+        )
+    run_target = _run_target_from_wire(row["run_target"])
+    if run_target.schema_digest != schema_pin or (
+        address_space_digest is not None
+        and _sha_token_from_plain_digest(run_target.address_space_digest) != address_space_digest
+    ):
+        raise EvaluationRunRuntimeErrorV1(
+            "native Explain target pins do not match the replay envelope",
+            code="EVALUATION_RUN_V1_PROGRAM_PIN_MISMATCH",
+        )
+    if (
+        expected_target_digest is not None
+        and _sha_token_from_plain_digest(run_target.target_digest) != expected_target_digest
+    ):
+        raise EvaluationRunRuntimeErrorV1(
+            "native Explain target does not match sealed Goal target",
+            code="EVALUATION_RUN_V1_PROGRAM_PIN_MISMATCH",
+        )
+    lowering = _native_explain_lowering_from_wire(row["lowering"])
+    try:
+        materialized, _traces = _materialize_native_derivation_plan(lowering)
+    except Exception as exc:
+        raise EvaluationRunRuntimeErrorV1(
+            "native Explain context lowering cannot be materialized",
+            code="EVALUATION_RUN_V1_PROGRAM_SHAPE_INVALID",
+        ) from exc
+    if _compiled_plan_wire(materialized) != _compiled_plan_wire(compiled_plan):
+        raise EvaluationRunRuntimeErrorV1(
+            "native Explain context does not reproduce the sealed program",
+            code="EVALUATION_RUN_V1_PROGRAM_PIN_MISMATCH",
+        )
+    _assert_native_explain_occurrence_pins(
+        lowering.occurrence_map,
+        run_target,
+        code="EVALUATION_RUN_V1_PROGRAM_PIN_MISMATCH",
+    )
+    return DecodedNativePolicyExplainContextV1(
+        run_target=run_target,
+        lowering_plan=lowering,
+        context_digest=row["context_digest"],  # type: ignore[arg-type]
+    )
+
+
 def _scenario_value_to_wire(value: ScenarioValueV1) -> dict[str, object]:
     if not isinstance(value, ScenarioValueV1):
         raise EvaluationRunRuntimeErrorV1(
@@ -1032,6 +2343,12 @@ class DecodedEvaluationReplayProgramV1:
     candidate_policy_structure: PolicyStructureV0 | None = field(
         default=None, repr=False, compare=False
     )
+    primary_native_explain_context: DecodedNativePolicyExplainContextV1 | None = field(
+        default=None, repr=False, compare=False
+    )
+    candidate_native_explain_context: DecodedNativePolicyExplainContextV1 | None = field(
+        default=None, repr=False, compare=False
+    )
     scenario_operations: tuple[ResolvedScenarioOperationV1, ...] | None = field(
         default=None, repr=False, compare=False
     )
@@ -1050,6 +2367,10 @@ def build_evaluation_replay_program_envelope_v1(
     candidate_compiled_plan: CompiledDerivationPlan | None = None,
     primary_policy_structure: PolicyStructureV0 | None = None,
     candidate_policy_structure: PolicyStructureV0 | None = None,
+    primary_run_target: EvaluationRunTargetV0 | None = None,
+    candidate_run_target: EvaluationRunTargetV0 | None = None,
+    primary_lowering_plan: RuleExprLoweringPlan | None = None,
+    candidate_lowering_plan: RuleExprLoweringPlan | None = None,
     scenario_operations: tuple[ResolvedScenarioOperationV1, ...] | None = None,
 ) -> EvaluationReplayProgramEnvelopeV1:
     """Capture the exact replay program, with no live evaluator/store input.
@@ -1115,6 +2436,63 @@ def build_evaluation_replay_program_envelope_v1(
                 "primary plan declares a candidate without its compiled program",
                 code="EVALUATION_RUN_V1_CAPTURE_INPUT_INVALID",
             )
+    if (primary_run_target is None) != (primary_lowering_plan is None):
+        raise EvaluationRunRuntimeErrorV1(
+            "primary native Explain target and lowering plan must be supplied together",
+            code="EVALUATION_RUN_V1_CAPTURE_INPUT_INVALID",
+        )
+    if (candidate_run_target is None) != (candidate_lowering_plan is None):
+        raise EvaluationRunRuntimeErrorV1(
+            "candidate native Explain target and lowering plan must be supplied together",
+            code="EVALUATION_RUN_V1_CAPTURE_INPUT_INVALID",
+        )
+    if candidate_plan is None and (
+        candidate_run_target is not None or candidate_lowering_plan is not None
+    ):
+        raise EvaluationRunRuntimeErrorV1(
+            "candidate native Explain context requires a candidate plan",
+            code="EVALUATION_RUN_V1_CAPTURE_INPUT_INVALID",
+        )
+    if primary_run_target is not None:
+        assert primary_lowering_plan is not None
+        primary_context = _native_explain_context_to_wire(
+            run_target=primary_run_target,
+            lowering_plan=primary_lowering_plan,
+            compiled_plan=primary_compiled_plan,
+            query_digest=plan.query_digest,
+        )
+        if (
+            primary_policy_structure is not None
+            and primary_policy_structure != primary_run_target.policy_structure
+        ):
+            raise EvaluationRunRuntimeErrorV1(
+                "primary policy structure disagrees with native Explain target",
+                code="EVALUATION_RUN_V1_CAPTURE_INPUT_INVALID",
+            )
+    else:
+        primary_context = None
+    if candidate_run_target is not None:
+        assert (
+            candidate_plan is not None
+            and candidate_lowering_plan is not None
+            and candidate_compiled_plan is not None
+        )
+        candidate_context = _native_explain_context_to_wire(
+            run_target=candidate_run_target,
+            lowering_plan=candidate_lowering_plan,
+            compiled_plan=candidate_compiled_plan,
+            query_digest=candidate_plan.query_digest,
+        )
+        if (
+            candidate_policy_structure is not None
+            and candidate_policy_structure != candidate_run_target.policy_structure
+        ):
+            raise EvaluationRunRuntimeErrorV1(
+                "candidate policy structure disagrees with native Explain target",
+                code="EVALUATION_RUN_V1_CAPTURE_INPUT_INVALID",
+            )
+    else:
+        candidate_context = None
     candidate_record: dict[str, object] | None = None
     if candidate_plan is not None:
         assert candidate_compiled_plan is not None
@@ -1133,6 +2511,8 @@ def build_evaluation_replay_program_envelope_v1(
             if candidate_policy_structure is None
             else _authored_policy_structure_to_wire(candidate_policy_structure)
         ),
+        "primary_native_explain_context": primary_context,
+        "candidate_native_explain_context": candidate_context,
         "scenario_patch": (
             None if scenario_operations is None else _scenario_patch_to_wire(scenario_operations)
         ),
@@ -1239,6 +2619,10 @@ def capture_evaluation_replay_payload_v1(
     candidate_compiled_plan: CompiledDerivationPlan | None = None,
     primary_policy_structure: PolicyStructureV0 | None = None,
     candidate_policy_structure: PolicyStructureV0 | None = None,
+    primary_run_target: EvaluationRunTargetV0 | None = None,
+    candidate_run_target: EvaluationRunTargetV0 | None = None,
+    primary_lowering_plan: RuleExprLoweringPlan | None = None,
+    candidate_lowering_plan: RuleExprLoweringPlan | None = None,
     scenario_operations: tuple[ResolvedScenarioOperationV1, ...] | None = None,
     provider_receipts: tuple[ProviderReceiptRefV1, ...] = (),
 ) -> EvaluationReplayPayloadV1:
@@ -1273,6 +2657,10 @@ def capture_evaluation_replay_payload_v1(
         candidate_compiled_plan=candidate_compiled_plan,
         primary_policy_structure=primary_policy_structure,
         candidate_policy_structure=candidate_policy_structure,
+        primary_run_target=primary_run_target,
+        candidate_run_target=candidate_run_target,
+        primary_lowering_plan=primary_lowering_plan,
+        candidate_lowering_plan=candidate_lowering_plan,
         scenario_operations=scenario_operations,
     )
     try:
@@ -1311,20 +2699,28 @@ def decode_evaluation_replay_program_v1(
     _decode_schema_from_payload(payload)
     envelope = payload.program_envelope
     compiled_program = envelope.compiled_program
-    root = _exact_keys(
-        compiled_program,
-        frozenset(
-            {
-                "$type",
-                "primary",
-                "candidate",
-                "primary_policy_structure",
-                "candidate_policy_structure",
-                "scenario_patch",
-            }
-        ),
-        label="evaluation replay program",
+    legacy_program_keys = frozenset(
+        {
+            "$type",
+            "primary",
+            "candidate",
+            "primary_policy_structure",
+            "candidate_policy_structure",
+            "scenario_patch",
+        }
     )
+    augmented_program_keys = legacy_program_keys | frozenset(
+        {"primary_native_explain_context", "candidate_native_explain_context"}
+    )
+    if not isinstance(compiled_program, Mapping) or set(compiled_program) not in {
+        legacy_program_keys,
+        augmented_program_keys,
+    }:
+        raise EvaluationRunRuntimeErrorV1(
+            "evaluation replay program has unsupported or missing fields",
+            code="EVALUATION_RUN_V1_PROGRAM_SHAPE_INVALID",
+        )
+    root = compiled_program
     if root["$type"] != _PROGRAM_TYPE:
         raise EvaluationRunRuntimeErrorV1(
             "evaluation replay program type is invalid",
@@ -1376,11 +2772,88 @@ def decode_evaluation_replay_program_v1(
         scenario_operations = None
     else:
         scenario_operations = _scenario_patch_from_wire(root["scenario_patch"])
+    if set(root) == legacy_program_keys:
+        primary_native_explain_context = None
+        candidate_native_explain_context = None
+    else:
+        if root["primary_native_explain_context"] is None:
+            primary_native_explain_context = None
+        else:
+            primary_native_explain_context = _native_explain_context_from_wire(
+                root["primary_native_explain_context"],
+                compiled_plan=primary,
+                schema_pin=envelope.schema_digest,
+                address_space_digest=envelope.address_space_digest,
+                expected_query_digest=run.plan.query_digest,
+                expected_target_digest=(
+                    None
+                    if run.plan.target.kind == "relation_provider"
+                    else run.plan.target.target_digest
+                ),
+            )
+        if root["candidate_native_explain_context"] is None:
+            candidate_native_explain_context = None
+        else:
+            if candidate is None:
+                raise EvaluationRunRuntimeErrorV1(
+                    "replay program has undeclared candidate native Explain context",
+                    code="EVALUATION_RUN_V1_PROGRAM_PIN_MISMATCH",
+                )
+            candidate_native_explain_context = _native_explain_context_from_wire(
+                root["candidate_native_explain_context"],
+                compiled_plan=candidate,
+                schema_pin=envelope.schema_digest,
+                # Candidate Policy/Rule may have its own exact semantic
+                # address-space pin.  It shares the sealed schema/world, not
+                # necessarily the primary target's address space.
+                address_space_digest=None,
+                expected_query_digest=run.candidate_plan.query_digest,
+                expected_target_digest=run.candidate_plan.target.target_digest,
+            )
+        if primary_native_explain_context is not None and (
+            primary_policy_structure is None
+            or primary_native_explain_context.run_target.policy_structure
+            != primary_policy_structure
+        ):
+            raise EvaluationRunRuntimeErrorV1(
+                "primary native Explain context and captured structure disagree",
+                code="EVALUATION_RUN_V1_PROGRAM_PIN_MISMATCH",
+            )
+        if candidate_native_explain_context is not None and (
+            candidate_policy_structure is None
+            or candidate_native_explain_context.run_target.policy_structure
+            != candidate_policy_structure
+        ):
+            raise EvaluationRunRuntimeErrorV1(
+                "candidate native Explain context and captured structure disagree",
+                code="EVALUATION_RUN_V1_PROGRAM_PIN_MISMATCH",
+            )
+        if (
+            primary_native_explain_context is not None
+            and run.plan.target.kind == "relation_provider"
+        ):
+            receipts = run.replay_payload.provider_receipts
+            if len(receipts) != 1:
+                raise EvaluationRunRuntimeErrorV1(
+                    "provider composite Explain target requires one sealed receipt",
+                    code="EVALUATION_RUN_V1_PROGRAM_PIN_MISMATCH",
+                )
+            expected_composite = _provider_composite_target_digest(
+                base_target_digest=primary_native_explain_context.run_target.target_digest,
+                provider_digest=receipts[0].provider_digest,
+            )
+            if run.plan.target.target_digest != expected_composite:
+                raise EvaluationRunRuntimeErrorV1(
+                    "provider composite Explain target is mismatched",
+                    code="EVALUATION_RUN_V1_PROGRAM_PIN_MISMATCH",
+                )
     return DecodedEvaluationReplayProgramV1(
         primary=primary,
         candidate=candidate,
         primary_policy_structure=primary_policy_structure,
         candidate_policy_structure=candidate_policy_structure,
+        primary_native_explain_context=primary_native_explain_context,
+        candidate_native_explain_context=candidate_native_explain_context,
         scenario_operations=scenario_operations,
         primary_compiled_plan_digest=_compiled_plan_digest(primary),
         candidate_compiled_plan_digest=(
@@ -2055,8 +3528,82 @@ def _assert_run_current(run: EvaluationRunV1) -> None:
 
 
 @dataclass(frozen=True)
+class EvaluationRunPolicyProjectionV1:
+    """V1-owned wrapper around lineage-projected native evidence.
+
+    The inner ``PolicyEvaluationProjectionV0`` / provenance DTOs remain useful
+    identity-free projections of an authored Policy tree.  This wrapper binds
+    them to a V1 Run and explicit row target without manufacturing a legacy V0
+    run anchor.
+    """
+
+    run_digest: str
+    target_digest: str
+    query_digest: str
+    context_digest: str
+    evidence_graph_id: str
+    structure: PolicyStructureV0 = field(repr=False, compare=False)
+    evaluation: PolicyEvaluationProjectionV0 = field(repr=False, compare=False)
+    provenance: PolicyProvenanceIndexV0 = field(repr=False, compare=False)
+    projection_digest: str = field(init=False)
+
+    def __post_init__(self) -> None:
+        for name in ("run_digest", "target_digest", "query_digest", "context_digest"):
+            _require_token(getattr(self, name), name=name)
+        if not isinstance(self.evidence_graph_id, str) or not self.evidence_graph_id:
+            raise EvaluationRunRuntimeErrorV1(
+                "Policy projection evidence graph id is invalid",
+                code="EVALUATION_RUN_V1_EXPLAIN_TARGET_INVALID",
+            )
+        if not isinstance(self.structure, PolicyStructureV0):
+            raise EvaluationRunRuntimeErrorV1(
+                "Policy projection structure is invalid",
+                code="EVALUATION_RUN_V1_EXPLAIN_TARGET_INVALID",
+            )
+        if not isinstance(self.evaluation, PolicyEvaluationProjectionV0) or not isinstance(
+            self.provenance, PolicyProvenanceIndexV0
+        ):
+            raise EvaluationRunRuntimeErrorV1(
+                "Policy projection payload is invalid",
+                code="EVALUATION_RUN_V1_EXPLAIN_TARGET_INVALID",
+            )
+        if self.evaluation.root_node_id != self.structure.root_node_id:
+            raise EvaluationRunRuntimeErrorV1(
+                "Policy projection root does not match captured structure",
+                code="EVALUATION_RUN_V1_EXPLAIN_TARGET_INVALID",
+            )
+        object.__setattr__(
+            self,
+            "projection_digest",
+            _token(
+                "evaluation_run_v1_policy_projection",
+                (
+                    self.run_digest,
+                    self.target_digest,
+                    self.query_digest,
+                    self.context_digest,
+                    self.evidence_graph_id,
+                    self.structure.structure_digest,
+                    # Protocol projection DTOs are identity-free and contain
+                    # only canonical immutable scalar/tuple fields.  Their
+                    # deterministic dataclass representations avoid inventing
+                    # a second V0 wire format inside this V1 runtime wrapper.
+                    repr(self.evaluation),
+                    repr(self.provenance),
+                ),
+            ),
+        )
+
+
+@dataclass(frozen=True)
 class EvaluationRunExplanationV1:
-    """A structural Explain envelope with intentionally limited proof claims."""
+    """Explicit V1 Explain with a sealed-world native evidence option.
+
+    A positive row may lazily reconstruct canonical Native evidence from the
+    sealed program/world/context.  This remains inner-engine evidence only:
+    portable adapter proof parity and zero-row negative proofs are never
+    claimed.
+    """
 
     run_digest: str
     target: ExplainTargetV1
@@ -2072,7 +3619,11 @@ class EvaluationRunExplanationV1:
     )
     scenario_patch_capture: Literal["captured", "not_captured"] = "not_captured"
     scenario_patch_application: Literal["applied", "not_applied", "not_captured"] = "not_captured"
-    engine_evidence: Literal["not_captured"] = "not_captured"
+    evidence_graph: EvidenceGraph | None = field(default=None, repr=False, compare=False)
+    policy_projection: EvaluationRunPolicyProjectionV1 | None = field(
+        default=None, repr=False, compare=False
+    )
+    engine_evidence: Literal["native_detached_recomputed", "not_captured"] = "not_captured"
     negative_proof: Literal["not_claimed"] = "not_claimed"
     proof_parity: Literal["not_claimed"] = "not_claimed"
     provider_receipt_count: int = 0
@@ -2153,6 +3704,33 @@ class EvaluationRunExplanationV1:
                 "Explain Scenario patch application state is invalid",
                 code="EVALUATION_RUN_V1_EXPLAIN_TARGET_INVALID",
             )
+        if self.engine_evidence not in {"native_detached_recomputed", "not_captured"}:
+            raise EvaluationRunRuntimeErrorV1(
+                "Explain engine evidence state is invalid",
+                code="EVALUATION_RUN_V1_EXPLAIN_TARGET_INVALID",
+            )
+        if self.engine_evidence == "native_detached_recomputed":
+            if (
+                self.observation != "positive_row_observed"
+                or not isinstance(self.evidence_graph, EvidenceGraph)
+                or not isinstance(self.policy_projection, EvaluationRunPolicyProjectionV1)
+            ):
+                raise EvaluationRunRuntimeErrorV1(
+                    "native detached evidence requires a positive row and complete projection",
+                    code="EVALUATION_RUN_V1_EXPLAIN_TARGET_INVALID",
+                )
+            if self.policy_projection.run_digest != self.run_digest or (
+                self.policy_projection.evidence_graph_id != self.evidence_graph.graph_id
+            ):
+                raise EvaluationRunRuntimeErrorV1(
+                    "native detached evidence projection is not bound to this Explain",
+                    code="EVALUATION_RUN_V1_EXPLAIN_TARGET_INVALID",
+                )
+        elif self.evidence_graph is not None or self.policy_projection is not None:
+            raise EvaluationRunRuntimeErrorV1(
+                "uncaptured Explain evidence must not carry a graph or projection",
+                code="EVALUATION_RUN_V1_EXPLAIN_TARGET_INVALID",
+            )
         if (
             isinstance(self.provider_receipt_count, bool)
             or not isinstance(self.provider_receipt_count, int)
@@ -2183,6 +3761,10 @@ class EvaluationRunExplanationV1:
                     else _scenario_patch_to_wire(self.scenario_operations)["patch_digest"],
                     self.scenario_patch_capture,
                     self.scenario_patch_application,
+                    None if self.evidence_graph is None else self.evidence_graph.graph_id,
+                    None
+                    if self.policy_projection is None
+                    else self.policy_projection.projection_digest,
                     self.engine_evidence,
                     self.negative_proof,
                     self.proof_parity,
@@ -2190,6 +3772,341 @@ class EvaluationRunExplanationV1:
                 ),
             ),
         )
+
+
+def _plan_for_explain_side(run: EvaluationRunV1, side: EvaluationRunSideV1) -> GoalPlanV1:
+    if side.name == "candidate_effective":
+        if run.candidate_plan is None:
+            raise EvaluationRunRuntimeErrorV1(
+                "candidate Explain side has no sealed candidate plan",
+                code="EVALUATION_RUN_V1_EXPLAIN_TARGET_INVALID",
+            )
+        return run.candidate_plan
+    return run.plan
+
+
+def _native_explain_context_for_side(
+    decoded: DecodedEvaluationReplayProgramV1,
+    side: EvaluationRunSideV1,
+) -> tuple[CompiledDerivationPlan, DecodedNativePolicyExplainContextV1 | None]:
+    if side.name == "candidate_effective":
+        if decoded.candidate is None:
+            raise EvaluationRunRuntimeErrorV1(
+                "candidate Explain side has no sealed compiled program",
+                code="EVALUATION_RUN_V1_EXPLAIN_TARGET_INVALID",
+            )
+        return decoded.candidate, decoded.candidate_native_explain_context
+    return decoded.primary, decoded.primary_native_explain_context
+
+
+def _selected_row_for_explain(
+    side: EvaluationRunSideV1, target: ExplainTargetV1
+) -> GoalResultRowV1:
+    for row in side.canonical_result.rows:
+        if row.anchor is not None and row.anchor.anchor_digest == target.anchor_digest:
+            return row
+    raise EvaluationRunRuntimeErrorV1(
+        "Explain row target does not belong to this sealed run",
+        code="EVALUATION_RUN_V1_EXPLAIN_TARGET_INVALID",
+    )
+
+
+def _probe_seed_for_goal_row(
+    plan: RuleExprLoweringPlan,
+    row: GoalResultRowV1,
+) -> tuple[dict[str, object], dict[str, object]]:
+    values = dict(row.values)
+    seed: dict[str, object] = {}
+    subject: dict[str, object] = {}
+    for head_port, variable_names in probe_seed_vars_by_head_port(plan).items():
+        value = values.get(head_port)
+        if value is None:
+            raise EvaluationRunRuntimeErrorV1(
+                "sealed result row does not cover the captured Explain projection",
+                code="EVALUATION_RUN_V1_EXPLAIN_CONTEXT_MISMATCH",
+            )
+        raw = _goal_value_to_raw(value)
+        subject[head_port] = raw
+        for variable_name in variable_names:
+            prior = seed.get(variable_name)
+            if prior is not None and prior != raw:
+                raise EvaluationRunRuntimeErrorV1(
+                    "captured Explain projection maps one variable to conflicting values",
+                    code="EVALUATION_RUN_V1_EXPLAIN_CONTEXT_MISMATCH",
+                )
+            seed[variable_name] = raw
+    return seed, subject
+
+
+def _terminal_environment_key(environment: Mapping[str, object]) -> bytes:
+    try:
+        return _canonical_json_bytes(
+            _encode_structural(dict(sorted(environment.items()))),
+            label="native Explain terminal binding",
+        )
+    except EvaluationRunRuntimeErrorV1:
+        raise
+    except Exception as exc:  # pragma: no cover - ProbeEnv only carries typed engine values.
+        raise EvaluationRunRuntimeErrorV1(
+            "native Explain terminal binding is not canonical",
+            code="EVALUATION_RUN_V1_EXPLAIN_CONTEXT_MISMATCH",
+        ) from exc
+
+
+def _assert_unambiguous_positive_row_probe(
+    probe: object,
+) -> None:
+    """Reject a projected row backed by multiple hidden full bindings.
+
+    ``GoalResultV1`` has selected-row set semantics.  Showing one arbitrary
+    witness tree when two full native environments project to the same row
+    would turn Explain into an unsealed choice.  Multiple duplicate source
+    witnesses inside *one* canonical environment remain ordinary support;
+    distinct environments fail closed until a future explicit proof target is
+    introduced.
+    """
+
+    paths = getattr(probe, "paths", ())
+    terminal_bindings = getattr(probe, "terminal_bindings", ())
+    by_branch = {item.branch_id: item.environments for item in terminal_bindings}
+    holding_branch_count = 0
+    for path in paths:
+        if path.status != "holds":
+            continue
+        # Different authored Any branches may legitimately contribute one
+        # distinct full environment each to the same selected row.  The
+        # ambiguity boundary is therefore *within one holding branch*: a
+        # selected-row set must not make us choose between two hidden bindings
+        # for that branch, while multiple represented Policy paths remain
+        # valuable Explain evidence.
+        environments: dict[bytes, Mapping[str, object]] = {}
+        for environment in by_branch.get(path.tree_id, ()):
+            key = _terminal_environment_key(environment)
+            environments[key] = environment
+        if len(environments) > 1:
+            raise EvaluationRunRuntimeErrorV1(
+                "captured selected row maps to multiple hidden native bindings",
+                code="EVALUATION_RUN_V1_EXPLAIN_AMBIGUOUS_ROW_WITNESS",
+            )
+        if environments:
+            holding_branch_count += 1
+    if holding_branch_count == 0:
+        raise EvaluationRunRuntimeErrorV1(
+            "captured positive row has no holding native branch",
+            code="EVALUATION_RUN_V1_EXPLAIN_CONTEXT_MISMATCH",
+        )
+
+
+def _scenario_source_meta(
+    witness_ref: str,
+    operations: tuple[ResolvedScenarioOperationV1, ...] | None,
+) -> dict[str, object]:
+    """Return source metadata only for an effective synthetic Scenario fact.
+
+    A resolved operation names both the baseline witnesses it *masked* and
+    the synthetic witnesses it added to the effective relation.  The former
+    is operation-level provenance, not provenance of a baseline Fact that
+    happened to be removed later.  In particular, a detached Explain for the
+    baseline side must never retroactively present baseline support as a
+    Scenario-resolved witness.
+
+    Callers pass operations only while rehydrating the effective world, and
+    this helper deliberately matches only synthetic ids.  The complete
+    operation inventory remains available separately on
+    ``EvaluationRunExplanationV1.scenario_operations``.
+    """
+
+    if operations is None:
+        return {"source_kind": "captured_witness"}
+    matched = [
+        operation for operation in operations if witness_ref in operation.synthetic_witness_ids
+    ]
+    if not matched:
+        return {"source_kind": "captured_witness"}
+    return {
+        "source_kind": "scenario_resolved_witness",
+        "scenario_operation_digests": tuple(operation.operation_digest for operation in matched),
+        "premise_ids": tuple(premise for operation in matched for premise in operation.premise_ids),
+        "origin_refs": tuple(origin for operation in matched for origin in operation.origin_refs),
+    }
+
+
+def _captured_fact_sources(
+    relation: Mapping[str, Sequence[ProjectedFact]],
+    operations: tuple[ResolvedScenarioOperationV1, ...] | None,
+) -> Mapping[tuple[str, tuple[object, ...]], tuple[Source, ...]]:
+    sources: dict[tuple[str, tuple[object, ...]], list[Source]] = {}
+    for predicate_id, facts in relation.items():
+        for fact in facts:
+            key = (predicate_id, fact.fact_tuple)
+            sources.setdefault(key, []).append(
+                Source(
+                    ref=fact.asrt_id,
+                    field=predicate_id,
+                    value=fact.fact_tuple,
+                    meta=_scenario_source_meta(fact.asrt_id, operations),
+                )
+            )
+    return {key: tuple(sorted(items, key=lambda item: item.ref)) for key, items in sources.items()}
+
+
+def _replace_captured_sources_in_atom(
+    atom: EvidenceAtom,
+    sources: Mapping[tuple[str, tuple[object, ...]], tuple[Source, ...]],
+) -> EvidenceAtom:
+    if not isinstance(atom.form, Fact) or not isinstance(atom.verdict, Holds):
+        return atom
+    values = tuple(getattr(term, "value", None) for term in atom.form.terms)
+    captured = sources.get((atom.form.predicate, values))
+    if not captured:
+        return atom
+    return replace(atom, verdict=Holds(certainty=atom.verdict.certainty, support=captured))
+
+
+def _rehydrate_captured_sources(
+    graph: EvidenceGraph,
+    sources: Mapping[tuple[str, tuple[object, ...]], tuple[Source, ...]],
+) -> EvidenceGraph:
+    paths: list[EvidenceTree] = []
+    for path in graph.paths:
+        if not isinstance(path, EvidenceTree):
+            raise EvaluationRunRuntimeErrorV1(
+                "native Explain generated an unsupported evidence path",
+                code="EVALUATION_RUN_V1_EXPLAIN_CONTEXT_MISMATCH",
+            )
+        rules = tuple(
+            replace(
+                rule,
+                atoms=tuple(
+                    _replace_captured_sources_in_atom(atom, sources) for atom in rule.atoms
+                ),
+            )
+            for rule in path.rules
+        )
+        conditions = tuple(
+            replace(
+                condition,
+                atom=_replace_captured_sources_in_atom(condition.atom, sources),
+            )
+            for condition in path.policy_conditions
+        )
+        paths.append(replace(path, rules=rules, policy_conditions=conditions))
+    return replace(graph, paths=tuple(paths))
+
+
+def _detached_native_policy_evidence(
+    *,
+    run: EvaluationRunV1,
+    side: EvaluationRunSideV1,
+    target: ExplainTargetV1,
+    schema: dict[str, Any],
+    world: EvaluationReplayWorldV1,
+    plan: GoalPlanV1,
+    compiled: CompiledDerivationPlan,
+    context: DecodedNativePolicyExplainContextV1,
+    scenario_operations: tuple[ResolvedScenarioOperationV1, ...] | None,
+) -> tuple[EvidenceGraph, EvaluationRunPolicyProjectionV1]:
+    relation = _world_relation(world, schema)
+    try:
+        dependencies = portable_dependency_predicate_ids_v1(compiled, schema_ir=schema)
+    except PortableEvaluationError as exc:
+        raise EvaluationRunRuntimeErrorV1(
+            "captured Explain program is outside the deterministic native profile",
+            code="EVALUATION_RUN_V1_EXPLAIN_CONTEXT_MISMATCH",
+        ) from exc
+    if set(dependencies) - set(relation):
+        raise EvaluationRunRuntimeErrorV1(
+            "captured Explain world omits a program dependency",
+            code="EVALUATION_RUN_V1_EXPLAIN_CONTEXT_MISMATCH",
+        )
+    program_relation = {predicate_id: relation[predicate_id] for predicate_id in dependencies}
+    try:
+        recomputed = execute_native_deterministic_v1(
+            compiled, schema_ir=schema, effective_relations=program_relation
+        )
+    except (PortableEvaluationError, ValueError) as exc:
+        raise EvaluationRunRuntimeErrorV1(
+            "captured native Explain re-execution failed",
+            code="EVALUATION_RUN_V1_EXPLAIN_EXECUTION_FAILED",
+        ) from exc
+    observed = _goal_result_from_engine_output(
+        plan=plan,
+        output=recomputed,
+        closure_target_digests=world.closure_target_digests,
+        relation=relation,
+        schema_ir=schema,
+    )
+    if observed.result_digest != side.canonical_result.result_digest:
+        raise EvaluationRunRuntimeErrorV1(
+            "captured native Explain result differs from the sealed run side",
+            code="EVALUATION_RUN_V1_EXPLAIN_REPLAY_MISMATCH",
+        )
+    selected_row = _selected_row_for_explain(side, target)
+    seed, subject = _probe_seed_for_goal_row(context.lowering_plan, selected_row)
+    probe = probe_native(
+        context.lowering_plan,
+        seed,
+        {
+            predicate_id: tuple(fact.fact_tuple for fact in facts)
+            for predicate_id, facts in relation.items()
+        },
+        build_schema_index(schema),
+        subject_binding=subject,
+    )
+    _assert_unambiguous_positive_row_probe(probe)
+    base_graph = EvidenceGraph(
+        graph_id=_token(
+            "evaluation_run_v1_native_evidence_graph",
+            (
+                run.run_digest,
+                target.target_digest,
+                world.world_capture_digest,
+                context.context_digest,
+            ),
+        ),
+        engine="native",
+        layout_hint="tree",
+        subject_binding=subject,
+        paths=probe.paths,
+        metadata={
+            "run_digest": run.run_digest,
+            "query_digest": plan.query_digest,
+            "world_capture_digest": world.world_capture_digest,
+            "native_explain_context_digest": context.context_digest,
+            "evidence_scope": "captured_relation_only",
+            "proof_parity": "not_claimed",
+            "provider_receipt_count": len(run.replay_payload.provider_receipts),
+        },
+    )
+    graph = _rehydrate_captured_sources(
+        base_graph,
+        _captured_fact_sources(
+            relation,
+            scenario_operations if side.world_side == "effective" else None,
+        ),
+    )
+    try:
+        evaluation, provenance = project_policy_evidence_v1(
+            structure=context.run_target.policy_structure,
+            lineage=context.run_target.policy_lineage,
+            rule_pins=context.run_target.rule_pins,
+            evidence=graph,
+        )
+    except Exception as exc:
+        raise EvaluationRunRuntimeErrorV1(
+            "captured native evidence cannot be projected onto the sealed Policy",
+            code="EVALUATION_RUN_V1_EXPLAIN_CONTEXT_MISMATCH",
+        ) from exc
+    return graph, EvaluationRunPolicyProjectionV1(
+        run_digest=run.run_digest,
+        target_digest=plan.target.target_digest,
+        query_digest=plan.query_digest,
+        context_digest=context.context_digest,
+        evidence_graph_id=graph.graph_id,
+        structure=context.run_target.policy_structure,
+        evaluation=evaluation,
+        provenance=provenance,
+    )
 
 
 def explain_evaluation_run_v1(
@@ -2216,14 +4133,7 @@ def explain_evaluation_run_v1(
         ) from exc
     side = _run_side(run, target.side)
     if target.kind == "row":
-        anchors = {
-            row.anchor.anchor_digest for row in side.canonical_result.rows if row.anchor is not None
-        }
-        if target.anchor_digest not in anchors:
-            raise EvaluationRunRuntimeErrorV1(
-                "Explain row target does not belong to this sealed run",
-                code="EVALUATION_RUN_V1_EXPLAIN_TARGET_INVALID",
-            )
+        _selected_row_for_explain(side, target)
         observation: Literal["positive_row_observed", "result_summary_observed"] = (
             "positive_row_observed"
         )
@@ -2245,6 +4155,28 @@ def explain_evaluation_run_v1(
         else decoded.primary_policy_structure
     )
     scenario_operations = decoded.scenario_operations
+    evidence_graph: EvidenceGraph | None = None
+    policy_projection: EvaluationRunPolicyProjectionV1 | None = None
+    engine_evidence: Literal["native_detached_recomputed", "not_captured"] = "not_captured"
+    if target.kind == "row":
+        compiled, context = _native_explain_context_for_side(decoded, side)
+        if context is not None:
+            schema = _decode_schema_from_payload(run.replay_payload)
+            evidence_graph, policy_projection = _detached_native_policy_evidence(
+                run=run,
+                side=side,
+                target=target,
+                schema=schema,
+                world=world,
+                plan=_plan_for_explain_side(run, side),
+                compiled=compiled,
+                context=context,
+                scenario_operations=scenario_operations,
+            )
+            # The V1 context contains the authoritative structure even if an
+            # early capture omitted the older optional structure-only field.
+            policy_structure = context.run_target.policy_structure
+            engine_evidence = "native_detached_recomputed"
     return EvaluationRunExplanationV1(
         run_digest=run.run_digest,
         target=target,
@@ -2266,6 +4198,9 @@ def explain_evaluation_run_v1(
                 else "not_applied"
             )
         ),
+        evidence_graph=evidence_graph,
+        policy_projection=policy_projection,
+        engine_evidence=engine_evidence,
         provider_receipt_count=len(run.replay_payload.provider_receipts),
     )
 
@@ -2829,6 +4764,7 @@ def diff_scenario_run_v1(run: EvaluationRunV1) -> ScenarioDiffV1:
 __all__ = [
     "DecodedEvaluationReplayProgramV1",
     "EvaluationRunExplanationV1",
+    "EvaluationRunPolicyProjectionV1",
     "EvaluationRunReplaySideV1",
     "EvaluationRunReplayV1",
     "EvaluationRunRuntimeErrorV1",

@@ -7,6 +7,7 @@ import factgraph.application.protocol as protocol
 import factgraph.sdk as sdk
 from factgraph.application.evaluation_run_v1_runtime import (
     EvaluationRunExplanationV1,
+    EvaluationRunPolicyProjectionV1,
     EvaluationRunReplayV1,
     PolicyVariantComparisonV1,
     ScenarioDiffV1,
@@ -106,6 +107,7 @@ V1_SDK_EXPORTS = frozenset(
         "EvaluationRunV1",
         "ExplainTargetV1",
         "EvaluationRunExplanationV1",
+        "EvaluationRunPolicyProjectionV1",
         "EvaluationRunReplayV1",
         "PolicyVariantComparisonV1",
         "ScenarioDiffV1",
@@ -131,6 +133,7 @@ def test_application_exports_v1_runtime_without_replacing_v0_protocols() -> None
     assert application.portable_deterministic_profile_v1 is portable_deterministic_profile_v1
     assert application.provider_binding_slot_v1 is provider_binding_slot_v1
     assert application.EvaluationRunExplanationV1 is EvaluationRunExplanationV1
+    assert application.EvaluationRunPolicyProjectionV1 is EvaluationRunPolicyProjectionV1
     assert application.EvaluationRunReplayV1 is EvaluationRunReplayV1
     assert application.PolicyVariantComparisonV1 is PolicyVariantComparisonV1
     assert application.ScenarioDiffV1 is ScenarioDiffV1
@@ -183,6 +186,7 @@ def test_sdk_reexports_all_user_constructible_v1_intent_and_result_types() -> No
         "EvaluationRunV1": EvaluationRunV1,
         "ExplainTargetV1": ExplainTargetV1,
         "EvaluationRunExplanationV1": EvaluationRunExplanationV1,
+        "EvaluationRunPolicyProjectionV1": EvaluationRunPolicyProjectionV1,
         "EvaluationRunReplayV1": EvaluationRunReplayV1,
         "PolicyVariantComparisonV1": PolicyVariantComparisonV1,
         "ScenarioDiffV1": ScenarioDiffV1,

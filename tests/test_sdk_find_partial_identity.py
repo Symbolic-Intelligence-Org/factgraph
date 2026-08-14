@@ -157,9 +157,10 @@ class SDKFindPartialIdentityTests(unittest.TestCase):
         # grown the base to 105. Q18 deliberately adds 46 V1 GoalPlan,
         # Scenario, provider, execution-profile, Run/Explain/replay, and
         # immutable-comparison names (including explicit assertion absence and
-        # the non-causal Scenario diff), bringing the explicit total to 151.
+        # the non-causal Scenario diff and V1 detached-Explain Policy
+        # projection), bringing the explicit total to 152.
         # Intent unchanged: no ACCIDENTAL name creep.
-        self.assertEqual(len(sdk_module.__all__), 151)
+        self.assertEqual(len(sdk_module.__all__), 152)
         self.assertIn("compile_derivation_plan", sdk_module.__all__)
         self.assertIn("RuleProgram", sdk_module.__all__)
         self.assertIn("RuleProgramFact", sdk_module.__all__)

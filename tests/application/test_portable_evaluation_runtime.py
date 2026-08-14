@@ -34,7 +34,11 @@ from factgraph.application.protocol import (
     EvaluationQueryBinding,
     EvaluationQuerySelection,
     Policy,
+    PolicyAll,
+    PolicyAny,
+    PolicyCompare,
     PolicyOccurrence,
+    PolicyUnify,
     SemanticPortAddress,
     SemanticRulePort,
     entity_identity,
@@ -42,7 +46,7 @@ from factgraph.application.protocol import (
 )
 from factgraph.application.protocol.rule_expr_lowering import _materialize_adapter_derivation_plan
 from factgraph.core.evidence.write_protocol import set_field
-from factgraph.core.rules.where_ast import PredAtom, Var
+from factgraph.core.rules.where_ast import CmpAtom, Const, PredAtom, Var
 from factgraph.core.store._support import ProjectedFact
 from factgraph.core.view.projector import project_view_facts_with_witness
 from factgraph.sdk import Entity, Field, Identity, SDKStore
@@ -117,6 +121,150 @@ def _compiled_query_and_relation() -> tuple[
             (
                 EvaluationQueryBinding(
                     SemanticPortAddress("pair", "person"),
+                    EntityRef("Person", {"employee_id": "alice"}),
+                ),
+            ),
+        ),
+        compiled_policy=policy,
+        address_space=space,
+        schema_index=index,
+    )
+    plan, _traces = _materialize_adapter_derivation_plan(
+        compiled._lowering_plan,
+        engine="native",
+    )
+    projected = project_view_facts_with_witness(source.ledger, source.schema_ir)
+    dependencies = ("Person:exists", "person:age", "person:score")
+    relation = {predicate_id: tuple(projected[predicate_id]) for predicate_id in dependencies}
+    return plan, source.schema_ir, relation
+
+
+def _compiled_common_any_query_and_relation() -> tuple[
+    CompiledDerivationPlan, dict, dict[str, tuple[ProjectedFact, ...]]
+]:
+    """Compile a real Policy Any query whose public alias is common to both arms.
+
+    Each arm has private occurrence variables.  The left/right constraints are
+    deliberately local to their respective ``PolicyAll`` arm, so this fixture
+    exercises the exact shape that must not invent a cross-branch value merely
+    to satisfy Soufflé witness capture.
+    """
+
+    source = SDKStore([Person])
+    index = build_schema_index(source.schema_ir)
+    for employee_id, age, score in (("alice", 22, 9), ("bob", 19, 7)):
+        ref = resolve_selector(
+            EntitySelector(entity_type="Person", identity={"employee_id": employee_id}),
+            index=index,
+        )
+        encoded = ref.encoded_ref or ""
+        info = entity_info(index, "Person")
+        set_field(source.ledger, info.exists_predicate_id, encoded, [])
+        set_field(
+            source.ledger,
+            info.identity_predicates["employee_id"].pred_id,
+            encoded,
+            [("string", employee_id)],
+        )
+        set_field(
+            source.ledger,
+            field_predicate(index, "Person", "age").pred_id,
+            encoded,
+            [("int", age)],
+        )
+        set_field(
+            source.ledger,
+            field_predicate(index, "Person", "score").pred_id,
+            encoded,
+            [("int", score)],
+        )
+
+    def _person_rule(rule_id: str, *, threshold: int | None):
+        person, age, score = Var("$person"), Var("$age"), Var("$score")
+        when: tuple[object, ...] = (
+            PredAtom("Person:exists", [person]),
+            PredAtom("person:age", [person, age]),
+        )
+        if threshold is None:
+            when = (*when, PredAtom("person:score", [person, score]))
+        else:
+            when = (*when, CmpAtom("gt", age, Const(threshold)))
+        ports = {
+            "person": SemanticRulePort(person, entity_identity("Person")),
+            "age": SemanticRulePort(age, field_endpoint("Person", "age")),
+        }
+        return build_resolved_rule(
+            id=rule_id,
+            version="1",
+            when=when,
+            ports=ports,
+            schema_index=index,
+        )
+
+    common = _person_rule("portable_common", threshold=None)
+    eligible_left = _person_rule("portable_eligible_left", threshold=20)
+    eligible_right = _person_rule("portable_eligible_right", threshold=20)
+    never_left = _person_rule("portable_never_left", threshold=100)
+    never_right = _person_rule("portable_never_right", threshold=100)
+    space = SemanticAddressSpace(
+        (
+            manage_rule_occurrence(common, "common"),
+            manage_rule_occurrence(eligible_left, "eligible_left"),
+            manage_rule_occurrence(eligible_right, "eligible_right"),
+            manage_rule_occurrence(never_left, "never_left"),
+            manage_rule_occurrence(never_right, "never_right"),
+        )
+    )
+    common_person = SemanticPortAddress("common", "person")
+    common_age = SemanticPortAddress("common", "age")
+    eligible_left_person = SemanticPortAddress("eligible_left", "person")
+    eligible_left_age = SemanticPortAddress("eligible_left", "age")
+    eligible_right_person = SemanticPortAddress("eligible_right", "person")
+    eligible_right_age = SemanticPortAddress("eligible_right", "age")
+    never_left_person = SemanticPortAddress("never_left", "person")
+    never_left_age = SemanticPortAddress("never_left", "age")
+    never_right_person = SemanticPortAddress("never_right", "person")
+    never_right_age = SemanticPortAddress("never_right", "age")
+    policy = compile_policy(
+        Policy(
+            "portable_common_any",
+            PolicyAll(
+                (
+                    PolicyOccurrence("common"),
+                    PolicyAny(
+                        (
+                            PolicyAll(
+                                (
+                                    PolicyOccurrence("eligible_left"),
+                                    PolicyOccurrence("eligible_right"),
+                                    PolicyUnify(eligible_left_person, eligible_right_person),
+                                    PolicyCompare.ge(eligible_left_age, eligible_right_age),
+                                )
+                            ),
+                            PolicyAll(
+                                (
+                                    PolicyOccurrence("never_left"),
+                                    PolicyOccurrence("never_right"),
+                                    PolicyUnify(never_left_person, never_right_person),
+                                    PolicyCompare.ge(never_left_age, never_right_age),
+                                )
+                            ),
+                        )
+                    ),
+                )
+            ),
+            version="1",
+        ),
+        address_space=space,
+        schema_index=index,
+    )
+    compiled = compile_evaluation_query(
+        EvaluationQuery(
+            policy.policy_digest,
+            (EvaluationQuerySelection("age", common_age),),
+            (
+                EvaluationQueryBinding(
+                    common_person,
                     EntityRef("Person", {"employee_id": "alice"}),
                 ),
             ),
@@ -363,6 +511,41 @@ class PortableEvaluationRuntimeTests(unittest.TestCase):
             ],
         )
         self.assertEqual(len({item.selected_row_set_digest for item in result.executions}), 1)
+
+    def test_policy_any_keeps_private_witness_variables_local_to_each_arm(self) -> None:
+        """A common Query binding/selection must not require Any-arm aliases.
+
+        The real Query compiler has already proven the common address total.
+        The portable executor must therefore run each DNF arm with only that
+        arm's local witness variables, rather than requiring ``eligible`` and
+        ``never`` variables to share one impossible synthetic projection head.
+        """
+
+        plan, schema_ir, relation = _compiled_common_any_query_and_relation()
+        contract = validate_portable_deterministic_v1(
+            plan,
+            schema_ir=schema_ir,
+            effective_relations=relation,
+        )
+        self.assertEqual(contract.selected_head_var_names, ("$__projection_0",))
+        self.assertEqual(len(contract.execution_branch_head_var_names), 2)
+        branch_heads = tuple(set(item) for item in contract.execution_branch_head_var_names)
+        eligible_head = next(item for item in branch_heads if "$eligible_left__person" in item)
+        never_head = next(item for item in branch_heads if "$never_left__person" in item)
+        self.assertNotIn("$never_left__person", eligible_head)
+        self.assertNotIn("$eligible_left__person", never_head)
+
+        result = execute_portable_deterministic_v1(
+            plan,
+            schema_ir=schema_ir,
+            effective_relations=relation,
+        )
+
+        self.assertEqual(
+            tuple(item.engine for item in result.executions), ("native", "souffle", "problog")
+        )
+        self.assertEqual(len({item.selected_row_set_digest for item in result.executions}), 1)
+        self.assertEqual(result.executions[0].rows[0].terms, (("int", 22),))
 
     def test_relation_inventory_is_exact_including_empty_relations(self) -> None:
         plan, schema_ir, relation = _compiled_query_and_relation()

@@ -9,8 +9,10 @@ finite, already-materialized relation without consulting the caller's Store.
 The public boundary is intentionally strict:
 
 * one query-style ``CompiledDerivationPlan`` with one projection head;
-* positive ``PredAtom`` + ``CmpAtom`` bodies only, with branch-total variables
-  for finite OR-of-AND bodies;
+* positive ``PredAtom`` + ``CmpAtom`` bodies only.  A finite OR-of-AND body
+  is executed as one isolated, widened plan per DNF branch: public projection
+  variables remain branch-total, while compiler-local witness variables stay
+  local to the branch that binds them;
 * no rules, aggregates, builtins, negation, engine extension/configuration, or
   confidence / probabilistic semantics;
 * an exact, finite mapping of every predicate referenced by the plan to
@@ -99,6 +101,13 @@ class PortableExecutionContractV1:
     selected_value_types: tuple[str, ...]
     execution_head_var_names: tuple[str, ...]
     execution_value_types: tuple[str, ...]
+    # The original fields retain the complete, deterministic execution-variable
+    # envelope for callers that inspect the static contract.  A DNF body cannot
+    # safely materialize that union as one physical adapter head when an ``Any``
+    # branch has private variables.  These parallel inventories record the
+    # actual per-branch heads used by the isolated executor instead.
+    execution_branch_head_var_names: tuple[tuple[str, ...], ...] = ()
+    execution_branch_value_types: tuple[tuple[str, ...], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -451,9 +460,8 @@ def execute_portable_deterministic_v1(
     executions: list[PortableEngineEvaluationV1] = []
     for engine in _PORTABLE_ENGINES:
         try:
-            outputs = evaluate_derivation_plans(
-                DerivationEvaluateRequest(plans=(validated.execution_plan,), engine=engine),
-                store=store,
+            branch_outputs = _execute_portable_branch_plans(
+                engine, validated=validated, store=store
             )
         except PortableEvaluationError:
             raise
@@ -463,7 +471,7 @@ def execute_portable_deterministic_v1(
                 code="PORTABLE_ENGINE_EXECUTION_FAILED",
                 details={"engine": engine, "cause_type": type(exc).__name__},
             ) from exc
-        executions.append(_normalize_engine_outputs(engine, outputs, validated.contract))
+        executions.append(_normalize_engine_outputs(engine, branch_outputs, validated.contract))
 
     digests = {item.selected_row_set_digest for item in executions}
     if len(digests) != 1:
@@ -501,26 +509,40 @@ def execute_native_deterministic_v1(
     )
     store = _materialize_store(validated)
     try:
-        outputs = evaluate_derivation_plans(
-            DerivationEvaluateRequest(plans=(validated.execution_plan,), engine="native"),
-            store=store,
-        )
+        branch_outputs = _execute_portable_branch_plans("native", validated=validated, store=store)
     except Exception as exc:
         raise PortableEvaluationError(
             "native deterministic execution failed",
             code="NATIVE_ENGINE_EXECUTION_FAILED",
             details={"cause_type": type(exc).__name__},
         ) from exc
-    return _normalize_engine_outputs("native", outputs, validated.contract)
+    return _normalize_engine_outputs("native", branch_outputs, validated.contract)
 
 
 @dataclass(frozen=True)
 class _ValidatedPortableInput:
     plan: CompiledDerivationPlan
-    execution_plan: CompiledDerivationPlan
+    execution_branches: tuple["_PortableExecutionBranch", ...]
     schema_ir: dict[str, Any]
     relations: Mapping[str, tuple[ProjectedFact, ...]]
     contract: PortableExecutionContractV1
+
+
+@dataclass(frozen=True)
+class _PortableExecutionBranch:
+    """One branch-local adapter plan plus its exact output normalization shape.
+
+    Soufflé's support capture needs every variable in a predicate witness to
+    be present in its query head.  Keeping this widening *inside* each DNF
+    branch avoids inventing a value for an alias that exists only on another
+    ``PolicyAny`` arm.  The public result continues to expose only the shared
+    selected head prefix.
+    """
+
+    branch_index: int
+    plan: CompiledDerivationPlan
+    execution_head_var_names: tuple[str, ...]
+    execution_value_types: tuple[str, ...]
 
 
 class _PortableEvaluationLedger(Ledger):
@@ -566,6 +588,11 @@ def _validate_input(
         ) from exc
     _validate_plan_shape(plan, schema)
     dependencies, variable_types = _validate_positive_body(plan, schema)
+    execution_branches = _build_portable_execution_branches(
+        plan,
+        schema=schema,
+        selected_head_var_names=plan.heads[0].head_var_names,
+    )
     relations = _normalize_relations(
         schema,
         dependency_predicate_ids=dependencies,
@@ -576,18 +603,9 @@ def _validate_input(
         *selected_head_var_names,
         *tuple(sorted(name for name in variable_types if name not in set(selected_head_var_names))),
     )
-    execution_plan = replace(
-        plan,
-        heads=(
-            CompiledHeadCall(
-                target_pred_id=plan.heads[0].target_pred_id,
-                head_var_names=execution_head_var_names,
-            ),
-        ),
-    )
     return _ValidatedPortableInput(
         plan=plan,
-        execution_plan=execution_plan,
+        execution_branches=execution_branches,
         schema_ir=schema,
         relations=relations,
         contract=PortableExecutionContractV1(
@@ -597,6 +615,12 @@ def _validate_input(
             selected_value_types=tuple(variable_types[name] for name in selected_head_var_names),
             execution_head_var_names=execution_head_var_names,
             execution_value_types=tuple(variable_types[name] for name in execution_head_var_names),
+            execution_branch_head_var_names=tuple(
+                item.execution_head_var_names for item in execution_branches
+            ),
+            execution_branch_value_types=tuple(
+                item.execution_value_types for item in execution_branches
+            ),
         ),
     )
 
@@ -768,10 +792,15 @@ def _validate_positive_body(
             code="PORTABLE_VARIABLE_TYPE_UNRESOLVED",
             details={"variables": unresolved_variables},
         )
+    # Only public projection variables need a value in *every* DNF branch.
+    # Query compilation independently proves that every public bind/select is
+    # branch-total before it emits this plan.  Compiler-local occurrence vars
+    # may legitimately differ between PolicyAny arms; widening them globally
+    # would create an impossible synthetic head for Soufflé witness capture.
     _validate_branch_total_variables(
         branches,
         predicate_types=predicate_types,
-        required_variables=tuple(sorted(variable_types)),
+        required_variables=plan.heads[0].head_var_names,
     )
     head_variables = set(plan.heads[0].head_var_names)
     if not head_variables <= set(variable_types):
@@ -856,36 +885,22 @@ def _validate_branch_total_variables(
     predicate_types: Mapping[str, tuple[str, ...]],
     required_variables: tuple[str, ...],
 ) -> None:
-    """Require every widened execution variable to be typed in every branch.
+    """Require every public projection variable to be typed in every branch.
 
-    The runtime deliberately widens the temporary query head so the existing
-    Soufflé adapter can reconstruct relation-local witness bindings without
-    reading a caller Store.  A branch-local variable would make that temporary
-    projection partial, so this narrow v1 profile rejects it rather than
-    inventing null/missing-value semantics.
+    A branch-private occurrence variable is not a public query value.  It is
+    widened only in that branch's temporary adapter head, where it is known to
+    be bound and can support Soufflé's relation-local witness capture.  This
+    helper therefore deliberately validates the shared projection head rather
+    than a global union of all hidden compiler variables.
     """
 
     required = set(required_variables)
     for branch_index, branch in enumerate(branches):
-        branch_types: dict[str, str] = {}
-        equality_edges: list[tuple[str, str]] = []
-        for atom in branch:
-            if isinstance(atom, PredAtom):
-                for type_domain, term in zip(
-                    predicate_types[atom.pred_id], atom.terms, strict=True
-                ):
-                    if isinstance(term, Var):
-                        prior = branch_types.setdefault(term.name, type_domain)
-                        if prior != type_domain:
-                            raise PortableEvaluationError(
-                                "portable variable is assigned incompatible branch type domains",
-                                code="PORTABLE_VARIABLE_TYPE_AMBIGUOUS",
-                                details={"branch": branch_index, "variable": term.name},
-                            )
-            elif isinstance(atom, CmpAtom) and atom.op == "eq":
-                if isinstance(atom.lhs, Var) and isinstance(atom.rhs, Var):
-                    equality_edges.append((atom.lhs.name, atom.rhs.name))
-        _propagate_equality_type_domains(branch_types, equality_edges)
+        branch_types = _branch_variable_types(
+            branch,
+            predicate_types=predicate_types,
+            branch_index=branch_index,
+        )
         missing = sorted(required - set(branch_types))
         if missing:
             raise PortableEvaluationError(
@@ -893,6 +908,160 @@ def _validate_branch_total_variables(
                 code="PORTABLE_PARTIAL_BRANCH_VARIABLE",
                 details={"branch": branch_index, "variables": missing},
             )
+
+
+def _branch_variable_types(
+    branch: Sequence[object],
+    *,
+    predicate_types: Mapping[str, tuple[str, ...]],
+    branch_index: int,
+) -> dict[str, str]:
+    """Return only the schema-resolved variables used by one DNF branch.
+
+    The positive-profile gate has already validated the atom union.  Keeping
+    the branch-local proof here still matters: an OR arm may not borrow a type
+    source from a different arm, because its temporary execution head must be
+    entirely bound by this arm.
+    """
+
+    branch_types: dict[str, str] = {}
+    equality_edges: list[tuple[str, str]] = []
+    mentioned: set[str] = set()
+    for atom in branch:
+        if isinstance(atom, PredAtom):
+            for type_domain, term in zip(predicate_types[atom.pred_id], atom.terms, strict=True):
+                if isinstance(term, Var):
+                    mentioned.add(term.name)
+                    prior = branch_types.setdefault(term.name, type_domain)
+                    if prior != type_domain:
+                        raise PortableEvaluationError(
+                            "portable variable is assigned incompatible branch type domains",
+                            code="PORTABLE_VARIABLE_TYPE_AMBIGUOUS",
+                            details={"branch": branch_index, "variable": term.name},
+                        )
+        elif isinstance(atom, CmpAtom):
+            if isinstance(atom.lhs, Var):
+                mentioned.add(atom.lhs.name)
+            if isinstance(atom.rhs, Var):
+                mentioned.add(atom.rhs.name)
+            if atom.op == "eq" and isinstance(atom.lhs, Var) and isinstance(atom.rhs, Var):
+                equality_edges.append((atom.lhs.name, atom.rhs.name))
+    _propagate_equality_type_domains(branch_types, equality_edges)
+    unresolved = sorted(mentioned - set(branch_types))
+    if unresolved:
+        raise PortableEvaluationError(
+            "portable branch contains a variable without a local schema type source",
+            code="PORTABLE_VARIABLE_TYPE_UNRESOLVED",
+            details={"branch": branch_index, "variables": unresolved},
+        )
+    return branch_types
+
+
+def _build_portable_execution_branches(
+    plan: CompiledDerivationPlan,
+    *,
+    schema: Mapping[str, Any],
+    selected_head_var_names: tuple[str, ...],
+) -> tuple[_PortableExecutionBranch, ...]:
+    """Compile one branch-local widened head per validated positive DNF arm.
+
+    ``evaluate_derivation_plans`` cannot ask Soufflé to reconstruct a witness
+    for an unprojected predicate variable.  Executing each DNF arm separately
+    is semantically the same finite OR for this positive, set-normalized
+    profile, while avoiding a cross-arm "missing value" convention.  The
+    caller later unions only the selected public head prefix.
+    """
+
+    try:
+        expression = parse_where_ir_to_ast(plan.body_ir)
+    except (TypeError, ValueError, WhereASTError) as exc:  # pragma: no cover - validated first.
+        raise PortableEvaluationError(
+            "portable plan has invalid where IR",
+            code="PORTABLE_WHERE_INVALID",
+            details={"cause_type": type(exc).__name__},
+        ) from exc
+    ast_branches = _walk_branches(expression)
+    body_branches = _where_ir_branches(plan.body_ir)
+    if len(ast_branches) != len(body_branches):  # pragma: no cover - parser shape invariant.
+        raise PortableEvaluationError(
+            "portable where branch structure changed during validation",
+            code="PORTABLE_WHERE_INVALID",
+        )
+    predicate_types = _predicate_type_domains(schema)
+    branches: list[_PortableExecutionBranch] = []
+    selected = set(selected_head_var_names)
+    for branch_index, (ast_branch, body_ir) in enumerate(
+        zip(ast_branches, body_branches, strict=True)
+    ):
+        branch_types = _branch_variable_types(
+            ast_branch,
+            predicate_types=predicate_types,
+            branch_index=branch_index,
+        )
+        missing = sorted(selected - set(branch_types))
+        if missing:
+            raise PortableEvaluationError(
+                "portable OR branch does not bind every public projection variable",
+                code="PORTABLE_PARTIAL_BRANCH_VARIABLE",
+                details={"branch": branch_index, "variables": missing},
+            )
+        execution_head_var_names = (
+            *selected_head_var_names,
+            *tuple(sorted(name for name in branch_types if name not in selected)),
+        )
+        branches.append(
+            _PortableExecutionBranch(
+                branch_index=branch_index,
+                plan=replace(
+                    plan,
+                    body_ir=list(body_ir),
+                    heads=(
+                        CompiledHeadCall(
+                            target_pred_id=plan.heads[0].target_pred_id,
+                            head_var_names=execution_head_var_names,
+                        ),
+                    ),
+                ),
+                execution_head_var_names=execution_head_var_names,
+                execution_value_types=tuple(
+                    branch_types[name] for name in execution_head_var_names
+                ),
+            )
+        )
+    return tuple(branches)
+
+
+def _where_ir_branches(body_ir: Sequence[object]) -> tuple[tuple[object, ...], ...]:
+    """Preserve the validated source IR while splitting its outer DNF only."""
+
+    if body_ir and all(isinstance(item, tuple) for item in body_ir):
+        return (tuple(body_ir),)
+    if body_ir:
+        branches: list[tuple[object, ...]] = []
+        for item in body_ir:
+            if not isinstance(item, list):
+                break
+            branches.append(tuple(item))
+        else:
+            return tuple(branches)
+    raise PortableEvaluationError(
+        "portable plan has an unsupported where expression",
+        code="PORTABLE_WHERE_INVALID",
+    )
+
+
+def _predicate_type_domains(schema: Mapping[str, Any]) -> dict[str, tuple[str, ...]]:
+    return {
+        item["pred_id"]: tuple(arg["type_domain"] for arg in item["arg_specs"])
+        for item in schema["predicates"]
+        if isinstance(item, dict)
+        and isinstance(item.get("pred_id"), str)
+        and isinstance(item.get("arg_specs"), list)
+        and all(
+            isinstance(arg, dict) and isinstance(arg.get("type_domain"), str)
+            for arg in item["arg_specs"]
+        )
+    }
 
 
 def _validate_portable_terms(terms: Sequence[Term]) -> None:
@@ -1072,11 +1241,8 @@ def _observe_portable_engine_v1(
             status=_observation_status_for_exception_v1(exc),
         )
     try:
-        outputs = evaluate_derivation_plans(
-            DerivationEvaluateRequest(plans=(validated.execution_plan,), engine=engine),
-            store=store,
-        )
-        evaluation = _normalize_engine_outputs(engine, outputs, validated.contract)
+        branch_outputs = _execute_portable_branch_plans(engine, validated=validated, store=store)
+        evaluation = _normalize_engine_outputs(engine, branch_outputs, validated.contract)
     except Exception as exc:
         return _engine_observation_failure_frame_v1(
             engine,
@@ -1088,6 +1254,30 @@ def _observe_portable_engine_v1(
         status="succeeded",
         evaluation=evaluation,
     )
+
+
+def _execute_portable_branch_plans(
+    engine: PortableEngineV1,
+    *,
+    validated: _ValidatedPortableInput,
+    store: Store,
+) -> tuple[tuple[_PortableExecutionBranch, tuple[DerivationOutput, ...]], ...]:
+    """Execute each independently valid DNF branch on the same detached Store.
+
+    This is not an adapter fallback and does not choose a preferred branch.
+    Every configured engine receives every branch.  A caller only sees the
+    set-union of the public selected tuples after all branch frames normalize;
+    any adapter exception aborts the enclosing engine frame/result.
+    """
+
+    outputs: list[tuple[_PortableExecutionBranch, tuple[DerivationOutput, ...]]] = []
+    for branch in validated.execution_branches:
+        branch_outputs = evaluate_derivation_plans(
+            DerivationEvaluateRequest(plans=(branch.plan,), engine=engine),
+            store=store,
+        )
+        outputs.append((branch, tuple(branch_outputs)))
+    return tuple(outputs)
 
 
 def _assert_portable_engine_available_v1(engine: PortableEngineV1) -> None:
@@ -1257,6 +1447,12 @@ def _portable_execution_contract_digest_v1(contract: PortableExecutionContractV1
         "selected_value_types": list(contract.selected_value_types),
         "execution_head_var_names": list(contract.execution_head_var_names),
         "execution_value_types": list(contract.execution_value_types),
+        "execution_branch_head_var_names": [
+            list(item) for item in contract.execution_branch_head_var_names
+        ],
+        "execution_branch_value_types": [
+            list(item) for item in contract.execution_branch_value_types
+        ],
     }
     return _framed_digest(
         "portable_execution_contract_v1",
@@ -1266,16 +1462,17 @@ def _portable_execution_contract_digest_v1(contract: PortableExecutionContractV1
 
 def _normalize_engine_outputs(
     engine: PortableEngineV1,
-    outputs: Sequence[DerivationOutput],
+    branch_outputs: Sequence[tuple[_PortableExecutionBranch, Sequence[DerivationOutput]]],
     contract: PortableExecutionContractV1,
 ) -> PortableEngineEvaluationV1:
     rows_by_bytes: dict[bytes, PortableSelectedRowV1] = {}
-    for output in outputs:
-        if not _is_deterministically_true_output(output):
-            continue
-        row = _selected_row_from_output(output, contract)
-        canonical = canonical_bytes_tup_v1(list(row.terms))
-        rows_by_bytes.setdefault(canonical, row)
+    for branch, outputs in branch_outputs:
+        for output in outputs:
+            if not _is_deterministically_true_output(output):
+                continue
+            row = _selected_row_from_output(output, branch=branch, contract=contract)
+            canonical = canonical_bytes_tup_v1(list(row.terms))
+            rows_by_bytes.setdefault(canonical, row)
     ordered_items = tuple(rows_by_bytes[key] for key in sorted(rows_by_bytes))
     return PortableEngineEvaluationV1(
         engine=engine,
@@ -1318,6 +1515,8 @@ def _is_deterministically_true_output(output: DerivationOutput) -> bool:
 
 def _selected_row_from_output(
     output: DerivationOutput,
+    *,
+    branch: _PortableExecutionBranch,
     contract: PortableExecutionContractV1,
 ) -> PortableSelectedRowV1:
     if not isinstance(output, DerivationOutput) or output.candidate_kind != "fact":
@@ -1328,7 +1527,7 @@ def _selected_row_from_output(
     payload = output.payload
     terms_payload = payload.get("terms") if isinstance(payload, dict) else None
     if not isinstance(terms_payload, list) or len(terms_payload) != len(
-        contract.execution_head_var_names
+        branch.execution_head_var_names
     ):
         raise PortableEvaluationError(
             "portable engine output does not match projection head width",
@@ -1338,7 +1537,7 @@ def _selected_row_from_output(
     all_terms: list[tuple[str, object]] = []
     for item, expected_tag in zip(
         terms_payload,
-        contract.execution_value_types,
+        branch.execution_value_types,
         strict=True,
     ):
         if not isinstance(item, dict):

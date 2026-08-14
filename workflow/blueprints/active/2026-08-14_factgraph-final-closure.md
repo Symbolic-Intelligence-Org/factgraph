@@ -88,10 +88,10 @@ schema, groundness, cardinality, conflict and dependency checks. It owns
 synthetic witness identity and origin labelling. The engine facade accepts
 only the resolved relation, materialized lowering and pinned profile.
 
-QueryPlanV1 retains one compiler/lowering path. A Rule is sealed-lifted, a
-Policy remains direct, and a RelationProvider first produces a finite typed
-relation receipt. Results are normalized before modes, expectations and parity
-are calculated.
+QueryPlanV1 retains one compiler/lowering path. A Rule is sealed-lifted and a
+Policy remains direct; a RelationProvider is a finite typed relation input
+attached to that logical target, never an under-specified bare Query target.
+Results are normalized before modes, expectations and parity are calculated.
 
 ### 5.3 Portable engines
 
@@ -133,14 +133,17 @@ inputs. Assessment reports technical axes without product verdicts.
 
 - [x] Scenario v1 supports every Q18-supported premise operation, conflicts
   and exact boundary rejection.
-- [x] QueryPlan v1 supports Rule/Policy/provider targets, all result modes and
-  all Q18 expectation forms with independent completeness state.
+- [x] QueryPlan v1 supports Rule/Policy targets with optional provider input,
+  all result modes and all Q18 expectation forms with independent completeness
+  state; a bare provider rejects before compilation.
 - [x] Effective-world and Policy-variant executions capture baseline/effective
   differences and explicit anchors.
 - [x] Native, Soufflé and ProbLog all execute the portable corpus against the
   exact captured world with no fallback.
 - [x] Replay/explain read no mutable Store; mutation and splice probes fail
-  closed.
+  closed. A sealed restricted native Explain context is deterministically
+  recomputed only against the captured relation for an explicit positive row,
+  producing its EvidenceGraph and Policy-node projection.
 - [x] Assessment/evidence boundaries are typed and module docs are clear.
 - [x] Focused legacy cohorts and the new conformance corpus pass; lint/type/
   diff checks pass; final audit documents any unrelated baseline failure.
@@ -179,8 +182,16 @@ the only reason to stop and request a decision.
 
 ## 10. Outcome / Deviations
 
-Implemented as a parallel V1 family without widening any V0 wire/digest
-contract. The delivered surface is `fg.query(...).plan(...)` / V1
+The initial V1 family was delivered without widening any V0 wire/digest
+contract. Final verification briefly reopened the blueprint for the missing
+detached Explain implementation; that correction now seals a restricted native
+Explain context and deterministically recomputes an explicit positive row's
+EvidenceGraph and Policy-node `HOLDS`/`FAILS`/`NOT_REACHED` projection against
+the captured relation only. It does not pretend that an EvidenceGraph was
+captured directly, does not create a graph for a summary/zero row, and keeps
+portable proof parity `not_claimed`.
+
+The delivered surface remains `fg.query(...).plan(...)` / V1
 `what_if(...)`, grounded `ScenarioSpecV1`, `GoalPlanV1`, restricted
 pre-engine `RelationProviderV1`, sealed `EvaluationRunV1`, explicit detached
 Explain/replay, immutable candidate comparison, and captured-only
@@ -193,10 +204,13 @@ explicitly rejected. Generic NAF, global closure, signed negative facts,
 Actions, Provider sandboxing, source authority and Meander Plan/Package/
 Translator ownership remain out of scope exactly as Q18 specifies.
 
-Final direct verification on the pinned `factpy` environment: 680 passed and
-175 subtests across `tests/application`, `tests/sdk`, and public-surface
-checks; scoped Ruff, MyPy, formatter and diff checks passed. The whole
-repository's bare `pytest` collection is blocked by a pre-existing missing
-`render_evidence_graph_html` import used by service/agent tests and unrelated
-third-party test layout. Those paths are unchanged from the baseline; see the
-final verification record for precise commands and evidence.
+The final direct verification on the pinned `factpy` environment: 687 passed
+and 175 subtests across `tests/application`, `tests/sdk`, and public-surface
+checks. Scoped Ruff, MyPy and diff checks pass; formatter checks pass for the
+new V1 modules/tests and modified files without inherited formatting debt. The
+existing `sdk/store.py` formatting debt predates this slice and its only V1
+change is a docstring. The whole repository's bare `pytest` collection is
+blocked by a pre-existing missing `render_evidence_graph_html` import used by
+service/agent tests and unrelated third-party test layout. Those paths are
+unchanged from the baseline; see the final verification record for precise
+commands and evidence.

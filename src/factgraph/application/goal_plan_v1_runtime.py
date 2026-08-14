@@ -982,6 +982,16 @@ def _build_replay_payload(
             if invocation.candidate is None
             else invocation.candidate.target.run_target.policy_structure
         ),
+        primary_run_target=invocation.primary.target.run_target,
+        candidate_run_target=(
+            None if invocation.candidate is None else invocation.candidate.target.run_target
+        ),
+        primary_lowering_plan=invocation.primary.compiled_query._lowering_plan,
+        candidate_lowering_plan=(
+            None
+            if invocation.candidate is None
+            else invocation.candidate.compiled_query._lowering_plan
+        ),
         scenario_operations=(
             None if invocation.scenario is None else resolved.effective_world.operations
         ),

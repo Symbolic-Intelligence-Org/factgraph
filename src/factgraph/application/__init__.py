@@ -212,6 +212,7 @@ from .portable_evaluation_runtime import (
 from .evaluation_run_v1_runtime import (
     DecodedEvaluationReplayProgramV1,
     EvaluationRunExplanationV1,
+    EvaluationRunPolicyProjectionV1,
     EvaluationRunReplaySideV1,
     EvaluationRunReplayV1,
     EvaluationRunRuntimeErrorV1,
@@ -397,6 +398,7 @@ __all__ = [
     "validate_portable_deterministic_v1",
     "DecodedEvaluationReplayProgramV1",
     "EvaluationRunExplanationV1",
+    "EvaluationRunPolicyProjectionV1",
     "EvaluationRunReplaySideV1",
     "EvaluationRunReplayV1",
     "EvaluationRunRuntimeErrorV1",

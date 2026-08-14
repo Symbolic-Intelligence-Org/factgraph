@@ -92,8 +92,11 @@ operation provides exact local closure for its own explicit target.
 
 ### Providers, Policy variants, and portable engines
 
-Attach a `RelationProviderV1` through `.using(provider)` (or the explicit
-`ProviderQueryTargetV1` wrapper). A provider receives a sealed
+Rule and Policy are the V1 logical Query targets. Attach a
+`RelationProviderV1` to one through `.using(provider)` (or the explicit
+`ProviderQueryTargetV1(base, provider)` wrapper); `fg.query(provider)` is
+rejected before compilation because a provider has no independent head,
+projection or semantic address space. A provider receives a sealed
 `ProviderRequestV1`, returns finite typed `ProviderRelationRowV1` values in a
 `ProviderMaterializationV1`, and is invoked exactly once before Scenario
 resolution and before an engine runs. It replaces only its declared supplied
@@ -117,7 +120,13 @@ that their proof/evidence structures are equivalent. Unsupported syntax or an
 unavailable engine yields a typed assessment/frame instead of falling back.
 
 Detached V1 Explain always requires an explicit `ExplainTargetV1` that names
-one row or summary anchor. It never chooses a first row implicitly. The
+one row or summary anchor. It never chooses a first row implicitly. For an
+explicit positive row, a sealed restricted native Explain context is used to
+re-execute only the captured relation and verify the sealed result before
+returning an `EvidenceGraph` and `EvaluationRunPolicyProjectionV1`. This is
+native inner evidence only: portable proof parity remains `not_claimed`.
+Summary/zero-row targets have no graph or negative proof; missing context,
+ambiguous hidden witnesses and any pin/replay mismatch fail closed. The
 captured relation, Scenario resolution, engine pins, and provider receipts are
 replayable; ordinary current-store evaluation and the older V0 capture codecs
 remain separate contracts.

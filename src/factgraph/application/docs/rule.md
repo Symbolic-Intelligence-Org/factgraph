@@ -871,7 +871,10 @@ terminal seals that compiled Query with:
   effective world (comparison is never a Policy mutation);
 - an optional `ScenarioSpecV1` and an `EvidenceScopeV1` admission filter;
 - an exact native or portable execution profile; and
-- optionally one restricted `RelationProviderV1` materialization.
+- optionally one restricted `RelationProviderV1` materialization attached to
+  that Rule/Policy target through `.using(provider)` / the composite
+  `ProviderQueryTargetV1`; a bare provider is not a Query target because it
+  has no independent head, projection, or address space.
 
 `RelationProviderV1` is a pre-engine boundary, not an arbitrary logical
 functor. Its compute/lookup callback receives a sealed request and returns a
@@ -916,14 +919,20 @@ only three successful matching normalized selected-row sets warrant an
 are deliberately not made equal by the common V1 result.
 
 `EvaluationRunV1` captures the baseline/effective worlds, plan/target/profile
-pins, engine frames, completeness/expectation/technical assessment, and any
-permitted provider receipt. Detached replay consumes only that sealed capture;
-it never silently reads the current Store, latest Rule/Policy, current schema,
-or current engine config. Detached Explain requires an explicit named
-`ExplainTargetV1` row or summary anchor and must report unavailable/unsupported
-evidence rather than fabricate a proof. `GoalTechnicalAssessmentV1` reports
-FactGraph technical axes only; authority, truthfulness, source authority,
-agent intent, review, and enforcement remain caller/Meander concerns.
+pins, engine frames, completeness/expectation/technical assessment, permitted
+provider receipts, and a restricted native Explain context. Detached replay
+consumes only that sealed capture; it never silently reads the current Store,
+latest Rule/Policy, current schema, or current engine config. Detached Explain
+requires an explicit named `ExplainTargetV1` row or summary anchor. For a
+positive row with captured context it lazily re-executes Native over only the
+sealed relation, checks the sealed result, and returns an inner
+`EvidenceGraph` plus `EvaluationRunPolicyProjectionV1` (`holds` / `fails` /
+`not_reached` on the authored Policy topology). It does not claim portable
+proof parity. Summary/zero-row Explain has no graph or negative proof; missing
+context, ambiguous hidden witnesses, or pin/replay mismatches fail closed.
+`GoalTechnicalAssessmentV1` reports FactGraph technical axes only; authority,
+truthfulness, source authority, agent intent, review, and enforcement remain
+caller/Meander concerns.
 
 For an explicit Scenario, `GoalPlanRunV1.scenario_diff` is a sealed derivative
 of the captured baseline/effective worlds and normalized selected row sets. It

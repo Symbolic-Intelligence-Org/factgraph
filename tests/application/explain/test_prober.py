@@ -8,8 +8,20 @@ from factgraph.application.explain import EvidenceJoin, Fails, Holds, NotReached
 from factgraph.application.schema_runtime import encode_entity_ref
 from factgraph.application.protocol import EntityRef, Rule
 from factgraph.application.protocol.rule_expr import _coerce_rule_expr_operand
-from factgraph.application.protocol.rule_expr_lowering import _lower_application_rule, _lower_rule_expr
-from factgraph.core.rules.where_ast import AndExpr, CmpAtom, Const, InAtom, NotAtom, OrExpr, PredAtom, Var
+from factgraph.application.protocol.rule_expr_lowering import (
+    _lower_application_rule,
+    _lower_rule_expr,
+)
+from factgraph.core.rules.where_ast import (
+    AndExpr,
+    CmpAtom,
+    Const,
+    InAtom,
+    NotAtom,
+    OrExpr,
+    PredAtom,
+    Var,
+)
 from factgraph.sdk import Entity, Field, Identity, compile_schema_from_classes
 
 
@@ -22,11 +34,7 @@ def _status(result: object) -> str:
 def _negated_atoms(result: object) -> tuple[object, ...]:
     paths = getattr(result, "paths")
     return tuple(
-        atom
-        for path in paths
-        for rule in path.rules
-        for atom in rule.atoms
-        if atom.negated
+        atom for path in paths for rule in path.rules for atom in rule.atoms if atom.negated
     )
 
 
@@ -40,7 +48,9 @@ class NativeProberTests(unittest.TestCase):
             repr="%user is a senior US resident",
         )
 
-        self.assertEqual(prober_module._render_rule_repr(rule, {"user": None}), "<user> is a senior US resident")
+        self.assertEqual(
+            prober_module._render_rule_repr(rule, {"user": None}), "<user> is a senior US resident"
+        )
 
     def test_monotonic_witness_backtracking_keeps_later_successful_env(self) -> None:
         x = Var("$x")
@@ -57,6 +67,65 @@ class NativeProberTests(unittest.TestCase):
         self.assertEqual(_status(only_true), "holds")
         self.assertEqual(_status(false_then_true), "holds")
 
+    def test_terminal_inventory_dedupes_duplicate_full_bindings(self) -> None:
+        user = Var("$user")
+        hidden = Var("$hidden")
+        rule = Rule(
+            id="terminal_binding",
+            when=(PredAtom("p", [user, hidden]),),
+            ports={"user": user},
+        )
+        plan = _lower_application_rule(rule, head=rule)
+        user_seed = plan.occurrence_map[0].port_bindings[0].alias_local_execution_var.name
+
+        result = probe_native(
+            plan,
+            {user_seed: "alice"},
+            {"p": [("alice", "secret"), ("alice", "secret")]},
+        )
+
+        self.assertEqual(len(result.terminal_bindings), 1)
+        inventory = result.terminal_bindings[0]
+        self.assertEqual(inventory.branch_id, result.paths[0].tree_id)
+        self.assertEqual(len(inventory.environments), 1)
+        self.assertIn("secret", inventory.environments[0].values())
+        with self.assertRaises(TypeError):
+            inventory.environments[0][user_seed] = "mutated"  # type: ignore[index]
+
+    def test_terminal_inventory_preserves_distinct_hidden_bindings_canonically(self) -> None:
+        user = Var("$user")
+        hidden = Var("$hidden")
+        rule = Rule(
+            id="terminal_bindings",
+            when=(PredAtom("p", [user, hidden]),),
+            ports={"user": user},
+        )
+        plan = _lower_application_rule(rule, head=rule)
+        user_seed = plan.occurrence_map[0].port_bindings[0].alias_local_execution_var.name
+
+        forward = probe_native(
+            plan,
+            {user_seed: "alice"},
+            {"p": [("alice", "first"), ("alice", "second")]},
+        )
+        reverse = probe_native(
+            plan,
+            {user_seed: "alice"},
+            {"p": [("alice", "second"), ("alice", "first")]},
+        )
+
+        forward_bindings = forward.terminal_bindings[0].environments
+        reverse_bindings = reverse.terminal_bindings[0].environments
+        self.assertEqual(len(forward_bindings), 2)
+        self.assertEqual(forward_bindings, reverse_bindings)
+        hidden_values = {
+            value
+            for environment in forward_bindings
+            for value in environment.values()
+            if value in {"first", "second"}
+        }
+        self.assertEqual(hidden_values, {"first", "second"})
+
     def test_structure_preserves_head_body_occurrences_and_join_materialization(self) -> None:
         left_person = Var("$p")
         left_region = Var("$region")
@@ -72,7 +141,9 @@ class NativeProberTests(unittest.TestCase):
             when=(PredAtom("Person:region", [right_person, right_region]),),
             ports={"person": right_person, "region": right_region},
         )
-        expr = (left.as_("left") & right.as_("right")).join(left.as_("left").region.eq(right.as_("right").region))
+        expr = (left.as_("left") & right.as_("right")).join(
+            left.as_("left").region.eq(right.as_("right").region)
+        )
         plan = _lower_rule_expr(expr, head=left)
 
         result = probe_native(plan, {}, {"Person:region": [("alice", "US"), ("bob", "US")]})
@@ -329,6 +400,13 @@ class NativeProberTests(unittest.TestCase):
 
         self.assertEqual(tuple(path.status for path in result.paths), ("holds", "fails"))
         self.assertIsInstance(result.paths[0].rules[1].atoms[0].verdict, Holds)
+        self.assertEqual(
+            tuple(inventory.branch_id for inventory in result.terminal_bindings),
+            tuple(path.tree_id for path in result.paths),
+        )
+        self.assertEqual(
+            tuple(len(inventory.environments) for inventory in result.terminal_bindings), (1, 0)
+        )
 
     def test_fact_repr_baking_uses_schema_template_and_entity_renderer(self) -> None:
         class DisplayUser(Entity):
@@ -387,8 +465,12 @@ class NativeProberTests(unittest.TestCase):
         )
         plan = _lower_application_rule(rule, head=rule)
         schema_index = build_schema_index(compile_schema_from_classes([DisplayUser]))
-        user_ref = encode_entity_ref(EntityRef("DisplayUser", {"user_id": "u-1"}), index=schema_index)
-        identity_pred_id = entity_info(schema_index, "DisplayUser").identity_predicates["user_id"].pred_id
+        user_ref = encode_entity_ref(
+            EntityRef("DisplayUser", {"user_id": "u-1"}), index=schema_index
+        )
+        identity_pred_id = (
+            entity_info(schema_index, "DisplayUser").identity_predicates["user_id"].pred_id
+        )
         country_pred_id = field_predicate(schema_index, "DisplayUser", "country").pred_id
 
         result = probe_native(
@@ -422,7 +504,9 @@ class NativeProberTests(unittest.TestCase):
         )
         plan = _lower_application_rule(rule, head=rule)
         schema_index = build_schema_index(compile_schema_from_classes([DisplayUser]))
-        user_ref = encode_entity_ref(EntityRef("DisplayUser", {"user_id": "u-1"}), index=schema_index)
+        user_ref = encode_entity_ref(
+            EntityRef("DisplayUser", {"user_id": "u-1"}), index=schema_index
+        )
         country_pred_id = field_predicate(schema_index, "DisplayUser", "country").pred_id
 
         result = probe_native(
@@ -435,7 +519,9 @@ class NativeProberTests(unittest.TestCase):
         atom = result.paths[0].rules[1].atoms[0]
         self.assertEqual(atom.repr_text, f"{user_ref} lives in US")
 
-    def test_not_atom_single_inner_renders_friendly_negated_repr_and_preserves_verdict(self) -> None:
+    def test_not_atom_single_inner_renders_friendly_negated_repr_and_preserves_verdict(
+        self,
+    ) -> None:
         class DisplayUser(Entity):
             class Meta:
                 repr = "User %user_id"
@@ -456,8 +542,12 @@ class NativeProberTests(unittest.TestCase):
         )
         plan = _lower_application_rule(rule, head=rule)
         schema_index = build_schema_index(compile_schema_from_classes([DisplayUser]))
-        user_ref = encode_entity_ref(EntityRef("DisplayUser", {"user_id": "u-1"}), index=schema_index)
-        identity_pred_id = entity_info(schema_index, "DisplayUser").identity_predicates["user_id"].pred_id
+        user_ref = encode_entity_ref(
+            EntityRef("DisplayUser", {"user_id": "u-1"}), index=schema_index
+        )
+        identity_pred_id = (
+            entity_info(schema_index, "DisplayUser").identity_predicates["user_id"].pred_id
+        )
         country_pred_id = field_predicate(schema_index, "DisplayUser", "country").pred_id
         blocked_pred_id = field_predicate(schema_index, "DisplayUser", "blocked").pred_id
 
@@ -515,8 +605,12 @@ class NativeProberTests(unittest.TestCase):
         )
         plan = _lower_application_rule(rule, head=rule)
         schema_index = build_schema_index(compile_schema_from_classes([DisplayUser]))
-        user_ref = encode_entity_ref(EntityRef("DisplayUser", {"user_id": "u-1"}), index=schema_index)
-        identity_pred_id = entity_info(schema_index, "DisplayUser").identity_predicates["user_id"].pred_id
+        user_ref = encode_entity_ref(
+            EntityRef("DisplayUser", {"user_id": "u-1"}), index=schema_index
+        )
+        identity_pred_id = (
+            entity_info(schema_index, "DisplayUser").identity_predicates["user_id"].pred_id
+        )
         age_pred_id = field_predicate(schema_index, "DisplayUser", "age").pred_id
         blocked_pred_id = field_predicate(schema_index, "DisplayUser", "blocked").pred_id
 
@@ -572,8 +666,12 @@ class NativeProberTests(unittest.TestCase):
         )
         plan = _lower_application_rule(rule, head=rule)
         schema_index = build_schema_index(compile_schema_from_classes([DisplayUser]))
-        user_ref = encode_entity_ref(EntityRef("DisplayUser", {"user_id": "u-1"}), index=schema_index)
-        identity_pred_id = entity_info(schema_index, "DisplayUser").identity_predicates["user_id"].pred_id
+        user_ref = encode_entity_ref(
+            EntityRef("DisplayUser", {"user_id": "u-1"}), index=schema_index
+        )
+        identity_pred_id = (
+            entity_info(schema_index, "DisplayUser").identity_predicates["user_id"].pred_id
+        )
         country_pred_id = field_predicate(schema_index, "DisplayUser", "country").pred_id
         blocked_pred_id = field_predicate(schema_index, "DisplayUser", "blocked").pred_id
         flag_pred_id = field_predicate(schema_index, "DisplayUser", "flag").pred_id
@@ -637,12 +735,18 @@ class NativeProberTests(unittest.TestCase):
         employee = Var("$employee")
         dept = Var("$dept")
         schema_index = build_schema_index(compile_schema_from_classes([Dept, Employee]))
-        employee_ref = encode_entity_ref(EntityRef("Employee", {"emp_id": "e-1"}), index=schema_index)
+        employee_ref = encode_entity_ref(
+            EntityRef("Employee", {"emp_id": "e-1"}), index=schema_index
+        )
         dept_ref = encode_entity_ref(EntityRef("Dept", {"dept_id": "d-1"}), index=schema_index)
         employee_info = entity_info(schema_index, "Employee")
         dept_info = entity_info(schema_index, "Dept")
         dept_pred_id = field_predicate(schema_index, "Employee", "dept").pred_id
-        rule = Rule(id="employee_dept", when=(PredAtom(dept_pred_id, [employee, dept]),), ports={"employee": employee, "dept": dept})
+        rule = Rule(
+            id="employee_dept",
+            when=(PredAtom(dept_pred_id, [employee, dept]),),
+            ports={"employee": employee, "dept": dept},
+        )
         plan = _lower_application_rule(rule, head=rule)
 
         result = probe_native(
@@ -675,7 +779,9 @@ class NativeProberTests(unittest.TestCase):
         employee = Var("$employee")
         dept = Var("$dept")
         schema_index = build_schema_index(compile_schema_from_classes([Dept, Employee]))
-        employee_ref = encode_entity_ref(EntityRef("Employee", {"emp_id": "e-1"}), index=schema_index)
+        employee_ref = encode_entity_ref(
+            EntityRef("Employee", {"emp_id": "e-1"}), index=schema_index
+        )
         dept_ref = encode_entity_ref(EntityRef("Dept", {"dept_id": "d-1"}), index=schema_index)
         dept_info = entity_info(schema_index, "Dept")
         dept_pred_id = field_predicate(schema_index, "Employee", "dept").pred_id
@@ -708,11 +814,16 @@ class NativeProberTests(unittest.TestCase):
         sensor = Var("$sensor")
         reading = Var("$reading")
         schema_index = build_schema_index(compile_schema_from_classes([Measurement]))
-        sensor_ref = encode_entity_ref(EntityRef("Measurement", {"sensor_id": "s-1"}), index=schema_index)
+        sensor_ref = encode_entity_ref(
+            EntityRef("Measurement", {"sensor_id": "s-1"}), index=schema_index
+        )
         reading_pred_id = field_predicate(schema_index, "Measurement", "reading").pred_id
         rule = Rule(
             id="measurement_reading",
-            when=(PredAtom(reading_pred_id, [sensor, reading]), CmpAtom("eq", reading, Const("0x3ff8000000000000"))),
+            when=(
+                PredAtom(reading_pred_id, [sensor, reading]),
+                CmpAtom("eq", reading, Const("0x3ff8000000000000")),
+            ),
             ports={"sensor": sensor, "reading": reading},
         )
         plan = _lower_application_rule(rule, head=rule)
@@ -738,7 +849,11 @@ class NativeProberTests(unittest.TestCase):
         schema_index = build_schema_index(compile_schema_from_classes([Label]))
         subject_ref = encode_entity_ref(EntityRef("Label", {"label_id": "l-1"}), index=schema_index)
         code_pred_id = field_predicate(schema_index, "Label", "code").pred_id
-        rule = Rule(id="label_code", when=(PredAtom(code_pred_id, [subject, code]),), ports={"subject": subject, "code": code})
+        rule = Rule(
+            id="label_code",
+            when=(PredAtom(code_pred_id, [subject, code]),),
+            ports={"subject": subject, "code": code},
+        )
         plan = _lower_application_rule(rule, head=rule)
 
         result = probe_native(
@@ -762,10 +877,16 @@ class NativeProberTests(unittest.TestCase):
         user = Var("$user")
         note = Var("$note")
         schema_index = build_schema_index(compile_schema_from_classes([DisplayUser]))
-        user_ref = encode_entity_ref(EntityRef("DisplayUser", {"user_id": "u-1"}), index=schema_index)
+        user_ref = encode_entity_ref(
+            EntityRef("DisplayUser", {"user_id": "u-1"}), index=schema_index
+        )
         user_info = entity_info(schema_index, "DisplayUser")
         note_pred_id = field_predicate(schema_index, "DisplayUser", "note").pred_id
-        rule = Rule(id="user_note", when=(PredAtom(note_pred_id, [user, note]),), ports={"user": user, "note": note})
+        rule = Rule(
+            id="user_note",
+            when=(PredAtom(note_pred_id, [user, note]),),
+            ports={"user": user, "note": note},
+        )
         plan = _lower_application_rule(rule, head=rule)
 
         result = probe_native(
