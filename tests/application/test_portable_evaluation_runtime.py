@@ -33,10 +33,12 @@ from factgraph.application.protocol import (
     EvaluationQuery,
     EvaluationQueryBinding,
     EvaluationQuerySelection,
+    FieldPath,
     Policy,
     PolicyAll,
     PolicyAny,
     PolicyCompare,
+    PolicyFieldNavigation,
     PolicyOccurrence,
     PolicyUnify,
     SemanticPortAddress,
@@ -267,6 +269,114 @@ def _compiled_common_any_query_and_relation() -> tuple[
                     common_person,
                     EntityRef("Person", {"employee_id": "alice"}),
                 ),
+            ),
+        ),
+        compiled_policy=policy,
+        address_space=space,
+        schema_index=index,
+    )
+    plan, _traces = _materialize_adapter_derivation_plan(
+        compiled._lowering_plan,
+        engine="native",
+    )
+    projected = project_view_facts_with_witness(source.ledger, source.schema_ir)
+    dependencies = ("Person:exists", "person:age", "person:score")
+    relation = {predicate_id: tuple(projected[predicate_id]) for predicate_id in dependencies}
+    return plan, source.schema_ir, relation
+
+
+def _compiled_cross_entity_navigation_comparison_query_and_relation() -> tuple[
+    CompiledDerivationPlan, dict, dict[str, tuple[ProjectedFact, ...]]
+]:
+    """Compile two distinct same-predicate occurrences joined by field navigation.
+
+    The two ``PolicyOccurrence`` values intentionally share one underlying
+    Rule.  This produces repeated ``Person:exists`` / ``person:age`` /
+    ``person:score`` atoms with different values in one concrete branch: the
+    shape that exercises Soufflé witness capture's occurrence identity.
+    """
+
+    source = SDKStore([Person])
+    index = build_schema_index(source.schema_ir)
+    for employee_id, age, score in (("alice", 22, 9), ("bob", 19, 7)):
+        ref = resolve_selector(
+            EntitySelector(entity_type="Person", identity={"employee_id": employee_id}),
+            index=index,
+        )
+        encoded = ref.encoded_ref or ""
+        info = entity_info(index, "Person")
+        set_field(source.ledger, info.exists_predicate_id, encoded, [])
+        set_field(
+            source.ledger,
+            info.identity_predicates["employee_id"].pred_id,
+            encoded,
+            [("string", employee_id)],
+        )
+        set_field(
+            source.ledger,
+            field_predicate(index, "Person", "age").pred_id,
+            encoded,
+            [("int", age)],
+        )
+        set_field(
+            source.ledger,
+            field_predicate(index, "Person", "score").pred_id,
+            encoded,
+            [("int", score)],
+        )
+
+    person, age, score = Var("$person"), Var("$age"), Var("$score")
+    person_values = build_resolved_rule(
+        id="portable_cross_entity_person_values",
+        version="1",
+        when=(
+            PredAtom("Person:exists", [person]),
+            PredAtom("person:age", [person, age]),
+            PredAtom("person:score", [person, score]),
+        ),
+        ports={
+            "person": SemanticRulePort(person, entity_identity("Person")),
+            "age": SemanticRulePort(age, field_endpoint("Person", "age")),
+            "score": SemanticRulePort(score, field_endpoint("Person", "score")),
+        },
+        schema_index=index,
+    )
+    space = SemanticAddressSpace(
+        (
+            manage_rule_occurrence(person_values, "older"),
+            manage_rule_occurrence(person_values, "younger"),
+        )
+    )
+    older_person = SemanticPortAddress("older", "person")
+    younger_person = SemanticPortAddress("younger", "person")
+    older_age = SemanticPortAddress("older", "age")
+    younger_age = SemanticPortAddress("younger", "age")
+    policy = compile_policy(
+        Policy(
+            "portable_cross_entity_navigation",
+            PolicyAll(
+                (
+                    PolicyOccurrence("older"),
+                    PolicyOccurrence("younger"),
+                    PolicyCompare.gt(
+                        PolicyFieldNavigation(older_person, FieldPath("Person", "age")),
+                        PolicyFieldNavigation(younger_person, FieldPath("Person", "age")),
+                    ),
+                )
+            ),
+            version="1",
+        ),
+        address_space=space,
+        schema_index=index,
+    )
+    compiled = compile_evaluation_query(
+        EvaluationQuery(
+            policy.policy_digest,
+            (
+                EvaluationQuerySelection("older", older_person),
+                EvaluationQuerySelection("younger", younger_person),
+                EvaluationQuerySelection("older_age", older_age),
+                EvaluationQuerySelection("younger_age", younger_age),
             ),
         ),
         compiled_policy=policy,
@@ -546,6 +656,45 @@ class PortableEvaluationRuntimeTests(unittest.TestCase):
         )
         self.assertEqual(len({item.selected_row_set_digest for item in result.executions}), 1)
         self.assertEqual(result.executions[0].rows[0].terms, (("int", 22),))
+
+    def test_cross_entity_field_navigation_comparison_preserves_each_souffle_witness_occurrence(
+        self,
+    ) -> None:
+        """All engines agree when one predicate occurs twice with distinct values.
+
+        This is a real compiled Policy, not raw where IR.  Its direct
+        ``PolicyFieldNavigation`` comparison requires two Person occurrences:
+        collapsing Soufflé witness facts by predicate id would make the
+        ``younger`` occurrence borrow the ``older`` witness and reject this
+        valid row during support reconstruction.
+        """
+
+        plan, schema_ir, relation = (
+            _compiled_cross_entity_navigation_comparison_query_and_relation()
+        )
+
+        result = execute_portable_deterministic_v1(
+            plan,
+            schema_ir=schema_ir,
+            effective_relations=relation,
+        )
+
+        self.assertEqual(
+            tuple(item.engine for item in result.executions), ("native", "souffle", "problog")
+        )
+        self.assertEqual(len({item.selected_row_set_digest for item in result.executions}), 1)
+        expected = tuple(row.terms for row in result.executions[0].rows)
+        self.assertEqual(len(expected), 1)
+        self.assertEqual(expected[0][0][0], "entity_ref")
+        self.assertEqual(expected[0][1][0], "entity_ref")
+        self.assertNotEqual(expected[0][0][1], expected[0][1][1])
+        self.assertEqual(expected[0][2:], (("int", 22), ("int", 19)))
+        self.assertTrue(
+            all(
+                tuple(row.terms for row in execution.rows) == expected
+                for execution in result.executions
+            )
+        )
 
     def test_relation_inventory_is_exact_including_empty_relations(self) -> None:
         plan, schema_ir, relation = _compiled_query_and_relation()

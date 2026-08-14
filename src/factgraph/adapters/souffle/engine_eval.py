@@ -71,7 +71,9 @@ def evaluate_store_engine(
             if isinstance(value, str) and value.startswith("$") and value not in where_variables
         ]
         if missing_vars:
-            raise WhereValidationError(f"head entity vars reference unbound where variables: {missing_vars}")
+            raise WhereValidationError(
+                f"head entity vars reference unbound where variables: {missing_vars}"
+            )
 
         query_support_rows = _run_query_and_read_support_rows(
             store=store,
@@ -242,12 +244,20 @@ def _run_query_and_read_support_rows(
             query_rel=query_rel,
             query_variables=query_variables,
         )
-        (out_dir / "rules" / "idb.dl").write_text(witness_program.text, encoding="utf-8", newline="\n")
-        _rewrite_query_outputs_map(manifest_path, [query_rel, *(rel.relation_name for rel in witness_program.branch_relations)])
+        (out_dir / "rules" / "idb.dl").write_text(
+            witness_program.text, encoding="utf-8", newline="\n"
+        )
+        _rewrite_query_outputs_map(
+            manifest_path,
+            [query_rel, *(rel.relation_name for rel in witness_program.branch_relations)],
+        )
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
         outputs_map = manifest.get("outputs_map", {})
         query_outputs = outputs_map.get("__query__") if isinstance(outputs_map, dict) else None
-        expected_outputs = [query_rel, *(rel.relation_name for rel in witness_program.branch_relations)]
+        expected_outputs = [
+            query_rel,
+            *(rel.relation_name for rel in witness_program.branch_relations),
+        ]
         if query_outputs != expected_outputs:
             raise WhereValidationError("query outputs_map is missing or invalid")
 
@@ -256,11 +266,17 @@ def _run_query_and_read_support_rows(
         engine_mode = run_manifest.get("engine_mode")
         exit_code = run_manifest.get("exit_code")
         if engine_mode != "souffle":
-            raise WhereValidationError("engine evaluate requires souffle execution (runner fell back to noop)")
+            raise WhereValidationError(
+                "engine evaluate requires souffle execution (runner fell back to noop)"
+            )
         if exit_code != 0:
-            raise WhereValidationError(f"engine evaluate failed with non-zero exit_code: {exit_code}")
+            raise WhereValidationError(
+                f"engine evaluate failed with non-zero exit_code: {exit_code}"
+            )
 
-        parsed_rows = _read_branch_witness_rows(out_dir / "outputs", witness_program.branch_relations)
+        parsed_rows = _read_branch_witness_rows(
+            out_dir / "outputs", witness_program.branch_relations
+        )
         return _build_support_rows_from_witness_rows(
             store=store,
             where=where,
@@ -301,7 +317,9 @@ def _run_query_and_read_bindings(
     engine_mode = run_manifest.get("engine_mode")
     exit_code = run_manifest.get("exit_code")
     if engine_mode != "souffle":
-        raise WhereValidationError("engine evaluate requires souffle execution (runner fell back to noop)")
+        raise WhereValidationError(
+            "engine evaluate requires souffle execution (runner fell back to noop)"
+        )
     if exit_code != 0:
         raise WhereValidationError(f"engine evaluate failed with non-zero exit_code: {exit_code}")
 
@@ -374,14 +392,18 @@ def _read_query_witness_rows(
                 raise WhereValidationError(
                     f"witness query output arity mismatch: expected {expected_arity}, got {len(cells)}"
                 )
-            binding_items = normalize_binding_items({var: value for var, value in zip(variables, cells)})
+            binding_items = normalize_binding_items(
+                {var: value for var, value in zip(variables, cells)}
+            )
             witness_atoms: list[tuple[str, str]] = []
             case_indexes: set[int] = set()
             for spec, value in zip(pred_columns, cells[len(variables) :]):
                 if value == "":
                     continue
                 if not isinstance(value, str):
-                    raise WhereValidationError(f"witness column must decode to string for {spec.pred_condition_key}")
+                    raise WhereValidationError(
+                        f"witness column must decode to string for {spec.pred_condition_key}"
+                    )
                 witness_atoms.append((spec.pred_condition_key, value))
                 case_indexes.add(spec.case_index)
             if not case_indexes:
@@ -485,18 +507,32 @@ def _build_souffle_support_artifact(
     witness_ids_by_atom_key: dict[str, set[str]],
 ) -> ProofReceipt:
     binding = binding_dict_from_items(binding_items)
-    witness_facts = _build_synthetic_witness_facts(
+    # Keep selected witness rows keyed by their *predicate occurrence* until
+    # the complete support binding has been reconstructed.  One body may use
+    # the same predicate more than once (for example two independent Person
+    # occurrences joined by a Policy field-navigation comparison).  Collapsing
+    # those rows to ``pred_id`` here makes the later occurrence accidentally
+    # re-use the first occurrence's witness.
+    witness_facts_by_condition = _build_synthetic_witness_facts_by_condition(
         store=store,
         where=where,
         binding=binding,
         selected_case_index=selected_case_index,
         witness_ids_by_atom_key=witness_ids_by_atom_key,
     )
+    # ``build_support_artifact_for_binding`` intentionally keeps its stable
+    # predicate-keyed input contract.  Build that compatibility view only
+    # after the occurrence-sensitive binding has been recovered.
+    witness_facts = _group_witness_facts_by_predicate(
+        where=where,
+        selected_case_index=selected_case_index,
+        witness_facts_by_condition=witness_facts_by_condition,
+    )
     support_binding = _extend_binding_from_witness_facts(
         where=where,
         binding=binding,
         selected_case_index=selected_case_index,
-        witness_facts=witness_facts,
+        witness_facts_by_condition=witness_facts_by_condition,
     )
     native_like = build_support_artifact_for_binding(
         where=where,
@@ -517,7 +553,7 @@ def _build_souffle_support_artifact(
     )
 
 
-def _build_synthetic_witness_facts(
+def _build_synthetic_witness_facts_by_condition(
     *,
     store: Any,
     where: list[Any],
@@ -529,9 +565,11 @@ def _build_synthetic_witness_facts(
     try:
         branch = branches[selected_case_index]
     except IndexError as exc:
-        raise WhereValidationError(f"selected witness branch out of range: {selected_case_index}") from exc
+        raise WhereValidationError(
+            f"selected witness branch out of range: {selected_case_index}"
+        ) from exc
 
-    witness_facts: dict[str, list[ProjectedFact]] = {}
+    witness_facts_by_condition: dict[str, list[ProjectedFact]] = {}
     for condition_index, atom in enumerate(branch):
         if not isinstance(atom, tuple) or not atom or atom[0] != "pred":
             continue
@@ -539,7 +577,10 @@ def _build_synthetic_witness_facts(
         pred_condition_key = make_pred_condition_key(selected_case_index, condition_index, pred_id)
         asrt_ids = witness_ids_by_atom_key.get(pred_condition_key)
         if not asrt_ids:
-            raise WhereValidationError(f"missing witness ids for selected predicate atom: {pred_condition_key}")
+            raise WhereValidationError(
+                f"missing witness ids for selected predicate atom: {pred_condition_key}"
+            )
+        facts: list[ProjectedFact] = []
         for asrt_id in sorted(asrt_ids):
             projected = _projected_fact_from_claim(store, pred_id=pred_id, asrt_id=asrt_id)
             if projected is None:
@@ -547,9 +588,45 @@ def _build_synthetic_witness_facts(
                     asrt_id=asrt_id,
                     fact_tuple=_ground_terms(terms, binding),
                 )
-            witness_facts.setdefault(pred_id, []).append(
-                projected
+            facts.append(projected)
+        witness_facts_by_condition[pred_condition_key] = facts
+    return witness_facts_by_condition
+
+
+def _group_witness_facts_by_predicate(
+    *,
+    where: list[Any],
+    selected_case_index: int,
+    witness_facts_by_condition: dict[str, list[ProjectedFact]],
+) -> dict[str, list[ProjectedFact]]:
+    """Return the legacy predicate-keyed witness view for receipt assembly.
+
+    Receipt construction still discovers all matching facts by predicate and
+    grounded terms, so this view deliberately retains every selected fact.
+    The occurrence-keyed view remains the authority for deriving hidden
+    bindings before that step.
+    """
+
+    branches = _normalize_where_branches(where)
+    try:
+        branch = branches[selected_case_index]
+    except IndexError as exc:
+        raise WhereValidationError(
+            f"selected witness branch out of range: {selected_case_index}"
+        ) from exc
+
+    witness_facts: dict[str, list[ProjectedFact]] = {}
+    for condition_index, atom in enumerate(branch):
+        if not isinstance(atom, tuple) or not atom or atom[0] != "pred":
+            continue
+        _, pred_id, _terms = atom
+        pred_condition_key = make_pred_condition_key(selected_case_index, condition_index, pred_id)
+        facts = witness_facts_by_condition.get(pred_condition_key)
+        if not facts:
+            raise WhereValidationError(
+                f"missing witness facts for selected predicate atom: {pred_condition_key}"
             )
+        witness_facts.setdefault(pred_id, []).extend(facts)
     return witness_facts
 
 
@@ -558,22 +635,27 @@ def _extend_binding_from_witness_facts(
     where: list[Any],
     binding: dict[str, Any],
     selected_case_index: int,
-    witness_facts: dict[str, list[ProjectedFact]],
+    witness_facts_by_condition: dict[str, list[ProjectedFact]],
 ) -> dict[str, Any]:
     branches = _normalize_where_branches(where)
     try:
         branch = branches[selected_case_index]
     except IndexError as exc:
-        raise WhereValidationError(f"selected witness branch out of range: {selected_case_index}") from exc
+        raise WhereValidationError(
+            f"selected witness branch out of range: {selected_case_index}"
+        ) from exc
 
     out = dict(binding)
-    for atom in branch:
+    for condition_index, atom in enumerate(branch):
         if not isinstance(atom, tuple) or not atom or atom[0] != "pred":
             continue
         _, pred_id, terms = atom
-        facts = witness_facts.get(pred_id)
+        pred_condition_key = make_pred_condition_key(selected_case_index, condition_index, pred_id)
+        facts = witness_facts_by_condition.get(pred_condition_key)
         if not facts:
-            continue
+            raise WhereValidationError(
+                f"missing witness facts for selected predicate atom: {pred_condition_key}"
+            )
         _bind_terms_from_fact(terms, facts[0].fact_tuple, out)
     return out
 
@@ -588,7 +670,9 @@ def _bind_terms_from_fact(terms: Any, fact_tuple: tuple[Any, ...], binding: dict
     for term, value in zip(terms, fact_tuple):
         if not isinstance(term, str) or not term.startswith("$"):
             if term != value:
-                raise WhereValidationError(f"witness fact constant mismatch: expected {term}, got {value}")
+                raise WhereValidationError(
+                    f"witness fact constant mismatch: expected {term}, got {value}"
+                )
             continue
         existing = binding.get(term)
         if existing is not None and existing != value:
