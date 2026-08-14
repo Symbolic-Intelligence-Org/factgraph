@@ -207,6 +207,8 @@ from .semantics import ProbLogConfig, PyReasonConfig
 if TYPE_CHECKING:
     from factgraph.audit.proof_frame_diff import ProofFrameDiff
 
+    from .policy_authoring import PolicyDraft
+
 
 @dataclass(frozen=True)
 class FrozenAssertionSet:
@@ -2281,7 +2283,7 @@ class SDKStore:
     def schema_ir(self) -> dict[str, Any]:
         return self._schema_ir
 
-    def policy(self, policy_id: str, *, version: str | None = None) -> Any:
+    def policy(self, policy_id: str, *, version: str | None = None) -> "PolicyDraft":
         """Start one typed, in-process Policy authoring draft.
 
         The draft emits the existing managed Policy and SemanticAddressSpace

@@ -41,6 +41,25 @@ Its execution calls are SDK surface. Its direct `PolicyAll` / `PolicyAny` /
 `SemanticAddressSpace` construction is intentionally labelled as advanced
 application/compiler authoring, not as the desired business-user Policy API.
 
+## SDK Policy authoring walkthrough
+
+[`08_sdk_policy_authoring.ipynb`](08_sdk_policy_authoring.ipynb) is the
+user-facing companion to the advanced V1 walkthrough. It starts from a
+resolved Rule asset and uses `fg.policy(...).use(...).build(...)` to create an
+immutable Policy target with typed occurrence and port handles. It demonstrates
+natural scalar comparisons such as `people.age > 12`, cross-occurrence
+comparisons such as `older.age > younger.age`, one-hop field navigation,
+explicit nested `draft.all(...)` / `draft.any(...)`, direct Query binding and
+selection through the same handles, and the sealed Run / Explain / replay
+path. It also demonstrates why Python `and` / `or`, chained comparisons, and
+implicit entity equality deliberately fail loudly.
+
+The first public literal subset is intentionally small: signed-int64 `int` and
+`time` values only. Strings, booleans, floats, `None`, entity literals,
+multi-hop navigation, Actions, a Policy registry, and bare provider Queries
+remain outside this API. The optional portable cell verifies selected-row-set
+parity across real Native, Soufflé, and ProbLog; it does not claim proof parity.
+
 The portable cells make a deliberately narrow claim: canonical selected-row
 set parity for the supported positive deterministic fragment. They do not
 claim cross-engine proof, provenance, certainty, or arbitrary-language

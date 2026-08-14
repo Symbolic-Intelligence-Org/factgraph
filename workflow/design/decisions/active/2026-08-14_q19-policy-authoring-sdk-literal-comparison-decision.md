@@ -7,11 +7,11 @@
   authoring layer, including natural port comparisons, literal comparison and
   nested `all`/`any`, on an isolated branch.
 - Inputs:
-  - [Policy authoring SDK versus shipped audit](../../../audit/active/2026-08-14_factgraph-policy-authoring-sdk-vs-shipped.md)
+  - [Policy authoring SDK versus shipped audit](../../../audit/archive/2026-08-14_factgraph-policy-authoring-sdk-vs-shipped.md)
   - [Q12](2026-08-13_q12-policy-comparison-field-navigation-v0-decision.md)
   - [Q18](2026-08-14_q18-factgraph-final-closure-contract.md)
 - Outputs / Downstream:
-  - [Policy authoring SDK blueprint](../../../blueprints/active/2026-08-14_factgraph-policy-authoring-sdk.md)
+  - [Policy authoring SDK blueprint](../../../blueprints/archive/2026-08-14_factgraph-policy-authoring-sdk.md)
 - Branch: `codex/v0.3.0-policy-authoring-sdk-2026-08-14`
 - Base: `a6ed84c1`
 
@@ -76,8 +76,8 @@ compiler. Raw application Policy values remain supported unchanged.
   `occurrence.name` is only an ergonomic alias for safe, unambiguous Python
   identifiers. Navigation uses `entity_port.field("field")`.
 - `draft.all(...)` and `draft.any(...)` are explicit and recursively nestable.
-  They preserve the written topology; they never flatten or reorder author
-  structure beyond existing canonical child validation.
+  They preserve authored nesting topology; they never flatten it, while the
+  established Policy canonicalizer retains deterministic child ordering.
 - Scalar `>`, `>=`, `<`, `<=`, `==` and `!=` produce typed compare constraints.
   `draft.same(left_entity, right_entity)` is the explicit entity-identity
   unification operation; entity comparison operators are rejected.
@@ -140,17 +140,17 @@ forms where widening a historical V0 DTO would alter its seal.
 
 ## 4. Acceptance criteria
 
-- [ ] SDK authors can construct nested All/Any policies from resolved Rule
+- [x] SDK authors can construct nested All/Any policies from resolved Rule
   occurrences without importing Policy IR or SemanticAddressSpace.
-- [ ] Port/navigation comparison and a canonical integer literal lower through
+- [x] Port/navigation comparison and a canonical integer literal lower through
   one existing compiler/evaluator path with deterministic structure/lineage.
-- [ ] Misuse of host Boolean syntax, cross-draft handles, unknown ports and
+- [x] Misuse of host Boolean syntax, cross-draft handles, unknown ports and
   invalid literals fails loudly before evaluation.
-- [ ] `fg.query(built_policy)` accepts façade handles in bind/select and raw
+- [x] `fg.query(built_policy)` accepts façade handles in bind/select and raw
   Policy compatibility stays intact.
-- [ ] Native, Soufflé and ProbLog have real conformance fixtures for supported
+- [x] Native, Soufflé and ProbLog have real conformance fixtures for supported
   façade comparison forms, without fallback.
-- [ ] Detached Explain/replay expose literal compare topology and reject tamper;
+- [x] Detached Explain/replay expose literal compare topology and reject tamper;
   legacy V0 artefacts remain readable.
 
 ## 5. Decision record
@@ -159,3 +159,4 @@ forms where widening a historical V0 DTO would alter its seal.
 | --- | --- | --- | --- |
 | 2026-08-14 | adopted | User-facing authoring form selected | Explicit nesting plus natural comparison is adopted; literals are treated as a semantic, auditable extension rather than convenience syntax. |
 | 2026-08-14 | scoped | Literal envelope frozen | Q19 starts with only canonical `int` and `time` literals, the minimum portable surface that covers `people.age > 12` without untested coercion. |
+| 2026-08-14 | implemented | SDK façade and literal closure verified | `fg.policy(...)`/typed handles, canonical literals, existing compiler/codec/Explain paths, real Native/Soufflé/ProbLog parity, a runnable tutorial, and independent review all closed without a second evaluator or registry. |

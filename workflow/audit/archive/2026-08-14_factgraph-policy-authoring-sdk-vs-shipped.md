@@ -10,7 +10,7 @@
   - the user's 2026-08-14 request for an ergonomic, nested Policy authoring surface with natural comparisons and literal operands
 - Outputs / Downstream:
   - [Q19 Policy authoring SDK and literal comparison](../../design/decisions/active/2026-08-14_q19-policy-authoring-sdk-literal-comparison-decision.md)
-  - [Policy authoring SDK blueprint](../../blueprints/active/2026-08-14_factgraph-policy-authoring-sdk.md)
+  - [Policy authoring SDK blueprint](../../blueprints/archive/2026-08-14_factgraph-policy-authoring-sdk.md)
 - Related:
   - Q12's compiler/evidence compatibility contract remains authoritative except where Q19 explicitly supersedes its literal restriction.
 - Source intent: turn the existing typed Rule/Policy Query execution substrate into an ergonomic SDK authoring surface without creating a second Policy language or evaluator.
@@ -85,3 +85,22 @@ loosening the portable deterministic profile.
 - [x] Python-host-language frictions enumerated
 - [x] Out-of-scope items explicit
 - [x] Blueprint recommendations provided
+
+## 7. Implementation disposition
+
+Q19 consumed the three genuinely new rows without widening the execution
+authority:
+
+- D-01 is the SDK `PolicyDraft`/typed-handle façade. Its frozen target enters
+  the existing managed Policy resolver and Query compiler, with no catalog or
+  second evaluator.
+- D-02 is the sealed, canonical signed-int64 `int`/`time` `PolicyLiteral`
+  operand. It has compiler/lineage/Explain/replay coverage and real
+  Native/Soufflé/ProbLog selected-row-set fixtures.
+- D-03 is fail-loud host-language behavior plus target-owner validation at
+  bind/select. Python Boolean/hash traps, unsupported literals, cross-draft
+  handles and select-only navigation all reject before evaluation.
+
+The resulting SDK tutorial is executable. The final application/SDK/export
+cohort reported 706 passed + 175 subtests, and two independent reviews returned
+CLEAR. The consuming blueprint is ready for archive; this audit moves with it.

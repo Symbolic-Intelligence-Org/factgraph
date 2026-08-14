@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 import shutil
 import unittest
 from unittest.mock import patch
@@ -61,9 +62,14 @@ class Person(Entity):
     score: int = Field()
 
 
-def _compiled_query_and_relation(*, literal_threshold: int | None = None) -> tuple[
-    CompiledDerivationPlan, dict, dict[str, tuple[ProjectedFact, ...]]
-]:
+class TimedPerson(Entity):
+    employee_id: str = Identity()
+    observed_at: datetime = Field()
+
+
+def _compiled_query_and_relation(
+    *, literal_threshold: int | None = None
+) -> tuple[CompiledDerivationPlan, dict, dict[str, tuple[ProjectedFact, ...]]]:
     source = SDKStore([Person])
     index = build_schema_index(source.schema_ir)
     for employee_id, age, score in (("alice", 22, 9), ("bob", 19, 7)):
@@ -114,13 +120,17 @@ def _compiled_query_and_relation(*, literal_threshold: int | None = None) -> tup
     policy = compile_policy(
         Policy(
             "portable-person",
-            root if literal_threshold is None else PolicyAll((
-                root,
-                PolicyCompare.gt(
-                    SemanticPortAddress("pair", "age"),
-                    PolicyLiteral("int", literal_threshold),
-                ),
-            )),
+            root
+            if literal_threshold is None
+            else PolicyAll(
+                (
+                    root,
+                    PolicyCompare.gt(
+                        SemanticPortAddress("pair", "age"),
+                        PolicyLiteral("int", literal_threshold),
+                    ),
+                )
+            ),
         ),
         address_space=space,
         schema_index=index if literal_threshold is not None else None,
@@ -149,6 +159,103 @@ def _compiled_query_and_relation(*, literal_threshold: int | None = None) -> tup
     )
     projected = project_view_facts_with_witness(source.ledger, source.schema_ir)
     dependencies = ("Person:exists", "person:age", "person:score")
+    relation = {predicate_id: tuple(projected[predicate_id]) for predicate_id in dependencies}
+    return plan, source.schema_ir, relation
+
+
+def _compiled_time_literal_query_and_relation() -> tuple[
+    CompiledDerivationPlan, dict, dict[str, tuple[ProjectedFact, ...]]
+]:
+    """Build a real ``time``-typed literal comparison over captured facts.
+
+    This deliberately uses the schema's ``datetime -> time`` field mapping and
+    raw epoch-nanosecond evidence values.  The portable execution test below
+    therefore covers the actual native/Souffle/ProbLog lowering path rather
+    than merely Policy construction or codec round-tripping.
+    """
+
+    source = SDKStore([TimedPerson])
+    index = build_schema_index(source.schema_ir)
+    info = entity_info(index, "TimedPerson")
+    observed_at_predicate = field_predicate(index, "TimedPerson", "observed_at")
+    for employee_id, observed_at in (
+        ("alice", 1_700_000_000_000_000_000),
+        ("bob", 1_600_000_000_000_000_000),
+    ):
+        ref = resolve_selector(
+            EntitySelector(entity_type="TimedPerson", identity={"employee_id": employee_id}),
+            index=index,
+        )
+        encoded = ref.encoded_ref or ""
+        set_field(source.ledger, info.exists_predicate_id, encoded, [])
+        set_field(
+            source.ledger,
+            info.identity_predicates["employee_id"].pred_id,
+            encoded,
+            [("string", employee_id)],
+        )
+        set_field(
+            source.ledger,
+            observed_at_predicate.pred_id,
+            encoded,
+            [("time", observed_at)],
+        )
+
+    person, observed_at = Var("$person"), Var("$observed_at")
+    rule = build_resolved_rule(
+        id="timed_person_values",
+        version="1",
+        when=(
+            PredAtom(info.exists_predicate_id, [person]),
+            PredAtom(observed_at_predicate.pred_id, [person, observed_at]),
+        ),
+        ports={
+            "person": SemanticRulePort(person, entity_identity("TimedPerson")),
+            "observed_at": SemanticRulePort(
+                observed_at,
+                field_endpoint("TimedPerson", "observed_at"),
+            ),
+        },
+        schema_index=index,
+    )
+    space = SemanticAddressSpace((manage_rule_occurrence(rule, "pair"),))
+    policy = compile_policy(
+        Policy(
+            "portable-time-literal",
+            PolicyAll(
+                (
+                    PolicyOccurrence("pair"),
+                    PolicyCompare.gt(
+                        SemanticPortAddress("pair", "observed_at"),
+                        PolicyLiteral("time", 1_650_000_000_000_000_000),
+                    ),
+                )
+            ),
+        ),
+        address_space=space,
+        schema_index=index,
+    )
+    compiled = compile_evaluation_query(
+        EvaluationQuery(
+            policy.policy_digest,
+            (
+                EvaluationQuerySelection("person", SemanticPortAddress("pair", "person")),
+                EvaluationQuerySelection(
+                    "observed_at",
+                    SemanticPortAddress("pair", "observed_at"),
+                ),
+            ),
+        ),
+        compiled_policy=policy,
+        address_space=space,
+        schema_index=index,
+    )
+    plan, _traces = _materialize_adapter_derivation_plan(
+        compiled._lowering_plan,
+        engine="native",
+    )
+    projected = project_view_facts_with_witness(source.ledger, source.schema_ir)
+    dependencies = (info.exists_predicate_id, observed_at_predicate.pred_id)
     relation = {predicate_id: tuple(projected[predicate_id]) for predicate_id in dependencies}
     return plan, source.schema_ir, relation
 
@@ -587,6 +694,31 @@ class PortableEvaluationRuntimeTests(unittest.TestCase):
         self.assertEqual(len({item.selected_row_set_digest for item in result.executions}), 1)
         self.assertEqual(len(result.executions[0].rows), 1)
         self.assertEqual(result.executions[0].rows[0].terms[1], ("int", 22))
+
+    def test_real_compiled_policy_time_literal_runs_all_three_engines(self) -> None:
+        plan, schema_ir, relation = _compiled_time_literal_query_and_relation()
+
+        contract = validate_portable_deterministic_v1(
+            plan,
+            schema_ir=schema_ir,
+            effective_relations=relation,
+        )
+        self.assertEqual(contract.selected_head_var_names, ("$__projection_0", "$__projection_1"))
+        result = execute_portable_deterministic_v1(
+            plan,
+            schema_ir=schema_ir,
+            effective_relations=relation,
+        )
+
+        self.assertEqual(
+            tuple(item.engine for item in result.executions), ("native", "souffle", "problog")
+        )
+        self.assertEqual(len({item.selected_row_set_digest for item in result.executions}), 1)
+        self.assertEqual(len(result.executions[0].rows), 1)
+        self.assertEqual(
+            result.executions[0].rows[0].terms[1],
+            ("time", 1_700_000_000_000_000_000),
+        )
 
     def test_materialized_world_is_new_and_does_not_need_a_source_store(self) -> None:
         plan, schema_ir, relation = _compiled_query_and_relation()

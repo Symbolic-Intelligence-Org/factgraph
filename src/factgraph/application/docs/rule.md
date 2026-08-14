@@ -298,8 +298,9 @@ Policy. The existing RuleExpr partial-join lowering remains unchanged.
 ### Direct comparison and one-hop field navigation
 
 `PolicyCompare` is a direct `PolicyAll` constraint, never a dotted Query path
-or a new Rule. Its operands are either direct scalar field addresses or a
-strict identity-to-field navigation:
+or a new Rule. Its operands are direct scalar field addresses, a strict
+identity-to-field navigation, or the deliberately narrow `PolicyLiteral`
+described below:
 
 ```python
 from factgraph.application.protocol import (
@@ -321,12 +322,23 @@ older_than = PolicyCompare.gt(older_age, younger_age)
 Compilation requires the same trusted `SchemaIndex` as the managed address
 space. Direct operands must be `single` scalar Field endpoints; navigation
 starts at an EntityIdentity endpoint and can reach only one known scalar field
-of that same entity type. Both sides must have the same scalar domain.
-`eq`/`ne` canonicalize operand order; native ordering is deliberately limited
-to `int` and `time`. Entity references, multi-value fields, literals,
+of that same entity type. Two semantic operands must have the same scalar
+domain. A literal may appear on exactly one side, and must be a canonical
+`PolicyLiteral("int", value)` or `PolicyLiteral("time", value)` signed-int64
+value. It lowers to the existing `CmpAtom(..., Const(value))` form; it is not a
+string DSL value or a Query binding. `eq`/`ne` canonicalize operand order;
+ordering and literals are deliberately limited to `int` and `time`. Entity
+references, multi-value fields, string/bool/float/UUID/bytes literals,
 relationships and multi-hop paths are rejected from Policy logic. The separate
 select-side Query navigation described below is not a Policy condition and
 never changes a Policy's identity, structure, lineage, or evidence ownership.
+
+The public SDK façade is the preferred authoring surface for this subset. For
+example, `fg.policy(...).use(..., as_="older").age > 12` constructs this same
+sealed `PolicyLiteral` comparison; `older.person.field("age") >
+younger.person.field("age")` constructs the navigation comparison above. The
+façade does not change the compiler, lineage, lowering, or Explain ownership.
+Raw `PolicyCompare` remains the advanced application-level representation.
 
 Like `PolicyUnify`, a compare is branch-total in its owning `PolicyAll`.
 Placing it inside the appropriate branch of `PolicyAny` is valid; placing it
@@ -564,11 +576,13 @@ lifecycle, although it may consume any `EvidenceGraph` that satisfies its
 anchor and lineage checks. Empty runs have no Policy view—an empty result is
 still not a false result.
 
-The older ad-hoc `QueryRuntimeRequest` and SDK `Query` remain unchanged.
-Non-native engines, standalone Query explain integration, candidate acceptance,
-literals, relationship/multi-hop navigation, general expectation modes,
-completeness, What-if, bundle persistence, Package, and Agent/Meander wire
-formats remain later slices.
+The preceding paragraph records the historical F3A boundary, not the current
+capability inventory. The older ad-hoc `QueryRuntimeRequest` and SDK `Query`
+remain unchanged. Later F4/F5/Q18/Q19 work added sealed runs, detached Explain,
+candidate comparison, constrained What-if, portable selected-row parity, and
+the narrow `int`/`time` Policy literal described above. Relationship/multi-hop
+navigation, general Action semantics, Package lookup, and Agent/Meander wire
+formats remain outside this application Policy contract.
 
 ### Unified resolved Query target v1
 

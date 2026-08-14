@@ -1,6 +1,6 @@
 # Task Blueprint: FactGraph Policy authoring SDK
 
-- Status: implementing
+- Status: archived
 - Created: 2026-08-14
 - Last Updated: 2026-08-14
 - Related Modules:
@@ -12,7 +12,7 @@
   - [Q19 decision](../../design/decisions/active/2026-08-14_q19-policy-authoring-sdk-literal-comparison-decision.md)
   - [Q12 decision](../../design/decisions/active/2026-08-13_q12-policy-comparison-field-navigation-v0-decision.md)
   - [Q18 final closure](../../design/decisions/active/2026-08-14_q18-factgraph-final-closure-contract.md)
-  - [vs-shipped audit](../../audit/active/2026-08-14_factgraph-policy-authoring-sdk-vs-shipped.md)
+  - [vs-shipped audit](../../audit/archive/2026-08-14_factgraph-policy-authoring-sdk-vs-shipped.md)
 - Audit Log:
   - [paired audit](./2026-08-14_factgraph-policy-authoring-sdk.audit.md)
 
@@ -61,7 +61,8 @@ less strict.
 
 - Raw Policy and all legacy V0 DTO/wire identities stay compatible.
 - No public dotted-string parser, lookup registry or implicit address fallback.
-- Nested topology is preserved exactly; façade never flattens `all`/`any`.
+- Nested topology is preserved and the façade never flattens `all`/`any`;
+  existing Policy canonicalization retains deterministic child ordering.
 - Every symbolic object rejects Boolean coercion and cross-draft/schema mixing.
 - Only a tested three-engine literal domain is supported; unsupported values
   reject before lowering, with no native-only fallback. Q19 freezes that set
@@ -71,13 +72,13 @@ less strict.
 
 ## 7. Acceptance
 
-- [ ] Typed façade produces the same structural Policy IR expected by Q12/Q18.
-- [ ] Literal-bearing policies have sealed deterministic structure, compiler,
+- [x] Typed façade produces the same structural Policy IR expected by Q12/Q18.
+- [x] Literal-bearing policies have sealed deterministic structure, compiler,
   Explain and replay representations.
-- [ ] Native/Soufflé/ProbLog real fixtures agree on every supported new form.
-- [ ] SDK docs/tutorial use the façade; raw IR remains documented as advanced
+- [x] Native/Soufflé/ProbLog real fixtures agree on every supported new form.
+- [x] SDK docs/tutorial use the façade; raw IR remains documented as advanced
   application/compiler surface.
-- [ ] Legacy Query/Policy/Explain/portable cohorts stay green.
+- [x] Legacy Query/Policy/Explain/portable cohorts stay green.
 
 ## 8. Implementation Plan
 
@@ -99,5 +100,24 @@ less strict.
 
 ## 10. Outcome / Deviations
 
-Implementation began on 2026-08-14 after the scoped audit and Q19 decision.
-Outcome is completed after documentation and independent review.
+Implemented on 2026-08-14.
+
+- Added the SDK-owned `PolicyDraft`/typed-handle façade and the frozen
+  `AuthoredPolicyTargetV1`. It only unwraps into the existing managed Policy
+  target resolver and Query compiler.
+- Added canonical, type-directed signed-int64 `int`/`time` `PolicyLiteral`
+  operands through Policy structure, lowering, lineage, V0 bundle and V1
+  replay/Explain codecs. No legacy no-literal wire identity changed.
+- Added façade-owner checks at Query bind/select, explicit Python Boolean/hash
+  traps, literal-domain early rejection, and select-only navigation checks.
+- Updated application/SDK docs and added
+  `examples/08_sdk_policy_authoring.ipynb`, which was executed in the `factpy`
+  kernel.
+
+Final verification: `pytest tests/application tests/sdk
+tests/test_sdk_find_partial_identity.py tests/test_v1_public_surface_exports.py
+-q` reported **706 passed, 175 subtests passed**. Changed-code Ruff, four-module
+targeted mypy, `git diff --check`, portable `int`/`time` real-engine fixtures,
+and two independent reviews all passed. The public SDK surface intentionally
+grew from 152 to 162 names; the pinned export regression now records the ten
+Q19 authoring symbols. No push or merge occurred.

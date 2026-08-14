@@ -25,9 +25,75 @@ The existing `fg.eval.evaluate(...)`, `EvaluationQueryBuilderV1.evaluate()`,
 `capture()`, and V0 Scenario terminals remain compatibility APIs. They do not
 silently acquire Scenario algebra, a provider callback, or portable execution.
 
-For the Q18 V1 path, start with the same resolved Rule or managed `Policy`,
-declare structured `bind` / ordered `select` intent, then call the new
-terminal `.plan(...)`:
+### SDK-authored Policy targets
+
+For normal SDK callers, author a managed Policy through a typed draft instead
+of constructing `PolicyAll`, `PolicyAny`, `PolicyOccurrence`,
+`SemanticAddressSpace`, or `SemanticPortAddress` directly:
+
+```python
+review = fg.policy("age_review", version="1")
+people = review.use(person_values_rule, as_="people")
+other = review.use(person_values_rule, as_="other")
+
+target = review.build(
+    review.all(
+        people,
+        other,
+        people.age > 12,
+        people.person.field("age") > other.person.field("age"),
+    )
+)
+```
+
+To make alternatives explicit, use each declared occurrence once in its own
+branch; the nesting is preserved for Explain rather than flattened:
+
+```python
+alternatives = fg.policy("age_band", version="1")
+young = alternatives.use(person_values_rule, as_="young")
+mature = alternatives.use(person_values_rule, as_="mature")
+age_band = alternatives.build(
+    alternatives.any(
+        alternatives.all(young, young.age < 30),
+        alternatives.all(mature, mature.age >= 30),
+    )
+)
+```
+
+`target` is an `AuthoredPolicyTargetV1`: an immutable application `Policy`
+and its exact semantic address space. `fg.query(target)` sends that pair to the
+existing managed Policy compiler rather than a new evaluator. The same handles can be passed to
+`bind` and `select`:
+
+```python
+query = (
+    fg.query(target)
+      .bind(people.person, alice_ref)
+      .select("age", people.age)
+)
+```
+
+`draft.all(...)` and `draft.any(...)` are deliberately explicit and preserve
+the authored nesting topology (with deterministic canonical child ordering); do
+not use Python `and` / `or`. Symbolic handles
+raise in a Python boolean context, so chained comparisons such as
+`12 < people.age < 65` also fail loudly. Write
+`draft.all(people.age >= 12, people.age < 65)` instead. Entity identity is
+also explicit: use `draft.same(left.person, right.person)`, not `==`.
+
+Rich comparisons are a bounded convenience, not a dynamically typed formula
+language. Direct scalar ports and one-hop same-entity field navigation support
+`==`, `!=`, `>`, `>=`, `<`, and `<=`. Literal operands currently support only
+canonical signed-int64 `int` and `time` values, so `people.age > 12` is valid
+while strings, booleans, floats, UUIDs, bytes, `None`, entity references, and
+literal-vs-literal comparisons reject. There is intentionally no global
+`fg.compare(...)`: the handle provides the schema domain, Policy draft owner,
+and semantic address that make a comparison meaningful.
+
+For the Q18 V1 path, start with a resolved Rule, an advanced managed `Policy`,
+or the SDK-authored target above; declare structured `bind` / ordered `select`
+intent, then call the new terminal `.plan(...)`:
 
 ```python
 from factgraph.sdk import (
@@ -525,9 +591,10 @@ known alternative engines.
 
 ### Unified resolved Query target (v1)
 
-For new native callers, `fg.query(...)` is the compact entry point over the
-same compiled Query path. It accepts either a semantically resolved Rule bundle
-or a Policy plus its exact `SemanticAddressSpace`:
+For new callers, `fg.query(...)` is the compact entry point over the same
+compiled Query path. It accepts a semantically resolved Rule bundle, an
+advanced Policy plus its exact `SemanticAddressSpace`, or an
+`AuthoredPolicyTargetV1` returned by `fg.policy(...).build(...)`:
 
 ```python
 compiled = (
@@ -548,15 +615,18 @@ result = fg.eval.evaluate(compiled, engine="native")
 
 The Rule form deterministically lifts one `target` occurrence into the internal
 Policy `__factgraph_rule_lift__:<rule-id>`; it does not make a Rule and Policy
-the same authored object. For a direct Policy use
-`fg.query(policy, address_space=addresses)`. `bind` accepts only a structured
-direct `SemanticPortAddress`. `select` accepts either that direct address or
-the narrow structured `EvaluationQueryFieldNavigationV0` shown above: exactly
-one identity-to-same-entity, single non-identity scalar-field lookup. The
-lookup is Query-owned projection plumbing, not a `PolicyFieldNavigation`; it
-changes the Query digest but not Policy structure, lineage, or digest. Missing
-field evidence produces no row, never `null` or `false`. The builder delegates
-all of this to the existing `EvaluationQuery` compiler. Its sole
+the same authored object. For a direct advanced Policy use
+`fg.query(policy, address_space=addresses)`. For an SDK-authored target use
+`fg.query(target)` without `address_space=`; its typed handles lower to the
+same structured addresses. `bind` accepts only a structured direct address or
+a direct typed handle. `select` additionally accepts a typed one-hop field
+handle and lowers it to the narrow structured
+`EvaluationQueryFieldNavigationV0`: exactly one identity-to-same-entity,
+single non-identity scalar-field lookup. The lookup is Query-owned projection
+plumbing, not a `PolicyFieldNavigation`; it changes the Query digest but not
+Policy structure, lineage, or digest. Missing field evidence produces no row,
+never `null` or `false`. The builder delegates all of this to the existing
+`EvaluationQuery` compiler. Its sole
 result-observation extension is
 `expect_contains(expectation_id, /, **selected_values)`: values name existing
 selections, are schema-normalized like `bind`, and observe the completed row
@@ -603,12 +673,14 @@ Policy authoring. Ordinary capture/evidence remains the existing F4 path;
 the Run anchor records whether its source was a direct Policy or a Rule lift.
 
 A direct Policy may itself contain the narrow application-level
-`PolicyCompare` constraint. Its operands are either direct scalar
-`SemanticPortAddress` values or a structured `PolicyFieldNavigation` from an
-identity port to one scalar field. That navigation is compiled and evidenced as
-Policy-owned lookup/compare conditions; it is not accepted by `.bind(...)` or
-`.select(...)`. See `src/factgraph/application/docs/rule.md` for the exact
-schema, branch-total, and native-domain limits.
+`PolicyCompare` constraint. Its operands are direct scalar
+`SemanticPortAddress` values, a structured `PolicyFieldNavigation` from an
+identity port to one scalar field, or a canonical `PolicyLiteral("int" |
+"time", value)` paired with one semantic scalar operand. That navigation is
+compiled and evidenced as Policy-owned lookup/compare conditions; it is not
+accepted by `.bind(...)` or `.select(...)`. The SDK draft façade is preferred
+for new caller code. See `src/factgraph/application/docs/rule.md` for the
+exact schema, branch-total, literal, and cross-engine limits.
 
 `builder.evaluate(scenario=...)` forwards either the existing narrow
 `ScenarioFieldSubstitutionV0(...)` operation or the atomic

@@ -85,6 +85,7 @@ class EvaluationQueryBuilderV1:
     _selections: tuple[EvaluationQuerySelectionItem, ...] = ()
     _expectations: tuple[ContainsRowExpectationV0, ...] = ()
     _provider: RelationProviderV1 | None = None
+    _authored_policy_owner: object | None = None
 
     def bind(
         self,
@@ -99,6 +100,7 @@ class EvaluationQueryBuilderV1:
                 code="INVALID_QUERY_BINDING",
             )
         if isinstance(address, PolicyPortHandle):
+            self._assert_authored_policy_handle(address)
             address = address.address
 
         try:
@@ -122,6 +124,7 @@ class EvaluationQueryBuilderV1:
         try:
             selection: EvaluationQuerySelectionItem
             if isinstance(source, PolicyFieldHandle):
+                self._assert_authored_policy_handle(source)
                 selection = EvaluationQueryNavigationSelectionV0(
                     alias,
                     EvaluationQueryFieldNavigationV0(
@@ -130,6 +133,7 @@ class EvaluationQueryBuilderV1:
                     ),
                 )
             elif isinstance(source, PolicyPortHandle):
+                self._assert_authored_policy_handle(source)
                 selection = EvaluationQuerySelection(alias, source.address)
             elif isinstance(source, SemanticPortAddress):
                 selection = EvaluationQuerySelection(alias, source)
@@ -145,6 +149,21 @@ class EvaluationQueryBuilderV1:
         except EvaluationQueryError as exc:
             raise SDKStoreError(f"query select rejected: {exc}", code=exc.code) from exc
         return replace(self, _selections=(*self._selections, selection))
+
+    def _assert_authored_policy_handle(self, handle: PolicyPortHandle) -> None:
+        """Reject a handle that was not issued by this exact authored target.
+
+        ``SemanticPortAddress`` is intentionally structural and therefore can
+        be used by advanced callers.  A façade handle additionally carries an
+        in-process draft capability: otherwise two drafts with the same alias
+        and a compatible schema could silently cross-wire a Query.
+        """
+
+        if self._authored_policy_owner is None or handle._owner is not self._authored_policy_owner:
+            raise SDKStoreError(
+                "Policy port handle belongs to a different Policy draft or target",
+                code="POLICY_CROSS_DRAFT_HANDLE",
+            )
 
     def expect_contains(
         self,
@@ -394,6 +413,7 @@ def build_evaluation_query_builder(
     """Resolve an in-process target before any bind/select intent is accepted."""
 
     provider: RelationProviderV1 | None = None
+    authored_policy_owner: object | None = None
     if isinstance(target, ProviderQueryTargetV1):
         provider = target.provider
         target = target.target
@@ -407,6 +427,7 @@ def build_evaluation_query_builder(
         authored_target = target
         target = authored_target.policy
         address_space = authored_target.address_space
+        authored_policy_owner = authored_target._authoring_owner
     try:
         resolved = resolve_evaluation_query_target(
             target,
@@ -415,7 +436,12 @@ def build_evaluation_query_builder(
         )
     except EvaluationQueryTargetError as exc:
         raise SDKStoreError(f"query target rejected: {exc}", code=exc.code) from exc
-    return EvaluationQueryBuilderV1(graph, resolved, _provider=provider)
+    return EvaluationQueryBuilderV1(
+        graph,
+        resolved,
+        _provider=provider,
+        _authored_policy_owner=authored_policy_owner,
+    )
 
 
 __all__ = [

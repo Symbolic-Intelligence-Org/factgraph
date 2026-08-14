@@ -10,7 +10,7 @@ Query compiler.
 from __future__ import annotations
 
 from collections import Counter
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Literal, TypeAlias, cast
 
 from factgraph.application.protocol.policy import (
@@ -72,6 +72,7 @@ class AuthoredPolicyTargetV1:
 
     policy: Policy
     address_space: SemanticAddressSpace
+    _authoring_owner: object = field(default_factory=object, repr=False, compare=False, hash=False)
 
     def __post_init__(self) -> None:
         if not isinstance(self.policy, Policy):
@@ -110,6 +111,7 @@ class PolicyNodeHandle(_PolicyHandle):
     """A structural authored Policy node belonging to one draft."""
 
     __slots__ = ("_node",)
+    __hash__ = _PolicyHandle.__hash__
 
     def __init__(self, owner: object, node: _AuthoringNode) -> None:
         super().__init__(owner)
@@ -132,6 +134,7 @@ class PolicyConstraintHandle(_PolicyHandle):
     """One Policy-owned direct ``all`` constraint."""
 
     __slots__ = ("_node",)
+    __hash__ = _PolicyHandle.__hash__
 
     def __init__(self, owner: object, node: _AuthoringConstraint) -> None:
         super().__init__(owner)
@@ -228,6 +231,7 @@ class PolicyPortHandle(_PolicyHandle):
     """Base class for direct structured semantic-port handles."""
 
     __slots__ = ("address",)
+    __hash__ = _PolicyHandle.__hash__
 
     def __init__(self, owner: object, address: SemanticPortAddress) -> None:
         super().__init__(owner)
@@ -302,6 +306,7 @@ class _PolicyScalarHandle(PolicyPortHandle):
     """Shared rich comparison implementation for direct and navigated fields."""
 
     __slots__ = ("_operand", "scalar_domain")
+    __hash__ = _PolicyHandle.__hash__
 
     def __init__(
         self,
@@ -342,6 +347,11 @@ class _PolicyScalarHandle(PolicyPortHandle):
                 code="POLICY_UNSUPPORTED_COMPARE_ENDPOINT",
             )
         elif isinstance(other, PolicyLiteral):
+            if other.scalar_domain != self.scalar_domain:
+                raise PolicyAuthoringError(
+                    "Policy literal domain must match the scalar port domain",
+                    code="POLICY_LITERAL_DOMAIN_MISMATCH",
+                )
             operand = other
         else:
             if self.scalar_domain not in {"int", "time"}:
@@ -516,7 +526,9 @@ class PolicyDraft:
                 tuple(handle._managed for _alias, handle in sorted(self._occurrences.items()))
             )
             return AuthoredPolicyTargetV1(
-                Policy(self._id, root._node, version=self._version), space
+                Policy(self._id, root._node, version=self._version),
+                space,
+                self._owner,
             )
         except (PolicyError, SemanticAddressResolutionError, TypeError, ValueError) as exc:
             code = getattr(exc, "code", "POLICY_BUILD_REJECTED")

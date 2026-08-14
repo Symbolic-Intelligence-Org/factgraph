@@ -1,7 +1,7 @@
 # FactGraph SDK Documentation
 
 - Applicable scope: `src/factgraph/sdk`
-- Last updated: 2026-08-13
+- Last updated: 2026-08-14
 - Audience: SDK users and maintainers of the Python product surface
 
 `factgraph.sdk` provides schema declarations, the `FactGraph` lifecycle,
@@ -24,6 +24,9 @@ evaluation, audit, and package namespaces.
 - Route canonical SDK mutations through `Database.commit_changes(...)` when a
   Database is present, including entity create/delete, field writes, ingest,
   metadata append, schema transition, and batch commit.
+- Author immutable, typed managed Policy targets through `fg.policy(...)`,
+  then route them through the same structured Query/Run/Explain compiler path
+  as resolved Rule targets.
 - Keep `FactGraph.from_schema_classes(...)` as the lower-level unmanaged
   Ledger compatibility constructor.
 
@@ -134,7 +137,7 @@ remain the implementation-truth layer for maintainers and advanced users.
 | [`00_user_guide.en.md`](00_user_guide.en.md) | End-to-end SDK tour and lifecycle examples. |
 | [`01_concepts.en.md`](01_concepts.en.md) | Object lifecycles, layer ownership, frozen DTOs, stability tiers. |
 | [`02_readwrite_and_ingest.en.md`](02_readwrite_and_ingest.en.md) | Read/write and ingest behavior. |
-| [`03_rules_and_inferences.en.md`](03_rules_and_inferences.en.md) | Rule DSL and evaluation namespace. |
+| [`03_rules_and_inferences.en.md`](03_rules_and_inferences.en.md) | Rule DSL, SDK Policy authoring, and evaluation namespace. |
 | [`04_api_surface.en.md`](04_api_surface.en.md) | Public API index and signatures. |
 | [`06_what_if_and_proof.en.md`](06_what_if_and_proof.en.md) | V1 Query/Scenario What-if, explicit detached evidence/replay, and bounded `ScenarioRunV0` compatibility overview. |
 | [`07_walker_and_advanced.en.md`](07_walker_and_advanced.en.md) | Advanced direct imports and adapters. |

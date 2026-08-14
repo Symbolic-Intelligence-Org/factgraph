@@ -6,6 +6,7 @@ from factgraph.application import build_resolved_rule, build_schema_index
 from factgraph.application.protocol import (
     EntityRef,
     EntitySelector,
+    PolicyLiteral,
     SemanticRulePort,
     entity_identity,
     field_endpoint,
@@ -111,6 +112,13 @@ class PolicyAuthoringTests(unittest.TestCase):
         self.assertEqual(compiled.target.compiled_policy.policy_version, "1")
         self.assertTrue(alice.startswith("idref_v1:Person:"))
 
+    def test_explicit_literal_domain_mismatch_rejects_during_authoring(self) -> None:
+        graph = SDKStore([Person])
+        draft = graph.policy("literal_domain")
+        people = draft.use(_bundle(graph), as_="people")
+        with self.assertRaisesRegex(SDKStoreError, "domain must match"):
+            _ = people.age > PolicyLiteral("time", 12)
+
     def test_dot_navigation_and_nested_all_any_preserve_authored_structure(self) -> None:
         graph = SDKStore([Person])
         _seed(graph, "alice", age=30, score=7)
@@ -197,6 +205,8 @@ class PolicyAuthoringTests(unittest.TestCase):
             _ = (people.age > 12) and (people.age < 65)
         with self.assertRaisesRegex(SDKStoreError, "truth value"):
             _ = 12 < people.age < 65
+        with self.assertRaisesRegex(TypeError, "hash keys"):
+            hash(people.age)
 
         valid = draft.all(people, people.age >= 12, people.age < 65)
         self.assertIsNotNone(valid)
@@ -230,6 +240,27 @@ class PolicyAuthoringTests(unittest.TestCase):
         with self.assertRaisesRegex(SDKStoreError, "contain every declared occurrence"):
             unused.build(unused.all(a))
 
+    def test_query_rejects_handles_from_a_different_authored_target(self) -> None:
+        graph = SDKStore([Person])
+        first = graph.policy("first")
+        first_people = first.use(_bundle(graph), as_="people")
+        first_target = first.build(first.all(first_people))
+        second = graph.policy("second")
+        second_people = second.use(_bundle(graph), as_="people")
+        second_target = second.build(second.all(second_people))
+
+        with self.assertRaisesRegex(SDKStoreError, "different Policy draft"):
+            graph.query(first_target).bind(
+                second_people.person,
+                EntityRef("Person", {"employee_id": "alice"}),
+            )
+        with self.assertRaisesRegex(SDKStoreError, "different Policy draft"):
+            graph.query(first_target).select("age", second_people.age)
+
+        # The handles from the target being queried remain accepted.
+        self.assertIsNotNone(graph.query(first_target).select("age", first_people.age))
+        self.assertIsNotNone(graph.query(second_target).select("age", second_people.age))
+
     def test_authored_target_rejects_address_space_override(self) -> None:
         graph = SDKStore([Person])
         draft = graph.policy("one")
@@ -237,6 +268,15 @@ class PolicyAuthoringTests(unittest.TestCase):
         target = draft.build(draft.all(people))
         with self.assertRaisesRegex(SDKStoreError, "already carries"):
             graph.query(target, address_space=target.address_space)
+
+    def test_field_navigation_handle_is_select_only(self) -> None:
+        graph = SDKStore([Person])
+        draft = graph.policy("navigation")
+        people = draft.use(_bundle(graph), as_="people")
+        target = draft.build(draft.all(people))
+
+        with self.assertRaisesRegex(SDKStoreError, "direct Policy ports"):
+            graph.query(target).bind(people.person.field("age"), 22)
 
 
 if __name__ == "__main__":
