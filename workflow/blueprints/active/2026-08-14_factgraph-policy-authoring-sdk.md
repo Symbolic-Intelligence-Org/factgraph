@@ -1,6 +1,6 @@
 # Task Blueprint: FactGraph Policy authoring SDK
 
-- Status: draft
+- Status: scoped
 - Created: 2026-08-14
 - Last Updated: 2026-08-14
 - Related Modules:
@@ -64,7 +64,8 @@ less strict.
 - Nested topology is preserved exactly; façade never flattens `all`/`any`.
 - Every symbolic object rejects Boolean coercion and cross-draft/schema mixing.
 - Only a tested three-engine literal domain is supported; unsupported values
-  reject before lowering, with no native-only fallback.
+  reject before lowering, with no native-only fallback. Q19 freezes that set
+  to canonical signed-64-bit `int` and `time` literals.
 - Explain remains captured-world-only and a literal compare remains a
   Policy-owned condition, not synthetic Rule evidence.
 
@@ -98,4 +99,5 @@ less strict.
 
 ## 10. Outcome / Deviations
 
-To be completed after implementation and independent review.
+Scope frozen on 2026-08-14. To be completed after implementation and
+independent review.

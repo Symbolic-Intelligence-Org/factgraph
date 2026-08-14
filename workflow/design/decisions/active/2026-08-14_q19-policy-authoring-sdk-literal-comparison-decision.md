@@ -94,13 +94,12 @@ program and Explain projection.
 The SDK derives the literal's scalar domain from the compared resolved endpoint
 and validates its exact canonical value before Policy construction. Raw IR may
 construct a literal only with an explicit domain. The initial supported value
-set is restricted to tags proven by three-engine conformance; at minimum,
-canonical `int` literals support equality and ordering. Ordering remains only
-`int` and `time`; unsupported domains, coercions, `None`, bool-as-int,
-non-finite float values, entity references and multi-value endpoints reject
-before execution. The implementation may add equality-only scalar tags only
-when their canonical codec, lowering, replay and real all-engine tests are in
-the same slice.
+set is deliberately just canonical `int` and `time` literals, each represented
+by a non-Boolean signed 64-bit integer. They support equality and ordering.
+String, bool, UUID, bytes and float literals remain rejected until a later
+slice supplies their canonical codec, lowering, replay and real all-engine
+tests. `None`, bool-as-int, non-finite float values, entity references and
+multi-value endpoints reject before execution.
 
 ### 2.4 Host-language safety
 
@@ -159,3 +158,4 @@ forms where widening a historical V0 DTO would alter its seal.
 | Date | Stage | Event | Notes |
 | --- | --- | --- | --- |
 | 2026-08-14 | adopted | User-facing authoring form selected | Explicit nesting plus natural comparison is adopted; literals are treated as a semantic, auditable extension rather than convenience syntax. |
+| 2026-08-14 | scoped | Literal envelope frozen | Q19 starts with only canonical `int` and `time` literals, the minimum portable surface that covers `people.age > 12` without untested coercion. |
