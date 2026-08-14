@@ -56,6 +56,9 @@
 - `KGReadTools.list_rules()` 只暴露 runtime inventory 的稳定字段；更丰富语义需上层额外推断
 - `EvaluateTools` 只接受结构化 derivation IR，不负责 NL→IR 翻译
 - `WriteTools` 只接受结构化 `FactDraft`，不负责 NL→Draft 生成；所有写入都必须经过 confirmed draft
+- `FactDraft.confidence` 是 extraction/review 工作流信息，不进入 durable
+  `WriteRequest.meta`，也不会被隐式转换为 `raw_kind` / `bound` 概率事实；需要
+  run-local 不确定性时必须显式使用 FactGraph 的 Scenario 语义输入
 - exact retract 只支持指定 `asrt_id`；不做 dependency scan、impact analysis 或 cascade marking
 - `RuleTools` 当前只支持 native ephemeral 执行；`validate/compile-preview` 走 `souffle` preflight，非 native 规则只支持预检/导出，不在 session 内执行
 - `EngineRoutingAdvisor` 只给建议，不自动执行；非 native recommendation 下不会注册 ephemeral rule，因此 session state 不会被污染

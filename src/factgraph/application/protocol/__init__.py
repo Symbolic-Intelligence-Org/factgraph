@@ -298,8 +298,12 @@ from .policy import (
     PolicyNodeLineage,
     PolicyOccurrence,
     PolicyStructureNodeV0,
+    PolicyV2Only,
+    PolicyWeightedChoice,
+    PolicyWeightedChoiceArm,
     PolicyStructureV0,
     PolicyUnify,
+    policy_contains_weighted_choice,
 )
 from .rule_expr import ExplicitBoolError, RuleExpr, RuleExprError, RuleJoinConstraint
 from .rule_expr_inspect import ConditionDescriptor, OccurrenceInspect, PortInspect, RuleExprInspect
@@ -500,8 +504,12 @@ __all__ = [
     "PolicyNodeLineage",
     "PolicyOccurrence",
     "PolicyStructureNodeV0",
+    "PolicyV2Only",
+    "PolicyWeightedChoice",
+    "PolicyWeightedChoiceArm",
     "PolicyStructureV0",
     "PolicyUnify",
+    "policy_contains_weighted_choice",
     "PolicyBranchEvaluationV0",
     "PolicyBranchParticipation",
     "PolicyEvaluationProjectionV0",

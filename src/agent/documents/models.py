@@ -1,9 +1,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Literal
+from hashlib import sha256
+import json
+from typing import TYPE_CHECKING, Any, Literal
 
 from ..errors import AgentContractError
+
+if TYPE_CHECKING:
+    from factgraph.application.protocol.provenance_v1 import ProvenanceRefV1
 
 
 @dataclass(frozen=True)
@@ -60,15 +65,21 @@ class ExtractionProvenance:
     merged_from: tuple["ExtractionProvenance", ...] = ()
 
     def all_sources(self) -> tuple["ExtractionProvenance", ...]:
-        """Return all contributing provenance nodes recursively, deduped by segment_id."""
+        """Return all contributing nodes, deduped by document-plus-segment identity.
+
+        ``segment_id`` is only locally meaningful inside one source document.
+        Collapsing it globally would silently erase a contributing source when
+        two documents happen to use the same segment identifier.
+        """
 
         flattened: list[ExtractionProvenance] = []
-        seen_segment_ids: set[str] = set()
+        seen_source_segments: set[tuple[str, str]] = set()
 
         def _walk(provenance: ExtractionProvenance) -> None:
-            if provenance.segment_id in seen_segment_ids:
+            source_key = (provenance.source_document_id, provenance.segment_id)
+            if source_key in seen_source_segments:
                 return
-            seen_segment_ids.add(provenance.segment_id)
+            seen_source_segments.add(source_key)
             flattened.append(provenance)
             for nested in provenance.merged_from:
                 _walk(nested)
@@ -77,10 +88,73 @@ class ExtractionProvenance:
         return tuple(flattened)
 
     def source_segment_ids(self) -> tuple[str, ...]:
+        """Return legacy display segment identifiers in first-seen source order.
+
+        Callers that dedupe provenance must use the document-plus-segment
+        identity carried by :meth:`all_sources`, not these display values.
+        """
+
         return tuple(provenance.segment_id for provenance in self.all_sources())
 
     def is_merged(self) -> bool:
         return bool(self.merged_from)
+
+    def to_factgraph_provenance_refs(self) -> tuple["ProvenanceRefV1", ...]:
+        """Return bounded, FactGraph-neutral references for all source segments.
+
+        This is deliberately a lazy bridge: document staging and Agent draft
+        checkpointing continue to own ``raw_text`` and the legacy
+        ``source/source_loc`` mirror.  The returned values contain only a
+        stable opaque source token, a char/page locator, the SHA-256 of source
+        text, and the neutral ``agent_extraction`` role.  They do not carry
+        raw text, document names, ACLs, tenant data, admission decisions, or a
+        SourceRecord-like object.
+
+        Merged provenance is expanded through :meth:`all_sources` in its
+        established first-seen order.  FactGraph's closed reference cap and
+        full-wire deduplication are enforced before the tuple is returned.
+        """
+
+        # Import only on use: Agent documents remain independently usable in
+        # environments that do not import the product Scenario/Explain layer.
+        from factgraph.application.protocol.common import ProtocolShapeError
+        from factgraph.application.protocol.provenance_v1 import (
+            ProvenanceLocatorV1,
+            ProvenanceRefV1,
+            canonical_provenance_refs_v1,
+        )
+
+        references: list[ProvenanceRefV1] = []
+        try:
+            for source in self.all_sources():
+                document_id = _require_non_empty_str(
+                    source.source_document_id, "source_document_id"
+                )
+                segment_id = _require_non_empty_str(source.segment_id, "segment_id")
+                start = _require_non_negative_int(source.char_offset_start, "char_offset_start")
+                end = _require_non_negative_int(source.char_offset_end, "char_offset_end")
+                if end < start:
+                    raise AgentContractError("char_offset_end must not precede char_offset_start")
+                raw_text = _require_non_empty_str(source.raw_text, "raw_text")
+                page = _optional_non_negative_int(source.page_number, "page_number")
+                locator_ref = f"chars:{start}-{end}"
+                if page is not None:
+                    locator_ref = f"page:{page}:{locator_ref}"
+                references.append(
+                    ProvenanceRefV1(
+                        source_ref=_factgraph_source_ref(document_id, segment_id),
+                        locator=ProvenanceLocatorV1.opaque(locator_ref),
+                        origin_role="agent_extraction",
+                        content_digest=f"sha256:{sha256(raw_text.encode('utf-8')).hexdigest()}",
+                    )
+                )
+            return canonical_provenance_refs_v1(tuple(references))
+        except AgentContractError:
+            raise
+        except (ProtocolShapeError, TypeError, ValueError, UnicodeError) as exc:
+            raise AgentContractError(
+                "extraction provenance cannot be converted to FactGraph-neutral references"
+            ) from exc
 
     def to_checkpoint(self) -> dict[str, Any]:
         return {
@@ -147,3 +221,15 @@ def _require_dict(value: Any, name: str) -> dict[str, Any]:
     if not isinstance(value, dict):
         raise AgentContractError(f"{name} must be object")
     return dict(value)
+
+
+def _factgraph_source_ref(document_id: str, segment_id: str) -> str:
+    """Return a stable opaque bridge key without exposing document identifiers."""
+
+    payload = json.dumps(
+        {"document_id": document_id, "segment_id": segment_id},
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+    ).encode("utf-8")
+    return f"agent-document:{sha256(payload).hexdigest()}"

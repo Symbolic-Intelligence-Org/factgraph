@@ -1853,6 +1853,13 @@ class SDKStore:
         self._rules_manager = _SDKRulesManager(self)
         self._inferences_manager = _SDKInferencesManager(self)
         self._eval_manager = _SDKEvalManager(self)
+        # Q20's V2 Scenario/profile construction is deliberately a separate
+        # product facade.  Import it lazily here so the store remains the
+        # foundational SDK type and the facade never becomes a second runner.
+        from .product_scenario_execution import _SDKExecutionManagerV2, _SDKProbLogManagerV2
+
+        self._execution_manager = _SDKExecutionManagerV2(self)
+        self._problog_manager = _SDKProbLogManagerV2(self)
         self._audit_manager = _SDKAuditManager(self)
         self._meta_manager = _SDKMetaManager(self)
         self._package_manager = _SDKPackageManager(self)
@@ -2283,6 +2290,110 @@ class SDKStore:
     def schema_ir(self) -> dict[str, Any]:
         return self._schema_ir
 
+    def rule_builder(
+        self,
+        id: str,
+        *,
+        version: str | None = None,
+        meta: Any | None = None,
+    ) -> Any:
+        """Start a product Rule builder bound to this graph's trusted schema.
+
+        The builder resolves its complete semantic-port declaration at build
+        time and returns a ``ProductRuleV1``.  It is neither a Rule registry
+        nor a deferred compiler: the returned value is immediately usable by
+        :meth:`policy_builder` / :meth:`query`.
+        """
+
+        from .product_authoring import rule_builder
+
+        return rule_builder(self, id, version=version, meta=meta)
+
+    def build_rule(
+        self,
+        *,
+        id: str,
+        when: Any,
+        ports: Any,
+        semantic_ports: Any,
+        version: str | None = None,
+        meta: Any | None = None,
+        repr: str | None = None,
+    ) -> Any:
+        """Direct product Rule construction through :meth:`rule_builder`.
+
+        ``semantic_ports`` must completely describe the SDK Rule's public
+        ports. Product code can use an ``Entity`` class for its identity port
+        and a bound ``Field`` descriptor for a scalar field port (for example
+        ``{"person": Person, "age": Person.age}``); resolution occurs
+        against this exact graph before the product wrapper is returned.
+        """
+
+        from .product_authoring import build_rule
+
+        return build_rule(
+            self,
+            id=id,
+            when=when,
+            ports=ports,
+            semantic_ports=semantic_ports,
+            version=version,
+            meta=meta,
+            repr=repr,
+        )
+
+    def policy_builder(
+        self,
+        id: str,
+        *,
+        version: str | None = None,
+        meta: Any | None = None,
+    ) -> Any:
+        """Start one product Policy builder with local typed occurrences only."""
+
+        from .product_authoring import PolicyBuilder
+
+        return PolicyBuilder(self, id, version=version, meta=meta)
+
+    def build_policy(
+        self,
+        *,
+        id: str,
+        build: Any,
+        version: str | None = None,
+        meta: Any | None = None,
+    ) -> Any:
+        """Build one product Policy by invoking ``build`` on one exact builder.
+
+        The callback receives the same builder whose final ``build(...)`` call
+        is used, preserving Q19 owner-bound occurrence/port handles.  This is
+        intentionally local construction, never registration by ``id``.
+        """
+
+        if not callable(build):
+            raise SDKStoreError("build_policy(build=...) requires a callable")
+        builder = self.policy_builder(id, version=version, meta=meta)
+        try:
+            root = build(builder)
+        except SDKStoreError:
+            raise
+        except Exception as exc:
+            raise SDKStoreError(f"build_policy callback raised: {exc}") from exc
+        return builder.build(root)
+
+    def scenario(self) -> Any:
+        """Start one run-local, immutable-on-build Scenario V2 request.
+
+        The returned builder accepts ordinary SDK ``Field`` descriptors,
+        managed entity references and a strict ``meta=`` mapping.  It only
+        constructs ``ScenarioSpecV2``: it does not write to the ledger,
+        resolve a captured world or execute a query.
+        """
+
+        from .product_scenario_execution import scenario_builder_v2
+
+        return scenario_builder_v2(self)
+
     def policy(self, policy_id: str, *, version: str | None = None) -> "PolicyDraft":
         """Start one typed, in-process Policy authoring draft.
 
@@ -2308,11 +2419,13 @@ class SDKStore:
 
         The established terminal methods (``compile()``, ``evaluate()``,
         ``capture()``, and V0 ``what_if(...)``) retain their V0 compatibility
-        contracts.  The separate terminal ``plan(...)`` creates an immutable
-        GoalPlan V1, which can carry typed result modes/expectations, a V1
-        Scenario, a restricted materialized relation provider, and either a
-        native or portable deterministic execution profile.  It returns a
-        sealed V1 run/replay artifact rather than widening a V0 result wire.
+        contracts.  ``plan(...)`` preserves its V1 GoalPlan behavior for V1
+        inputs.  Supplying an ``EvaluationExecutionProfileV2`` selects the
+        separate V2 product terminal, optionally with a ``ScenarioSpecV2``
+        overlay (absence means an explicit empty V2 world).  The V2 terminal
+        retains the original Product Rule/Policy envelope for sealed capture;
+        it never reinterprets V0/V1 providers, expectations, or evidence
+        scopes.
         """
 
         from .evaluation_query_builder import build_evaluation_query_builder
@@ -2372,6 +2485,24 @@ class SDKStore:
     def eval(self) -> _SDKEvalManager:
         """`eval` taxonomy namespace exposing T5 evaluate/explain APIs."""
         return self._eval_manager
+
+    @property
+    def execution(self) -> Any:
+        """Read-only V2 execution-profile construction namespace.
+
+        ``fg.execution.native_deterministic(...)`` and
+        ``fg.execution.problog(...)`` produce detached, strictly pinned V2
+        profile builders.  They do not replace legacy ``fg.eval`` config
+        compatibility APIs or invoke an engine.
+        """
+
+        return self._execution_manager
+
+    @property
+    def problog(self) -> Any:
+        """Read-only closed semantic-marker factory for V2 ProbLog profiles."""
+
+        return self._problog_manager
 
     @property
     def audit(self) -> _SDKAuditManager:

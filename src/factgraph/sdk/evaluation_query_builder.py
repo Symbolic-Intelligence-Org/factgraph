@@ -33,13 +33,18 @@ from factgraph.application.protocol.evaluation_scenario import (
     ScenarioFieldSubstitutionV0,
 )
 from factgraph.application.protocol.evaluation_run_v1 import EvaluationExecutionProfileV1
+from factgraph.application.protocol.execution_profile_v2 import EvaluationExecutionProfileV2
 from factgraph.application.protocol.goal_plan_v1 import (
     GoalExpectationV1,
     GoalResultModeV1,
 )
-from factgraph.application.protocol.policy import Policy
+from factgraph.application.protocol.policy import (
+    Policy,
+    _lower_policy_weighted_choices_to_any_skeleton,
+)
 from factgraph.application.protocol.relation_provider_v1 import RelationProviderV1
 from factgraph.application.protocol.scenario_v1 import EvidenceScopeV1, ScenarioSpecV1
+from factgraph.application.protocol.scenario_v2 import ScenarioSpecV2
 from factgraph.application.protocol.semantic_address import SemanticPortAddress
 from factgraph.application.semantic_address_runtime import SemanticAddressSpace
 from factgraph.application.semantic_port_runtime import ResolvedRuleBundle
@@ -50,6 +55,7 @@ from .policy_authoring import (
     PolicyFieldHandle,
     PolicyPortHandle,
 )
+from .product_authoring import ProductPolicyV1, ProductRuleV1, WeightedChoiceTopologyV1
 
 if TYPE_CHECKING:
     from factgraph.application.goal_plan_v1_runtime import GoalPlanInvocationV1
@@ -86,6 +92,12 @@ class EvaluationQueryBuilderV1:
     _expectations: tuple[ContainsRowExpectationV0, ...] = ()
     _provider: RelationProviderV1 | None = None
     _authored_policy_owner: object | None = None
+    _weighted_choices: tuple[WeightedChoiceTopologyV1, ...] = ()
+    # The resolved target below is sufficient for legacy/V1 compilation, but
+    # V2 capture also needs the original product envelope: AssetMeta binding,
+    # WeightedChoice topology and the exact immutable wrapper.  Retain it as
+    # an in-process carrier only; V2 run construction seals its own snapshot.
+    _product_target: ProductRuleV1 | ProductPolicyV1 | None = None
 
     def bind(
         self,
@@ -204,9 +216,9 @@ class EvaluationQueryBuilderV1:
         *,
         result_mode: GoalResultModeV1 = "rows",
         expectations: tuple[GoalExpectationV1, ...] = (),
-        scenario: ScenarioSpecV1 | None = None,
+        scenario: ScenarioSpecV1 | ScenarioSpecV2 | None = None,
         evidence_scope: EvidenceScopeV1 | None = None,
-        profile: EvaluationExecutionProfileV1 | None = None,
+        profile: EvaluationExecutionProfileV1 | EvaluationExecutionProfileV2 | None = None,
         candidate: (
             ResolvedRuleBundle
             | Policy
@@ -215,7 +227,7 @@ class EvaluationQueryBuilderV1:
             | None
         ) = None,
         candidate_address_space: SemanticAddressSpace | None = None,
-    ) -> "GoalPlanInvocationV1":
+    ) -> Any:
         """Compile one immutable V1 GoalPlan without evaluating it.
 
         Rule and Policy targets use exactly the same typed Query compiler as
@@ -224,6 +236,26 @@ class EvaluationQueryBuilderV1:
         candidate is compiled independently with the identical bind/select
         declaration for immutable policy comparison.
         """
+
+        # V2 is an explicitly separate terminal rather than an extension of
+        # the V1 wire.  Select it before the established V1 checks so a mixed
+        # Scenario/profile pair cannot be accidentally interpreted as legacy
+        # intent.  A V2 profile always owns a sealed V2 world; ``scenario`` is
+        # an optional overlay, so its absence means the explicit empty world
+        # rather than a fallback to the V1 evaluator.
+        is_v2 = isinstance(scenario, ScenarioSpecV2) or isinstance(
+            profile, EvaluationExecutionProfileV2
+        )
+        if is_v2:
+            return self._plan_v2(
+                result_mode=result_mode,
+                expectations=expectations,
+                scenario=scenario,
+                evidence_scope=evidence_scope,
+                profile=profile,
+                candidate=candidate,
+                candidate_address_space=candidate_address_space,
+            )
 
         if self._expectations:
             raise SDKStoreError(
@@ -284,6 +316,136 @@ class EvaluationQueryBuilderV1:
             code = getattr(exc, "code", None)
             raise SDKStoreError(f"GoalPlan construction rejected: {exc}", code=code) from exc
 
+    def _plan_v2(
+        self,
+        *,
+        result_mode: GoalResultModeV1,
+        expectations: tuple[GoalExpectationV1, ...],
+        scenario: ScenarioSpecV1 | ScenarioSpecV2 | None,
+        evidence_scope: EvidenceScopeV1 | None,
+        profile: EvaluationExecutionProfileV1 | EvaluationExecutionProfileV2 | None,
+        candidate: (
+            ResolvedRuleBundle
+            | Policy
+            | ResolvedEvaluationQueryTargetV1
+            | AuthoredPolicyTargetV1
+            | None
+        ),
+        candidate_address_space: SemanticAddressSpace | None,
+    ) -> Any:
+        """Create a V2 invocation without widening the V1 GoalPlan contract."""
+
+        if not isinstance(profile, EvaluationExecutionProfileV2) or (
+            scenario is not None and not isinstance(scenario, ScenarioSpecV2)
+        ):
+            raise SDKStoreError(
+                "V2 Query planning requires profile=EvaluationExecutionProfileV2; "
+                "scenario must be ScenarioSpecV2 when supplied",
+                code="V2_PLAN_COHERENT_INPUTS_REQUIRED",
+            )
+        if self._expectations or expectations:
+            raise SDKStoreError(
+                "V2 Query planning does not accept V0/V1 expectations; "
+                "point-probability expectations are not implemented",
+                code="V2_PLAN_EXPECTATIONS_UNSUPPORTED",
+            )
+        if result_mode != "rows":
+            raise SDKStoreError(
+                "V2 Query planning currently supports result_mode='rows' only",
+                code="V2_PLAN_RESULT_MODE_UNSUPPORTED",
+            )
+        if evidence_scope is not None:
+            raise SDKStoreError(
+                "V2 Query planning does not accept V1 evidence_scope; "
+                "Scenario V2 captures its own typed evidence lane",
+                code="V2_PLAN_EVIDENCE_SCOPE_UNSUPPORTED",
+            )
+        if self._provider is not None:
+            raise SDKStoreError(
+                "V2 Query planning does not accept RelationProviderV1",
+                code="V2_PLAN_PROVIDER_UNSUPPORTED",
+            )
+        if self._product_target is None:
+            raise SDKStoreError(
+                "V2 Query planning requires a resolved Rule/Policy product target",
+                code="V2_PLAN_PRODUCT_TARGET_REQUIRED",
+            )
+
+        primary = self._compile_v2_query()
+        compiled_candidate: TargetedCompiledEvaluationQueryV0 | None = None
+        candidate_product_target: ProductRuleV1 | ProductPolicyV1 | None = None
+        if candidate is not None:
+            if isinstance(candidate, ProviderQueryTargetV1):
+                raise SDKStoreError(
+                    "V2 Query candidate cannot carry RelationProviderV1",
+                    code="V2_PLAN_PROVIDER_UNSUPPORTED",
+                )
+            candidate_builder = build_evaluation_query_builder(
+                self._graph,
+                candidate,
+                address_space=candidate_address_space,
+            )
+            candidate_builder = replace(
+                candidate_builder,
+                _bindings=self._bindings,
+                _selections=self._selections,
+            )
+            if candidate_builder._product_target is None:
+                raise SDKStoreError(
+                    "V2 Query candidate requires a resolved Rule/Policy product target",
+                    code="V2_PLAN_PRODUCT_TARGET_REQUIRED",
+                )
+            compiled_candidate = candidate_builder._compile_v2_query()
+            candidate_product_target = candidate_builder._product_target
+
+        from factgraph.application.goal_plan_v2_runtime import (
+            build_product_evaluation_invocation_v2,
+        )
+
+        try:
+            return build_product_evaluation_invocation_v2(
+                graph=self._graph,
+                primary=primary,
+                product_target=self._product_target,
+                profile=profile,
+                scenario=scenario,
+                candidate=compiled_candidate,
+                candidate_product_target=candidate_product_target,
+            )
+        except (TypeError, ValueError) as exc:
+            code = getattr(exc, "code", None)
+            raise SDKStoreError(f"V2 Query planning rejected: {exc}", code=code) from exc
+
+    def plan_v2(
+        self,
+        *,
+        scenario: ScenarioSpecV2 | None = None,
+        profile: EvaluationExecutionProfileV2,
+        candidate: (
+            ResolvedRuleBundle
+            | Policy
+            | ResolvedEvaluationQueryTargetV1
+            | AuthoredPolicyTargetV1
+            | None
+        ) = None,
+        candidate_address_space: SemanticAddressSpace | None = None,
+    ) -> Any:
+        """Explicit alias for the V2 branch of :meth:`plan`.
+
+        New code may use either this spelling or
+        ``query.plan(scenario=v2, profile=v2)``.  ``scenario`` is optional:
+        omitting it selects the sealed empty V2 world.  Both route to exactly
+        the same V2 invocation factory and preserve the original product
+        target.
+        """
+
+        return self.plan(
+            scenario=scenario,
+            profile=profile,
+            candidate=candidate,
+            candidate_address_space=candidate_address_space,
+        )
+
     def compile(self) -> TargetedCompiledEvaluationQueryV0:
         """Return the existing compiled Query inside a source-target envelope."""
 
@@ -303,6 +465,12 @@ class EvaluationQueryBuilderV1:
         provider exactly once through the sealed V1 runtime.
         """
 
+        if self._weighted_choices:
+            raise SDKStoreError(
+                "WeightedChoice targets are V2 ProbLog-only; legacy compile/evaluate/capture/"
+                "what_if and V1 plan terminals reject them before deterministic Policy lowering",
+                code="WEIGHTED_CHOICE_V2_ONLY",
+            )
         if self._provider is not None and not allow_provider:
             raise SDKStoreError(
                 "RelationProviderV1 requires query.plan(...).run(); legacy "
@@ -320,6 +488,38 @@ class EvaluationQueryBuilderV1:
         except (EvaluationQueryError, EvaluationQueryTargetError, ValueError) as exc:
             code = getattr(exc, "code", None)
             raise SDKStoreError(f"query compilation rejected: {exc}", code=code) from exc
+
+    def _compile_v2_query(self) -> TargetedCompiledEvaluationQueryV0:
+        """Compile typed Query intent for V2 without reusing a V1 terminal.
+
+        A V2 ProductPolicy may contain an intrinsic ``WeightedChoice`` node.
+        The controlled private bridge derives the compiler-only skeleton for
+        typed bind/select validation, while the V2 runner owns the actual
+        ProbLog lowering.  Providers and legacy expectations remain rejected
+        because their contracts cannot be silently reinterpreted as V2.
+        """
+
+        if self._provider is not None:
+            raise SDKStoreError(
+                "V2 Query compilation does not accept RelationProviderV1",
+                code="V2_PLAN_PROVIDER_UNSUPPORTED",
+            )
+        if self._expectations:
+            raise SDKStoreError(
+                "V2 Query compilation does not accept legacy expectations",
+                code="V2_PLAN_EXPECTATIONS_UNSUPPORTED",
+            )
+        try:
+            return compile_targeted_evaluation_query(
+                self._target,
+                bindings=self._bindings,
+                selections=self._selections,
+                expectations=(),
+                schema_index=self._graph._application_schema_index,
+            )
+        except (EvaluationQueryError, EvaluationQueryTargetError, ValueError) as exc:
+            code = getattr(exc, "code", None)
+            raise SDKStoreError(f"V2 query compilation rejected: {exc}", code=code) from exc
 
     def evaluate(self, **kwargs: Any) -> Any:
         """Compile then use the sole native evaluator; no default kwargs are injected."""
@@ -414,9 +614,17 @@ def build_evaluation_query_builder(
 
     provider: RelationProviderV1 | None = None
     authored_policy_owner: object | None = None
+    weighted_choices: tuple[WeightedChoiceTopologyV1, ...] = ()
     if isinstance(target, ProviderQueryTargetV1):
         provider = target.provider
         target = target.target
+    # V2 runs must retain an immutable product envelope for the selected
+    # target.  Product inputs retain their original object; established raw
+    # resolved Rule/Policy forms receive the explicit ``AssetMeta=absent``
+    # envelope instead of silently losing their identity at V2 capture.
+    product_target = _product_target_for_v2(target)
+    if isinstance(target, ProductPolicyV1):
+        weighted_choices = target.weighted_choices
     if isinstance(target, AuthoredPolicyTargetV1):
         if address_space is not None:
             raise SDKStoreError(
@@ -425,7 +633,7 @@ def build_evaluation_query_builder(
                 code="AUTHORED_POLICY_ADDRESS_SPACE_OVERRIDE",
             )
         authored_target = target
-        target = authored_target.policy
+        target = _query_resolution_policy_for_authored_target(authored_target)
         address_space = authored_target.address_space
         authored_policy_owner = authored_target._authoring_owner
     try:
@@ -441,7 +649,43 @@ def build_evaluation_query_builder(
         resolved,
         _provider=provider,
         _authored_policy_owner=authored_policy_owner,
+        _weighted_choices=weighted_choices,
+        _product_target=product_target,
     )
+
+
+def _product_target_for_v2(target: object) -> ProductRuleV1 | ProductPolicyV1 | None:
+    """Return an exact V2 product carrier without creating a registry entry."""
+
+    if isinstance(target, (ProductRuleV1, ProductPolicyV1)):
+        return target
+    if isinstance(target, ResolvedRuleBundle):
+        return ProductRuleV1(target.rule, target.contract)
+    if isinstance(target, AuthoredPolicyTargetV1):
+        return ProductPolicyV1(
+            target.policy,
+            target.address_space,
+            target._authoring_owner,
+        )
+    return None
+
+
+def _query_resolution_policy_for_authored_target(
+    target: AuthoredPolicyTargetV1,
+) -> Policy:
+    """Return the one internal plain skeleton permitted for Product V2 Query.
+
+    A public ``ProductPolicyV1.policy`` with ``WeightedChoice`` contains an
+    intrinsic V2-only node (and carries ``PolicyV2Only`` as defense in depth),
+    so the legacy resolver rejects it. The SDK alone derives the private plain
+    skeleton needed for typed bind/select validation before the V2 runner
+    lowers the derived topology capture. The original product object remains
+    held in ``_product_target`` and legacy terminals reject its AST.
+    """
+
+    if isinstance(target, ProductPolicyV1) and target.requires_v2_profile:
+        return _lower_policy_weighted_choices_to_any_skeleton(target.policy)
+    return target.policy
 
 
 __all__ = [

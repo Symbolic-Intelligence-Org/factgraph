@@ -30,12 +30,18 @@ from .protocol.evaluation_expectation import (
 from .evaluation_run_runtime import build_evaluation_run_target_v0
 from .policy_runtime import CompiledPolicyV0, _assert_compiled_policy_current, compile_policy
 from .protocol.evaluation_query import (
-    EvaluationQuery, EvaluationQueryError,
+    EvaluationQuery,
+    EvaluationQueryError,
     EvaluationQueryBinding,
     EvaluationQuerySelectionItem,
 )
 from .protocol.evaluation_run import EvaluationRunTargetV0
-from .protocol.policy import Policy, PolicyOccurrence
+from .protocol.policy import (
+    Policy,
+    PolicyOccurrence,
+    PolicyV2Only,
+    policy_contains_weighted_choice,
+)
 from .schema_runtime import SchemaIndex
 from .semantic_address_runtime import SemanticAddressSpace, manage_rule_occurrence
 from .semantic_port_runtime import (
@@ -103,7 +109,10 @@ def resolve_evaluation_query_target(
                 "QUERY_TARGET_ADDRESS_SPACE_UNEXPECTED",
             )
         _assert_resolved_target_current(target)
-        if schema_index is not None and schema_index.schema_digest != target.run_target.schema_digest:
+        if (
+            schema_index is not None
+            and schema_index.schema_digest != target.run_target.schema_digest
+        ):
             raise _error(
                 "resolved Query target schema does not match this FactGraph",
                 "QUERY_TARGET_SCHEMA_MISMATCH",
@@ -118,7 +127,10 @@ def resolve_evaluation_query_target(
             )
         try:
             assert_rule_contract_current(target.rule, target.contract)
-            if schema_index is not None and schema_index.schema_digest != target.contract.schema_digest:
+            if (
+                schema_index is not None
+                and schema_index.schema_digest != target.contract.schema_digest
+            ):
                 raise _error(
                     "Rule target schema does not match this FactGraph",
                     "QUERY_TARGET_SCHEMA_MISMATCH",
@@ -133,7 +145,9 @@ def resolve_evaluation_query_target(
         except EvaluationQueryTargetError:
             raise
         except (SemanticPortResolutionError, ValueError) as exc:
-            raise _error("resolved Rule target is no longer current", "QUERY_RULE_TARGET_STALE") from exc
+            raise _error(
+                "resolved Rule target is no longer current", "QUERY_RULE_TARGET_STALE"
+            ) from exc
         run_target = build_evaluation_run_target_v0(
             compiled_policy=compiled,
             schema_digest=target.contract.schema_digest,
@@ -144,6 +158,12 @@ def resolve_evaluation_query_target(
         return ResolvedEvaluationQueryTargetV1(compiled, space, run_target)
 
     if isinstance(target, Policy):
+        if isinstance(target, PolicyV2Only) or policy_contains_weighted_choice(target):
+            raise _error(
+                "this Policy contains a V2-only WeightedChoice; query the enclosing "
+                "ProductPolicyV1 with a V2 execution profile",
+                "WEIGHTED_CHOICE_V2_ONLY",
+            )
         if not isinstance(address_space, SemanticAddressSpace):
             raise _error(
                 "Policy targets require their exact SemanticAddressSpace via address_space=",
@@ -169,7 +189,9 @@ def resolve_evaluation_query_target(
         except EvaluationQueryTargetError:
             raise
         except (SemanticPortResolutionError, ValueError) as exc:
-            raise _error("Policy target could not be resolved", "QUERY_POLICY_TARGET_INVALID") from exc
+            raise _error(
+                "Policy target could not be resolved", "QUERY_POLICY_TARGET_INVALID"
+            ) from exc
         run_target = build_evaluation_run_target_v0(
             compiled_policy=compiled,
             schema_digest=schema_digest,
@@ -221,7 +243,10 @@ def compile_targeted_evaluation_query(
         # PARTIAL_BRANCH_QUERY_ADDRESS) through the unified facade.
         raise
     except ValueError as exc:
-        raise _error("typed Query compilation rejected this target intent", "QUERY_TARGET_COMPILATION_REJECTED") from exc
+        raise _error(
+            "typed Query compilation rejected this target intent",
+            "QUERY_TARGET_COMPILATION_REJECTED",
+        ) from exc
     try:
         compiled_expectations = compile_contains_row_expectations_v0(
             expectations,
@@ -249,9 +274,13 @@ def _assert_targeted_compiled_query_current(
     if not isinstance(value, TargetedCompiledEvaluationQueryV0):
         raise _error("targeted compiled Query has invalid runtime type", "INVALID_TARGETED_QUERY")
     if not isinstance(value.compiled_query, CompiledEvaluationQueryV0):
-        raise _error("targeted compiled Query lacks CompiledEvaluationQueryV0", "INVALID_TARGETED_QUERY")
+        raise _error(
+            "targeted compiled Query lacks CompiledEvaluationQueryV0", "INVALID_TARGETED_QUERY"
+        )
     if not isinstance(value.target, ResolvedEvaluationQueryTargetV1):
-        raise _error("targeted compiled Query lacks resolved target context", "INVALID_TARGETED_QUERY")
+        raise _error(
+            "targeted compiled Query lacks resolved target context", "INVALID_TARGETED_QUERY"
+        )
     _assert_compiled_evaluation_query_current(value.compiled_query)
     _assert_resolved_target_current(value.target)
     compiled, target = value.compiled_query, value.target
@@ -261,9 +290,14 @@ def _assert_targeted_compiled_query_current(
         raise _error("targeted compiled Query expectations are malformed", "INVALID_TARGETED_QUERY")
     expectation_ids = tuple(item.expectation_id for item in value.expectations)
     if len(set(expectation_ids)) != len(expectation_ids):
-        raise _error("targeted compiled Query expectation ids are duplicated", "DUPLICATE_EXPECTATION_ID")
+        raise _error(
+            "targeted compiled Query expectation ids are duplicated", "DUPLICATE_EXPECTATION_ID"
+        )
     if any(item.query_digest != compiled.query_digest for item in value.expectations):
-        raise _error("targeted compiled Query expectation does not match its Query", "EXPECTATION_QUERY_MISMATCH")
+        raise _error(
+            "targeted compiled Query expectation does not match its Query",
+            "EXPECTATION_QUERY_MISMATCH",
+        )
     try:
         for item in value.expectations:
             assert_compiled_contains_row_expectation_current(item)
@@ -280,7 +314,9 @@ def _assert_targeted_compiled_query_current(
             "TARGETED_QUERY_CONTEXT_MISMATCH",
         )
     expected_wrapper_digest = targeted_evaluation_query_wrapper_digest_v0(
-        compiled.query_digest, target.run_target.target_digest, value.expectations,
+        compiled.query_digest,
+        target.run_target.target_digest,
+        value.expectations,
     )
     if value.wrapper_digest != expected_wrapper_digest:
         raise _error(
@@ -297,13 +333,21 @@ def assert_targeted_evaluation_query_current(value: TargetedCompiledEvaluationQu
 
 def _assert_resolved_target_current(target: ResolvedEvaluationQueryTargetV1) -> None:
     if not isinstance(target, ResolvedEvaluationQueryTargetV1):
-        raise _error("resolved Query target has invalid runtime type", "INVALID_RESOLVED_QUERY_TARGET")
+        raise _error(
+            "resolved Query target has invalid runtime type", "INVALID_RESOLVED_QUERY_TARGET"
+        )
     if not isinstance(target.compiled_policy, CompiledPolicyV0):
-        raise _error("resolved Query target lacks CompiledPolicyV0", "INVALID_RESOLVED_QUERY_TARGET")
+        raise _error(
+            "resolved Query target lacks CompiledPolicyV0", "INVALID_RESOLVED_QUERY_TARGET"
+        )
     if not isinstance(target.address_space, SemanticAddressSpace):
-        raise _error("resolved Query target lacks SemanticAddressSpace", "INVALID_RESOLVED_QUERY_TARGET")
+        raise _error(
+            "resolved Query target lacks SemanticAddressSpace", "INVALID_RESOLVED_QUERY_TARGET"
+        )
     if not isinstance(target.run_target, EvaluationRunTargetV0):
-        raise _error("resolved Query target lacks EvaluationRunTargetV0", "INVALID_RESOLVED_QUERY_TARGET")
+        raise _error(
+            "resolved Query target lacks EvaluationRunTargetV0", "INVALID_RESOLVED_QUERY_TARGET"
+        )
     try:
         _assert_compiled_policy_current(target.compiled_policy)
         schema_digest = _schema_digest_for_space(target.address_space)
@@ -337,7 +381,9 @@ def _schema_digest_for_space(space: SemanticAddressSpace) -> str:
     except SemanticPortResolutionError as exc:
         raise _error("address space contains a stale Rule contract", "QUERY_TARGET_STALE") from exc
     if len(digests) != 1:
-        raise _error("address space must use exactly one schema digest", "QUERY_TARGET_SCHEMA_MISMATCH")
+        raise _error(
+            "address space must use exactly one schema digest", "QUERY_TARGET_SCHEMA_MISMATCH"
+        )
     return next(iter(digests))
 
 
@@ -364,7 +410,10 @@ def targeted_evaluation_query_wrapper_digest_v0(
         "expectation_digests": [item.expectation_digest for item in expectations],
     }
     encoded = json.dumps(
-        payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False,
+        payload,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
     ).encode()
     return f"sha256:{sha256_hex(encoded)}"
 

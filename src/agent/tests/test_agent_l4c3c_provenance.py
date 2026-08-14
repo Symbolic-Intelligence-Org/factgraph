@@ -49,6 +49,5 @@ class AgentLayer4C3cProvenanceTests(unittest.TestCase):
         self.assertEqual(restored.source_segment_ids(), ("seg_1", "seg_2", "seg_3"))
         self.assertEqual(restored.merged_from[0].segment_id, "seg_2")
 
-
 if __name__ == "__main__":
     unittest.main()

@@ -10,27 +10,61 @@ from factgraph.core.protocol.digests import sha256_hex
 from factgraph.core.rules.where_ast import CmpAtom, Const, PredAtom, Var
 
 from .protocol.policy import (
-    Policy, PolicyAll, PolicyAny, PolicyCompare, PolicyComparisonOperand,
-    PolicyCompareStructureNodeV0, PolicyConditionLoweredRefV0, PolicyError,
-    PolicyExpression, PolicyFieldNavigation, PolicyLineage, PolicyLineageRef,
-    PolicyLiteral, PolicyLoweredRef, PolicyNode, PolicyNodeLineage, PolicyOccurrence, PolicyStage,
-    PolicyStructureNode, PolicyStructureNodeV0, PolicyStructureV0, PolicyUnify,
+    Policy,
+    PolicyAll,
+    PolicyAny,
+    PolicyCompare,
+    PolicyComparisonOperand,
+    PolicyCompareStructureNodeV0,
+    PolicyConditionLoweredRefV0,
+    PolicyError,
+    PolicyExpression,
+    PolicyFieldNavigation,
+    PolicyLineage,
+    PolicyLineageRef,
+    PolicyLiteral,
+    PolicyLoweredRef,
+    PolicyNode,
+    PolicyNodeLineage,
+    PolicyOccurrence,
+    PolicyStage,
+    PolicyStructureNode,
+    PolicyStructureNodeV0,
+    PolicyStructureV0,
+    PolicyUnify,
+    PolicyV2Only,
+    policy_contains_weighted_choice,
 )
 from .protocol.rule import _PROJECTION_ID_PREFIX
 from .protocol.rule_expr import (
-    RuleExpr, RuleExprError, RuleJoinConstraint, _AndGroup, _RuleExpr,
+    RuleExpr,
+    RuleExprError,
+    RuleJoinConstraint,
+    _AndGroup,
+    _RuleExpr,
     _canonical_join_constraint,
 )
 from .protocol.rule_expr_lowering import (
-    RuleExprLoweringBranch, RuleExprPolicyCondition, _DNF_BRANCH_LIMIT, _RuleExprBodyPlan,
-    _lower_rule_expr_body, _vars_in_atom,
+    RuleExprLoweringBranch,
+    RuleExprPolicyCondition,
+    _DNF_BRANCH_LIMIT,
+    _RuleExprBodyPlan,
+    _lower_rule_expr_body,
+    _vars_in_atom,
 )
 from .protocol.semantic_address import SemanticPortAddress
 from .protocol.semantic_port import EntityIdentityEndpoint, FieldEndpoint
 from .schema_runtime import (
-    SchemaIndex, SchemaResolutionError, field_predicate, field_value_type,
+    SchemaIndex,
+    SchemaResolutionError,
+    field_predicate,
+    field_value_type,
 )
-from .semantic_address_runtime import ManagedRuleOccurrence, SemanticAddressResolutionError, SemanticAddressSpace
+from .semantic_address_runtime import (
+    ManagedRuleOccurrence,
+    SemanticAddressResolutionError,
+    SemanticAddressSpace,
+)
 from .semantic_port_runtime import SemanticPortResolutionError, assert_rule_contract_current
 
 _CMP_OPS = frozenset({"eq", "ne", "gt", "ge", "lt", "le"})
@@ -67,6 +101,8 @@ class _PolicyBranchVariant:
     aliases: frozenset[str]
     active_node_ids: frozenset[str]
     compare_node_ids: frozenset[str]
+
+
 @dataclass(frozen=True)
 class PolicyRulePin:
     occurrence_alias: str
@@ -74,24 +110,39 @@ class PolicyRulePin:
     rule_version: str | None
     rule_content_digest: str
     semantic_contract_digest: str
+
     def __post_init__(self) -> None:
-        for name in ("occurrence_alias", "rule_id", "rule_content_digest", "semantic_contract_digest"):
+        for name in (
+            "occurrence_alias",
+            "rule_id",
+            "rule_content_digest",
+            "semantic_contract_digest",
+        ):
             _runtime_text(getattr(self, name), name)
         if self.rule_version is not None:
             _runtime_text(self.rule_version, "rule_version")
+
+
 @dataclass(frozen=True)
 class PolicyCompiledBranch:
     branch_id: str
     authored_occurrence_aliases: tuple[str, ...]
     lowered_occurrence_aliases: tuple[str, ...]
+
     def __post_init__(self) -> None:
         _runtime_text(self.branch_id, "branch_id")
         for name in ("authored_occurrence_aliases", "lowered_occurrence_aliases"):
             value = getattr(self, name)
-            if not isinstance(value, tuple) or not value or not all(isinstance(alias, str) and alias for alias in value):
+            if (
+                not isinstance(value, tuple)
+                or not value
+                or not all(isinstance(alias, str) and alias for alias in value)
+            ):
                 raise ValueError(f"{name} must be a non-empty string tuple")
         if len(self.authored_occurrence_aliases) != len(self.lowered_occurrence_aliases):
             raise ValueError("authored and lowered occurrence inventories must align")
+
+
 @dataclass(frozen=True)
 class CompiledPolicyV0:
     policy_id: str
@@ -107,16 +158,30 @@ class CompiledPolicyV0:
     _policy_conditions: tuple[RuleExprPolicyCondition, ...] = field(
         default=(), repr=False, compare=False
     )
+
     def __post_init__(self) -> None:
         for name in ("policy_id", "policy_digest", "address_space_digest"):
             _runtime_text(getattr(self, name), name)
         if self.policy_version is not None:
             _runtime_text(self.policy_version, "policy_version")
-        if not isinstance(self.rule_pins, tuple) or not self.rule_pins or not all(isinstance(pin, PolicyRulePin) for pin in self.rule_pins):
+        if (
+            not isinstance(self.rule_pins, tuple)
+            or not self.rule_pins
+            or not all(isinstance(pin, PolicyRulePin) for pin in self.rule_pins)
+        ):
             raise ValueError("rule_pins must be a non-empty PolicyRulePin tuple")
-        if not isinstance(self.branches, tuple) or not self.branches or not all(isinstance(branch, PolicyCompiledBranch) for branch in self.branches):
+        if (
+            not isinstance(self.branches, tuple)
+            or not self.branches
+            or not all(isinstance(branch, PolicyCompiledBranch) for branch in self.branches)
+        ):
             raise ValueError("branches must be a non-empty PolicyCompiledBranch tuple")
-        if not isinstance(self.policy_structure, PolicyStructureV0) or not isinstance(self.rule_expr, _RuleExpr) or not isinstance(self.lineage, PolicyLineage) or not isinstance(self._body_plan, _RuleExprBodyPlan):
+        if (
+            not isinstance(self.policy_structure, PolicyStructureV0)
+            or not isinstance(self.rule_expr, _RuleExpr)
+            or not isinstance(self.lineage, PolicyLineage)
+            or not isinstance(self._body_plan, _RuleExprBodyPlan)
+        ):
             raise ValueError("compiled Policy structure has invalid runtime types")
         if not isinstance(self._policy_conditions, tuple) or not all(
             isinstance(item, RuleExprPolicyCondition) for item in self._policy_conditions
@@ -133,6 +198,13 @@ def compile_policy(
 ) -> CompiledPolicyV0:
     if not isinstance(policy, Policy):
         raise _error("policy must be Policy", "INVALID_POLICY", "policy_compile", ("policy",))
+    if isinstance(policy, PolicyV2Only) or policy_contains_weighted_choice(policy):
+        raise _error(
+            "this Policy contains V2-only WeightedChoice semantics and cannot be compiled as legacy deterministic Policy",
+            "WEIGHTED_CHOICE_V2_ONLY",
+            "policy_compile",
+            ("policy",),
+        )
     if not isinstance(address_space, SemanticAddressSpace):
         raise _error(
             "address_space must be SemanticAddressSpace",
@@ -207,14 +279,34 @@ def compile_policy(
         for alias, item in sorted(managed.items())
     )
     policy_digest = _digest(
-        policy.id, policy.version, address_space.address_space_digest,
-        pins, policy_structure, rule_expr, branches, lineage, policy_conditions,
+        policy.id,
+        policy.version,
+        address_space.address_space_digest,
+        pins,
+        policy_structure,
+        rule_expr,
+        branches,
+        lineage,
+        policy_conditions,
     )
     return CompiledPolicyV0(
-        policy.id, policy.version, policy_digest, address_space.address_space_digest,
-        pins, policy_structure, rule_expr, branches, lineage, body_plan, policy_conditions,
+        policy.id,
+        policy.version,
+        policy_digest,
+        address_space.address_space_digest,
+        pins,
+        policy_structure,
+        rule_expr,
+        branches,
+        lineage,
+        body_plan,
+        policy_conditions,
     )
-def _validate_structure(nodes: tuple[PolicyNode, ...], managed: dict[str, ManagedRuleOccurrence]) -> None:
+
+
+def _validate_structure(
+    nodes: tuple[PolicyNode, ...], managed: dict[str, ManagedRuleOccurrence]
+) -> None:
     aliases = [node.alias for node in nodes if isinstance(node, PolicyOccurrence)]
     duplicates = sorted(alias for alias, count in Counter(aliases).items() if count > 1)
     if duplicates:
@@ -258,7 +350,7 @@ def _validate_execution_var_ownership(
             binding = occurrence_map[lowered_alias]
             authored_alias = binding.authored_alias or lowered_alias
             atom_count = len(managed[authored_alias].occurrence.rule.when)
-            for atom in branch.body_atoms[offset:offset + atom_count]:
+            for atom in branch.body_atoms[offset : offset + atom_count]:
                 for variable in _vars_in_atom(atom):
                     owner = owners.setdefault(variable.name, lowered_alias)
                     if owner != lowered_alias:
@@ -267,11 +359,16 @@ def _validate_execution_var_ownership(
                             "POLICY_EXECUTION_VAR_COLLISION",
                             "policy_lowering_adapter",
                             ("policy", "when", branch.branch_id),
-                            {"variable": variable.name, "occurrence_aliases": sorted((owner, lowered_alias))},
+                            {
+                                "variable": variable.name,
+                                "occurrence_aliases": sorted((owner, lowered_alias)),
+                            },
                         )
             offset += atom_count
         if offset != len(branch.body_atoms):
             raise _invariant("lowered atoms do not match occurrence Rule bodies", branch.branch_id)
+
+
 def _admit(managed: dict[str, ManagedRuleOccurrence]) -> None:
     schema_digests = {item.contract.schema_digest for item in managed.values()}
     if len(schema_digests) != 1:
@@ -303,7 +400,9 @@ def _admit(managed: dict[str, ManagedRuleOccurrence]) -> None:
                 {"reserved_prefix": _PROJECTION_ID_PREFIX},
             )
         for index, atom in enumerate(rule.when):
-            supported_pred = isinstance(atom, PredAtom) and all(isinstance(term, (Var, Const)) for term in atom.terms)
+            supported_pred = isinstance(atom, PredAtom) and all(
+                isinstance(term, (Var, Const)) for term in atom.terms
+            )
             supported_cmp = (
                 isinstance(atom, CmpAtom)
                 and atom.op in _CMP_OPS
@@ -318,6 +417,8 @@ def _admit(managed: dict[str, ManagedRuleOccurrence]) -> None:
                     ("address_space", alias, "rule", "when", str(index)),
                     {"atom_kind": type(atom).__name__},
                 )
+
+
 def _validate_constraints(
     node: PolicyExpression,
     address_space: SemanticAddressSpace,
@@ -407,7 +508,9 @@ def _resolve_compare(
 ) -> _ResolvedPolicyCompare:
     path = ("policy", "when", compare.node_id)
     left = _resolve_compare_operand(compare.left, address_space, schema_index, path=(*path, "left"))
-    right = _resolve_compare_operand(compare.right, address_space, schema_index, path=(*path, "right"))
+    right = _resolve_compare_operand(
+        compare.right, address_space, schema_index, path=(*path, "right")
+    )
     if left.scalar_domain != right.scalar_domain:
         raise _error(
             "Policy comparison operands must have the same scalar domain",
@@ -492,7 +595,10 @@ def _resolve_compare_operand(
             "INVALID_POLICY_NAVIGATION",
             "policy_compile",
             path,
-            {"base_entity_type": base.endpoint.entity_type, "field_entity_type": operand.field.entity_type},
+            {
+                "base_entity_type": base.endpoint.entity_type,
+                "field_entity_type": operand.field.entity_type,
+            },
         )
     return _resolved_scalar_field(
         operand.base,
@@ -519,12 +625,18 @@ def _resolved_scalar_field(
     except SchemaResolutionError as exc:
         raise _error(
             str(exc),
-            "INVALID_POLICY_NAVIGATION" if lookup_predicate_id is not None else "UNSUPPORTED_POLICY_COMPARE_ENDPOINT",
+            "INVALID_POLICY_NAVIGATION"
+            if lookup_predicate_id is not None
+            else "UNSUPPORTED_POLICY_COMPARE_ENDPOINT",
             "policy_compile",
             path,
             {"schema_code": exc.code},
         ) from exc
-    if value_type.value_kind != "scalar" or value_type.cardinality != "single" or value_type.scalar_domain is None:
+    if (
+        value_type.value_kind != "scalar"
+        or value_type.cardinality != "single"
+        or value_type.scalar_domain is None
+    ):
         raise _error(
             "Policy comparison operands must be single scalar fields",
             "UNSUPPORTED_POLICY_COMPARE_ENDPOINT",
@@ -537,10 +649,17 @@ def _resolved_scalar_field(
         value_type.scalar_domain,
         info.pred_id if lookup_predicate_id is not None else None,
     )
+
+
 def _resolve_unify(unify: PolicyUnify, address_space: SemanticAddressSpace) -> RuleJoinConstraint:
     path = ("policy", "when", unify.node_id)
     if unify.left.occurrence_alias == unify.right.occurrence_alias:
-        raise _error("Unify must connect distinct occurrences", "SELF_UNIFY_UNSUPPORTED", "policy_compile", path)
+        raise _error(
+            "Unify must connect distinct occurrences",
+            "SELF_UNIFY_UNSUPPORTED",
+            "policy_compile",
+            path,
+        )
     try:
         left, right = address_space.resolve(unify.left), address_space.resolve(unify.right)
     except SemanticAddressResolutionError as exc:
@@ -562,6 +681,8 @@ def _resolve_unify(unify: PolicyUnify, address_space: SemanticAddressSpace) -> R
         return left.execution_ref.eq(right.execution_ref)
     except RuleExprError as exc:
         raise _error(str(exc), "INVALID_UNIFY", "policy_compile", path) from exc
+
+
 def _compile_expr(
     node: PolicyExpression,
     managed: dict[str, ManagedRuleOccurrence],
@@ -576,12 +697,20 @@ def _compile_expr(
     if isinstance(node, PolicyAny):
         return RuleExpr.any(*children)
     compiled = RuleExpr.all(*children)
-    constraints = tuple(joins[child.node_id] for child in node.children if isinstance(child, PolicyUnify))
+    constraints = tuple(
+        joins[child.node_id] for child in node.children if isinstance(child, PolicyUnify)
+    )
     if constraints:
         if not isinstance(compiled, _AndGroup):
-            raise _error("All did not compile to AND", "POLICY_COMPILER_INVARIANT", "policy_compiler_invariant")
+            raise _error(
+                "All did not compile to AND",
+                "POLICY_COMPILER_INVARIANT",
+                "policy_compiler_invariant",
+            )
         compiled = compiled.join(*constraints)
     return compiled
+
+
 def _branch_count(node: PolicyExpression) -> int:
     if isinstance(node, PolicyOccurrence):
         return 1
@@ -595,6 +724,8 @@ def _branch_count(node: PolicyExpression) -> int:
     for count in counts:
         result *= count
     return result
+
+
 def _guaranteed_aliases(node: PolicyExpression) -> frozenset[str]:
     if isinstance(node, PolicyOccurrence):
         return frozenset((node.alias,))
@@ -604,6 +735,8 @@ def _guaranteed_aliases(node: PolicyExpression) -> frozenset[str]:
     if isinstance(node, PolicyAny):
         return frozenset.intersection(*map(_guaranteed_aliases, structural))
     return frozenset().union(*map(_guaranteed_aliases, structural))
+
+
 def _occurrence_aliases(node: PolicyNode) -> frozenset[str]:
     if isinstance(node, PolicyOccurrence):
         return frozenset((node.alias,))
@@ -612,10 +745,14 @@ def _occurrence_aliases(node: PolicyNode) -> frozenset[str]:
     if isinstance(node, PolicyCompare):
         return frozenset(_compare_aliases(node))
     return frozenset().union(*map(_occurrence_aliases, node.children))
+
+
 def _nodes(node: PolicyNode) -> tuple[PolicyNode, ...]:
     if isinstance(node, (PolicyOccurrence, PolicyUnify, PolicyCompare)):
         return (node,)
     return (node, *(nested for child in node.children for nested in _nodes(child)))
+
+
 def _policy_structure(
     root: PolicyExpression,
     nodes: tuple[PolicyNode, ...],
@@ -625,15 +762,23 @@ def _policy_structure(
         value: PolicyStructureNode
         if isinstance(node, PolicyOccurrence):
             value = PolicyStructureNodeV0(
-                node.node_id, "occurrence", occurrence_alias=node.alias,
+                node.node_id,
+                "occurrence",
+                occurrence_alias=node.alias,
             )
         elif isinstance(node, PolicyUnify):
             value = PolicyStructureNodeV0(
-                node.node_id, "unify", left=node.left, right=node.right,
+                node.node_id,
+                "unify",
+                left=node.left,
+                right=node.right,
             )
         elif isinstance(node, PolicyCompare):
             value = PolicyCompareStructureNodeV0(
-                node.node_id, node.op, node.left, node.right,
+                node.node_id,
+                node.op,
+                node.left,
+                node.right,
             )
         else:
             value = PolicyStructureNodeV0(
@@ -643,6 +788,8 @@ def _policy_structure(
             )
         result.append(value)
     return PolicyStructureV0(root.node_id, tuple(sorted(result, key=lambda item: item.node_id)))
+
+
 def _compile_policy_conditions(
     root: PolicyExpression,
     plan: _RuleExprBodyPlan,
@@ -663,15 +810,13 @@ def _compile_policy_conditions(
     emitted: list[RuleExprPolicyCondition] = []
     for branch in plan.branches:
         variant = branch_to_variant[branch.branch_id]
-        occupied = {
-            variable.name
-            for atom in branch.body_atoms
-            for variable in _vars_in_atom(atom)
-        }
+        occupied = {variable.name for atom in branch.body_atoms for variable in _vars_in_atom(atom)}
         for compare_id in sorted(variant.compare_node_ids):
             resolved = resolved_compares.get(compare_id)
             if resolved is None:
-                raise _invariant("authored Compare has no resolved condition", branch.branch_id, compare_id)
+                raise _invariant(
+                    "authored Compare has no resolved condition", branch.branch_id, compare_id
+                )
             left, left_conditions = _materialize_policy_operand(
                 branch,
                 plan,
@@ -722,9 +867,7 @@ def _materialize_policy_operand(
     if operand.lookup_predicate_id is None:
         return source, ()
     generated = _fresh_policy_condition_var(compare_node_id, branch.branch_id, side, occupied)
-    role: Literal["left_field", "right_field"] = (
-        "left_field" if side == "left" else "right_field"
-    )
+    role: Literal["left_field", "right_field"] = "left_field" if side == "left" else "right_field"
     return generated, (
         RuleExprPolicyCondition(
             branch.branch_id,
@@ -752,7 +895,9 @@ def _branch_execution_var(
         if authored_alias != address.occurrence_alias:
             continue
         matches.extend(
-            binding for binding in occurrence.port_bindings if binding.port_name == address.port_name
+            binding
+            for binding in occurrence.port_bindings
+            if binding.port_name == address.port_name
         )
     if len(matches) != 1:
         raise _invariant(
@@ -787,7 +932,9 @@ def _fresh_policy_condition_var(
 
 def _policy_branch_variants(node: PolicyExpression) -> tuple[_PolicyBranchVariant, ...]:
     if isinstance(node, PolicyOccurrence):
-        return (_PolicyBranchVariant(frozenset((node.alias,)), frozenset((node.node_id,)), frozenset()),)
+        return (
+            _PolicyBranchVariant(frozenset((node.alias,)), frozenset((node.node_id,)), frozenset()),
+        )
     if isinstance(node, PolicyAny):
         any_variants: list[_PolicyBranchVariant] = []
         for child in node.children:
@@ -810,11 +957,13 @@ def _policy_branch_variants(node: PolicyExpression) -> tuple[_PolicyBranchVarian
     all_variants: list[_PolicyBranchVariant] = []
     for parts in product(*(_policy_branch_variants(child) for child in structural)):
         aliases = frozenset().union(*(part.aliases for part in parts))
-        active = frozenset((node.node_id, *(constraint.node_id for constraint in constraints))).union(
-            *(part.active_node_ids for part in parts)
-        )
+        active = frozenset(
+            (node.node_id, *(constraint.node_id for constraint in constraints))
+        ).union(*(part.active_node_ids for part in parts))
         compare_ids = frozenset(
-            constraint.node_id for constraint in constraints if isinstance(constraint, PolicyCompare)
+            constraint.node_id
+            for constraint in constraints
+            if isinstance(constraint, PolicyCompare)
         ).union(*(part.compare_node_ids for part in parts))
         all_variants.append(_PolicyBranchVariant(aliases, active, compare_ids))
     return tuple(all_variants)
@@ -835,7 +984,9 @@ def _match_variants_to_lowered_branches(
         )
         candidates = buckets.get(aliases, [])
         if len(candidates) != 1:
-            raise _invariant("authored Policy branches do not map uniquely to lowered branches", branch.branch_id)
+            raise _invariant(
+                "authored Policy branches do not map uniquely to lowered branches", branch.branch_id
+            )
         result[branch.branch_id] = candidates[0]
     if len(result) != len(plan.branches) or len(variants) != len(plan.branches):
         raise _invariant("authored Policy branch count does not match lowered branches")
@@ -889,8 +1040,11 @@ def _lineage(
             universe.add(occurrence_ref)
             for source_index, _atom in enumerate(managed[source_alias].occurrence.rule.when):
                 atom_ref = PolicyLoweredRef(
-                    "body_atom", branch.branch_id, lowered_alias,
-                    source_index=source_index, lowered_index=body_index,
+                    "body_atom",
+                    branch.branch_id,
+                    lowered_alias,
+                    source_index=source_index,
+                    lowered_index=body_index,
                 )
                 refs[occurrence_node.node_id].add(atom_ref)
                 universe.add(atom_ref)
@@ -900,7 +1054,9 @@ def _lineage(
 
         for ordinal, condition in enumerate(conditions_by_branch[branch.branch_id]):
             if condition.policy_node_id not in variant.compare_node_ids:
-                raise _invariant("Policy condition is outside its authored branch", branch.branch_id)
+                raise _invariant(
+                    "Policy condition is outside its authored branch", branch.branch_id
+                )
             condition_ref = PolicyConditionLoweredRefV0(
                 branch.branch_id,
                 condition.policy_node_id,
@@ -920,13 +1076,19 @@ def _lineage(
             if source is None:
                 raise _invariant("lowered Unify has no authored origin", branch.branch_id)
             unify_ref = PolicyLoweredRef(
-                "unify", branch.branch_id, join.left.occurrence_alias, join.left.port_name,
-                lowered_index=ordinal, peer_occurrence_alias=join.right.occurrence_alias,
+                "unify",
+                branch.branch_id,
+                join.left.occurrence_alias,
+                join.left.port_name,
+                lowered_index=ordinal,
+                peer_occurrence_alias=join.right.occurrence_alias,
                 peer_port_name=join.right.port_name,
             )
             refs[source.node_id].add(unify_ref)
             universe.add(unify_ref)
-        branches.append(PolicyCompiledBranch(branch.branch_id, authored_aliases, branch.occurrence_aliases))
+        branches.append(
+            PolicyCompiledBranch(branch.branch_id, authored_aliases, branch.occurrence_aliases)
+        )
 
     forward: list[PolicyNodeLineage] = []
     reverse: dict[PolicyLineageRef, set[str]] = {}
@@ -948,7 +1110,12 @@ def _lineage(
 
 def _policy_condition_sort_key(condition: RuleExprPolicyCondition) -> tuple[object, ...]:
     order = {"left_field": 0, "right_field": 1, "compare": 2}
-    return (condition.branch_id, condition.policy_node_id, order[condition.role], condition.condition_id)
+    return (
+        condition.branch_id,
+        condition.policy_node_id,
+        order[condition.role],
+        condition.condition_id,
+    )
 
 
 def _lineage_ref_sort_key(ref: PolicyLineageRef) -> tuple[object, ...]:
@@ -984,11 +1151,15 @@ def _kind(node: PolicyNode) -> Literal["occurrence", "all", "any", "unify", "com
     if isinstance(node, PolicyUnify):
         return "unify"
     return "compare"
+
+
 def _unify_key(
     left: SemanticPortAddress,
     right: SemanticPortAddress,
 ) -> tuple[tuple[str, str], tuple[str, str]]:
-    ends = sorted(((left.occurrence_alias, left.port_name), (right.occurrence_alias, right.port_name)))
+    ends = sorted(
+        ((left.occurrence_alias, left.port_name), (right.occurrence_alias, right.port_name))
+    )
     return ends[0], ends[1]
 
 
@@ -1012,16 +1183,18 @@ def _assert_compiled_policy_current(compiled: CompiledPolicyV0) -> None:
         for branch in current_body.branches
     )
     expected_digest = _digest(
-        compiled.policy_id, compiled.policy_version, compiled.address_space_digest,
-        compiled.rule_pins, compiled.policy_structure, compiled.rule_expr,
-        compiled.branches, compiled.lineage, compiled._policy_conditions,
+        compiled.policy_id,
+        compiled.policy_version,
+        compiled.address_space_digest,
+        compiled.rule_pins,
+        compiled.policy_structure,
+        compiled.rule_expr,
+        compiled.branches,
+        compiled.lineage,
+        compiled._policy_conditions,
     )
-    structure_kinds = {
-        node.node_id: node.kind for node in compiled.policy_structure.nodes
-    }
-    lineage_kinds = {
-        node.node_id: node.node_kind for node in compiled.lineage.authored_nodes
-    }
+    structure_kinds = {node.node_id: node.kind for node in compiled.policy_structure.nodes}
+    lineage_kinds = {node.node_id: node.node_kind for node in compiled.lineage.authored_nodes}
     conditions_current = _policy_conditions_current(compiled, current_body)
     if (
         current_body != compiled._body_plan
@@ -1071,9 +1244,15 @@ def _digest(
             }
             for condition in policy_conditions
         ]
-    return sha256_hex(json.dumps(
-        payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False,
-    ).encode())
+    return sha256_hex(
+        json.dumps(
+            payload,
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+            allow_nan=False,
+        ).encode()
+    )
 
 
 def _policy_conditions_current(
@@ -1113,7 +1292,11 @@ def _policy_conditions_current(
     by_branch = {branch.branch_id: branch for branch in current_body.branches}
     for condition in conditions:
         key = (condition.branch_id, condition.policy_node_id, condition.condition_id)
-        if key in seen or condition.branch_id not in branch_ids or condition.policy_node_id not in compare_ids:
+        if (
+            key in seen
+            or condition.branch_id not in branch_ids
+            or condition.policy_node_id not in compare_ids
+        ):
             return False
         seen.add(key)
         branch = by_branch[condition.branch_id]
@@ -1140,11 +1323,19 @@ def _conditions_for_branch(
     conditions: tuple[RuleExprPolicyCondition, ...], branch_id: str
 ) -> tuple[RuleExprPolicyCondition, ...]:
     return tuple(condition for condition in conditions if condition.branch_id == branch_id)
+
+
 def _invariant(message: str, *path: str) -> PolicyError:
-    return _error(message, "POLICY_LINEAGE_NOT_TOTAL", "policy_compiler_invariant", ("lineage", *path))
+    return _error(
+        message, "POLICY_LINEAGE_NOT_TOTAL", "policy_compiler_invariant", ("lineage", *path)
+    )
+
+
 def _runtime_text(value: object, name: str) -> None:
     if not isinstance(value, str) or not value:
         raise ValueError(f"{name} must be a non-empty string")
+
+
 def _error(
     message: str,
     code: str,
@@ -1153,4 +1344,6 @@ def _error(
     details: dict[str, Any] | None = None,
 ) -> PolicyError:
     return PolicyError(message, code=code, stage=stage, path=path, details=details)
+
+
 __all__ = ["CompiledPolicyV0", "PolicyCompiledBranch", "PolicyRulePin", "compile_policy"]

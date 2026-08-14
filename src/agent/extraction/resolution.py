@@ -152,7 +152,9 @@ class EntityResolver:
 
         key_to_spec: dict[tuple[Any, str, tuple[tuple[str, Any], ...]], FactDraftSpec] = {}
         merge_events: list[MergeEvent] = []
-        alias_map: dict[tuple[str, tuple[tuple[str, Any], ...]], tuple[str, tuple[tuple[str, Any], ...]]] = {}
+        alias_map: dict[
+            tuple[str, tuple[tuple[str, Any], ...]], tuple[str, tuple[tuple[str, Any], ...]]
+        ] = {}
         canonical_keys: list[tuple[str, tuple[tuple[str, Any], ...]]] = []
         canonical_primary_segment_ids: dict[
             tuple[str, tuple[tuple[str, Any], ...]],
@@ -283,7 +285,9 @@ def _is_entity_alias(
         return False
     tokens_a = set(val_a.split())
     tokens_b = set(val_b.split())
-    shorter, longer = (tokens_a, tokens_b) if len(tokens_a) <= len(tokens_b) else (tokens_b, tokens_a)
+    shorter, longer = (
+        (tokens_a, tokens_b) if len(tokens_a) <= len(tokens_b) else (tokens_b, tokens_a)
+    )
     return bool(shorter) and shorter.issubset(longer)
 
 
@@ -291,12 +295,17 @@ def _merge_specs(primary: FactDraftSpec, other: FactDraftSpec) -> FactDraftSpec:
     primary_prov = primary.extraction_provenance
     other_prov = other.extraction_provenance
 
-    existing_segment_ids = set(primary_prov.source_segment_ids())
+    # Segment identifiers are local to a source document.  Preserve merged
+    # provenance from another document even when it uses the same local id.
+    existing_source_segments = {
+        (source.source_document_id, source.segment_id) for source in primary_prov.all_sources()
+    }
     additions: list[ExtractionProvenance] = []
     for candidate in other_prov.all_sources():
-        if candidate.segment_id in existing_segment_ids:
+        source_key = (candidate.source_document_id, candidate.segment_id)
+        if source_key in existing_source_segments:
             continue
-        existing_segment_ids.add(candidate.segment_id)
+        existing_source_segments.add(source_key)
         additions.append(candidate)
 
     new_provenance = replace(

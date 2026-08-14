@@ -141,6 +141,7 @@ remain the implementation-truth layer for maintainers and advanced users.
 | [`04_api_surface.en.md`](04_api_surface.en.md) | Public API index and signatures. |
 | [`06_what_if_and_proof.en.md`](06_what_if_and_proof.en.md) | V1 Query/Scenario What-if, explicit detached evidence/replay, and bounded `ScenarioRunV0` compatibility overview. |
 | [`07_walker_and_advanced.en.md`](07_walker_and_advanced.en.md) | Advanced direct imports and adapters. |
+| [`08_product_scenario_execution_v2.en.md`](08_product_scenario_execution_v2.en.md) | Product `fg.scenario()`, strict metadata/provenance, target-scoped V2 execution profiles, and the V2 Query terminal. |
 
 ## Stability and Versioning
 

@@ -27,6 +27,46 @@ silently acquire Scenario algebra, a provider callback, or portable execution.
 
 ### SDK-authored Policy targets
 
+For new product code, use the symmetric Rule/Policy builders.  ``AssetMeta``
+is a descriptive, separately sealed label; it never changes logical Rule or
+Policy identity and it never registers an asset by id:
+
+```python
+from factgraph.sdk import AssetMeta, vars
+
+with vars("person", "age") as (person, age):
+    person_values = fg.build_rule(
+        id="person_values",
+        version="1",
+        meta=AssetMeta(name="Person values", tags=("demo", "people")),
+        when=(Person(person), Person(person).age == age),
+        ports={"person": person, "age": age},
+        semantic_ports={"person": Person, "age": Person.age},
+    )
+
+ranked = fg.policy_builder(
+    "ranked_people",
+    version="1",
+    meta=AssetMeta(name="Rank eligible people", tags=("ranking",)),
+)
+people = ranked.use(person_values, as_="people")
+target = ranked.build(ranked.all(people, people.age >= 18))
+```
+
+For a product Rule, `semantic_ports` uses public schema descriptors: an
+`Entity` class means its complete identity endpoint and a bound `Field`
+descriptor means that scalar field endpoint. The builder still resolves both
+against this exact graph and requires matching positive body witnesses. Raw
+`SemanticEndpoint` / `SemanticRulePort` inputs remain advanced compatibility
+forms; routine SDK code does not need application or core imports.
+
+``fg.rule_builder(...).build(...)`` is the staged form of ``build_rule``.
+Likewise, ``fg.build_policy(id=..., build=lambda policy: ...)`` constructs one
+``PolicyBuilder`` and calls the callback on that exact builder, preserving the
+local ownership of ``use(..., as_=...)`` handles.  The older concise
+``fg.policy(...)`` / ``PolicyDraft`` form remains supported for Q19
+compatibility and returns an unlabelled ``AuthoredPolicyTargetV1``.
+
 For normal SDK callers, author a managed Policy through a typed draft instead
 of constructing `PolicyAll`, `PolicyAny`, `PolicyOccurrence`,
 `SemanticAddressSpace`, or `SemanticPortAddress` directly:
@@ -90,6 +130,36 @@ while strings, booleans, floats, UUIDs, bytes, `None`, entity references, and
 literal-vs-literal comparisons reject. There is intentionally no global
 `fg.compare(...)`: the handle provides the schema domain, Policy draft owner,
 and semantic address that make a comparison meaningful.
+
+### Explicit exclusive stochastic topology
+
+``all(...)`` and ``any(...)`` are always deterministic logical nodes.  Do not
+put weights or generic engine settings on either one.  A categorical model is
+an explicit product-builder sidecar instead:
+
+```python
+key = ranked.use(person_values, as_="key")
+declared = ranked.use(person_values, as_="declared")
+inferred = ranked.use(person_values, as_="inferred")
+
+source = ranked.weighted_choice(
+    id="eligibility_source",
+    on=(key.person,),
+    choices=(
+        ranked.choice("declared", probability="0.7", when=ranked.all(declared)),
+        ranked.choice("inferred", probability="0.3", when=ranked.all(inferred)),
+    ),
+)
+target = ranked.build(ranked.all(key, source))
+```
+
+Weights are canonical decimal strings, not floats; every positive arm must
+sum exactly to ``"1"`` and the ordered ``on=`` semantic-port key must occur in
+every logical arm.  This is an exclusive choice (future V2 ProbLog annotated
+disjunction), not a synonym for ``any(...)`` or a model of independent causes.
+Until the V2 ProbLog terminal is selected, all legacy compilation/evaluation,
+capture, Scenario-v0 and V1-plan terminals fail closed with
+``WEIGHTED_CHOICE_V2_ONLY`` rather than silently treating it as ordinary OR.
 
 For the Q18 V1 path, start with a resolved Rule, an advanced managed `Policy`,
 or the SDK-authored target above; declare structured `bind` / ordered `select`

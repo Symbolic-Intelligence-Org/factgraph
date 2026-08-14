@@ -145,7 +145,11 @@ class AgentLayer3AWriteTests(unittest.TestCase):
         self.assertEqual(request.e_ref, self.refs["u1"])
         self.assertEqual(request.meta["approved_by"], "analyst-1")
         self.assertEqual(request.meta["agent_executor"], "agent-layer3a")
-        self.assertEqual(request.meta["confidence"], 0.7)
+        # Extraction confidence stays on the draft/workflow boundary.  It is
+        # neither valid write metadata nor an implicit probabilistic fact.
+        self.assertNotIn("confidence", request.meta)
+        self.assertNotIn("raw_kind", request.meta)
+        self.assertNotIn("bound", request.meta)
         self.assertEqual(request.meta["source"], "manual")
         self.assertEqual(request.meta["source_loc"], "turn:1")
         self.assertEqual(request.meta["trace_id"], "bundle-1")
