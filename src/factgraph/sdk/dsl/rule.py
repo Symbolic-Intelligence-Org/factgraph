@@ -113,6 +113,7 @@ class Rule:
         return payload
 
     def dependency_rules(self) -> list[Rule]:
+        """Return directly referenced in-memory Rules from this legacy body."""
         return _dependency_rules_from_where(self.where)
 
 
@@ -175,9 +176,18 @@ class Inference:
 
     @property
     def heads(self) -> list[HeadCall]:
+        """Return a copy of the normalized inference heads."""
         return list(self._heads)
 
     def to_authoring_payload(self) -> dict[str, Any]:
+        """Lower this legacy Inference into its authoring payload.
+
+        Returns:
+            A JSON-shaped mapping accepted by the compatibility compiler.
+
+        Notes:
+            This does not execute or accept derived candidates into the ledger.
+        """
         payload: dict[str, Any] = {
             "derivation_id": self.id,
             "version": self.version,
@@ -202,6 +212,7 @@ class Inference:
         return payload
 
     def dependency_rules(self) -> list[Rule]:
+        """Return directly referenced in-memory Rules from this inference."""
         return _dependency_rules_from_where(self.when)
 
 
@@ -279,17 +290,29 @@ class Query:
 
     @property
     def return_contract(self) -> list[ReturnContractEntry]:
+        """Return a copy of the normalized output-column contract."""
         return list(self._return_contract)
 
     @property
     def initial_bound_vars(self) -> set[str]:
+        """Return variables bound by the Query head before body validation."""
         return set(self._initial_bound_vars)
 
     @property
     def where_ir(self) -> list[Any]:
+        """Return a copy of the lowered compatibility body IR."""
         return list(self._where_ir)
 
     def to_runtime_payload(self) -> dict[str, Any]:
+        """Return the normalized compatibility runtime payload.
+
+        Returns:
+            A JSON-shaped Query payload with head, body and return contract.
+
+        Notes:
+            This legacy DSL payload is separate from Product
+            ``fg.query(target).bind(...).select(...)``.
+        """
         return {
             "head": [_query_head_item_to_payload(item) for item in self._normalized_head],
             "where": list(self._where_ir),
@@ -308,6 +331,7 @@ class Query:
         }
 
     def dependency_rules(self) -> list[Rule]:
+        """Return directly referenced in-memory Rules from this Query body."""
         return _dependency_rules_from_where(self.where)
 
 

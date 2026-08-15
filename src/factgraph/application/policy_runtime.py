@@ -33,6 +33,7 @@ from .protocol.policy import (
     PolicyStructureV0,
     PolicyUnify,
     PolicyV2Only,
+    policy_contains_product_function,
     policy_contains_weighted_choice,
 )
 from .protocol.rule import _PROJECTION_ID_PREFIX
@@ -53,7 +54,7 @@ from .protocol.rule_expr_lowering import (
     _vars_in_atom,
 )
 from .protocol.semantic_address import SemanticPortAddress
-from .protocol.semantic_port import EntityIdentityEndpoint, FieldEndpoint
+from .protocol.semantic_port import EntityIdentityEndpoint, FieldEndpoint, FunctionValueEndpointV1
 from .schema_runtime import (
     SchemaIndex,
     SchemaResolutionError,
@@ -198,10 +199,18 @@ def compile_policy(
 ) -> CompiledPolicyV0:
     if not isinstance(policy, Policy):
         raise _error("policy must be Policy", "INVALID_POLICY", "policy_compile", ("policy",))
-    if isinstance(policy, PolicyV2Only) or policy_contains_weighted_choice(policy):
+    if (
+        isinstance(policy, PolicyV2Only)
+        or policy_contains_weighted_choice(policy)
+        or policy_contains_product_function(policy)
+    ):
         raise _error(
-            "this Policy contains V2-only WeightedChoice semantics and cannot be compiled as legacy deterministic Policy",
-            "WEIGHTED_CHOICE_V2_ONLY",
+            "this Policy contains V2-only Product semantics and cannot be compiled as a legacy Policy",
+            (
+                "FUNCTION_V2_ONLY"
+                if policy_contains_product_function(policy)
+                else "WEIGHTED_CHOICE_V2_ONLY"
+            ),
             "policy_compile",
             ("policy",),
         )
@@ -555,6 +564,11 @@ def _resolve_compare_operand(
                 path,
                 {"semantic_address_code": exc.code},
             ) from exc
+        if isinstance(resolved.endpoint, FunctionValueEndpointV1):
+            return _ResolvedPolicyOperand(
+                source_address=operand,
+                scalar_domain=resolved.endpoint.scalar_domain,
+            )
         if not isinstance(resolved.endpoint, FieldEndpoint):
             raise _error(
                 "Policy comparison direct operands must resolve to scalar Field ports",

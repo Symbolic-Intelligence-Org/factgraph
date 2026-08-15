@@ -37,12 +37,14 @@ class _DeclaredMember:
 
     @property
     def sdk_attr_name(self) -> str:
+        """Return the Python attribute name bound by the Entity metaclass."""
         if not self._sdk_attr_name:
             raise SDKSchemaError("descriptor is not bound to entity class")
         return self._sdk_attr_name
 
     @property
     def sdk_owner_cls(self) -> type:
+        """Return the Entity class that owns this descriptor."""
         if self._sdk_owner_cls is None:
             raise SDKSchemaError("descriptor owner is not available")
         return self._sdk_owner_cls
@@ -119,6 +121,14 @@ class Identity(_DataMember):
         super().__init__(pattern=pattern, repr=repr)
 
     def to_authoring(self, *, plan: _AnnotationPlan) -> dict[str, Any]:
+        """Return canonical schema-authoring data for this identity field.
+
+        Args:
+            plan: Type/cardinality information derived from the annotation.
+
+        Returns:
+            A canonical identity-field authoring mapping.
+        """
         if plan.cardinality != "single":
             raise SDKSchemaError("Identity fields must use a single-value annotation")
         out: dict[str, Any] = {
@@ -165,11 +175,20 @@ class Field(_DataMember):
 
     @property
     def cardinality(self) -> str:
+        """Return the cardinality inferred from the bound type annotation."""
         if self._inferred_cardinality is None:
             raise SDKSchemaError("Field cardinality is unavailable until the descriptor is bound to a schema class")
         return self._inferred_cardinality
 
     def to_authoring(self, *, plan: _AnnotationPlan) -> dict[str, Any]:
+        """Return canonical schema-authoring data for this field.
+
+        Args:
+            plan: Type/cardinality information derived from the annotation.
+
+        Returns:
+            A canonical field authoring mapping.
+        """
         self._inferred_cardinality = plan.cardinality
         out: dict[str, Any] = {
             "py_name": self.sdk_attr_name,
@@ -297,6 +316,14 @@ class Entity(metaclass=EntityMeta):
 
     @classmethod
     def sdk_entity_spec(cls) -> dict[str, Any]:
+        """Return the schema specification compiled for this Entity class.
+
+        Returns:
+            The Entity declaration consumed by FactGraph schema compilation.
+
+        Raises:
+            SDKSchemaError: If the class is not a compiled Entity declaration.
+        """
         spec = getattr(cls, "__sdk_entity_spec__", None)
         if not isinstance(spec, dict):
             raise SDKSchemaError(f"class '{cls.__name__}' is not a compiled Entity declaration")
@@ -360,6 +387,14 @@ class Relationship(metaclass=RelationshipMeta):
 
     @classmethod
     def sdk_relationship_spec(cls) -> dict[str, Any]:
+        """Return the schema specification compiled for this Relationship.
+
+        Returns:
+            A copy of the relationship declaration.
+
+        Raises:
+            SDKSchemaError: If the class is not a compiled Relationship.
+        """
         spec = getattr(cls, "__sdk_relationship_spec__", None)
         if not isinstance(spec, dict):
             raise SDKSchemaError(f"class '{cls.__name__}' is not a compiled Relationship declaration")

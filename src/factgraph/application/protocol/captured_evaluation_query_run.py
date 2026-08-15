@@ -114,7 +114,14 @@ class CapturedEvaluationQueryRunV0:
         object.__setattr__(self, "captured_query_run_digest", expected)
 
     def verify(self) -> "CapturedEvaluationQueryRunVerificationV0":
-        """Isolated verification of the exact captured F4 bundle."""
+        """Verify the exact captured F4 bundle in isolation.
+
+        Returns:
+            A verification record with explicit matched/truth boundaries.
+
+        Notes:
+            Verification does not consult current ledger truth.
+        """
 
         from factgraph.application.captured_evaluation_query_run_runtime import (
             verify_captured_evaluation_query_run_v0,
@@ -123,7 +130,17 @@ class CapturedEvaluationQueryRunV0:
         return verify_captured_evaluation_query_run_v0(self)
 
     def explain(self, *, row_capture_digest: str) -> "CapturedEvaluationQueryRunExplanationV0":
-        """Play a positive captured row; negative observations have no graph."""
+        """Play evidence for one positive captured row.
+
+        Args:
+            row_capture_digest: Exact captured row identity.
+
+        Returns:
+            Detached evidence plus authored Policy projection.
+
+        Notes:
+            Negative observations do not manufacture an EvidenceGraph.
+        """
 
         from factgraph.application.captured_evaluation_query_run_runtime import (
             explain_captured_evaluation_query_run_v0,
@@ -135,6 +152,11 @@ class CapturedEvaluationQueryRunV0:
         )
 
     def to_bytes(self) -> bytes:
+        """Serialize this detached captured Query run to canonical bytes.
+
+        Returns:
+            Canonical bytes containing the sealed observations and bundle.
+        """
         from factgraph.application.captured_evaluation_query_run_runtime import (
             captured_evaluation_query_run_bytes,
         )
@@ -143,6 +165,14 @@ class CapturedEvaluationQueryRunV0:
 
     @classmethod
     def from_bytes(cls, raw: bytes) -> "CapturedEvaluationQueryRunV0":
+        """Decode a detached captured Query run without a live Store.
+
+        Args:
+            raw: Canonical captured-run bytes.
+
+        Returns:
+            A validated detached captured Query run.
+        """
         from factgraph.application.captured_evaluation_query_run_runtime import (
             captured_evaluation_query_run_from_bytes,
         )
@@ -214,6 +244,7 @@ class CapturedEvaluationQueryRunVerificationV0:
 
     @property
     def matched(self) -> bool:
+        """Return whether isolated replay matched the declared runtime result."""
         return self.bundle_verification.verdict in {
             "matched_declared_runtime",
             "matched_unpinned_runtime",

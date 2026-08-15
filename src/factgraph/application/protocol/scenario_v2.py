@@ -189,9 +189,18 @@ class FactSemanticsV2:
 
     @classmethod
     def probabilistic_point(cls, value: object) -> "FactSemanticsV2":
+        """Create exact declared point-probability semantics.
+
+        Args:
+            value: Decimal-compatible probability in the closed interval [0, 1].
+
+        Returns:
+            Canonically normalized probabilistic fact semantics.
+        """
         return cls(raw_kind="probabilistic", point_probability=canonical_decimal_v2(value))
 
     def to_wire(self) -> dict[str, str]:
+        """Return the canonical evaluator-visible fact-semantics payload."""
         return {"raw_kind": self.raw_kind, "point_probability": self.point_probability}
 
 
@@ -231,9 +240,11 @@ class ScenarioDisplayV2:
 
     @property
     def is_empty(self) -> bool:
+        """Return whether this display annotation carries no user content."""
         return self.note is None and not self.labels
 
     def to_wire(self) -> dict[str, object]:
+        """Return the canonical presentation-only annotation payload."""
         return {"note": self.note, "labels": list(self.labels)}
 
 
@@ -283,9 +294,11 @@ class ScenarioMetaV2:
 
     @property
     def is_empty(self) -> bool:
+        """Return whether no semantics, provenance, or display data is present."""
         return self.fact_semantics is None and not self.provenance and self.display.is_empty
 
     def to_wire(self) -> dict[str, object]:
+        """Return all Scenario metadata lanes in canonical wire form."""
         return {
             "fact_semantics": None
             if self.fact_semantics is None
@@ -464,10 +477,12 @@ class ScenarioOperationV2:
 
     @property
     def kind(self) -> ScenarioOperationKindV1:
+        """Return the normalized operation kind inherited from the V1 operation."""
         return scenario_operation_kind_v2(self.operation)
 
     @property
     def premise_id(self) -> str:
+        """Return the user-assigned Scenario premise id."""
         return self.operation.premise_id
 
 

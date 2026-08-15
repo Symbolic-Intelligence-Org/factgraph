@@ -303,12 +303,17 @@ def _require_cardinality(predicate: dict[str, Any], *, expected: str, action: st
 
 
 class ScenarioBuilderV2:
-    """Ergonomic, mutable-while-building SDK facade for immutable ScenarioSpecV2.
+    """Author a run-local fact overlay for Product V2 evaluation.
 
     Every method returns this builder and every ``meta=`` is lowered at the
     call boundary.  ``set_exact`` intentionally uses per-member metadata:
     supplying operation-level metadata there would make it ambiguous which
     resulting synthetic fact owns the semantic/provenance annotation.
+
+    Notes:
+        Scenario methods are write-like authoring syntax, not ledger writes.
+        ``meta`` is strictly separated into evaluator semantics, provenance
+        references and display annotations when each operation is added.
     """
 
     __slots__ = ("_graph", "_builder", "_next_premise", "_premise_ids")
@@ -378,7 +383,26 @@ class ScenarioBuilderV2:
         meta: object = None,
         premise_id: str | None = None,
     ) -> "ScenarioBuilderV2":
-        """Replace one single-value field in the run-local effective world."""
+        """Replace one single-value field in the effective world.
+
+        Args:
+            field: Single-cardinality SDK ``Field`` descriptor.
+            entity: Managed reference string or compatible ``EntityRef``.
+            value: Typed replacement value.
+            meta: Optional strict Scenario semantics/provenance/display mapping.
+            premise_id: Optional stable operation identifier.
+
+        Returns:
+            This builder for fluent authoring.
+
+        Raises:
+            ProductScenarioExecutionError: If field/cardinality, entity,
+                value, metadata, or premise identity is invalid.
+
+        Notes:
+            The replacement remains run-local. The baseline assertion is kept
+            in operation evidence and is never relabelled as a Scenario source.
+        """
 
         from factgraph.application.protocol.scenario_v1 import ScenarioSetEffectiveValueV1
 
@@ -405,7 +429,22 @@ class ScenarioBuilderV2:
         meta: object = None,
         premise_id: str | None = None,
     ) -> "ScenarioBuilderV2":
-        """Ensure one member of a multi-value field in the effective world."""
+        """Ensure one member of a multi-value field in the effective world.
+
+        Args:
+            field: Multi-cardinality SDK ``Field`` descriptor.
+            entity: Managed reference string or compatible ``EntityRef``.
+            value: Typed member to ensure.
+            meta: Optional strict Scenario semantics/provenance/display mapping.
+            premise_id: Optional stable operation identifier.
+
+        Returns:
+            This builder for fluent authoring.
+
+        Raises:
+            ProductScenarioExecutionError: If field/cardinality, value,
+                metadata, entity, or premise identity is invalid.
+        """
 
         from factgraph.application.protocol.scenario_v1 import ScenarioEnsureMemberV1
 
@@ -438,6 +477,25 @@ class ScenarioBuilderV2:
         closed ``member_meta`` entry per input value.  This keeps a point
         probability attached to a precise synthetic fact rather than an
         ambiguous whole-set operation.
+
+        Args:
+            field: Multi-cardinality SDK ``Field`` descriptor.
+            entity: Managed reference string or compatible ``EntityRef``.
+            values: Complete desired member sequence.
+            member_meta: Optional one-to-one metadata sequence in input-value
+                order.
+            premise_id: Optional stable operation identifier.
+
+        Returns:
+            This builder for fluent authoring.
+
+        Raises:
+            ProductScenarioExecutionError: If values/metadata are malformed,
+                cardinality is wrong, or a member cannot be typed.
+
+        Notes:
+            Value/metadata pairs are canonically sorted together so a source
+            or probability cannot migrate to another member.
         """
 
         from factgraph.application.protocol.scenario_v1 import ScenarioSetExactMembersV1
@@ -503,7 +561,26 @@ class ScenarioBuilderV2:
         meta: object = None,
         premise_id: str | None = None,
     ) -> "ScenarioBuilderV2":
-        """Mask a whole field, or one member when ``value=`` is supplied."""
+        """Mask a whole field or one multi-value member.
+
+        Args:
+            field: SDK ``Field`` descriptor to mask.
+            entity: Managed reference string or compatible ``EntityRef``.
+            value: Optional member value. Omit it to mask the whole field.
+            meta: Optional provenance/display mapping for operation evidence.
+            premise_id: Optional stable operation identifier.
+
+        Returns:
+            This builder for fluent authoring.
+
+        Raises:
+            ProductScenarioExecutionError: If the field, entity, member,
+                metadata, or premise identity is invalid.
+
+        Notes:
+            Removal operations cannot carry probabilistic fact semantics,
+            because they do not create a synthetic fact.
+        """
 
         from factgraph.application.protocol.scenario_v1 import (
             ScenarioWithoutFieldV1,
@@ -531,7 +608,19 @@ class ScenarioBuilderV2:
         )
 
     def build(self) -> ScenarioSpecV2:
-        """Return the immutable V2 request; this never resolves or executes it."""
+        """Seal the authored operations as an immutable Scenario request.
+
+        Returns:
+            A validated ``ScenarioSpecV2`` ready for Product V2 planning.
+
+        Raises:
+            ProductScenarioExecutionError: If the final operation inventory is
+                inconsistent.
+
+        Notes:
+            Building does not resolve a captured world, execute a Query, or
+            write the ledger.
+        """
 
         try:
             return self._builder.build()
@@ -542,12 +631,17 @@ class ScenarioBuilderV2:
 
 
 class ExecutionProfileBuilderV2:
-    """Fluent, strict construction of one detached V2 execution profile.
+    """Build one target-pinned Product V2 execution profile.
 
     ``target=`` is deliberately explicit.  An occurrence or choice handle
     alone only proves local authoring ownership; it cannot identify the final
     Policy's digest.  Providing the product Rule/Policy context lets each
     attachment seal its exact target before a later V2 plan can execute it.
+
+    Notes:
+        A profile is a replayable execution-semantics artifact, not an
+        arbitrary engine kwargs dictionary. Building one does not execute an
+        engine or inspect the live ledger.
     """
 
     __slots__ = (
@@ -568,7 +662,7 @@ class ExecutionProfileBuilderV2:
         *,
         target: _Target,
         side: _TargetSide,
-        kind: Literal["native", "problog"],
+        kind: Literal["native", "portable", "problog"],
         name: str | None,
         engines: tuple[EvaluationEnginePinV2, ...],
         resources: EvaluationResourcePolicyV2,
@@ -582,7 +676,7 @@ class ExecutionProfileBuilderV2:
         self._resources = resources
         self._capture = capture
         self._semantics: DeterministicSemanticsV2 | ProbLogPointSemanticsV2 | None = (
-            DeterministicSemanticsV2() if kind == "native" else None
+            DeterministicSemanticsV2() if kind in {"native", "portable"} else None
         )
         default_pin = _target_pin(self._default_target, side=self._default_side)
         self._target_pins: dict[_TargetSide, EvaluationTargetPinV2] = {
@@ -597,7 +691,19 @@ class ExecutionProfileBuilderV2:
         return self._default_target
 
     def fact_semantics(self, *, identity_probability: bool = True) -> "ExecutionProfileBuilderV2":
-        """Select the only shipped ProbLog V2 fact-semantic model."""
+        """Select the Product V2 point-probability fact model.
+
+        Args:
+            identity_probability: Must currently be ``True``; submitted point
+                probabilities are projected directly to ProbLog float64 input.
+
+        Returns:
+            This profile builder.
+
+        Raises:
+            ProductScenarioExecutionError: If used on a non-ProbLog profile or
+                with an unsupported projection mode.
+        """
 
         if self._kind != "problog":
             raise ProductScenarioExecutionError(
@@ -618,12 +724,23 @@ class ExecutionProfileBuilderV2:
         *,
         side: _TargetSide,
     ) -> "ExecutionProfileBuilderV2":
-        """Declare an additional primary/candidate target pin without semantics.
+        """Pin an additional primary or candidate target.
 
         Deterministic V2 profiles have no attachments, but a candidate Query
         still needs an exact target pin before it can be captured and replayed.
         This is deliberately a target inventory declaration, not a generic
         configuration override or an implicit candidate compiler.
+
+        Args:
+            target: Exact Product Rule or Policy target.
+            side: Target role, normally ``"candidate"`` for an additional pin.
+
+        Returns:
+            This profile builder.
+
+        Raises:
+            ProductScenarioExecutionError: If the side already pins a
+                different target.
         """
 
         self._attachment_target(target, side)
@@ -635,7 +752,19 @@ class ExecutionProfileBuilderV2:
         *,
         side: _TargetSide,
     ) -> "ExecutionProfileBuilderV2":
-        """Alias for :meth:`with_target` for fluent profile declarations."""
+        """Add an exact target pin using fluent profile spelling.
+
+        Args:
+            target: Product Rule or Policy target to pin.
+            side: ``"primary"`` or ``"candidate"`` role.
+
+        Returns:
+            This mutable profile builder.
+
+        Raises:
+            ProductScenarioExecutionError: If the side already pins another
+                target or the target is unsupported.
+        """
 
         return self.with_target(target, side=side)
 
@@ -716,7 +845,25 @@ class ExecutionProfileBuilderV2:
         target: _Target | None = None,
         side: _TargetSide | None = None,
     ) -> "ExecutionProfileBuilderV2":
-        """Attach closed ProbLog rule semantics to a direct Rule or Policy member."""
+        """Attach ProbLog semantics to one Product Rule asset.
+
+        Args:
+            rule: Direct target Rule or Rule present in the selected Policy.
+            semantics: Marker returned by ``fg.problog.rule_semantics()``.
+            target: Optional target override for multi-side profiles.
+            side: Optional target side paired with ``target``.
+
+        Returns:
+            This profile builder.
+
+        Raises:
+            ProductScenarioExecutionError: If the profile kind, Rule/target
+                relationship, marker, or attachment ownership is invalid.
+
+        Notes:
+            Rule-level and occurrence-level settings may not own the same
+            lowering slot.
+        """
 
         if self._kind != "problog":
             raise ProductScenarioExecutionError(
@@ -772,7 +919,21 @@ class ExecutionProfileBuilderV2:
         target: ProductPolicyV1 | None = None,
         side: _TargetSide | None = None,
     ) -> "ExecutionProfileBuilderV2":
-        """Attach semantics to one exact, owner-bound Policy occurrence."""
+        """Attach ProbLog semantics to one Policy occurrence.
+
+        Args:
+            occurrence: Handle returned by the selected Policy builder.
+            semantics: Marker from ``fg.problog.occurrence_semantics()``.
+            target: Optional exact Policy target override.
+            side: Optional target side paired with ``target``.
+
+        Returns:
+            This profile builder.
+
+        Raises:
+            ProductScenarioExecutionError: If profile kind, ownership,
+                target membership, marker, or overlap rules fail.
+        """
 
         if self._kind != "problog":
             raise ProductScenarioExecutionError(
@@ -842,7 +1003,24 @@ class ExecutionProfileBuilderV2:
         target: ProductPolicyV1 | None = None,
         side: _TargetSide | None = None,
     ) -> "ExecutionProfileBuilderV2":
-        """Activate one already-authored WeightedChoice without changing weights."""
+        """Activate one authored WeightedChoice for ProbLog execution.
+
+        Args:
+            choice: Owner-bound choice handle or sealed topology.
+            semantics: Marker from ``fg.problog.choice_semantics()``.
+            target: Optional exact Product Policy target override.
+            side: Optional target side paired with ``target``.
+
+        Returns:
+            This profile builder.
+
+        Raises:
+            ProductScenarioExecutionError: If profile kind, ownership,
+                target membership, or marker validation fails.
+
+        Notes:
+            This activates the authored model but cannot override arm weights.
+        """
 
         if self._kind != "problog":
             raise ProductScenarioExecutionError(
@@ -883,9 +1061,26 @@ class ExecutionProfileBuilderV2:
         return self
 
     def build(self) -> EvaluationExecutionProfileV2:
-        """Seal the detached profile; no execution occurs at this call."""
+        """Validate and seal the detached execution profile.
 
-        kind: Literal["native_deterministic_v2", "problog_point_v2"]
+        Returns:
+            An immutable ``EvaluationExecutionProfileV2`` ready for Query
+            planning.
+
+        Raises:
+            ProductScenarioExecutionError: If required semantics, pins,
+                attachments, resources, or capture policy are invalid.
+
+        Notes:
+            No Query or engine runs at this call. Changing a profile requires
+            a new evaluation run; Explain always reports the captured profile.
+        """
+
+        kind: Literal[
+            "native_deterministic_v2",
+            "portable_deterministic_v2",
+            "problog_point_v2",
+        ]
         if self._kind == "problog":
             if not isinstance(self._semantics, ProbLogPointSemanticsV2):
                 raise ProductScenarioExecutionError(
@@ -894,9 +1089,12 @@ class ExecutionProfileBuilderV2:
                     code="V2_PROFILE_SEMANTICS_REQUIRED",
                 )
             kind = "problog_point_v2"
-        else:
+        elif self._kind == "native":
             assert isinstance(self._semantics, DeterministicSemanticsV2)
             kind = "native_deterministic_v2"
+        else:
+            assert isinstance(self._semantics, DeterministicSemanticsV2)
+            kind = "portable_deterministic_v2"
         try:
             return EvaluationExecutionProfileV2(
                 kind=kind,
@@ -938,7 +1136,28 @@ class _SDKExecutionManagerV2:
         native_engine_version: str = DEFAULT_NATIVE_ENGINE_VERSION_V2,
         native_adapter_version: str = DEFAULT_NATIVE_ADAPTER_VERSION_V2,
     ) -> ExecutionProfileBuilderV2:
-        """Start the closed native deterministic V2 profile builder."""
+        """Start a Native-only deterministic Product V2 profile.
+
+        Args:
+            target: Exact Product Rule or Policy target.
+            name: Optional profile display name.
+            side: Target role pinned by this builder.
+            max_rows: Maximum selected rows accepted from the engine.
+            timeout_ms: Optional closed timeout policy.
+            max_capture_bytes: Maximum sealed capture size.
+            native_engine_version: Pinned Native engine version.
+            native_adapter_version: Pinned Native adapter version.
+
+        Returns:
+            An ``ExecutionProfileBuilderV2`` with deterministic semantics.
+
+        Raises:
+            ProductScenarioExecutionError: If target, resources, capture, or
+                version pins are invalid.
+
+        Notes:
+            This method constructs a profile only; it does not execute Native.
+        """
 
         try:
             resources = EvaluationResourcePolicyV2(max_rows=max_rows, timeout_ms=timeout_ms)
@@ -976,11 +1195,40 @@ class _SDKExecutionManagerV2:
         souffle_engine_version: str = DEFAULT_SOUFFLE_ENGINE_VERSION_V2,
         souffle_adapter_version: str = DEFAULT_SOUFFLE_ADAPTER_VERSION_V2,
     ) -> ExecutionProfileBuilderV2:
-        """Start a point-probability ProbLog V2 profile builder.
+        """Start a point-probability ProbLog Product V2 profile.
 
         The profile pins all three declared engine environments.  It does not
         claim native/Soufflé probability execution; their V2 frames remain
         typed unsupported until a future engine implementation says otherwise.
+
+        Args:
+            target: Exact Product Rule or Policy target.
+            name: Optional profile display name.
+            side: Target role pinned by this builder.
+            max_rows: Maximum selected rows accepted from ProbLog.
+            timeout_ms: Optional closed timeout policy.
+            max_capture_bytes: Maximum sealed capture size.
+            problog_engine_version: Pinned ProbLog engine version.
+            problog_adapter_version: Pinned ProbLog adapter version.
+            native_engine_version: Native environment pin used for the typed
+                unsupported frame.
+            native_adapter_version: Native adapter pin.
+            souffle_engine_version: Soufflé environment pin used for the typed
+                unsupported frame.
+            souffle_adapter_version: Soufflé adapter pin.
+
+        Returns:
+            A builder requiring explicit ``fact_semantics(...)`` before
+            ``build()``.
+
+        Raises:
+            ProductScenarioExecutionError: If target, resources, capture, or
+                version pins are invalid.
+
+        Notes:
+            Probability does not attach to ordinary Policy ``all`` / ``any``
+            or Product Function. Use Scenario fact semantics, Rule/occurrence
+            attachments, or explicit WeightedChoice topology.
         """
 
         try:
@@ -1003,6 +1251,70 @@ class _SDKExecutionManagerV2:
             capture=capture,
         )
 
+    def portable_deterministic(
+        self,
+        *,
+        target: _Target,
+        name: str | None = None,
+        side: _TargetSide = "primary",
+        max_rows: int = 10_000,
+        max_capture_bytes: int = 4 * 1024 * 1024,
+        native_engine_version: str = DEFAULT_NATIVE_ENGINE_VERSION_V2,
+        native_adapter_version: str = DEFAULT_NATIVE_ADAPTER_VERSION_V2,
+        souffle_engine_version: str = DEFAULT_SOUFFLE_ENGINE_VERSION_V2,
+        souffle_adapter_version: str = DEFAULT_SOUFFLE_ADAPTER_VERSION_V2,
+        problog_engine_version: str = DEFAULT_PROBLOG_ENGINE_VERSION_V2,
+        problog_adapter_version: str = DEFAULT_PROBLOG_ADAPTER_VERSION_V2,
+    ) -> ExecutionProfileBuilderV2:
+        """Start the three-engine deterministic Product V2 profile.
+
+        Args:
+            target: Exact Product Rule or Policy target.
+            name: Optional profile display name.
+            side: Target role pinned by this builder.
+            max_rows: Maximum normalized selected rows.
+            max_capture_bytes: Maximum sealed capture size.
+            native_engine_version: Pinned Native engine version.
+            native_adapter_version: Pinned Native adapter version.
+            souffle_engine_version: Pinned Soufflé engine version.
+            souffle_adapter_version: Pinned Soufflé adapter version.
+            problog_engine_version: Pinned ProbLog engine version.
+            problog_adapter_version: Pinned ProbLog adapter version.
+
+        Returns:
+            An ``ExecutionProfileBuilderV2`` for Native, Soufflé and ProbLog.
+
+        Raises:
+            ProductScenarioExecutionError: If target, resources, capture, or
+                version pins are invalid.
+
+        Notes:
+            All three engines must succeed with identical normalized selected
+            rows. This is result parity, not proof/evidence parity.
+        """
+
+        try:
+            resources = EvaluationResourcePolicyV2(max_rows=max_rows, timeout_ms=None)
+            capture = EvaluationCapturePolicyV2(max_capture_bytes=max_capture_bytes)
+            engines = (
+                EvaluationEnginePinV2("native", native_engine_version, native_adapter_version),
+                EvaluationEnginePinV2("souffle", souffle_engine_version, souffle_adapter_version),
+                EvaluationEnginePinV2("problog", problog_engine_version, problog_adapter_version),
+            )
+        except ProtocolShapeError as exc:
+            raise _as_sdk_error(
+                exc, action="portable deterministic profile", code="V2_PROFILE_INVALID"
+            ) from exc
+        return ExecutionProfileBuilderV2(
+            target=target,
+            side=side,
+            kind="portable",
+            name=name,
+            engines=engines,
+            resources=resources,
+            capture=capture,
+        )
+
 
 class _SDKProbLogManagerV2:
     """Read-only marker factory for the closed ProbLog V2 attachment union."""
@@ -1016,12 +1328,20 @@ class _SDKProbLogManagerV2:
         raise FrozenSnapshotError("FactGraph.problog namespace is read-only")
 
     def rule_semantics(self) -> ExecutionAttachmentSemanticsV2:
-        """Return the sole current direct-Rule ProbLog attachment marker."""
+        """Return the current direct-Rule ProbLog attachment marker.
+
+        Returns:
+            A typed marker for ``profile.for_rule(...)``.
+        """
 
         return ExecutionAttachmentSemanticsV2("problog_rule_point_v1")
 
     def occurrence_semantics(self) -> ExecutionAttachmentSemanticsV2:
-        """Return the sole current Policy-occurrence ProbLog marker."""
+        """Return the current Policy-occurrence ProbLog attachment marker.
+
+        Returns:
+            A typed marker for ``profile.for_occurrence(...)``.
+        """
 
         return ExecutionAttachmentSemanticsV2("problog_occurrence_point_v1")
 

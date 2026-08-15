@@ -66,6 +66,77 @@ class PolicyOccurrence:
 
 
 @dataclass(frozen=True)
+class PolicyFunctionOccurrenceV1:
+    """Intrinsic V2-only marker for one Product Function occurrence.
+
+    The marker deliberately survives ordinary ``Policy`` rewrapping.  Legacy
+    compilation therefore cannot reinterpret a Function as a Rule.  The
+    controlled Product V2 compiler bridge alone lowers it to the synthetic
+    relation-backed occurrence with the same alias.
+    """
+
+    alias: str
+    function_digest: str
+    relation_predicate_id: str
+    signature_digest: str
+    input_bindings: tuple[tuple[str, SemanticPortAddress], ...]
+    node_id: str = field(init=False)
+
+    def __post_init__(self) -> None:
+        _text(self.alias, "alias")
+        _text(self.relation_predicate_id, "relation_predicate_id")
+        for value, name in (
+            (self.function_digest, "function_digest"),
+            (self.signature_digest, "signature_digest"),
+        ):
+            if not isinstance(value, str) or not value.startswith("sha256:"):
+                raise _shape(f"{name} must be a sha256 token", "INVALID_POLICY_FUNCTION")
+        if not isinstance(self.input_bindings, tuple) or not self.input_bindings:
+            raise _shape(
+                "Function occurrence input bindings must be a non-empty tuple",
+                "INVALID_POLICY_FUNCTION",
+            )
+        normalized: list[tuple[str, SemanticPortAddress]] = []
+        for item in self.input_bindings:
+            if (
+                not isinstance(item, tuple)
+                or len(item) != 2
+                or not isinstance(item[0], str)
+                or not item[0]
+                or not isinstance(item[1], SemanticPortAddress)
+            ):
+                raise _shape(
+                    "Function occurrence input binding is malformed",
+                    "INVALID_POLICY_FUNCTION",
+                )
+            normalized.append(item)
+        bindings = tuple(sorted(normalized, key=lambda item: item[0]))
+        if len({name for name, _address in bindings}) != len(bindings):
+            raise _shape(
+                "Function occurrence input bindings must have unique ports",
+                "INVALID_POLICY_FUNCTION",
+            )
+        object.__setattr__(self, "input_bindings", bindings)
+        object.__setattr__(
+            self,
+            "node_id",
+            _node_id(
+                (
+                    "function_occurrence_v1",
+                    self.alias,
+                    self.function_digest,
+                    self.relation_predicate_id,
+                    self.signature_digest,
+                    tuple(
+                        (name, address.occurrence_alias, address.port_name)
+                        for name, address in bindings
+                    ),
+                )
+            ),
+        )
+
+
+@dataclass(frozen=True)
 class PolicyUnify:
     left: SemanticPortAddress
     right: SemanticPortAddress
@@ -241,7 +312,16 @@ class PolicyAny:
                 "INVALID_POLICY_CONSTRAINT_SCOPE",
             )
         if any(
-            not isinstance(child, (PolicyOccurrence, PolicyAll, PolicyAny, PolicyWeightedChoice))
+            not isinstance(
+                child,
+                (
+                    PolicyOccurrence,
+                    PolicyFunctionOccurrenceV1,
+                    PolicyAll,
+                    PolicyAny,
+                    PolicyWeightedChoice,
+                ),
+            )
             for child in children
         ):
             raise _shape("PolicyAny children must be structural", "INVALID_POLICY_ANY")
@@ -272,7 +352,9 @@ class PolicyWeightedChoiceArm:
         object.__setattr__(
             self, "probability", _canonical_weighted_choice_probability(self.probability)
         )
-        if not isinstance(self.condition, (PolicyOccurrence, PolicyAll, PolicyAny)):
+        if not isinstance(
+            self.condition, (PolicyOccurrence, PolicyFunctionOccurrenceV1, PolicyAll, PolicyAny)
+        ):
             raise _shape(
                 "WeightedChoice arm condition must be a structural Policy expression",
                 "INVALID_POLICY_WEIGHTED_CHOICE",
@@ -367,7 +449,9 @@ class PolicyWeightedChoice:
         return tuple(item.condition for item in self.arms)
 
 
-PolicyExpression: TypeAlias = PolicyOccurrence | PolicyAll | PolicyAny | PolicyWeightedChoice
+PolicyExpression: TypeAlias = (
+    PolicyOccurrence | PolicyFunctionOccurrenceV1 | PolicyAll | PolicyAny | PolicyWeightedChoice
+)
 PolicyNode: TypeAlias = PolicyExpression | PolicyUnify | PolicyCompare
 
 
@@ -382,7 +466,14 @@ class Policy:
         if self.version is not None:
             _text(self.version, "version")
         if not isinstance(
-            self.when, (PolicyOccurrence, PolicyAll, PolicyAny, PolicyWeightedChoice)
+            self.when,
+            (
+                PolicyOccurrence,
+                PolicyFunctionOccurrenceV1,
+                PolicyAll,
+                PolicyAny,
+                PolicyWeightedChoice,
+            ),
         ):
             raise _shape("Policy.when must be structural", "INVALID_POLICY_ROOT")
 
@@ -750,6 +841,7 @@ class PolicyLineage:
 def _children(value: object, kind: str) -> tuple[PolicyNode, ...]:
     allowed = (
         PolicyOccurrence,
+        PolicyFunctionOccurrenceV1,
         PolicyAll,
         PolicyAny,
         PolicyWeightedChoice,
@@ -819,6 +911,18 @@ def policy_contains_weighted_choice(value: object) -> bool:
     return False
 
 
+def policy_contains_product_function(value: object) -> bool:
+    """Return whether a Policy carries a V2-only Function occurrence."""
+
+    if isinstance(value, Policy):
+        return policy_contains_product_function(value.when)
+    if isinstance(value, PolicyFunctionOccurrenceV1):
+        return True
+    if isinstance(value, (PolicyAll, PolicyAny, PolicyWeightedChoice)):
+        return any(policy_contains_product_function(item) for item in value.children)
+    return False
+
+
 def _lower_policy_weighted_choices_to_any_skeleton(policy: Policy) -> Policy:
     """Create the V2-internal deterministic skeleton for typed compilation.
 
@@ -836,6 +940,8 @@ def _lower_policy_weighted_choices_to_any_skeleton(policy: Policy) -> Policy:
     def lower_expression(node: PolicyExpression) -> PolicyExpression:
         if isinstance(node, PolicyOccurrence):
             return node
+        if isinstance(node, PolicyFunctionOccurrenceV1):
+            return PolicyOccurrence(node.alias)
         if isinstance(node, PolicyWeightedChoice):
             return PolicyAny(tuple(lower_expression(item.condition) for item in node.arms))
         if isinstance(node, PolicyAny):
@@ -948,6 +1054,7 @@ __all__ = [
     "PolicyConditionLoweredRefV0",
     "PolicyError",
     "PolicyFieldNavigation",
+    "PolicyFunctionOccurrenceV1",
     "PolicyLineage",
     "PolicyLineageRef",
     "PolicyLiteral",
@@ -959,4 +1066,5 @@ __all__ = [
     "PolicyStructureV0",
     "PolicyUnify",
     "policy_contains_weighted_choice",
+    "policy_contains_product_function",
 ]

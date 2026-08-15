@@ -106,6 +106,54 @@ For advanced callers, `ProvenanceLocatorV1` and `ProvenanceRefV1` are exported
 from `factgraph.sdk`.  They are neutral opaque references, not a SourceRecord
 or permission system.
 
+## Product Function construction and materialization
+
+Product Functions are immutable assets parallel to Product Rules. They are
+not Rule body builtins, action tools, providers, or globally registered Python
+names. The direct and staged forms produce the same sealed identity:
+
+```python
+def age_decade(age: int) -> int:
+    return age // 10
+
+decade = fg.build_function(
+    id="age_decade",
+    version="1",
+    meta=AssetMeta(name="Age decade"),
+    implementation=age_decade,
+)
+# Equivalent staged form:
+# decade = fg.function_builder("age_decade", version="1", meta=...).build(age_decade)
+
+draft = fg.policy_builder("people_by_decade", version="1")
+people = draft.use(person_values).as_("people")
+computed = draft.use(decade).as_("computed")
+computed.inputs(age=people.age)
+target = draft.build(draft.all(people, computed, computed.result >= 3))
+```
+
+All inputs are required, typed, directional edges from direct scalar ports of
+one Rule occurrence. A Function may not consume another Function, call a Rule,
+appear inside a Rule body, accept a field-navigation handle, or expose its
+output as a Query binding input. Multiple independent Function occurrences may
+read the same Rule occurrence. The first slice is synchronous, total,
+deterministic, pure-by-contract, and has exactly one scalar output.
+
+For every baseline/effective/candidate side, the runtime evaluates the upstream
+Rule projection over that sealed world and invokes the trusted in-process
+callable once per distinct canonical input tuple. It then stores each input and
+output port in compiler-reserved binary relations sharing an opaque call key.
+Those predicates exist only in the isolated execution schema; they never enter
+the SDKStore ledger. A callback is trusted Python rather than a sandbox:
+persistent graph-view mutation is detected and rejected, but external side
+effects cannot be undone.
+
+The Run captures definition/signature/implementation/asset pins and each typed
+materialized call, but never captures executable Python or source code. Replay
+injects those captured relations and does not invoke the callable. Structured
+Result/Explain data exposes the Function definitions and per-side calls even
+when no EvidenceGraph was captured; it does not fabricate a proof node.
+
 ## V2 execution profiles
 
 Profiles are explicit, detached and target-scoped.  A Policy occurrence or
@@ -168,11 +216,15 @@ The sealed run exposes named `baseline`, `effective`, and
 primary and candidate effective views retain separate target/side captures,
 while their captured semantic world can be the same Scenario world.
 
-Use `fg.execution.native_deterministic(target=...)` for deterministic V2.
-It builds immediately after `.build()` and rejects probability attachments.
+Use `fg.execution.native_deterministic(target=...)` for Native-only
+deterministic V2. Use
+`fg.execution.portable_deterministic(target=...)` to require successful,
+matching Native/Soufflé/ProbLog selected rows over one deterministic world and
+the same pre-materialized Product Function relations. It has no fallback and
+does not claim cross-engine proof parity. Both reject probability attachments.
 Use `fg.execution.problog(target=...)` for the declared-point ProbLog model; it
 requires an explicit `.fact_semantics(identity_probability=True)` before
-`.build()`.  Both factories accept only named resource/capture bounds and
+`.build()`. These factories accept only named resource/capture bounds and
 engine/adapter version pins.  They do not accept arbitrary `engine_options`
 or a generic configuration dictionary.
 
@@ -235,6 +287,12 @@ properties expose `EvaluationRunV2ResultView` values, including sealed row
 identity/observation digests and point-probability observations when present.
 For ProbLog, the view also exposes the explicit `problog_float64_v1`
 materialization capture rather than disguising the engine's float conversion.
+For a Product Function target, `result.functions` and
+`explain_data.functions` expose replay-validated Function asset, occurrence,
+typed input/output call, and materialization digests. These are structured
+business data; the callable remains `not_captured` and the occurrence capture
+may contain calls unrelated to the selected row because Function materializes
+the complete upstream occurrence relation before final Query binding/filtering.
 It has no
 implicit truth value, `close()` method, ordinal Explain target, or synthesized
 negative proof. `outcome.explain(...)` accepts only a caller-selected V2 row
@@ -247,7 +305,9 @@ unavailable EvidenceGraph rather than manufacturing one.
 GoalPlan profiles remain separate compatibility surfaces.  Passing a V2
 Scenario/profile to a V1 terminal is rejected rather than silently lowering
 metadata or probability semantics.  V2 profile construction does not execute
-an engine by itself.
+an engine by itself. A Policy containing intrinsic Product Function topology
+also rejects every legacy/V1 compile/evaluate/plan path with `FUNCTION_V2_ONLY`;
+rewrapping the raw Policy does not erase that marker.
 
 ## Runnable end-to-end tutorial
 
@@ -258,6 +318,9 @@ deterministic Scenario CRUD, an independently authored candidate Policy
 comparison over one shared Scenario world, Native and ProbLog profiles,
 `WeightedChoice`, sealed V2 Result/Explain views, declared-decimal →
 `problog_float64_v1` materialization (including explicit `p=0` omission), and
-detached replay. It also asserts the explicit current boundaries: Native and
+detached replay. It also builds a first-class Product Function, connects it to
+a Rule occurrence as a Policy peer, runs its one pre-materialized relation
+through real Native/Soufflé/ProbLog, inspects structured Function Explain data,
+and verifies replay does not call Python. It asserts the explicit current boundaries: Native and
 Soufflé have `unsupported` V2 probability frames and a V2 EvidenceGraph is
 reported unavailable when it was not captured rather than reconstructed.

@@ -630,6 +630,165 @@ class EvaluationSelectedRowV2:
         object.__setattr__(self, "observation_digest", observation_digest)
 
 
+@dataclass(frozen=True)
+class EvaluationFunctionCallV2:
+    """One sealed pure Function call materialized before engine execution."""
+
+    occurrence_alias: str
+    function_digest: str
+    implementation_digest: str
+    relation_predicate_id: str
+    call_key: str
+    inputs: tuple[tuple[str, GoalValueV1], ...]
+    output: tuple[str, GoalValueV1]
+    call_digest: str = field(init=False)
+
+    def __post_init__(self) -> None:
+        for name in ("occurrence_alias", "relation_predicate_id", "call_key"):
+            _require_non_empty_str(
+                getattr(self, name), field_name=f"EvaluationFunctionCallV2.{name}"
+            )
+        for name in ("function_digest", "implementation_digest"):
+            _require_token(getattr(self, name), field_name=f"EvaluationFunctionCallV2.{name}")
+        if not isinstance(self.inputs, tuple) or not self.inputs:
+            raise ProtocolShapeError("EvaluationFunctionCallV2.inputs must be non-empty tuple")
+        normalized: list[tuple[str, GoalValueV1]] = []
+        for name, value in self.inputs:
+            _require_non_empty_str(name, field_name="EvaluationFunctionCallV2.inputs.name")
+            fresh = GoalValueV1(value.tag, value.value)
+            if fresh.value_digest != value.value_digest:
+                raise ProtocolShapeError("EvaluationFunctionCallV2 input value seal is stale")
+            normalized.append((name, value))
+        inputs = tuple(sorted(normalized, key=lambda item: item[0]))
+        if len({name for name, _value in inputs}) != len(inputs):
+            raise ProtocolShapeError("EvaluationFunctionCallV2 input names must be unique")
+        if (
+            not isinstance(self.output, tuple)
+            or len(self.output) != 2
+            or not isinstance(self.output[0], str)
+            or not isinstance(self.output[1], GoalValueV1)
+        ):
+            raise ProtocolShapeError("EvaluationFunctionCallV2.output is malformed")
+        _require_non_empty_str(self.output[0], field_name="EvaluationFunctionCallV2.output.name")
+        fresh_output = GoalValueV1(self.output[1].tag, self.output[1].value)
+        if fresh_output.value_digest != self.output[1].value_digest:
+            raise ProtocolShapeError("EvaluationFunctionCallV2 output value seal is stale")
+        expected = _token(
+            "evaluation_function_call_v2",
+            {
+                "occurrence_alias": self.occurrence_alias,
+                "function_digest": self.function_digest,
+                "implementation_digest": self.implementation_digest,
+                "relation_predicate_id": self.relation_predicate_id,
+                "call_key": self.call_key,
+                "inputs": tuple((name, value.value_digest) for name, value in inputs),
+                "output": (self.output[0], self.output[1].value_digest),
+            },
+        )
+        if hasattr(self, "call_digest"):
+            if self.inputs != inputs or self.call_digest != expected:
+                raise ProtocolShapeError("EvaluationFunctionCallV2 seal is stale")
+            return
+        object.__setattr__(self, "inputs", inputs)
+        object.__setattr__(self, "call_digest", expected)
+
+
+@dataclass(frozen=True)
+class EvaluationFunctionMaterializationV2:
+    """All calls for one Function occurrence in one captured world side."""
+
+    occurrence_alias: str
+    function_digest: str
+    signature_digest: str
+    implementation_digest: str
+    relation_predicate_id: str
+    ports: tuple[tuple[str, str, Literal["input", "output"]], ...]
+    calls: tuple[EvaluationFunctionCallV2, ...]
+    materialization_digest: str = field(init=False)
+
+    def __post_init__(self) -> None:
+        _require_non_empty_str(
+            self.occurrence_alias,
+            field_name="EvaluationFunctionMaterializationV2.occurrence_alias",
+        )
+        _require_non_empty_str(
+            self.relation_predicate_id,
+            field_name="EvaluationFunctionMaterializationV2.relation_predicate_id",
+        )
+        for name in ("function_digest", "signature_digest", "implementation_digest"):
+            _require_token(
+                getattr(self, name),
+                field_name=f"EvaluationFunctionMaterializationV2.{name}",
+            )
+        if not isinstance(self.ports, tuple) or len(self.ports) < 2:
+            raise ProtocolShapeError("EvaluationFunctionMaterializationV2.ports are malformed")
+        ports: list[tuple[str, str, Literal["input", "output"]]] = []
+        for item in self.ports:
+            if (
+                not isinstance(item, tuple)
+                or len(item) != 3
+                or not isinstance(item[0], str)
+                or item[1] not in {"string", "int", "float64", "bool", "time", "uuid"}
+                or item[2] not in {"input", "output"}
+            ):
+                raise ProtocolShapeError("EvaluationFunctionMaterializationV2 port is malformed")
+            _require_non_empty_str(
+                item[0], field_name="EvaluationFunctionMaterializationV2.ports.name"
+            )
+            ports.append(item)  # type: ignore[arg-type]
+        if (
+            len({name for name, _tag, _mode in ports}) != len(ports)
+            or sum(mode == "output" for _name, _tag, mode in ports) != 1
+            or ports[-1][2] != "output"
+            or any(mode != "input" for _name, _tag, mode in ports[:-1])
+        ):
+            raise ProtocolShapeError(
+                "EvaluationFunctionMaterializationV2 ports must be ordered inputs plus one output"
+            )
+        canonical_ports = tuple(ports)
+        if not isinstance(self.calls, tuple) or not all(
+            isinstance(item, EvaluationFunctionCallV2) for item in self.calls
+        ):
+            raise ProtocolShapeError("EvaluationFunctionMaterializationV2.calls are malformed")
+        calls = tuple(sorted(self.calls, key=lambda item: item.call_digest))
+        if len({item.call_digest for item in calls}) != len(calls):
+            raise ProtocolShapeError("EvaluationFunctionMaterializationV2 calls must be unique")
+        if any(
+            item.occurrence_alias != self.occurrence_alias
+            or item.function_digest != self.function_digest
+            or item.implementation_digest != self.implementation_digest
+            or item.relation_predicate_id != self.relation_predicate_id
+            or tuple((name, value.tag, "input") for name, value in item.inputs)
+            != canonical_ports[:-1]
+            or (item.output[0], item.output[1].tag, "output") != canonical_ports[-1]
+            for item in calls
+        ):
+            raise ProtocolShapeError("EvaluationFunctionMaterializationV2 call pins mismatch")
+        expected = _token(
+            "evaluation_function_materialization_v2",
+            {
+                "occurrence_alias": self.occurrence_alias,
+                "function_digest": self.function_digest,
+                "signature_digest": self.signature_digest,
+                "implementation_digest": self.implementation_digest,
+                "relation_predicate_id": self.relation_predicate_id,
+                "ports": canonical_ports,
+                "calls": tuple(item.call_digest for item in calls),
+            },
+        )
+        if hasattr(self, "materialization_digest"):
+            if (
+                self.ports != canonical_ports
+                or self.calls != calls
+                or self.materialization_digest != expected
+            ):
+                raise ProtocolShapeError("EvaluationFunctionMaterializationV2 seal is stale")
+            return
+        object.__setattr__(self, "calls", calls)
+        object.__setattr__(self, "ports", canonical_ports)
+        object.__setattr__(self, "materialization_digest", expected)
+
+
 def _assert_selected_row_v2_current(value: EvaluationSelectedRowV2) -> None:
     if not isinstance(value, EvaluationSelectedRowV2):
         raise ProtocolShapeError("EvaluationEngineFrameV2 observation is malformed")
@@ -953,6 +1112,7 @@ class EvaluationRunSideV2:
     world_capture_digest: str
     engine_frames: tuple[EvaluationEngineFrameV2, ...]
     expectation_support: EvaluationExpectationSupportV2 = "not_requested"
+    function_materializations: tuple[EvaluationFunctionMaterializationV2, ...] = ()
     side_digest: str = field(init=False)
 
     def __post_init__(self) -> None:
@@ -969,6 +1129,18 @@ class EvaluationRunSideV2:
             _assert_engine_frame_v2_current(item)
         if len({item.engine for item in self.engine_frames}) != len(self.engine_frames):
             raise ProtocolShapeError("EvaluationRunSideV2 engine frames must be unique")
+        if not isinstance(self.function_materializations, tuple) or not all(
+            isinstance(item, EvaluationFunctionMaterializationV2)
+            for item in self.function_materializations
+        ):
+            raise ProtocolShapeError("EvaluationRunSideV2 function materializations are malformed")
+        function_materializations = tuple(
+            sorted(self.function_materializations, key=lambda item: item.occurrence_alias)
+        )
+        if len({item.occurrence_alias for item in function_materializations}) != len(
+            function_materializations
+        ):
+            raise ProtocolShapeError("EvaluationRunSideV2 Function occurrences must be unique")
         _require_literal(
             self.expectation_support,
             field_name="EvaluationRunSideV2.expectation_support",
@@ -982,12 +1154,19 @@ class EvaluationRunSideV2:
                 "world_capture_digest": self.world_capture_digest,
                 "frames": tuple(item.frame_digest for item in self.engine_frames),
                 "expectation_support": self.expectation_support,
+                "function_materializations": tuple(
+                    item.materialization_digest for item in function_materializations
+                ),
             },
         )
         if hasattr(self, "side_digest"):
-            if self.side_digest != expected_digest:
+            if (
+                self.function_materializations != function_materializations
+                or self.side_digest != expected_digest
+            ):
                 raise ProtocolShapeError("EvaluationRunSideV2.side_digest is stale")
             return
+        object.__setattr__(self, "function_materializations", function_materializations)
         object.__setattr__(self, "side_digest", expected_digest)
 
 
@@ -1000,6 +1179,7 @@ def _assert_run_side_v2_current(value: EvaluationRunSideV2) -> None:
         world_capture_digest=value.world_capture_digest,
         engine_frames=value.engine_frames,
         expectation_support=value.expectation_support,
+        function_materializations=value.function_materializations,
     )
     if fresh.side_digest != value.side_digest:
         raise ProtocolShapeError("EvaluationRunV2 side seal is stale")
@@ -1221,6 +1401,21 @@ class EvaluationRunV2:
             if self.profile.kind == "native_deterministic_v2":
                 if frames["native"].status != "succeeded":
                     raise ProtocolShapeError("native deterministic V2 run requires native success")
+            elif self.profile.kind == "portable_deterministic_v2":
+                if any(frames[engine].status != "succeeded" for engine in expected_engines):
+                    raise ProtocolShapeError(
+                        "portable deterministic V2 run requires all three engine successes"
+                    )
+                if any(
+                    observation.point_probability is not None
+                    for frame in frames.values()
+                    for observation in frame.observations
+                ) or any(
+                    frame.probability_materialization is not None for frame in frames.values()
+                ):
+                    raise ProtocolShapeError(
+                        "portable deterministic V2 frames cannot carry probability semantics"
+                    )
             else:
                 if not isinstance(self.profile.semantics, ProbLogPointSemanticsV2):
                     raise ProtocolShapeError("ProbLog point V2 run has malformed profile semantics")
@@ -1349,6 +1544,43 @@ def _rebuild_engine_frame_v2(value: EvaluationEngineFrameV2) -> EvaluationEngine
     return fresh
 
 
+def _rebuild_function_materialization_v2(
+    value: EvaluationFunctionMaterializationV2,
+) -> EvaluationFunctionMaterializationV2:
+    if not isinstance(value, EvaluationFunctionMaterializationV2):
+        raise ProtocolShapeError("EvaluationRunV2 Function materialization is malformed")
+    calls = tuple(
+        EvaluationFunctionCallV2(
+            occurrence_alias=item.occurrence_alias,
+            function_digest=item.function_digest,
+            implementation_digest=item.implementation_digest,
+            relation_predicate_id=item.relation_predicate_id,
+            call_key=item.call_key,
+            inputs=tuple(
+                (name, GoalValueV1(port_value.tag, port_value.value))
+                for name, port_value in item.inputs
+            ),
+            output=(
+                item.output[0],
+                GoalValueV1(item.output[1].tag, item.output[1].value),
+            ),
+        )
+        for item in value.calls
+    )
+    fresh = EvaluationFunctionMaterializationV2(
+        occurrence_alias=value.occurrence_alias,
+        function_digest=value.function_digest,
+        signature_digest=value.signature_digest,
+        implementation_digest=value.implementation_digest,
+        relation_predicate_id=value.relation_predicate_id,
+        ports=value.ports,
+        calls=calls,
+    )
+    if fresh.materialization_digest != value.materialization_digest:
+        raise ProtocolShapeError("EvaluationRunV2 Function materialization seal is stale")
+    return fresh
+
+
 def _rebuild_run_side_v2(value: EvaluationRunSideV2) -> EvaluationRunSideV2:
     if not isinstance(value, EvaluationRunSideV2):
         raise ProtocolShapeError("EvaluationRunV2 side is malformed")
@@ -1358,6 +1590,9 @@ def _rebuild_run_side_v2(value: EvaluationRunSideV2) -> EvaluationRunSideV2:
         world_capture_digest=value.world_capture_digest,
         engine_frames=tuple(_rebuild_engine_frame_v2(item) for item in value.engine_frames),
         expectation_support=value.expectation_support,
+        function_materializations=tuple(
+            _rebuild_function_materialization_v2(item) for item in value.function_materializations
+        ),
     )
     if fresh.side_digest != value.side_digest:
         raise ProtocolShapeError("EvaluationRunV2 side seal is stale")
@@ -1529,6 +1764,8 @@ __all__ = [
     "EvaluationProbabilityMaterializationActionV2",
     "EvaluationProbabilityMaterializationEntryV2",
     "EvaluationProbabilityMaterializationV2",
+    "EvaluationFunctionCallV2",
+    "EvaluationFunctionMaterializationV2",
     "EvaluationReplayPayloadV2",
     "EvaluationReplayWorldV2",
     "EvaluationRunFrameStatusV2",

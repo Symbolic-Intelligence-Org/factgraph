@@ -11,6 +11,8 @@ from .rule_expr_inspect import _render_ast_compact, _render_join, _render_repr_t
 
 @dataclass(frozen=True)
 class FreeVar:
+    """A free structural variable, optionally associated with a public port."""
+
     name: str
     port_name: str | None = None
 
@@ -21,6 +23,8 @@ class FreeVar:
 
 @dataclass(frozen=True)
 class Const:
+    """A literal constant in a structural condition form."""
+
     value: Any
 
 
@@ -76,6 +80,8 @@ StructureAtomForm: TypeAlias = Fact | Compare | Builtin | Aggregate
 
 @dataclass(frozen=True)
 class StructurePort:
+    """Public port metadata in an authored Rule structure."""
+
     name: str
     kind: Literal["entity_ref", "value"]
     entity_type: str | None = None
@@ -91,6 +97,8 @@ class StructurePort:
 
 @dataclass(frozen=True)
 class StructurePortRef:
+    """Reference to one public port on one structural occurrence."""
+
     occurrence_alias: str
     port_name: str
     rule_id: str | None = None
@@ -103,6 +111,8 @@ class StructurePortRef:
 
 @dataclass(frozen=True)
 class StructureAtom:
+    """One authored structural condition with optional normalized form."""
+
     atom_id: str
     kind: str
     form: StructureAtomForm | None = None
@@ -133,6 +143,8 @@ class StructureAtom:
 
 @dataclass(frozen=True)
 class StructureJoin:
+    """One equality join between two structural port references."""
+
     left: StructurePortRef
     right: StructurePortRef
     join_id: str
@@ -148,6 +160,8 @@ class StructureJoin:
 
 @dataclass(frozen=True)
 class StructureHeadLink:
+    """Link from a compiled head port to its source occurrence port."""
+
     head_port_name: str
     source_occurrence_alias: str
     source_port_name: str
@@ -163,6 +177,8 @@ class StructureHeadLink:
 
 @dataclass(frozen=True)
 class StructureOccurrence:
+    """One authored Rule occurrence in a structural branch."""
+
     occurrence_alias: str
     rule_id: str
     role: Literal["head", "body"]
@@ -188,19 +204,24 @@ class StructureOccurrence:
 
     @property
     def alias(self) -> str:
+        """Return the occurrence alias."""
         return self.occurrence_alias
 
     @property
     def template_id(self) -> str:
+        """Return the authored Rule id used by this occurrence."""
         return self.rule_id
 
     @property
     def repr_template(self) -> str | None:
+        """Return the optional authored representation template."""
         return self.repr_text
 
 
 @dataclass(frozen=True)
 class StructureBranch:
+    """One canonical structural branch with occurrences, joins and head links."""
+
     branch_id: str
     path: tuple[int, ...]
     occurrences: tuple[StructureOccurrence, ...]
@@ -217,6 +238,8 @@ class StructureBranch:
 
 @dataclass(frozen=True)
 class HeadClosure:
+    """Closure assessment for an inspected Rule head."""
+
     is_closed: bool
     unbound_ports: tuple[str, ...]
 
@@ -228,6 +251,8 @@ class HeadClosure:
 
 @dataclass(frozen=True)
 class RuleStructure:
+    """Canonical authored topology for Rule/Policy inspection and Explain."""
+
     structure_id: str
     source_kind: Literal["rule", "rule_expr"]
     head_rule_id: str
@@ -268,6 +293,7 @@ class RuleStructure:
 
     @property
     def occurrences(self) -> tuple[StructureOccurrence, ...]:
+        """Return distinct occurrences across all structural branches."""
         if self._floor_occurrences:
             return self._floor_occurrences
         seen: set[str] = set()
@@ -282,10 +308,12 @@ class RuleStructure:
 
     @property
     def joins(self) -> tuple[RuleJoinConstraint, ...]:
+        """Return top-level explicit join constraints."""
         return self._floor_joins
 
     @property
     def templates(self) -> tuple[str, ...]:
+        """Return distinct authored Rule ids in encounter order."""
         seen: set[str] = set()
         out: list[str] = []
         for occurrence in self.occurrences:
@@ -296,17 +324,28 @@ class RuleStructure:
 
     @property
     def port_visibility(self) -> Mapping[str, tuple[str, ...]]:
+        """Return visible public port names by occurrence alias."""
         return MappingProxyType({occurrence.occurrence_alias: occurrence.port_names for occurrence in self.occurrences})
 
     @property
     def is_closed(self) -> bool:
+        """Return whether every head port is pinned by the inspected body."""
         return False if self.head_closure is None else self.head_closure.is_closed
 
     @property
     def unbound_ports(self) -> tuple[str, ...]:
+        """Return head ports that prevent the structure from being closed."""
         return () if self.head_closure is None else self.head_closure.unbound_ports
 
     def render(self, bindings: Mapping[str, object] | None = None) -> str:
+        """Render the authored structure with optional port bindings.
+
+        Args:
+            bindings: Optional values used in representation templates.
+
+        Returns:
+            A deterministic structural text rendering.
+        """
         if not self.ast:
             return ""
         values = {} if bindings is None else bindings
@@ -323,11 +362,13 @@ class RuleStructure:
         return " | ".join(piece for piece in pieces if piece)
 
     def render_compact(self) -> str:
+        """Return a compact deterministic rendering of the structure AST."""
         if not self.ast:
             return ""
         return _render_ast_compact(self.ast)
 
     def narrate(self) -> tuple[str, ...]:
+        """Return human-readable lines describing the authored topology."""
         from .structure_render import narrate_structure
 
         return narrate_structure(self)

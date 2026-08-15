@@ -31,7 +31,11 @@ from .scenario_v2 import FactSemanticsV2
 
 
 EvaluationEngineV2: TypeAlias = Literal["native", "souffle", "problog"]
-EvaluationProfileKindV2: TypeAlias = Literal["native_deterministic_v2", "problog_point_v2"]
+EvaluationProfileKindV2: TypeAlias = Literal[
+    "native_deterministic_v2",
+    "portable_deterministic_v2",
+    "problog_point_v2",
+]
 EvaluationTargetSideV2: TypeAlias = Literal["primary", "candidate"]
 EvaluationAttachmentKindV2: TypeAlias = Literal["rule", "occurrence", "choice"]
 EvaluationAttachmentSemanticsKindV2: TypeAlias = Literal[
@@ -42,7 +46,9 @@ EvaluationAttachmentSemanticsKindV2: TypeAlias = Literal[
 EvaluationCaptureModeV2: TypeAlias = Literal["sealed_replay_required"]
 
 _ENGINES = frozenset({"native", "souffle", "problog"})
-_PROFILE_KINDS = frozenset({"native_deterministic_v2", "problog_point_v2"})
+_PROFILE_KINDS = frozenset(
+    {"native_deterministic_v2", "portable_deterministic_v2", "problog_point_v2"}
+)
 _TARGET_SIDES = frozenset({"primary", "candidate"})
 _TARGET_KINDS = frozenset({"rule", "policy"})
 _ATTACHMENT_KINDS = frozenset({"rule", "occurrence", "choice"})
@@ -56,6 +62,7 @@ _ATTACHMENT_SEMANTICS_KINDS = frozenset(
 _CAPTURE_MODES = frozenset({"sealed_replay_required"})
 _PROFILE_ENGINE_ORDER: dict[str, tuple[str, ...]] = {
     "native_deterministic_v2": ("native",),
+    "portable_deterministic_v2": ("native", "souffle", "problog"),
     # The latter two frames are explicitly represented as unsupported by a
     # V2 point-probability runner; their pins prevent a fake fallback.
     "problog_point_v2": ("problog", "native", "souffle"),
@@ -176,6 +183,7 @@ class EvaluationEnginePinV2:
         )
 
     def to_wire(self) -> dict[str, str]:
+        """Return the canonical engine/adapter pin payload."""
         return {
             "engine": self.engine,
             "engine_version": self.engine_version,
@@ -213,6 +221,7 @@ class EvaluationResourcePolicyV2:
         )
 
     def to_wire(self) -> dict[str, int | None]:
+        """Return the canonical closed resource-policy payload."""
         return {"max_rows": self.max_rows, "timeout_ms": self.timeout_ms}
 
 
@@ -243,6 +252,7 @@ class EvaluationCapturePolicyV2:
         )
 
     def to_wire(self) -> dict[str, int | str]:
+        """Return the canonical replay-capture policy payload."""
         return {"mode": self.mode, "max_capture_bytes": self.max_capture_bytes}
 
 
@@ -263,6 +273,7 @@ class DeterministicSemanticsV2:
         )
 
     def to_wire(self) -> dict[str, str]:
+        """Return the canonical deterministic-semantics payload."""
         return {"kind": "deterministic", "model": self.model}
 
 
@@ -303,6 +314,7 @@ class ProbLogPointSemanticsV2:
         )
 
     def to_wire(self) -> dict[str, object]:
+        """Return the canonical ProbLog point-semantics payload."""
         return {
             "kind": "problog_point",
             "model": self.model,
@@ -352,6 +364,7 @@ class EvaluationTargetPinV2:
         )
 
     def to_wire(self) -> dict[str, object]:
+        """Return the canonical side-specific target pin payload."""
         return {
             "side": self.side,
             "target_kind": self.target_kind,
@@ -381,6 +394,7 @@ class ExecutionAttachmentSemanticsV2:
         )
 
     def to_wire(self) -> dict[str, str]:
+        """Return the canonical attachment-semantics marker."""
         return {"kind": self.kind}
 
 
@@ -507,6 +521,7 @@ class ExecutionAttachmentV2:
             raise ProtocolShapeError("choice attachment cannot carry Rule/occurrence fields")
 
     def to_wire(self) -> dict[str, object]:
+        """Return the canonical authored execution-attachment payload."""
         return {
             "kind": self.kind,
             "target": self.target.to_wire(),
@@ -766,7 +781,7 @@ class EvaluationExecutionProfileV2:
             raise ProtocolShapeError(
                 "EvaluationExecutionProfileV2 engines do not match profile kind"
             )
-        if self.kind == "native_deterministic_v2":
+        if self.kind in {"native_deterministic_v2", "portable_deterministic_v2"}:
             if not isinstance(self.semantics, DeterministicSemanticsV2):
                 raise ProtocolShapeError("native deterministic V2 profile has wrong semantic model")
         elif not isinstance(self.semantics, ProbLogPointSemanticsV2):
@@ -807,7 +822,7 @@ class EvaluationExecutionProfileV2:
             raise ProtocolShapeError(
                 "EvaluationExecutionProfileV2 attachment target must be declared by target_pins"
             )
-        if self.kind == "native_deterministic_v2" and attachments:
+        if self.kind in {"native_deterministic_v2", "portable_deterministic_v2"} and attachments:
             raise ProtocolShapeError(
                 "deterministic V2 profile does not accept probability attachments"
             )
@@ -836,10 +851,26 @@ class EvaluationExecutionProfileV2:
         object.__setattr__(self, "profile_digest", expected_digest)
 
     def to_bytes(self) -> bytes:
+        """Serialize this sealed profile to canonical V2 bytes.
+
+        Returns:
+            Canonical bytes that include all engine, target and attachment pins.
+        """
         return evaluation_execution_profile_v2_bytes(self)
 
     @classmethod
     def from_bytes(cls, raw: bytes) -> "EvaluationExecutionProfileV2":
+        """Decode and validate a canonical V2 execution profile.
+
+        Args:
+            raw: Canonical bytes produced by ``to_bytes()``.
+
+        Returns:
+            A fully validated sealed execution profile.
+
+        Raises:
+            ProtocolShapeError: If the payload or any nested seal is invalid.
+        """
         result = evaluation_execution_profile_v2_from_bytes(raw)
         if not isinstance(result, cls):  # pragma: no cover - defensive boundary
             raise ProtocolShapeError("EvaluationExecutionProfileV2 codec returned wrong type")

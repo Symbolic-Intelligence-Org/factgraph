@@ -66,12 +66,14 @@ claim cross-engine proof, provenance, certainty, or arbitrary-language
 equivalence. The final cross-entity field-navigation/comparison example is
 included specifically to exercise two occurrences of the same predicate.
 
-## Complete Q20 product workflow
+## Complete Product V2 workflow (Q20 + Q21)
 
 [`09_product_scenario_execution_v2.ipynb`](09_product_scenario_execution_v2.ipynb)
-is the complete runnable Q20 product workflow. It executes both the symmetric
+is the complete runnable Product V2 workflow. It executes both the symmetric
 `rule_builder` / `build_rule` and `policy_builder` / `build_policy` forms,
-`AssetMeta`, rich typed Policy comparisons, and the same
+an SDK-owned durable `FactGraph.create(path=...)` / `load_workspace(...)`
+connection plus a caller-owned `Database.create(...)` / `FactGraph.attach(...)`
+connection, `AssetMeta`, rich typed Policy comparisons, and the same
 `fg.query(...).bind(...).select(...).plan(...).run()` terminal. It then shows
 deterministic Scenario CRUD (`set` / `add` / `set_exact` / `without`) without a
 ledger write, an independently authored candidate Policy pinned with
@@ -79,7 +81,12 @@ ledger write, an independently authored candidate Policy pinned with
 world, named baseline/effective/candidate ResultViews, target-scoped
 deterministic and ProbLog profiles, explicit exclusive `WeightedChoice`,
 structured Result/Explain views, declared-decimal → `problog_float64_v1`
-materialization (including the explicit `p=0` omission), and detached replay.
+materialization (including the explicit `p=0` omission), first-class Product
+Function authoring/composition, and detached replay. The Function section
+connects a pure scalar Function to a Rule occurrence as a peer Policy node,
+executes the same pre-materialized relation through real Native, Soufflé and
+ProbLog, inspects the structured call capture, and confirms replay does not
+invoke Python.
 
 It intentionally makes the current probability/evidence boundary visible:
 ProbLog is the sole V2 point-probability engine, while Native and Soufflé are

@@ -52,7 +52,7 @@ data = evaluation_explanation_data_v2_from_evaluation_run_v2(
 # `result.probability_materialization` / `data.probability_materialization`
 # for the declared decimal and its explicit float64 engine projection.
 # `data.scenario` carries captured world/fact/provenance lanes; `data.profile`,
-# `data.asset`, and `data.choice` expose their sealed captures.
+# `data.asset`, `data.choice`, and `data.functions` expose their sealed captures.
 ```
 
 ## Explicit target and proof rules
@@ -92,6 +92,11 @@ data = evaluation_explanation_data_v2_from_evaluation_run_v2(
   evidence exists;
 - `comparison` — non-causal sealed candidate/scenario comparison data when it
   is available; and
+- `functions` — replay-validated Product Function definition pins and the
+  selected side's typed pre-engine calls/materialization digests. This section
+  may contain the complete upstream occurrence materialization rather than
+  only calls matching the selected row; it never contains executable Python;
+  and
 - `boundaries` — explicit `not_claimed` proof-parity, negative-proof, source
   authority and action-authorization boundaries.
 
@@ -116,6 +121,15 @@ materialization. For a V2 `WeightedChoice`, the validated replay-program
 capture may also expose the sealed authored topology (selection key, arms,
 weights, and condition ids). It is never reconstructed from a live Policy or
 an engine proof; an absent capture remains explicitly `not_captured`.
+
+For a V2 Product Function, the validated replay-program capture exposes the
+Function id/version/signature/implementation and asset-binding pins, ordered
+typed ports, and Rule-port input edges. The run side independently exposes
+each materialized call key, typed input/output values, and materialization
+digest. Replay consumes these sealed calls and never invokes the callable.
+The Function capture is structured explanation data even when
+`evidence.graph is None`; no `EvidenceTree.Source` or Policy proof node is
+invented merely to make a renderer look complete.
 
 ## Evidence source and provenance boundary
 

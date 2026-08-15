@@ -19,6 +19,8 @@ class ExplicitBoolError(RuleExprError):
 
 @dataclass(frozen=True, eq=False)
 class RuleJoinConstraint:
+    """Explicit equality join between ports of two Rule occurrences."""
+
     left: RulePortRef
     right: RulePortRef
     op: Literal["eq"] = "eq"
@@ -45,10 +47,26 @@ class RuleExpr:
 
     @staticmethod
     def all(*operands: object) -> _RuleExpr:
+        """Compose Rule occurrences with explicit logical conjunction.
+
+        Args:
+            *operands: Rules, occurrences, RuleExpr groups, or join constraints.
+
+        Returns:
+            A canonical conjunction expression.
+        """
         return _combine("and", operands)
 
     @staticmethod
     def any(*operands: object) -> _RuleExpr:
+        """Compose Rule occurrences with explicit logical disjunction.
+
+        Args:
+            *operands: Rules, occurrences, or compatible RuleExpr groups.
+
+        Returns:
+            A canonical disjunction expression.
+        """
         return _combine("or", operands)
 
     def __and__(self, other: object) -> _RuleExpr:

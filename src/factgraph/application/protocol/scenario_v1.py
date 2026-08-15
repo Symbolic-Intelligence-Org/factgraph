@@ -151,6 +151,15 @@ class ScenarioValueV1:
 
     @classmethod
     def from_raw(cls, tag: ScenarioValueTagV1, value: Any) -> "ScenarioValueV1":
+        """Normalize one Python value into canonical Scenario storage.
+
+        Args:
+            tag: Canonical scalar/entity value tag.
+            value: Python value to normalize.
+
+        Returns:
+            A detached canonical Scenario value.
+        """
         if tag not in _VALUE_TAGS:
             raise ProtocolShapeError("ScenarioValueV1.tag must be a supported tup_v1 tag")
         try:
@@ -160,10 +169,12 @@ class ScenarioValueV1:
         return cls(tag=tag, value=normalized)
 
     def to_raw(self) -> Any:
+        """Return the canonical Python representation of this stored value."""
         return _raw_value(self.tag, self.value)
 
     @property
     def value_digest(self) -> str:
+        """Return the digest of the canonical tag/value pair."""
         return _token("scenario_value_v1", {"tag": self.tag, "value": self.value})
 
 
@@ -201,6 +212,8 @@ class _ScenarioFieldOperationBaseV1:
 
 @dataclass(frozen=True)
 class ScenarioSetEffectiveValueV1(_ScenarioFieldOperationBaseV1):
+    """Replace one single-valued field in the run-local effective world."""
+
     value: ScenarioValueV1 = dc_field(default_factory=lambda: ScenarioValueV1("string", ""))
     statement_digest: str = dc_field(init=False)
 
@@ -220,6 +233,8 @@ class ScenarioSetEffectiveValueV1(_ScenarioFieldOperationBaseV1):
 
 @dataclass(frozen=True)
 class ScenarioEnsureMemberV1(_ScenarioFieldOperationBaseV1):
+    """Ensure one value exists in a run-local multi-valued field."""
+
     value: ScenarioValueV1 = dc_field(default_factory=lambda: ScenarioValueV1("string", ""))
     statement_digest: str = dc_field(init=False)
 
@@ -239,6 +254,8 @@ class ScenarioEnsureMemberV1(_ScenarioFieldOperationBaseV1):
 
 @dataclass(frozen=True)
 class ScenarioSetExactMembersV1(_ScenarioFieldOperationBaseV1):
+    """Replace a run-local multi-valued field with an exact member set."""
+
     values: tuple[ScenarioValueV1, ...] = ()
     statement_digest: str = dc_field(init=False)
 
@@ -269,6 +286,8 @@ class ScenarioSetExactMembersV1(_ScenarioFieldOperationBaseV1):
 
 @dataclass(frozen=True)
 class ScenarioWithoutFieldV1(_ScenarioFieldOperationBaseV1):
+    """Remove every effective value for one entity field."""
+
     statement_digest: str = dc_field(init=False)
 
     def __post_init__(self) -> None:
@@ -280,6 +299,8 @@ class ScenarioWithoutFieldV1(_ScenarioFieldOperationBaseV1):
 
 @dataclass(frozen=True)
 class ScenarioWithoutValueV1(_ScenarioFieldOperationBaseV1):
+    """Remove one effective value from a multi-valued field."""
+
     value: ScenarioValueV1 = dc_field(default_factory=lambda: ScenarioValueV1("string", ""))
     statement_digest: str = dc_field(init=False)
 
@@ -346,6 +367,8 @@ class ScenarioEnsureRelationV1:
 
 @dataclass(frozen=True)
 class ScenarioWithoutRelationV1:
+    """Remove effective facts for one relation predicate."""
+
     premise_id: str
     predicate_id: str
     origin_refs: tuple[str, ...] = ()
@@ -379,6 +402,8 @@ class ScenarioWithoutRelationV1:
 
 @dataclass(frozen=True)
 class ScenarioWithoutEntityV1:
+    """Remove one entity and its effective dependent facts."""
+
     premise_id: str
     entity: EntityRef
     origin_refs: tuple[str, ...] = ()
@@ -452,6 +477,8 @@ class ScenarioWithoutAssertionV1:
 
 @dataclass(frozen=True)
 class ScenarioCreateEphemeralEntityV1:
+    """Create one run-local entity that is never written to the ledger."""
+
     premise_id: str
     entity: EntityRef
     origin_refs: tuple[str, ...] = ()

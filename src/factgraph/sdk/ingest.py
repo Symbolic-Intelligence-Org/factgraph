@@ -74,6 +74,8 @@ DEDUP_AFFECTING_META_KEYS: frozenset[str] = frozenset({"source", "source_loc", "
 
 @dataclass(frozen=True)
 class IngestResult:
+    """Summary, diagnostics and assertion ids produced by SDK ingest."""
+
     written_assertion_ids: list[str]
     skipped_count: int
     duplicate_count: int
@@ -84,6 +86,8 @@ class IngestResult:
 
 @dataclass(frozen=True)
 class ValidationReport:
+    """Structured validation status, warnings and errors for ingest provenance."""
+
     ok: bool
     warnings: list[dict[str, Any]]
     errors: list[dict[str, Any]]

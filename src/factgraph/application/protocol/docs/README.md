@@ -418,6 +418,47 @@ Run's capture. It makes neither an EvidenceGraph claim nor a causal claim;
 ordinary Query runs cannot obtain a Scenario diff merely because the V1 Run
 shape always has baseline/effective sides.
 
+### 2.8 Product V2 Function capability
+
+`ProductFunctionV1` is a Product asset parallel to `ProductRuleV1`; neither
+type may contain or call the other. Policy is the only composition layer. An
+intrinsic `PolicyFunctionOccurrenceV1` retains the Function identity, typed
+ports and Rule-port input edges in the authored AST. Legacy/V1 Policy
+compilation rejects this marker with `FUNCTION_V2_ONLY`, including after an
+ordinary `Policy` rewrap. Only the controlled Product V2 compiler may lower it
+to an internal relation-backed Rule occurrence.
+
+The first Function protocol is deliberately narrow: at least one ordered
+scalar input, one fresh scalar output, synchronous trusted in-process Python,
+and pure deterministic total semantics. Inputs must be direct scalar ports of
+one Rule occurrence and are branch-total. Function-to-Function edges, field
+navigation, output binding, Rule-body calls, nested calls, actions, aggregate,
+streaming and asynchronous output are outside the contract.
+
+Each Function occurrence derives a reserved call-identity entity and one
+binary predicate per input/output port. Per run side, V2 first evaluates the
+upstream Rule projection over the sealed source world, invokes the callable
+once per distinct typed input row, validates one typed output, and inserts the
+port facts into an isolated execution Store. These reserved predicates never
+enter the ledger. `portable_deterministic_v2` executes Native, Soufflé and
+ProbLog against this same materialized relation and claims only normalized
+selected-row parity, never proof parity.
+
+`EvaluationFunctionCallV2` and `EvaluationFunctionMaterializationV2` seal each
+side's call key, typed inputs/output, definition/implementation pins and
+materialization digest. The V2 replay-program envelope separately seals the
+Function definition, asset descriptor/binding, topology, internal schema and
+compiled-program association. Detached replay validates both captures,
+injects the captured relation and never receives or invokes executable code.
+The structured Product Result/Explain adapters expose these definition and
+call records; they do not fabricate an EvidenceGraph when native Function
+evidence was not captured.
+
+An in-process callable is trusted code, not a sandbox. V2 detects a persistent
+source-view change around invocation and fails closed, but it cannot roll back
+an external side effect. The durable implementation digest is caller-supplied
+or derived at authoring time; the callable itself is never a replay artifact.
+
 ---
 
 ## 3. Non-responsibilities

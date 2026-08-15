@@ -139,6 +139,16 @@ class EvaluationRunV2RowView:
     values: tuple[ResultValueViewV2, ...]
 
     def to_explain_target(self) -> EvaluationRunV2ExplainTarget:
+        """Create the explicit Explain target for this exact observation.
+
+        Returns:
+            A run/side/engine/observation-pinned V2 Explain target.
+
+        Notes:
+            The target does not run Explain by itself and never chooses a
+            different or implicit first row. Pass this row or the returned
+            target to ``ProductEvaluationOutcomeV2.explain(...)``.
+        """
         return EvaluationRunV2ExplainTarget(
             run_digest=self.run_digest,
             side=self.side,
@@ -351,6 +361,79 @@ class ProbabilityMaterializationViewV2:
     entries: tuple[ProbabilityMaterializationEntryViewV2, ...]
 
 
+@dataclass(frozen=True)
+class FunctionPortViewV2:
+    name: str
+    tag: str
+    mode: str
+    predicate_id: str
+
+
+@dataclass(frozen=True)
+class FunctionInputBindingViewV2:
+    port_name: str
+    source_occurrence_alias: str
+    source_port_name: str
+
+
+@dataclass(frozen=True, repr=False)
+class FunctionCallViewV2:
+    call_digest: str
+    call_key: str
+    inputs: tuple[ResultValueViewV2, ...]
+    output: ResultValueViewV2
+
+    def __repr__(self) -> str:
+        return (
+            "FunctionCallViewV2("
+            f"call_digest={self.call_digest!r}, call_key=<opaque>, "
+            f"input_count={len(self.inputs)}, output=<redacted>)"
+        )
+
+
+@dataclass(frozen=True)
+class FunctionAssetViewV2:
+    descriptor_capture: CaptureStateViewV2
+    descriptor_digest: str
+    binding_digest: str
+    name: str | None = None
+    description: str | None = None
+    tags: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True, repr=False)
+class FunctionOccurrenceViewV2:
+    occurrence_alias: str
+    function_id: str
+    function_version: str | None
+    function_digest: str
+    signature_digest: str
+    implementation_digest: str
+    relation_predicate_id: str
+    topology_digest: str
+    ports: tuple[FunctionPortViewV2, ...]
+    input_bindings: tuple[FunctionInputBindingViewV2, ...]
+    calls: tuple[FunctionCallViewV2, ...]
+    asset: FunctionAssetViewV2
+    lifecycle: Literal["run_local_materialization"] = "run_local_materialization"
+    callable_capture: Literal["not_captured"] = "not_captured"
+
+    def __repr__(self) -> str:
+        return (
+            "FunctionOccurrenceViewV2("
+            f"occurrence_alias={self.occurrence_alias!r}, function_id={self.function_id!r}, "
+            f"function_digest={self.function_digest!r}, call_count={len(self.calls)}, "
+            "callable_capture='not_captured')"
+        )
+
+
+@dataclass(frozen=True)
+class FunctionCaptureViewV2:
+    definition_capture: CaptureStateViewV2
+    materialization_capture: CaptureStateViewV2
+    occurrences: tuple[FunctionOccurrenceViewV2, ...] = ()
+
+
 @dataclass(frozen=True, repr=False)
 class EvaluationRunV2ResultView:
     """Read-only presentation of one sealed V2 world side.
@@ -376,6 +459,7 @@ class EvaluationRunV2ResultView:
     asset: AssetDescriptorCaptureViewV2
     scenario: ScenarioCaptureViewV2
     choice: ChoiceCaptureViewV2
+    functions: FunctionCaptureViewV2
     expectation_support: str
     summary_capture: CaptureStateViewV2 = field(
         default_factory=lambda: CaptureStateViewV2(
@@ -432,6 +516,15 @@ class RowViewV2:
     values: tuple[ResultValueViewV2, ...]
 
     def to_explain_target(self) -> ExplainTargetV1:
+        """Create a V1 row Explain target from this exact row anchor.
+
+        Returns:
+            A side- and row-anchor-bound ``ExplainTargetV1``.
+
+        Notes:
+            This compatibility view never chooses another row and does not
+            behave like legacy ``EvaluateRow.close()``.
+        """
         return ExplainTargetV1(self.side, "row", self.anchor_digest)
 
     def __repr__(self) -> str:
@@ -456,6 +549,15 @@ class SummaryViewV2:
     negative_proof: Literal["not_claimed"] = "not_claimed"
 
     def to_explain_target(self) -> ExplainTargetV1:
+        """Create a V1 summary Explain target without a negative-proof claim.
+
+        Returns:
+            A side- and summary-anchor-bound ``ExplainTargetV1``.
+
+        Notes:
+            A zero-row summary remains descriptive and never fabricates a
+            failed EvidenceGraph or logical falsehood proof.
+        """
         return ExplainTargetV1(self.side, "summary", self.anchor_digest)
 
     def __repr__(self) -> str:
@@ -682,12 +784,16 @@ def result_view_v2_from_evaluation_run_v2(
             code="PRODUCT_VIEW_V2_SIDE_INVALID",
         )
     succeeded = tuple(frame for frame in selected_side.engine_frames if frame.status == "succeeded")
-    if len(succeeded) != 1:
+    if run.profile.kind == "portable_deterministic_v2":
+        selected_frames = tuple(frame for frame in succeeded if frame.engine == "native")
+    else:
+        selected_frames = succeeded
+    if len(selected_frames) != 1:
         raise ProductViewErrorV2(
-            "sealed V2 side does not identify exactly one successful engine frame",
+            "sealed V2 side does not identify one canonical successful engine frame",
             code="PRODUCT_VIEW_V2_ENGINE_FRAME_INVALID",
         )
-    frame = succeeded[0]
+    frame = selected_frames[0]
     rows = tuple(
         EvaluationRunV2RowView(
             run_digest=run.run_digest,
@@ -731,6 +837,7 @@ def result_view_v2_from_evaluation_run_v2(
         asset=_asset_descriptor_capture_view_v2(plan),
         scenario=_scenario_capture_view_v2(run, side=side),
         choice=_choice_capture_view_v2(run, side=side),
+        functions=_function_capture_view_v2(run, side=side),
         expectation_support=selected_side.expectation_support,
     )
 
@@ -1016,6 +1123,128 @@ def _choice_capture_view_v2(
     )
 
 
+def _function_capture_view_v2(
+    run: EvaluationRunV2,
+    *,
+    side: ProductRunSideV2,
+) -> FunctionCaptureViewV2:
+    selected_side = _run_side_v2(run, side)
+    if not selected_side.function_materializations:
+        return FunctionCaptureViewV2(
+            definition_capture=CaptureStateViewV2("not_applicable"),
+            materialization_capture=CaptureStateViewV2("not_applicable"),
+        )
+    try:
+        from .goal_plan_v2_runtime import function_capture_from_evaluation_run_v2
+
+        definitions = function_capture_from_evaluation_run_v2(
+            run,
+            side="candidate" if side == "candidate_effective" else "primary",
+        )
+    except Exception as exc:
+        raise ProductViewErrorV2(
+            "sealed V2 Function capture could not be validated",
+            code="PRODUCT_VIEW_V2_FUNCTION_CAPTURE_INVALID",
+        ) from exc
+    materializations = {
+        item.occurrence_alias: item for item in selected_side.function_materializations
+    }
+    if not definitions:
+        raise ProductViewErrorV2(
+            "Function materialization has no sealed definition",
+            code="PRODUCT_VIEW_V2_FUNCTION_CAPTURE_MISMATCH",
+        )
+    if set(materializations) != {item.occurrence_alias for item in definitions}:
+        raise ProductViewErrorV2(
+            "Function definitions do not exactly cover side materializations",
+            code="PRODUCT_VIEW_V2_FUNCTION_CAPTURE_MISMATCH",
+        )
+    occurrences: list[FunctionOccurrenceViewV2] = []
+    for definition in definitions:
+        materialization = materializations[definition.occurrence_alias]
+        if (
+            materialization.function_digest != definition.function_digest
+            or materialization.signature_digest != definition.signature_digest
+            or materialization.implementation_digest != definition.implementation_digest
+            or materialization.relation_predicate_id != definition.relation_predicate_id
+            or materialization.ports
+            != tuple((name, tag, mode) for name, tag, mode, _predicate in definition.ports)
+        ):
+            raise ProductViewErrorV2(
+                "Function materialization pins do not match its definition",
+                code="PRODUCT_VIEW_V2_FUNCTION_CAPTURE_MISMATCH",
+            )
+        try:
+            asset_meta = json.loads(definition.asset_meta_json)
+        except json.JSONDecodeError as exc:  # pragma: no cover - runner validated.
+            raise ProductViewErrorV2(
+                "Function asset descriptor is malformed",
+                code="PRODUCT_VIEW_V2_FUNCTION_CAPTURE_INVALID",
+            ) from exc
+        if asset_meta.get("state") == "absent":
+            asset = FunctionAssetViewV2(
+                descriptor_capture=CaptureStateViewV2(
+                    "not_captured", "V2_FUNCTION_ASSET_DESCRIPTOR_ABSENT"
+                ),
+                descriptor_digest=definition.asset_descriptor_digest,
+                binding_digest=definition.asset_binding_digest,
+            )
+        else:
+            asset = FunctionAssetViewV2(
+                descriptor_capture=CaptureStateViewV2("captured"),
+                descriptor_digest=definition.asset_descriptor_digest,
+                binding_digest=definition.asset_binding_digest,
+                name=asset_meta.get("name"),
+                description=asset_meta.get("description"),
+                tags=tuple(asset_meta.get("tags", ())),
+            )
+        calls = tuple(
+            FunctionCallViewV2(
+                call_digest=call.call_digest,
+                call_key=call.call_key,
+                inputs=tuple(
+                    ResultValueViewV2(
+                        alias=name,
+                        tag=value.tag,
+                        value=value.value,
+                        value_digest=value.value_digest,
+                    )
+                    for name, value in call.inputs
+                ),
+                output=ResultValueViewV2(
+                    alias=call.output[0],
+                    tag=call.output[1].tag,
+                    value=call.output[1].value,
+                    value_digest=call.output[1].value_digest,
+                ),
+            )
+            for call in materialization.calls
+        )
+        occurrences.append(
+            FunctionOccurrenceViewV2(
+                occurrence_alias=definition.occurrence_alias,
+                function_id=definition.function_id,
+                function_version=definition.function_version,
+                function_digest=definition.function_digest,
+                signature_digest=definition.signature_digest,
+                implementation_digest=definition.implementation_digest,
+                relation_predicate_id=definition.relation_predicate_id,
+                topology_digest=definition.topology_digest,
+                ports=tuple(FunctionPortViewV2(*item) for item in definition.ports),
+                input_bindings=tuple(
+                    FunctionInputBindingViewV2(*item) for item in definition.input_bindings
+                ),
+                calls=calls,
+                asset=asset,
+            )
+        )
+    return FunctionCaptureViewV2(
+        definition_capture=CaptureStateViewV2("captured"),
+        materialization_capture=CaptureStateViewV2("captured"),
+        occurrences=tuple(occurrences),
+    )
+
+
 def _row_view_v2(
     row: GoalResultRowV1,
     *,
@@ -1129,6 +1358,12 @@ __all__ = [
     "ExecutionViewV2",
     "ExecutionAttachmentViewV2",
     "ExecutionProfileViewV2",
+    "FunctionAssetViewV2",
+    "FunctionCallViewV2",
+    "FunctionCaptureViewV2",
+    "FunctionInputBindingViewV2",
+    "FunctionOccurrenceViewV2",
+    "FunctionPortViewV2",
     "ExpectationViewV2",
     "ProductRunSideV2",
     "ProductRunSourceProtocolV2",

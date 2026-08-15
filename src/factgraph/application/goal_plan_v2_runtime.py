@@ -43,9 +43,12 @@ from factgraph.application.evaluation_query_target_runtime import (
 )
 from factgraph.application.evaluation_query_runtime import (
     ResolvedEvaluationQueryNavigationSelectionV0,
+    compile_evaluation_query,
 )
+from factgraph.application.policy_runtime import compile_policy
 from factgraph.application.portable_evaluation_runtime import (
     PortableEvaluationError,
+    execute_portable_deterministic_v1,
     portable_dependency_predicate_ids_v1,
 )
 from factgraph.application.protocol.derivation import (
@@ -55,6 +58,8 @@ from factgraph.application.protocol.derivation import (
 )
 from factgraph.application.protocol.evaluation_run_v2 import (
     EvaluationEngineFrameV2,
+    EvaluationFunctionCallV2,
+    EvaluationFunctionMaterializationV2,
     EvaluationReplayPayloadV2,
     EvaluationReplayWorldV2,
     EvaluationRunPlanV2,
@@ -76,6 +81,12 @@ from factgraph.application.protocol.execution_profile_v2 import (
     validate_resolved_execution_attachments_v2,
 )
 from factgraph.application.protocol.goal_plan_v1 import GoalValueV1
+from factgraph.application.protocol.evaluation_query import (
+    EvaluationQuery,
+    EvaluationQuerySelection,
+)
+from factgraph.application.protocol.policy import Policy, PolicyOccurrence
+from factgraph.application.protocol.rule import Rule
 from factgraph.application.protocol.provenance_v1 import (
     ProvenanceLocatorV1,
     ProvenanceRefV1,
@@ -94,6 +105,7 @@ from factgraph.application.protocol.scenario_v2 import (
     ScenarioSpecV2,
     canonical_decimal_v2,
 )
+from factgraph.application.protocol.schema_runtime import EntityRef
 from factgraph.application.scenario_v1_runtime import (
     ScenarioResolutionErrorV1,
     resolve_scenario_v1,
@@ -103,9 +115,12 @@ from factgraph.application.scenario_v1_runtime import (
 from factgraph.application.scenario_v2_runtime import (
     ScenarioResolutionErrorV2,
     build_effective_world_v2,
+    effective_world_v2_relation,
     resolve_scenario_v2_from_v1,
     world_has_probabilistic_semantics_v2,
 )
+from factgraph.application.schema_runtime import build_schema_index, encode_entity_ref
+from factgraph.application.semantic_address_runtime import SemanticAddressSpace
 from factgraph.application.weighted_choice_problog_v2 import (
     ProductWeightedChoiceProbLogV2Error,
     lower_product_policy_weighted_choice_to_problog_v2,
@@ -119,11 +134,14 @@ from factgraph.core.semantics import SemanticsProfile
 from factgraph.core.store._support import ProjectedFact
 from factgraph.core.store.runtime import Store
 from factgraph.core.view.projector import project_view_facts_with_witness
+from factgraph.core.rules.where_ast import PredAtom, Var
 from factgraph.sdk.product_authoring import (
+    FunctionOccurrenceTopologyV1,
     ProductPolicyV1,
     ProductRuleV1,
     WeightedChoiceArmV1,
     WeightedChoiceTopologyV1,
+    _function_port_predicate_id,
     asset_snapshot_v1,
     assert_asset_binding_current_v1,
 )
@@ -168,6 +186,22 @@ class ProductEvaluationInvocationV2:
     candidate_product_target: _ProductTarget | None = None
 
     def run(self) -> EvaluationRunV2:
+        """Capture one graph view and execute this Product V2 invocation.
+
+        Returns:
+            A sealed ``EvaluationRunV2`` containing named baseline,
+            effective, and optional candidate-effective result sides.
+
+        Raises:
+            ProductEvaluationRuntimeErrorV2: If a target/profile/Scenario
+                seal is stale, materialization fails, or an engine violates
+                the declared Product V2 contract.
+
+        Notes:
+            ``run()`` performs the one permitted live graph capture. Open the
+            returned carrier with ``outcome_from_run_v2(...)`` for structured
+            result, Explain, and detached replay views.
+        """
         return execute_product_evaluation_invocation_v2(self)
 
 
@@ -195,6 +229,25 @@ class EvaluationRunReplayV2:
         "sealed_declared_pins_not_runtime_attested"
     )
     proof_parity: Literal["not_claimed"] = "not_claimed"
+
+
+@dataclass(frozen=True)
+class CapturedFunctionDefinitionV2:
+    """Replay-validated Function definition data without an executable callable."""
+
+    occurrence_alias: str
+    function_id: str
+    function_version: str | None
+    function_digest: str
+    signature_digest: str
+    implementation_digest: str
+    relation_predicate_id: str
+    ports: tuple[tuple[str, str, str, str], ...]
+    input_bindings: tuple[tuple[str, str, str], ...]
+    topology_digest: str
+    asset_meta_json: str
+    asset_descriptor_digest: str
+    asset_binding_digest: str
 
 
 def build_product_evaluation_invocation_v2(
@@ -275,7 +328,11 @@ def execute_product_evaluation_invocation_v2(
     _assert_invocation_current(invocation)
 
     graph = invocation._graph
-    schema_ir = ensure_schema_ir(dict(graph.schema_ir))
+    base_schema_ir = ensure_schema_ir(dict(graph.schema_ir))
+    schema_ir = _execution_schema_ir_v2(
+        base_schema_ir,
+        products=(invocation.product_target, invocation.candidate_product_target),
+    )
     schema_pin = schema_digest(schema_ir)
     primary_program, primary_dependencies, primary_base = _materialize_program(
         invocation.primary,
@@ -298,10 +355,16 @@ def execute_product_evaluation_invocation_v2(
         )
 
     dependency_ids = tuple(sorted(set(primary_dependencies) | set(candidate_dependencies)))
+    authored_function_predicate_ids = {
+        _function_port_predicate_id(item.relation_predicate_id, port.name)
+        for product in (invocation.product_target, invocation.candidate_product_target)
+        for item in _functions_for(product)
+        for port in (*item.function.inputs, item.function.output)
+    }
     # Capture once.  Everything after this point consumes only immutable
     # ProjectedFact tuples / V2 worlds; it does not reopen the caller ledger.
     base_view_digest = graph._view_snapshot_digest(query_typed_values=True)
-    full_relation = project_view_facts_with_witness(graph.ledger, schema_ir)
+    full_relation = project_view_facts_with_witness(graph.ledger, base_schema_ir)
     if graph._view_snapshot_digest(query_typed_values=True) != base_view_digest:
         _fail("FactGraph view changed during V2 capture", "V2_VIEW_CHANGED_DURING_CAPTURE")
 
@@ -317,9 +380,13 @@ def execute_product_evaluation_invocation_v2(
             _raise_from(exc, prefix="Scenario dependency", default="V2_SCENARIO_DEPENDENCY_INVALID")
         dependency_ids = tuple(sorted(set(dependency_ids) | set(scenario_dependencies)))
 
+    capture_dependency_ids = tuple(
+        item for item in dependency_ids if item not in authored_function_predicate_ids
+    )
+
     try:
         baseline_relation = select_dependency_relation_v1(
-            full_relation, dependency_predicate_ids=dependency_ids
+            full_relation, dependency_predicate_ids=capture_dependency_ids
         )
     except ScenarioResolutionErrorV1 as exc:
         _raise_from(exc, prefix="V2 dependency relation", default="V2_DEPENDENCY_INVALID")
@@ -336,7 +403,7 @@ def execute_product_evaluation_invocation_v2(
             schema_digest=schema_pin,
             base_view_digest=base_view_digest,
             admissibility_digest=admissibility_digest,
-            dependency_predicate_ids=dependency_ids,
+            dependency_predicate_ids=capture_dependency_ids,
             relation=baseline_relation,
             metadata_by_witness=baseline_metadata,
             predicate_tags=_predicate_tags(schema_ir),
@@ -363,6 +430,18 @@ def execute_product_evaluation_invocation_v2(
         baseline_world = resolved_v2.baseline_world
         effective_world = resolved_v2.effective_world
 
+    function_predicate_ids = tuple(sorted(authored_function_predicate_ids))
+    baseline_world = _world_with_execution_schema_v2(
+        baseline_world,
+        schema_digest_value=schema_pin,
+        function_predicate_ids=function_predicate_ids,
+    )
+    effective_world = _world_with_execution_schema_v2(
+        effective_world,
+        schema_digest_value=schema_pin,
+        function_predicate_ids=function_predicate_ids,
+    )
+
     _assert_world_profile_compatibility(invocation.profile, baseline_world)
     _assert_world_profile_compatibility(invocation.profile, effective_world)
     primary_plan = _run_plan(invocation.primary, invocation.product_target, side="primary")
@@ -383,6 +462,8 @@ def execute_product_evaluation_invocation_v2(
         profile=invocation.profile,
         schema_ir=schema_ir,
         selection_shape=_selection_shape(invocation.primary),
+        product=invocation.product_target,
+        source_schema_index=graph._application_schema_index,
     )
     effective_side = _execute_side(
         name="effective",
@@ -393,6 +474,8 @@ def execute_product_evaluation_invocation_v2(
         profile=invocation.profile,
         schema_ir=schema_ir,
         selection_shape=_selection_shape(invocation.primary),
+        product=invocation.product_target,
+        source_schema_index=graph._application_schema_index,
     )
     candidate_side: EvaluationRunSideV2 | None = None
     candidate_capture: EvaluationReplayWorldV2 | None = None
@@ -412,6 +495,17 @@ def execute_product_evaluation_invocation_v2(
             profile=invocation.profile,
             schema_ir=schema_ir,
             selection_shape=_selection_shape(invocation.candidate),
+            product=invocation.candidate_product_target,
+            source_schema_index=graph._application_schema_index,
+        )
+
+    _assert_function_observations_deterministic_v2(
+        tuple(side for side in (baseline_side, effective_side, candidate_side) if side is not None)
+    )
+    if graph._view_snapshot_digest(query_typed_values=True) != base_view_digest:
+        _fail(
+            "source FactGraph changed during trusted in-process Function execution",
+            "V2_VIEW_CHANGED_DURING_FUNCTION",
         )
 
     program_bytes = _encode_program_envelope(
@@ -557,6 +651,7 @@ def choice_capture_from_evaluation_run_v2(
             "version",
             "schema",
             "schema_digest",
+            "source_schema_digest",
             "profile_digest",
             "address_space_digest",
             "primary",
@@ -575,6 +670,92 @@ def choice_capture_from_evaluation_run_v2(
     if capture is None:
         return None
     return _choice_topology_from_validated_capture(capture)
+
+
+def function_capture_from_evaluation_run_v2(
+    run: EvaluationRunV2,
+    *,
+    side: Literal["primary", "candidate"] = "primary",
+) -> tuple[CapturedFunctionDefinitionV2, ...]:
+    """Return replay-validated Function definitions without executable code."""
+
+    if side not in {"primary", "candidate"}:
+        _fail("Function capture side is unsupported", "V2_FUNCTION_CAPTURE_SIDE_INVALID")
+    try:
+        assert_evaluation_run_v2_current(run)
+    except Exception as exc:
+        _raise_from(exc, prefix="V2 Function capture run", default="V2_REPLAY_PROTOCOL_INVALID")
+    decoded = _decode_program_envelope(run)
+    envelope = _parse_canonical_json(
+        run.replay_payload.compiled_program_bytes, label="V2 replay program"
+    )
+    record = envelope.get(side) if isinstance(envelope, Mapping) else None
+    if not isinstance(record, Mapping):
+        _fail("V2 Function capture program record is absent", "V2_FUNCTION_CAPTURE_SIDE_INVALID")
+    plan = run.primary_plan if side == "primary" else run.candidate_plan
+    if plan is None:
+        _fail("V2 Function capture plan is absent", "V2_FUNCTION_CAPTURE_SIDE_INVALID")
+    carrier = _query_carrier_from_wire(
+        record.get("query_carrier"),
+        plan=plan,
+        expected_schema_digest=envelope["source_schema_digest"],  # type: ignore[arg-type,index]
+    )
+    program = decoded.primary_program if side == "primary" else decoded.candidate_program
+    if program is None:
+        _fail("V2 Function capture program is absent", "V2_FUNCTION_CAPTURE_SIDE_INVALID")
+    capture = _function_capture_from_wire(
+        record.get("function_capture"),
+        plan=plan,
+        carrier=carrier,
+        program=program,
+        schema_ir=decoded.schema_ir,
+    )
+    if capture is None:
+        return ()
+    occurrences = capture["occurrences"]
+    assert isinstance(occurrences, list)
+    result: list[CapturedFunctionDefinitionV2] = []
+    for occurrence in occurrences:
+        assert isinstance(occurrence, Mapping)
+        ports = occurrence["ports"]
+        bindings = occurrence["input_bindings"]
+        assert isinstance(ports, list) and isinstance(bindings, list)
+        result.append(
+            CapturedFunctionDefinitionV2(
+                occurrence_alias=occurrence["alias"],  # type: ignore[arg-type]
+                function_id=occurrence["function_id"],  # type: ignore[arg-type]
+                function_version=occurrence["function_version"],  # type: ignore[arg-type]
+                function_digest=occurrence["function_digest"],  # type: ignore[arg-type]
+                signature_digest=occurrence["signature_digest"],  # type: ignore[arg-type]
+                implementation_digest=occurrence["implementation_digest"],  # type: ignore[arg-type]
+                relation_predicate_id=occurrence["relation_predicate_id"],  # type: ignore[arg-type]
+                ports=tuple(
+                    (item["name"], item["tag"], item["mode"], item["predicate_id"])
+                    for item in ports
+                    if isinstance(item, Mapping)
+                ),  # type: ignore[misc]
+                input_bindings=tuple(
+                    (
+                        item["port_name"],
+                        item["source"]["occurrence_alias"],
+                        item["source"]["port_name"],
+                    )
+                    for item in bindings
+                    if isinstance(item, Mapping) and isinstance(item.get("source"), Mapping)
+                ),  # type: ignore[misc]
+                topology_digest=occurrence["topology_digest"],  # type: ignore[arg-type]
+                asset_meta_json=json.dumps(
+                    occurrence["asset_meta"],
+                    sort_keys=True,
+                    separators=(",", ":"),
+                    ensure_ascii=False,
+                    allow_nan=False,
+                ),
+                asset_descriptor_digest=occurrence["asset_descriptor_digest"],  # type: ignore[arg-type]
+                asset_binding_digest=occurrence["asset_binding_digest"],  # type: ignore[arg-type]
+            )
+        )
+    return tuple(result)
 
 
 def _assert_invocation_current(invocation: ProductEvaluationInvocationV2) -> None:
@@ -735,7 +916,7 @@ def _validate_profile_attachments(
     attachments = tuple(
         item for item in profile.attachments if item.target.pin_digest == pin.pin_digest
     )
-    if profile.kind == "native_deterministic_v2":
+    if profile.kind in {"native_deterministic_v2", "portable_deterministic_v2"}:
         if attachments:
             _fail("deterministic V2 profile has attachments", "V2_PROFILE_ATTACHMENT_UNSUPPORTED")
         return ResolvedExecutionAttachmentsV2(profile.profile_digest, ())
@@ -891,6 +1072,147 @@ def _choices_for(product: _ProductTarget) -> tuple[WeightedChoiceTopologyV1, ...
     return product.weighted_choices if isinstance(product, ProductPolicyV1) else ()
 
 
+def _functions_for(product: _ProductTarget | None) -> tuple[FunctionOccurrenceTopologyV1, ...]:
+    if not isinstance(product, ProductPolicyV1):
+        return ()
+    return product.function_occurrences
+
+
+def _function_entity_type(topology: FunctionOccurrenceTopologyV1) -> str:
+    return f"FactGraphFunctionCallV1_{topology.topology_digest[7:23]}"
+
+
+def _function_schema_ids(topology: FunctionOccurrenceTopologyV1) -> tuple[str, str, str]:
+    entity_type = _function_entity_type(topology)
+    return (
+        entity_type,
+        f"{entity_type}:exists",
+        f"__factgraph_function_call_key_v1:{topology.topology_digest[7:]}",
+    )
+
+
+def _execution_schema_ir_v2(
+    base_schema_ir: dict[str, Any],
+    *,
+    products: tuple[_ProductTarget | None, ...],
+) -> dict[str, Any]:
+    functions = tuple(
+        sorted(
+            (item for product in products for item in _functions_for(product)),
+            key=lambda item: item.topology_digest,
+        )
+    )
+    if not functions:
+        return ensure_schema_ir(dict(base_schema_ir))
+    try:
+        schema = json.loads(
+            json.dumps(
+                base_schema_ir,
+                sort_keys=True,
+                separators=(",", ":"),
+                ensure_ascii=False,
+                allow_nan=False,
+            )
+        )
+    except (TypeError, ValueError) as exc:
+        _raise_from(exc, prefix="V2 schema", default="V2_SCHEMA_INVALID")
+    assert isinstance(schema, dict)
+    existing_predicates = {item["pred_id"] for item in schema["predicates"]}
+    existing_entities = {item["entity_type"] for item in schema["entities"]}
+    for topology in functions:
+        entity_type, exists_id, identity_id = _function_schema_ids(topology)
+        port_predicate_ids = tuple(
+            _function_port_predicate_id(topology.relation_predicate_id, port.name)
+            for port in (*topology.function.inputs, topology.function.output)
+        )
+        if entity_type in existing_entities or any(
+            pred_id in existing_predicates
+            for pred_id in (exists_id, identity_id, *port_predicate_ids)
+        ):
+            _fail(
+                "Function execution schema namespace collides with the authored schema",
+                "V2_FUNCTION_SCHEMA_COLLISION",
+            )
+        existing_entities.add(entity_type)
+        existing_predicates.update((exists_id, identity_id, *port_predicate_ids))
+        schema["entities"].append(
+            {
+                "entity_type": entity_type,
+                "identity_fields": [{"name": "call_key", "type_domain": "string"}],
+            }
+        )
+        schema["predicates"].extend(
+            (
+                {
+                    "pred_id": exists_id,
+                    "owner_type": entity_type,
+                    "arity": 1,
+                    "arg_specs": [{"name": "call", "type_domain": "entity_ref"}],
+                    "cardinality": "single",
+                    "group_key_indexes": [0],
+                    "is_entity_exists": True,
+                },
+                {
+                    "pred_id": identity_id,
+                    "owner_type": entity_type,
+                    "arity": 2,
+                    "arg_specs": [
+                        {"name": "call", "type_domain": "entity_ref"},
+                        {"name": "call_key", "type_domain": "string"},
+                    ],
+                    "cardinality": "single",
+                    "group_key_indexes": [0],
+                    "py_field_name": "call_key",
+                    "is_identity_field": True,
+                },
+                *(
+                    {
+                        "pred_id": predicate_id,
+                        "owner_type": entity_type,
+                        "arity": 2,
+                        "arg_specs": [
+                            {"name": "call", "type_domain": "entity_ref"},
+                            {"name": port.name, "type_domain": port.scalar_domain},
+                        ],
+                        "cardinality": "single",
+                        "group_key_indexes": [0],
+                    }
+                    for port, predicate_id in zip(
+                        (*topology.function.inputs, topology.function.output),
+                        port_predicate_ids,
+                        strict=True,
+                    )
+                ),
+            )
+        )
+        schema["projection"]["entities"].append(entity_type)
+        schema["projection"]["predicates"].extend((exists_id, identity_id, *port_predicate_ids))
+    schema["entities"] = sorted(schema["entities"], key=lambda item: item["entity_type"])
+    schema["predicates"] = sorted(schema["predicates"], key=lambda item: item["pred_id"])
+    schema["projection"]["entities"] = sorted(set(schema["projection"]["entities"]))
+    schema["projection"]["predicates"] = sorted(set(schema["projection"]["predicates"]))
+    return ensure_schema_ir(schema)
+
+
+def _world_with_execution_schema_v2(
+    world: EffectiveWorldV2,
+    *,
+    schema_digest_value: str,
+    function_predicate_ids: tuple[str, ...],
+) -> EffectiveWorldV2:
+    return EffectiveWorldV2(
+        schema_digest=schema_digest_value,
+        base_view_digest=world.base_view_digest,
+        admissibility_digest=world.admissibility_digest,
+        dependency_predicate_ids=tuple(
+            sorted(set(world.dependency_predicate_ids) | set(function_predicate_ids))
+        ),
+        facts=world.facts,
+        closure_target_digests=world.closure_target_digests,
+        operation_evidence=world.operation_evidence,
+    )
+
+
 def _assert_weighted_topology_current(product: _ProductTarget) -> None:
     """Recompute the mutable sidecar's canonical seal before every V2 use.
 
@@ -926,7 +1248,7 @@ def _materialize_program(
     side: _TargetSide,
 ) -> tuple[CompiledDerivationPlan, tuple[str, ...], CompiledDerivationPlan]:
     engine: Literal["native", "problog"] = (
-        "native" if profile.kind == "native_deterministic_v2" else "problog"
+        "problog" if profile.kind == "problog_point_v2" else "native"
     )
     try:
         base, _traces = _materialize_adapter_derivation_plan(
@@ -1110,7 +1432,10 @@ def _assert_world_profile_compatibility(
             profile_accepts_fact_semantics_v2(profile, fact.fact_semantics)
         except Exception as exc:
             _raise_from(exc, prefix="V2 world semantics", default="V2_WORLD_SEMANTICS_UNSUPPORTED")
-    if profile.kind == "native_deterministic_v2" and world_has_probabilistic_semantics_v2(world):
+    if profile.kind in {
+        "native_deterministic_v2",
+        "portable_deterministic_v2",
+    } and world_has_probabilistic_semantics_v2(world):
         _fail(
             "native deterministic V2 cannot execute probabilistic facts",
             "V2_WORLD_SEMANTICS_UNSUPPORTED",
@@ -1158,13 +1483,19 @@ def _execute_side(
     profile: EvaluationExecutionProfileV2,
     schema_ir: dict[str, Any],
     selection_shape: tuple[tuple[str, str], ...],
+    product: _ProductTarget | None = None,
+    source_schema_index: Any | None = None,
+    captured_function_materializations: tuple[EvaluationFunctionMaterializationV2, ...] = (),
 ) -> EvaluationRunSideV2:
-    frames = _execute_program_on_world(
+    frames, function_materializations = _execute_program_on_world(
         world=world,
         program=program,
         profile=profile,
         schema_ir=schema_ir,
         selection_shape=selection_shape,
+        product=product,
+        source_schema_index=source_schema_index,
+        captured_function_materializations=captured_function_materializations,
     )
     return EvaluationRunSideV2(
         name=name,
@@ -1174,6 +1505,7 @@ def _execute_side(
         expectation_support=(
             "unsupported" if profile.kind == "problog_point_v2" else "not_requested"
         ),
+        function_materializations=function_materializations,
     )
 
 
@@ -1184,10 +1516,43 @@ def _execute_program_on_world(
     profile: EvaluationExecutionProfileV2,
     schema_ir: dict[str, Any],
     selection_shape: tuple[tuple[str, str], ...],
-) -> tuple[EvaluationEngineFrameV2, ...]:
+    product: _ProductTarget | None = None,
+    source_schema_index: Any | None = None,
+    captured_function_materializations: tuple[EvaluationFunctionMaterializationV2, ...] = (),
+) -> tuple[
+    tuple[EvaluationEngineFrameV2, ...],
+    tuple[EvaluationFunctionMaterializationV2, ...],
+]:
     store, probability_materialization = _materialize_world_store_v2(
         world, schema_ir=schema_ir, profile=profile
     )
+    functions = _functions_for(product)
+    if functions and captured_function_materializations:
+        _fail(
+            "live and captured Function materializations cannot be mixed",
+            "V2_FUNCTION_MATERIALIZATION_SPLICE",
+        )
+    if functions:
+        if not isinstance(product, ProductPolicyV1) or source_schema_index is None:
+            _fail(
+                "live Function materialization requires its Product Policy context",
+                "V2_FUNCTION_CONTEXT_REQUIRED",
+            )
+        function_materializations = _materialize_function_occurrences_v2(
+            store=store,
+            product=product,
+            functions=functions,
+            source_schema_index=source_schema_index,
+            execution_schema_ir=schema_ir,
+            profile=profile,
+        )
+    else:
+        function_materializations = captured_function_materializations
+        _inject_captured_function_materializations_v2(
+            store=store,
+            materializations=function_materializations,
+            schema_ir=schema_ir,
+        )
     if profile.kind == "native_deterministic_v2":
         outputs = _evaluate_engine(engine="native", store=store, program=program, profile=profile)
         rows = _selected_rows(
@@ -1196,7 +1561,74 @@ def _execute_program_on_world(
             probability_required=False,
             max_rows=profile.resources.max_rows,
         )
-        return (EvaluationEngineFrameV2("native", "succeeded", rows),)
+        return (EvaluationEngineFrameV2("native", "succeeded", rows),), function_materializations
+    if profile.kind == "portable_deterministic_v2":
+        relation = _portable_relation_with_functions_v2(
+            world=world,
+            program=program,
+            schema_ir=schema_ir,
+            materializations=function_materializations,
+        )
+        try:
+            portable = execute_portable_deterministic_v1(
+                program,
+                schema_ir=schema_ir,
+                effective_relations=relation,
+            )
+        except PortableEvaluationError as exc:
+            _raise_from(
+                exc,
+                prefix="V2 portable deterministic execution",
+                default="V2_PORTABLE_EXECUTION_FAILED",
+            )
+        frames: list[EvaluationEngineFrameV2] = []
+        for execution in portable.executions:
+            converted: list[EvaluationSelectedRowV2] = []
+            for portable_row in execution.rows:
+                if len(portable_row.terms) != len(selection_shape):
+                    _fail(
+                        "portable row does not align with V2 Query selections",
+                        "V2_PROJECTION_WIDTH_MISMATCH",
+                    )
+                values: list[tuple[str, GoalValueV1]] = []
+                for (alias, expected_tag), (actual_tag, raw) in zip(
+                    selection_shape, portable_row.terms, strict=True
+                ):
+                    if actual_tag != expected_tag:
+                        _fail(
+                            "portable row type does not align with V2 Query selections",
+                            "V2_PROJECTION_TYPE_MISMATCH",
+                        )
+                    values.append(
+                        (
+                            alias,
+                            GoalValueV1(
+                                cast(
+                                    Literal[
+                                        "entity_ref",
+                                        "string",
+                                        "int",
+                                        "float64",
+                                        "bool",
+                                        "bytes",
+                                        "time",
+                                        "uuid",
+                                    ],
+                                    actual_tag,
+                                ),
+                                raw,
+                            ),
+                        )
+                    )
+                converted.append(EvaluationSelectedRowV2(tuple(values)))
+            frames.append(
+                EvaluationEngineFrameV2(
+                    cast(Literal["native", "souffle", "problog"], execution.engine),
+                    "succeeded",
+                    tuple(converted),
+                )
+            )
+        return tuple(frames), function_materializations
     outputs = _evaluate_engine(engine="problog", store=store, program=program, profile=profile)
     rows = _selected_rows(
         outputs,
@@ -1222,7 +1654,266 @@ def _execute_program_on_world(
         EvaluationEngineFrameV2(
             "souffle", "unsupported", diagnostic_code="V2_PROBABILISTIC_SOUFFLE_UNSUPPORTED"
         ),
-    )
+    ), function_materializations
+
+
+def _portable_relation_with_functions_v2(
+    *,
+    world: EffectiveWorldV2,
+    program: CompiledDerivationPlan,
+    schema_ir: dict[str, Any],
+    materializations: tuple[EvaluationFunctionMaterializationV2, ...],
+) -> dict[str, tuple[ProjectedFact, ...]]:
+    """Build the exact portable dependency relation after Function materialization."""
+
+    dependencies = portable_dependency_predicate_ids_v1(program, schema_ir=schema_ir)
+    world_relation = effective_world_v2_relation(world)
+    relation: dict[str, list[ProjectedFact]] = {
+        predicate_id: [
+            ProjectedFact(
+                fact.witness_id,
+                tuple(value.to_raw() for value in fact.values),
+            )
+            for fact in world_relation.get(predicate_id, ())
+        ]
+        for predicate_id in dependencies
+    }
+    for materialization in materializations:
+        port_predicates = tuple(
+            _function_port_predicate_id(materialization.relation_predicate_id, name)
+            for name, _tag, _mode in materialization.ports
+        )
+        if any(predicate_id not in relation for predicate_id in port_predicates):
+            _fail(
+                "Function materialization is not a dependency of the portable program",
+                "V2_FUNCTION_PROGRAM_MISMATCH",
+            )
+        for call in materialization.calls:
+            for name, value in (*call.inputs, call.output):
+                predicate_id = _function_port_predicate_id(
+                    materialization.relation_predicate_id, name
+                )
+                relation[predicate_id].append(
+                    ProjectedFact(
+                        _token(
+                            "product_function_port_witness_v1",
+                            {"call_digest": call.call_digest, "port_name": name},
+                        ),
+                        (call.call_key, value.value),
+                    )
+                )
+    return {predicate_id: tuple(rows) for predicate_id, rows in relation.items()}
+
+
+def _materialize_function_occurrences_v2(
+    *,
+    store: Store,
+    product: ProductPolicyV1,
+    functions: tuple[FunctionOccurrenceTopologyV1, ...],
+    source_schema_index: Any,
+    execution_schema_ir: dict[str, Any],
+    profile: EvaluationExecutionProfileV2,
+) -> tuple[EvaluationFunctionMaterializationV2, ...]:
+    execution_index = build_schema_index(execution_schema_ir)
+    by_alias = {item.occurrence.alias: item for item in product.address_space.occurrences}
+    materializations: list[EvaluationFunctionMaterializationV2] = []
+    for topology in functions:
+        source_alias = topology.input_bindings[0].source.occurrence_alias
+        source_managed = by_alias.get(source_alias)
+        if source_managed is None or any(
+            item.source.occurrence_alias != source_alias for item in topology.input_bindings
+        ):
+            _fail(
+                "Function input source occurrence is absent or inconsistent",
+                "V2_FUNCTION_INPUT_SOURCE_INVALID",
+            )
+        source_space = SemanticAddressSpace((source_managed,))
+        source_policy = Policy(
+            f"__factgraph_function_input_v1__{topology.alias}",
+            PolicyOccurrence(source_alias),
+        )
+        try:
+            compiled_policy = compile_policy(
+                source_policy,
+                address_space=source_space,
+                schema_index=source_schema_index,
+            )
+            input_query = EvaluationQuery(
+                compiled_policy.policy_digest,
+                tuple(
+                    EvaluationQuerySelection(item.port_name, item.source)
+                    for item in topology.input_bindings
+                ),
+            )
+            compiled_query = compile_evaluation_query(
+                input_query,
+                compiled_policy=compiled_policy,
+                address_space=source_space,
+                schema_index=source_schema_index,
+            )
+            input_program, _traces = _materialize_adapter_derivation_plan(
+                compiled_query._lowering_plan,
+                engine="native",
+            )
+            outputs = _evaluate_engine(
+                engine="native",
+                store=store,
+                program=input_program,
+                profile=profile,
+            )
+            input_rows = _selected_rows(
+                outputs,
+                selection_shape=tuple(
+                    (item.name, item.scalar_domain) for item in topology.function.inputs
+                ),
+                probability_required=False,
+                max_rows=profile.resources.max_rows,
+            )
+        except ProductEvaluationRuntimeErrorV2:
+            raise
+        except Exception as exc:
+            _raise_from(
+                exc,
+                prefix=f"Function {topology.alias} input materialization",
+                default="V2_FUNCTION_INPUT_MATERIALIZATION_FAILED",
+            )
+
+        calls: list[EvaluationFunctionCallV2] = []
+        for row in input_rows:
+            by_name = dict(row.values)
+            ordered_inputs = tuple(
+                (port.name, by_name[port.name]) for port in topology.function.inputs
+            )
+            try:
+                raw_output = topology.function.implementation(
+                    *(value.value for _name, value in ordered_inputs)
+                )
+            except Exception as exc:
+                _raise_from(
+                    exc,
+                    prefix=f"Function {topology.alias} invocation",
+                    default="V2_FUNCTION_INVOCATION_FAILED",
+                )
+            try:
+                output = GoalValueV1(
+                    topology.function.output.scalar_domain,
+                    raw_output,
+                )
+            except Exception as exc:
+                _raise_from(
+                    exc,
+                    prefix=f"Function {topology.alias} output",
+                    default="V2_FUNCTION_OUTPUT_INVALID",
+                )
+            call_key_token = _token(
+                "product_function_call_key_v1",
+                {
+                    "occurrence_alias": topology.alias,
+                    "function_digest": topology.function.logical_identity_digest,
+                    "inputs": tuple((name, value.value_digest) for name, value in ordered_inputs),
+                },
+            )
+            entity_type, _exists_id, _identity_id = _function_schema_ids(topology)
+            try:
+                call_key = encode_entity_ref(
+                    EntityRef(entity_type, {"call_key": call_key_token}),
+                    index=execution_index,
+                )
+            except Exception as exc:
+                _raise_from(
+                    exc,
+                    prefix="Function call identity",
+                    default="V2_FUNCTION_CALL_IDENTITY_INVALID",
+                )
+            call = EvaluationFunctionCallV2(
+                occurrence_alias=topology.alias,
+                function_digest=topology.function.logical_identity_digest,
+                implementation_digest=topology.function.implementation_digest,
+                relation_predicate_id=topology.relation_predicate_id,
+                call_key=call_key,
+                inputs=ordered_inputs,
+                output=(topology.function.output.name, output),
+            )
+            _insert_function_call_v2(store, call)
+            calls.append(call)
+        materializations.append(
+            EvaluationFunctionMaterializationV2(
+                occurrence_alias=topology.alias,
+                function_digest=topology.function.logical_identity_digest,
+                signature_digest=topology.function.signature_digest,
+                implementation_digest=topology.function.implementation_digest,
+                relation_predicate_id=topology.relation_predicate_id,
+                ports=tuple(
+                    (port.name, port.scalar_domain, "input") for port in topology.function.inputs
+                )
+                + (
+                    (
+                        topology.function.output.name,
+                        topology.function.output.scalar_domain,
+                        "output",
+                    ),
+                ),
+                calls=tuple(calls),
+            )
+        )
+    return tuple(materializations)
+
+
+def _insert_function_call_v2(store: Store, call: EvaluationFunctionCallV2) -> None:
+    try:
+        for name, value in (*call.inputs, call.output):
+            set_field(
+                store.ledger,
+                _function_port_predicate_id(call.relation_predicate_id, name),
+                call.call_key,
+                [(value.tag, value.value)],
+            )
+    except Exception as exc:
+        _raise_from(
+            exc,
+            prefix=f"Function {call.occurrence_alias} relation materialization",
+            default="V2_FUNCTION_RELATION_MATERIALIZATION_FAILED",
+        )
+
+
+def _assert_function_observations_deterministic_v2(
+    sides: tuple[EvaluationRunSideV2, ...],
+) -> None:
+    observed: dict[tuple[str, tuple[str, ...]], str] = {}
+    for side in sides:
+        for materialization in side.function_materializations:
+            for call in materialization.calls:
+                key = (
+                    call.function_digest,
+                    tuple(value.value_digest for _name, value in call.inputs),
+                )
+                previous = observed.setdefault(key, call.output[1].value_digest)
+                if previous != call.output[1].value_digest:
+                    _fail(
+                        "Function returned different outputs for the same typed inputs in one run",
+                        "V2_FUNCTION_NONDETERMINISTIC_OUTPUT",
+                    )
+
+
+def _inject_captured_function_materializations_v2(
+    *,
+    store: Store,
+    materializations: tuple[EvaluationFunctionMaterializationV2, ...],
+    schema_ir: dict[str, Any],
+) -> None:
+    predicate_ids = {item["pred_id"] for item in schema_ir["predicates"]}
+    for materialization in materializations:
+        port_predicate_ids = tuple(
+            _function_port_predicate_id(materialization.relation_predicate_id, name)
+            for name, _tag, _mode in materialization.ports
+        )
+        if any(predicate_id not in predicate_ids for predicate_id in port_predicate_ids):
+            _fail(
+                "captured Function relation is absent from replay schema",
+                "V2_FUNCTION_REPLAY_SCHEMA_MISMATCH",
+            )
+        for call in materialization.calls:
+            _insert_function_call_v2(store, call)
 
 
 def _evaluate_engine(
@@ -1507,6 +2198,7 @@ def _encode_program_envelope(
             "version": _PROGRAM_VERSION,
             "schema": schema_ir,
             "schema_digest": schema_digest(schema_ir),
+            "source_schema_digest": primary_target.target.run_target.schema_digest,
             "profile_digest": profile.profile_digest,
             "address_space_digest": primary_plan.address_space_digest,
             "primary": primary,
@@ -1537,6 +2229,7 @@ def _program_record(
     resolved = _validate_profile_attachments(profile, product, side=side)
     query_carrier = _query_carrier_to_wire(targeted, product=product, plan=plan)
     choice_capture = _choice_capture_to_wire(product)
+    function_capture = _function_capture_to_wire(product, plan=plan)
     _assert_final_program_is_derived(
         profile=profile,
         plan=plan,
@@ -1553,6 +2246,7 @@ def _program_record(
         ],
         "query_carrier": query_carrier,
         "choice_capture": choice_capture,
+        "function_capture": function_capture,
         "attachment_resolution": _resolved_attachments_to_wire(resolved),
     }
     record["compiler_materialization_digest"] = _compiler_materialization_digest(
@@ -1562,6 +2256,7 @@ def _program_record(
         base_program=base_program,
         program=program,
         choice_capture=choice_capture,
+        function_capture=function_capture,
         resolved=resolved,
     )
     return record
@@ -1615,6 +2310,71 @@ def _choice_capture_to_wire(product: _ProductTarget) -> dict[str, object] | None
             for arm in choice.arms
         ],
         "skeleton_node_id": choice.skeleton_node_id,
+    }
+
+
+def _function_capture_to_wire(
+    product: _ProductTarget,
+    *,
+    plan: EvaluationRunPlanV2,
+) -> dict[str, object] | None:
+    functions = _functions_for(product)
+    if not functions:
+        return None
+    assert isinstance(product, ProductPolicyV1)
+    occurrences: list[dict[str, object]] = []
+    for topology in functions:
+        snapshot = asset_snapshot_v1(topology.function)
+        ports = [
+            {
+                "name": port.name,
+                "tag": port.scalar_domain,
+                "mode": "input",
+                "predicate_id": _function_port_predicate_id(
+                    topology.relation_predicate_id, port.name
+                ),
+            }
+            for port in topology.function.inputs
+        ]
+        ports.append(
+            {
+                "name": topology.function.output.name,
+                "tag": topology.function.output.scalar_domain,
+                "mode": "output",
+                "predicate_id": _function_port_predicate_id(
+                    topology.relation_predicate_id, topology.function.output.name
+                ),
+            }
+        )
+        occurrences.append(
+            {
+                "alias": topology.alias,
+                "function_id": topology.function.id,
+                "function_version": topology.function.version,
+                "function_digest": topology.function.logical_identity_digest,
+                "signature_digest": topology.function.signature_digest,
+                "implementation_digest": topology.function.implementation_digest,
+                "relation_predicate_id": topology.relation_predicate_id,
+                "ports": ports,
+                "input_bindings": [
+                    {
+                        "port_name": item.port_name,
+                        "source": {
+                            "occurrence_alias": item.source.occurrence_alias,
+                            "port_name": item.source.port_name,
+                        },
+                    }
+                    for item in topology.input_bindings
+                ],
+                "topology_digest": topology.topology_digest,
+                "asset_meta": snapshot["asset_meta"],
+                "asset_descriptor_digest": snapshot["descriptor_digest"],
+                "asset_binding_digest": snapshot["asset_binding_digest"],
+            }
+        )
+    return {
+        "product_target_digest": plan.target.target_digest,
+        "occurrences": occurrences,
     }
 
 
@@ -1789,6 +2549,7 @@ def _compiler_materialization_digest(
     base_program: CompiledDerivationPlan,
     program: CompiledDerivationPlan,
     choice_capture: Mapping[str, object] | None,
+    function_capture: Mapping[str, object] | None,
     resolved: ResolvedExecutionAttachmentsV2,
 ) -> str:
     return _token(
@@ -1803,6 +2564,9 @@ def _compiler_materialization_digest(
             "choice_capture_digest": None
             if choice_capture is None
             else _token("goal_plan_v2_choice_capture", choice_capture),
+            "function_capture_digest": None
+            if function_capture is None
+            else _token("goal_plan_v2_function_capture", function_capture),
             "attachment_resolution_digest": resolved.resolution_digest,
         },
     )
@@ -1830,7 +2594,7 @@ def _assert_final_program_is_derived(
             "V2 executable program is not derived from its base materialization",
             "V2_PROGRAM_LOWERING_MISMATCH",
         )
-    if profile.kind == "native_deterministic_v2":
+    if profile.kind in {"native_deterministic_v2", "portable_deterministic_v2"}:
         if choice_capture is not None:
             _fail(
                 "WeightedChoice requires the ProbLog V2 profile",
@@ -1838,7 +2602,8 @@ def _assert_final_program_is_derived(
             )
         if program != base_program:
             _fail(
-                "native V2 program carries an unsupported lowering", "V2_PROGRAM_LOWERING_MISMATCH"
+                "deterministic V2 program carries an unsupported lowering",
+                "V2_PROGRAM_LOWERING_MISMATCH",
             )
         return
 
@@ -2471,6 +3236,265 @@ def _choice_capture_from_wire(value: object) -> dict[str, object] | None:
     return row
 
 
+def _function_capture_from_wire(
+    value: object,
+    *,
+    plan: EvaluationRunPlanV2,
+    carrier: Mapping[str, object],
+    program: CompiledDerivationPlan,
+    schema_ir: Mapping[str, object],
+) -> dict[str, object] | None:
+    if value is None:
+        return None
+    row = _exact_keys(
+        value,
+        {"product_target_digest", "occurrences"},
+        label="V2 replay Function capture",
+    )
+    if row["product_target_digest"] != plan.target.target_digest:
+        _fail(
+            "V2 replay Function capture target pin mismatches plan",
+            "V2_REPLAY_PROGRAM_PIN_MISMATCH",
+        )
+    occurrences = row["occurrences"]
+    if not isinstance(occurrences, list) or not occurrences:
+        _fail(
+            "V2 replay Function capture occurrences are malformed",
+            "V2_REPLAY_PROGRAM_SHAPE_INVALID",
+        )
+    source = carrier.get("source_target")
+    if not isinstance(source, Mapping) or not isinstance(source.get("rule_pins"), list):
+        _fail("V2 replay Function source pins are malformed", "V2_REPLAY_PROGRAM_SHAPE_INVALID")
+    source_pins = {
+        item["occurrence_alias"]: item
+        for item in source["rule_pins"]
+        if isinstance(item, Mapping) and isinstance(item.get("occurrence_alias"), str)
+    }
+    predicates_raw = schema_ir.get("predicates")
+    if not isinstance(predicates_raw, list):
+        _fail("V2 replay Function schema predicates are malformed", "V2_REPLAY_SCHEMA_INVALID")
+    predicates = {item.get("pred_id"): item for item in predicates_raw if isinstance(item, Mapping)}
+    aliases: list[str] = []
+    for index, item in enumerate(occurrences):
+        occurrence = _exact_keys(
+            item,
+            {
+                "alias",
+                "function_id",
+                "function_version",
+                "function_digest",
+                "signature_digest",
+                "implementation_digest",
+                "relation_predicate_id",
+                "ports",
+                "input_bindings",
+                "topology_digest",
+                "asset_meta",
+                "asset_descriptor_digest",
+                "asset_binding_digest",
+            },
+            label=f"V2 replay Function occurrence[{index}]",
+        )
+        alias = _wire_text(occurrence["alias"], label="V2 replay Function alias")
+        function_id = _wire_text(occurrence["function_id"], label="V2 replay Function id")
+        function_version = _wire_optional_text(
+            occurrence["function_version"], label="V2 replay Function version"
+        )
+        relation_id = _wire_text(
+            occurrence["relation_predicate_id"], label="V2 replay Function relation"
+        )
+        implementation_digest = _require_token(
+            occurrence["implementation_digest"], "V2 replay Function implementation"
+        )
+        ports_raw = occurrence["ports"]
+        bindings_raw = occurrence["input_bindings"]
+        if (
+            not isinstance(ports_raw, list)
+            or len(ports_raw) < 2
+            or not isinstance(bindings_raw, list)
+        ):
+            _fail(
+                "V2 replay Function ports/bindings are malformed", "V2_REPLAY_PROGRAM_SHAPE_INVALID"
+            )
+        ports: list[dict[str, str]] = []
+        for port_index, port_value in enumerate(ports_raw):
+            port = _exact_keys(
+                port_value,
+                {"name", "tag", "mode", "predicate_id"},
+                label=f"V2 replay Function port[{port_index}]",
+            )
+            name = _wire_text(port["name"], label="V2 replay Function port name")
+            tag = _wire_text(port["tag"], label="V2 replay Function port tag")
+            mode = _wire_text(port["mode"], label="V2 replay Function port mode")
+            predicate_id = _wire_text(
+                port["predicate_id"], label="V2 replay Function port predicate"
+            )
+            if (
+                tag not in {"string", "int", "float64", "bool", "time", "uuid"}
+                or mode not in {"input", "output"}
+                or predicate_id != _function_port_predicate_id(relation_id, name)
+            ):
+                _fail(
+                    "V2 replay Function port contract is invalid", "V2_REPLAY_PROGRAM_PIN_MISMATCH"
+                )
+            predicate = predicates.get(predicate_id)
+            if not isinstance(predicate, Mapping):
+                _fail(
+                    "V2 replay Function predicate is absent from schema",
+                    "V2_REPLAY_PROGRAM_PIN_MISMATCH",
+                )
+            arg_specs = predicate.get("arg_specs")
+            if (
+                predicate.get("arity") != 2
+                or not isinstance(arg_specs, list)
+                or len(arg_specs) != 2
+                or not isinstance(arg_specs[0], Mapping)
+                or not isinstance(arg_specs[1], Mapping)
+                or arg_specs[0].get("type_domain") != "entity_ref"
+                or arg_specs[1].get("type_domain") != tag
+                or not _structural_contains(program.body_ir, predicate_id)
+            ):
+                _fail(
+                    "V2 replay Function program/schema binding is invalid",
+                    "V2_REPLAY_PROGRAM_PIN_MISMATCH",
+                )
+            ports.append({"name": name, "tag": tag, "mode": mode, "predicate_id": predicate_id})
+        if (
+            len({port["name"] for port in ports}) != len(ports)
+            or any(port["mode"] != "input" for port in ports[:-1])
+            or ports[-1]["mode"] != "output"
+        ):
+            _fail(
+                "V2 replay Function port order is noncanonical", "V2_REPLAY_PROGRAM_SHAPE_INVALID"
+            )
+        bindings: list[dict[str, object]] = []
+        for binding_index, binding_value in enumerate(bindings_raw):
+            binding = _exact_keys(
+                binding_value,
+                {"port_name", "source"},
+                label=f"V2 replay Function binding[{binding_index}]",
+            )
+            bindings.append(
+                {
+                    "port_name": _wire_text(
+                        binding["port_name"], label="V2 replay Function binding port"
+                    ),
+                    "source": _wire_address(
+                        binding["source"], label="V2 replay Function binding source"
+                    ),
+                }
+            )
+        if [item["port_name"] for item in bindings] != sorted(port["name"] for port in ports[:-1]):
+            _fail(
+                "V2 replay Function input bindings are noncanonical",
+                "V2_REPLAY_PROGRAM_SHAPE_INVALID",
+            )
+        signature_digest = _token(
+            "product_function_signature_v1",
+            {
+                "inputs": tuple((port["name"], port["tag"]) for port in ports[:-1]),
+                "output": (ports[-1]["name"], ports[-1]["tag"]),
+            },
+        )
+        function_digest = _token(
+            "product_function_logical_identity_v1",
+            {
+                "id": function_id,
+                "version": function_version,
+                "signature_digest": signature_digest,
+                "implementation_digest": implementation_digest,
+                "semantics": "pure_deterministic_total_v1",
+            },
+        )
+        topology_digest = _token(
+            "product_function_occurrence_v1",
+            {
+                "alias": alias,
+                "function_digest": function_digest,
+                "signature_digest": signature_digest,
+                "relation_predicate_id": relation_id,
+                "input_bindings": tuple(
+                    (
+                        binding["port_name"],
+                        binding["source"]["occurrence_alias"],  # type: ignore[index]
+                        binding["source"]["port_name"],  # type: ignore[index]
+                    )
+                    for binding in bindings
+                ),
+            },
+        )
+        if (
+            occurrence["signature_digest"] != signature_digest
+            or occurrence["function_digest"] != function_digest
+            or occurrence["topology_digest"] != topology_digest
+        ):
+            _fail("V2 replay Function capture seal is stale", "V2_REPLAY_PROGRAM_PIN_MISMATCH")
+        asset_meta = occurrence["asset_meta"]
+        if not isinstance(asset_meta, Mapping):
+            _fail("V2 replay Function AssetMeta is malformed", "V2_REPLAY_PROGRAM_SHAPE_INVALID")
+        descriptor_digest: object
+        if asset_meta.get("state") == "absent":
+            if (
+                set(asset_meta) != {"format", "state"}
+                or asset_meta.get("format") != "asset_meta_v1"
+            ):
+                _fail(
+                    "V2 replay Function absent AssetMeta is malformed",
+                    "V2_REPLAY_PROGRAM_SHAPE_INVALID",
+                )
+            descriptor_digest = "absent"
+        else:
+            if (
+                set(asset_meta) != {"format", "name", "description", "tags"}
+                or asset_meta.get("format") != "asset_meta_v1"
+            ):
+                _fail(
+                    "V2 replay Function AssetMeta is malformed", "V2_REPLAY_PROGRAM_SHAPE_INVALID"
+                )
+            descriptor_digest = _token("asset_meta_v1", asset_meta)
+        asset_binding_digest = _token(
+            "asset_binding_v1",
+            {
+                "target_kind": "function",
+                "logical_identity_digest": function_digest,
+                "descriptor_state": "absent" if descriptor_digest == "absent" else "present",
+                "descriptor_digest": descriptor_digest,
+            },
+        )
+        if (
+            occurrence["asset_descriptor_digest"] != descriptor_digest
+            or occurrence["asset_binding_digest"] != asset_binding_digest
+        ):
+            _fail("V2 replay Function asset binding is stale", "V2_REPLAY_PROGRAM_PIN_MISMATCH")
+        input_vars = tuple(Var(f"$__function_input_{offset}") for offset in range(len(ports) - 1))
+        output_var = Var("$__function_output")
+        call_key = Var("$__function_call_key")
+        source_rule = Rule(
+            id=f"__factgraph_function_v1__{function_id}",
+            version=function_version,
+            when=tuple(
+                PredAtom(port["predicate_id"], [call_key, variable])
+                for port, variable in zip(ports, (*input_vars, output_var), strict=True)
+            ),
+            ports={
+                port["name"]: variable
+                for port, variable in zip(ports, (*input_vars, output_var), strict=True)
+            },
+        )
+        pin = source_pins.get(alias)
+        if not isinstance(pin, Mapping) or pin.get("rule_content_digest") != _hex_to_token(
+            source_rule.content_digest, label="Function source Rule"
+        ):
+            _fail(
+                "V2 replay Function source Rule pin mismatches capture",
+                "V2_REPLAY_PROGRAM_PIN_MISMATCH",
+            )
+        aliases.append(alias)
+    if aliases != sorted(aliases) or len(set(aliases)) != len(aliases):
+        _fail("V2 replay Function occurrences are noncanonical", "V2_REPLAY_PROGRAM_SHAPE_INVALID")
+    return row
+
+
 def _choice_topology_from_validated_capture(
     capture: Mapping[str, object],
 ) -> WeightedChoiceTopologyV1:
@@ -2588,7 +3612,7 @@ def _resolved_attachments_from_carrier(
     attachments = tuple(
         item for item in profile.attachments if item.target.pin_digest == plan.target.pin_digest
     )
-    if profile.kind == "native_deterministic_v2":
+    if profile.kind in {"native_deterministic_v2", "portable_deterministic_v2"}:
         if attachments or choice_capture is not None:
             _fail(
                 "native V2 replay attachment carrier is invalid", "V2_REPLAY_PROGRAM_PIN_MISMATCH"
@@ -2709,6 +3733,7 @@ def _decode_program_envelope(run: EvaluationRunV2) -> _DecodedProgramV2:
             "version",
             "schema",
             "schema_digest",
+            "source_schema_digest",
             "profile_digest",
             "address_space_digest",
             "primary",
@@ -2737,11 +3762,13 @@ def _decode_program_envelope(run: EvaluationRunV2) -> _DecodedProgramV2:
         or row["schema_digest"] != run.replay_payload.schema_digest
     ):
         _fail("V2 replay schema digest mismatches run", "V2_REPLAY_PROGRAM_PIN_MISMATCH")
+    _require_token(row["source_schema_digest"], "V2 replay source schema digest")
     primary_plan, primary_program, primary_shape = _decode_program_record(
         row["primary"],
         expected=run.primary_plan,
         profile=run.profile,
-        expected_schema_digest=run.replay_payload.schema_digest,
+        expected_schema_digest=row["source_schema_digest"],  # type: ignore[arg-type]
+        schema_ir=schema_ir,
     )
     if primary_plan != run.primary_plan:
         _fail("V2 replay primary plan mismatches run", "V2_REPLAY_PROGRAM_PIN_MISMATCH")
@@ -2758,7 +3785,8 @@ def _decode_program_envelope(run: EvaluationRunV2) -> _DecodedProgramV2:
             row["candidate"],
             expected=run.candidate_plan,
             profile=run.profile,
-            expected_schema_digest=run.replay_payload.schema_digest,
+            expected_schema_digest=row["source_schema_digest"],  # type: ignore[arg-type]
+            schema_ir=schema_ir,
         )
         if candidate_plan != run.candidate_plan:
             _fail("V2 replay candidate plan mismatches run", "V2_REPLAY_PROGRAM_PIN_MISMATCH")
@@ -2778,6 +3806,7 @@ def _decode_program_record(
     expected: EvaluationRunPlanV2,
     profile: EvaluationExecutionProfileV2,
     expected_schema_digest: str,
+    schema_ir: Mapping[str, object],
 ) -> tuple[EvaluationRunPlanV2, CompiledDerivationPlan, tuple[tuple[str, str], ...]]:
     row = _exact_keys(
         value,
@@ -2788,6 +3817,7 @@ def _decode_program_record(
             "selection_shape",
             "query_carrier",
             "choice_capture",
+            "function_capture",
             "attachment_resolution",
             "compiler_materialization_digest",
         },
@@ -2811,6 +3841,13 @@ def _decode_program_record(
     )
     base_program = _compiled_plan_from_wire(row["base_compiled"])
     program = _compiled_plan_from_wire(row["compiled"])
+    function_capture = _function_capture_from_wire(
+        row["function_capture"],
+        plan=plan,
+        carrier=carrier,
+        program=program,
+        schema_ir=schema_ir,
+    )
     shape = _selection_shape_from_wire(row["selection_shape"])
     query_shape = tuple((item["alias"], item["tag"]) for item in carrier["query"]["selections"])  # type: ignore[index]
     if shape != query_shape:
@@ -2832,6 +3869,7 @@ def _decode_program_record(
         base_program=base_program,
         program=program,
         choice_capture=choice_capture,
+        function_capture=function_capture,
         resolved=resolved,
     )
     if row["compiler_materialization_digest"] != actual_materialization:
@@ -3031,6 +4069,7 @@ def _replay_side(
         profile=profile,
         schema_ir=schema_ir,
         selection_shape=selection_shape,
+        captured_function_materializations=declared.function_materializations,
     )
     declared_digests = tuple(item.frame_digest for item in declared.engine_frames)
     observed_digests = tuple(item.frame_digest for item in observed.engine_frames)
@@ -3038,7 +4077,11 @@ def _replay_side(
         side=name,
         declared_frame_digests=declared_digests,
         observed_frame_digests=observed_digests,
-        frame_match=declared_digests == observed_digests,
+        frame_match=(
+            declared_digests == observed_digests
+            and tuple(item.materialization_digest for item in declared.function_materializations)
+            == tuple(item.materialization_digest for item in observed.function_materializations)
+        ),
     )
 
 
@@ -3238,6 +4281,7 @@ if TYPE_CHECKING:  # pragma: no cover
 
 
 __all__ = [
+    "CapturedFunctionDefinitionV2",
     "EvaluationRunReplaySideV2",
     "EvaluationRunReplayV2",
     "GOAL_PLAN_V2_COMPILER_DIGEST",
@@ -3246,6 +4290,7 @@ __all__ = [
     "build_product_evaluation_invocation_v2",
     "choice_capture_from_evaluation_run_v2",
     "execute_product_evaluation_invocation_v2",
+    "function_capture_from_evaluation_run_v2",
     "replay_evaluation_run_v2",
     "replay_product_evaluation_run_v2",
 ]

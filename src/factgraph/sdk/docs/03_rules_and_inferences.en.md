@@ -131,6 +131,53 @@ literal-vs-literal comparisons reject. There is intentionally no global
 `fg.compare(...)`: the handle provides the schema domain, Policy draft owner,
 and semantic address that make a comparison meaningful.
 
+### Product Functions are Policy peers, not Rule calls
+
+Use `build_function` or the staged `function_builder(...).build(...)` form for
+a pure deterministic scalar computation. This creates an immutable product
+asset; it does not register a Python tool globally and it does not make the
+callable available inside a Rule:
+
+```python
+age_decade = fg.build_function(
+    id="age_decade",
+    version="1",
+    meta=AssetMeta(name="Age decade", tags=("computed",)),
+    implementation=lambda age: age // 10,
+    inputs={"age": "int"},
+    output="int",
+)
+
+policy = fg.policy_builder("people_by_decade", version="1")
+people = policy.use(person_values).as_("people")
+decade = policy.use(age_decade).as_("decade")
+decade.inputs(age=people.age)
+target = policy.build(policy.all(people, decade, decade.result >= 3))
+
+query = fg.query(target).select("age", people.age).select("decade", decade.result)
+```
+
+The Function occurrence and the Rule occurrence are peers in the authored
+Policy. Every Function input must connect exactly once to a direct scalar port
+of one Rule occurrence. Function-to-Function chaining, navigation inputs,
+Rule-embedded Function calls, Function-embedded Rules, output binding, async or
+multi-output callbacks, and side-effect/action tools are rejected in this
+slice. Multiple independent Function occurrences may read the same Rule
+occurrence.
+
+Execution is deliberately pre-engine. For each sealed baseline/effective side,
+FactGraph projects distinct typed input rows, calls the trusted in-process
+implementation once per row, and materializes its typed result as compiler-
+reserved binary relations. `portable_deterministic_v2` then gives Native,
+Soufflé and ProbLog the same relations; adapters do not invoke Python. Replay
+uses only sealed calls and never invokes the callable. A persistent graph-view
+change during a callback fails closed, but Python code is not a security
+sandbox and an already-performed external side effect cannot be rolled back.
+
+Function definition pins and per-side calls are available in structured V2
+Result/Explain data even when `EvidenceGraph` itself is explicitly unavailable.
+The callable and its source code are never placed in the Run.
+
 ### Explicit exclusive stochastic topology
 
 ``all(...)`` and ``any(...)`` are always deterministic logical nodes.  Do not
@@ -243,6 +290,13 @@ code, not a sandbox; V1 detects a persistent source-view change across the
 callback and fails closed, but cannot undo a malicious write. Use
 `provider_binding_slot_v1` to name a provider's required structured Query
 binding without introducing a dotted address grammar.
+
+A Product Function is not a renamed Provider. Provider supplies or replaces a
+declared dependency relation for an existing Rule/Policy Query and has no
+standalone projection. Function is an authored Policy peer with directional
+typed ports and a sealed per-side call relation. Both materialize before an
+engine and both treat in-process callbacks as trusted code, but their identity,
+composition, replay and Explain contracts remain separate.
 
 Pass an independently compiled Rule or Policy as `candidate=` to compare it
 with the primary target on the same resolved effective world. This is an
@@ -1128,11 +1182,14 @@ for shipped Meander consumers, not the target SDK design. It remains read-only,
 does not accept `CompiledEvaluationQueryV0`, and should not be adopted by new
 callers. Its removal requires a coordinated Meander migration.
 
-For the full envelope chain (`EvaluateResult` direct fields plus
+For the full legacy envelope chain (`EvaluateResult` direct fields plus
 `ResultFingerprint` / `engine_meta`, `EvaluateRow` data + methods,
 row digest / closed-head digest invariants, `Explanation` status / failure_class enum values,
 and runnable passed / failed examples), see
-[`docs/official/kernel/quickstart/evidence.md`](../../../../docs/official/kernel/quickstart/evidence.md).
+[Evaluation and evidence](../../../../docs/quickstart/evaluate_and_evidence.md).
+For Product V2 named ResultViews, row-explicit structured Explain data and
+detached replay, start with the
+[complete Product V2 workflow](../../../../docs/quickstart/product_workflow_v2.md).
 
 ## 9. Temporal Boundary (Current Status)
 

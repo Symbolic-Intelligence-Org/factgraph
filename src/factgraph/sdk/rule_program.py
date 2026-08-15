@@ -168,7 +168,11 @@ class RuleProgramExplanation:
 
     @property
     def repr(self) -> tuple[str, ...]:
-        """Deterministic machine-readable walk of the canonical evidence graph."""
+        """Return a deterministic structural walk of the EvidenceGraph.
+
+        Returns:
+            Stable presentation lines derived from structured evidence.
+        """
 
         return walk_evidence(
             self.evidence,
@@ -177,7 +181,11 @@ class RuleProgramExplanation:
         )
 
     def narrate(self) -> tuple[str, ...]:
-        """Render this evidence through FactGraph's canonical narrator."""
+        """Render this evidence through FactGraph's canonical narrator.
+
+        Returns:
+            Human-readable lines derived from structured evidence.
+        """
 
         return narrate_evidence(
             self.evidence,
@@ -213,7 +221,17 @@ class RuleProgramResult:
     )
 
     def explain(self) -> RuleProgramExplanation:
-        """Return the immutable evidence and support captured by this evaluation."""
+        """Return immutable evidence and support captured by this evaluation.
+
+        Returns:
+            A passed or failed Rule-program explanation.
+
+        Raises:
+            SDKValueError: If this result carries no canonical EvidenceGraph.
+
+        Notes:
+            Explain reads captured support only and does not rerun the program.
+        """
 
         if self._evidence is None:
             raise SDKValueError("RuleProgramResult has no canonical EvidenceGraph")

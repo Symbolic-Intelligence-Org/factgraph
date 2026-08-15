@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 import os
@@ -207,7 +207,22 @@ from .semantics import ProbLogConfig, PyReasonConfig
 if TYPE_CHECKING:
     from factgraph.audit.proof_frame_diff import ProofFrameDiff
 
+    from .evaluation_query_builder import EvaluationQueryBuilderV1
     from .policy_authoring import PolicyDraft
+    from .product_authoring import (
+        AssetMeta,
+        FunctionBuilder,
+        PolicyBuilder,
+        ProductFunctionV1,
+        ProductPolicyV1,
+        ProductRuleV1,
+        RuleBuilder,
+    )
+    from .product_scenario_execution import (
+        ScenarioBuilderV2,
+        _SDKExecutionManagerV2,
+        _SDKProbLogManagerV2,
+    )
 
 
 @dataclass(frozen=True)
@@ -505,6 +520,17 @@ class _SDKAssertionViewsManager:
 
         An assertion set stores assertion ids only. It does not store a read
         policy and it is not included in `fg.save_workspace(...)` persistence.
+
+        Args:
+            name: Unique in-process view name.
+            asrt_ids: Assertion ids to freeze.
+            asrts: Assertion records to freeze instead of ids.
+
+        Returns:
+            The newly frozen assertion set.
+
+        Raises:
+            SDKStoreError: If the name exists or the inputs are invalid.
         """
         normalized = _normalize_view_name(name)
         if normalized in self._views:
@@ -524,7 +550,19 @@ class _SDKAssertionViewsManager:
         asrt_ids: Iterable[str] | None = None,
         asrts: Iterable[Any] | None = None,
     ) -> FrozenAssertionSet:
-        """Replace the assertion ids for an existing frozen assertion set."""
+        """Replace an existing frozen assertion set.
+
+        Args:
+            name: Existing in-process view name.
+            asrt_ids: Replacement assertion ids.
+            asrts: Replacement assertion records instead of ids.
+
+        Returns:
+            The replacement frozen assertion set.
+
+        Raises:
+            SDKStoreError: If the name is missing or inputs are invalid.
+        """
         normalized = _normalize_view_name(name)
         if normalized not in self._views:
             raise SDKStoreError(f"view not found: {normalized}")
@@ -537,26 +575,53 @@ class _SDKAssertionViewsManager:
         return entry
 
     def delete(self, name: str) -> None:
-        """Delete a named frozen assertion set."""
+        """Delete a named in-process frozen assertion set.
+
+        Args:
+            name: Existing view name.
+
+        Raises:
+            SDKStoreError: If the name does not exist.
+        """
         normalized = _normalize_view_name(name)
         if normalized not in self._views:
             raise SDKStoreError(f"view not found: {normalized}")
         self._views.pop(normalized, None)
 
     def get(self, name: str) -> FrozenAssertionSet:
-        """Return a named frozen assertion set."""
+        """Return a named frozen assertion set.
+
+        Args:
+            name: Existing view name.
+
+        Returns:
+            The immutable assertion-id selection.
+
+        Raises:
+            SDKStoreError: If the name does not exist.
+        """
         normalized = _normalize_view_name(name)
         if normalized not in self._views:
             raise SDKStoreError(f"view not found: {normalized}")
         return self._views[normalized]
 
     def list(self) -> dict[str, FrozenAssertionSet]:
-        """Return all frozen assertion sets keyed by set name."""
+        """Return all in-process frozen assertion sets keyed by name.
+
+        Returns:
+            A new mapping of view names to immutable selections.
+        """
         return {name: spec for name, spec in self._views.items()}
 
 
 class AssertionsManager:
-    """Layer 3 namespace manager for assertion records and asrt_id retraction."""
+    """Read assertion records and append assertion-level revocations/metadata.
+
+    Notes:
+        The navigation key is an assertion id or explicit assertion filter.
+        Entity lifecycle belongs to ``fg.entities`` and field-cell operations
+        belong to ``fg.fields``.
+    """
 
     def __init__(self, sdk: "SDKStore") -> None:
         object.__setattr__(self, "_sdk", sdk)
@@ -565,11 +630,34 @@ class AssertionsManager:
         raise FrozenSnapshotError("FactGraph.assertions namespace is read-only")
 
     def by_id(self, asrt_id: str) -> Any:
+        """Read one assertion record by server-assigned id.
+
+        Args:
+            asrt_id: Non-empty assertion id.
+
+        Returns:
+            The assertion record, or ``None`` when no record exists.
+
+        Raises:
+            SDKStoreError: If ``asrt_id`` is malformed.
+        """
         if not isinstance(asrt_id, str) or not asrt_id:
             raise SDKStoreError("fg.assertions.by_id(asrt_id) expects non-empty string")
         return _assertion_record_by_id(self._sdk, asrt_id)
 
     def by_ids(self, asrt_ids: Iterable[str], *, strict: bool = False) -> Any:
+        """Read an assertion-record set by ids.
+
+        Args:
+            asrt_ids: Iterable of non-empty assertion ids.
+            strict: Reject duplicates and missing records when ``True``.
+
+        Returns:
+            Canonically ordered ``AssertionRecordSet``.
+
+        Raises:
+            SDKStoreError: If ids are malformed or strict validation fails.
+        """
         if isinstance(asrt_ids, (str, bytes)):
             raise SDKStoreError("fg.assertions.by_ids(asrt_ids) expects iterable[str], not string")
         if not isinstance(strict, bool):
@@ -602,12 +690,14 @@ class AssertionsManager:
 
     @property
     def active(self) -> Any:
+        """Return all currently active assertion records."""
         from .facade import AssertionRecordSet
 
         return AssertionRecordSet(record for record in self.all if record.is_active)
 
     @property
     def all(self) -> Any:
+        """Return active and revoked assertion history records."""
         from .facade import AssertionRecordSet, _assertion_record_from_claim, _claim_sort_key
 
         records = [
@@ -617,6 +707,17 @@ class AssertionsManager:
         return AssertionRecordSet(records)
 
     def field(self, field: Field) -> Any:
+        """Open active/history assertion views for one SDK field.
+
+        Args:
+            field: Bound SDK ``Field`` descriptor.
+
+        Returns:
+            An ``AssertionView`` with active and historical records.
+
+        Raises:
+            SDKStoreError: If the descriptor is invalid or unresolved.
+        """
         if not isinstance(field, Field):
             raise SDKStoreError("fg.assertions.field(...) expects sdk.Field descriptor; string names are ambiguous")
         schema_pred = self._sdk._schema_pred_for_field(field)
@@ -648,11 +749,24 @@ class AssertionsManager:
         value_tag: Any = _ASSERTION_FILTER_MISSING,
         _meta: Any = _ASSERTION_FILTER_MISSING,
     ) -> Any:
-        """Filter active assertion records by canonical Layer 3 criteria.
+        """Filter active assertion records by canonical criteria.
 
-        Step 6 intentionally scopes manager-level `where` to active assertions.
-        Historical filtering remains available by chaining from `all()` until
-        Step 8/9 unify AssertionView and hard-remove flat meta kwargs.
+        Args:
+            field: Optional SDK ``Field`` descriptor.
+            e_ref: Optional exact entity reference.
+            value: Optional exact decoded value.
+            value_tag: Optional canonical scalar tag.
+            _meta: Optional effective metadata key/value filters.
+
+        Returns:
+            An ``AssertionRecordSet`` containing active matches.
+
+        Raises:
+            SDKStoreError: If a filter has the wrong layer or type.
+
+        Notes:
+            This manager-level query searches active Claims only. Use
+            ``fg.assertions.all`` or an ``AssertionView`` for history.
         """
         from .facade import AssertionRecordSet, _assertion_record_from_claim, _claim_sort_key
 
@@ -706,7 +820,25 @@ class AssertionsManager:
         meta: dict[str, Any] | None = None,
         **kwargs: Any,
     ) -> str | None:
-        """Retract one assertion by id with Slice 2 guard semantics preserved."""
+        """Retract one assertion by id.
+
+        Args:
+            asrt_id: Server-assigned assertion id.
+            meta: Optional metadata for the revoke Claim.
+            **kwargs: Rejected legacy selector arguments.
+
+        Returns:
+            Revoker assertion id, or the existing revoker for an idempotent
+            repeated request.
+
+        Raises:
+            SDKStoreError: If the id is missing, malformed, protected, or the
+                graph is read-only/closed.
+
+        Notes:
+            Identity and ``:exists`` Claims must be removed through
+            ``fg.entities.delete``. Retraction appends a revoke Claim.
+        """
         if kwargs:
             raise SDKStoreError(
                 "fg.assertions.retract requires asrt_id (Layer 3); pass "
@@ -789,30 +921,23 @@ class AssertionsManager:
             raise SDKStoreError(str(exc), code=code) from exc
 
     def append_meta(self, asrt_id: str, key: str, value: Any) -> None:
-        """Append one meta row to an existing assertion (public reclassification seam).
+        """Append one metadata event to an existing assertion.
 
-        Meta rows are append-only: the new row never replaces earlier rows, it
-        extends the assertion's meta history. Every canonical read resolves a
-        key LAST-WINS — ``record.meta.raw`` (``_meta_raw_for_assertion``,
-        sdk/facade.py) and the premise admissibility filter
-        (``core/store/premise_filter.py::is_premise_excluded``) both take the
-        most recently written row. Appending e.g. a new ``provenance_class``
-        value therefore reclassifies the assertion for rule evaluation (moves
-        it INTO or OUT OF an excluded class). ``fg.ledger.find_meta(...)`` is
-        only the non-tombstone compatibility projection; complete ordered
-        history, including UNSET events, is available solely through the
-        narrow ``factgraph.audit.meta_history.read_meta_history`` audit/debug
-        interface, not a general SDK history API.
+        Args:
+            asrt_id: Existing assertion id.
+            key: Non-empty, non-system-managed metadata key.
+            value: Supported scalar metadata value.
 
-        This is the supported public surface for post-write meta
-        reclassification. ``Ledger.append_meta`` remains a deprecated
-        compatibility seam and may be downgraded to private in a later
-        cleanup phase; consumers should call this method instead.
+        Raises:
+            SDKStoreError: If the assertion/key/value is invalid, the key is
+                system-managed, or the graph is read-only/closed.
 
-        ``value`` must be a scalar (str/bool/int/float — the same shape free
-        meta keys accept at write time); the row kind is derived from the
-        Python type. Raises ``SDKStoreError`` for invalid input or an unknown
-        ``asrt_id``.
+        Notes:
+            Metadata is append-only and latest-event-wins on ordinary reads;
+            earlier events remain available through the narrow audit history
+            interface. This is the supported post-write reclassification path.
+            It is unrelated to Product V2 Scenario ``meta``, which is run-local
+            and never appended to ``claim_meta``.
         """
         if not isinstance(asrt_id, str) or not asrt_id:
             raise SDKStoreError(
@@ -875,13 +1000,53 @@ class _SDKSchemaManager:
         raise FrozenSnapshotError("FactGraph.schema namespace is read-only")
 
     def ingest(self, *args: Any, **kwargs: Any) -> Any:
+        """Ingest SDK-shaped entity data into the graph.
+
+        Args:
+            *args: Positional inputs accepted by the SDK ingest protocol.
+            **kwargs: Ingest metadata and validation options.
+
+        Returns:
+            The typed ingest result produced by the SDK ingest pipeline.
+
+        Raises:
+            SDKStoreError: If the input, metadata, or managed entity references
+                violate the ingest contract.
+
+        Notes:
+            Ingest is a factual write. On a database-backed graph it is durable
+            when this method returns; it is not a Scenario or What-if mutation.
+        """
         return self._sdk._ingest(*args, **kwargs)
 
     def validate_provenance(self, *args: Any, **kwargs: Any) -> Any:
+        """Validate an ingest result against a provenance standard.
+
+        Args:
+            *args: The object or ingest result to validate.
+            **kwargs: Validation options, including the provenance standard.
+
+        Returns:
+            The typed provenance-validation result.
+
+        Notes:
+            Validation inspects provenance structure; it does not admit a
+            source, grant source authority, or write to the ledger.
+        """
         return self._sdk._validate_provenance(*args, **kwargs)
 
     def register(self, entity_cls: type[Entity]) -> SchemaAddResult:
-        """Register a new Entity type."""
+        """Register one new Entity type additively.
+
+        Args:
+            entity_cls: New compiled SDK Entity declaration.
+
+        Returns:
+            The committed schema-add result.
+
+        Raises:
+            SchemaConflictError: If the entity type already exists.
+        """
         entity_type = _entity_type_for_schema_class(entity_cls, field_name="entity_cls")
         if entity_type in self._sdk._entity_types_by_class_registry():
             raise SchemaConflictError(
@@ -895,7 +1060,18 @@ class _SDKSchemaManager:
         )
 
     def extend(self, entity_cls: type[Entity]) -> SchemaAddResult:
-        """Add non-identity Fields to an existing Entity type."""
+        """Add non-identity Fields to an existing Entity type.
+
+        Args:
+            entity_cls: Complete additive Entity declaration.
+
+        Returns:
+            The committed schema-add result.
+
+        Raises:
+            SchemaNotFoundError: If the entity type is unknown.
+            SchemaNonAdditiveError: If the declaration changes existing shape.
+        """
         entity_type = _entity_type_for_schema_class(entity_cls, field_name="entity_cls")
         if entity_type not in self._sdk._entity_types_by_class_registry():
             raise SchemaNotFoundError(
@@ -909,7 +1085,14 @@ class _SDKSchemaManager:
         )
 
     def apply(self, entity_cls: type[Entity]) -> SchemaAddResult:
-        """Register a new Entity or extend an existing Entity."""
+        """Register a new Entity or additively extend an existing one.
+
+        Args:
+            entity_cls: Compiled SDK Entity declaration.
+
+        Returns:
+            The committed schema-add result.
+        """
         entity_type = _entity_type_for_schema_class(entity_cls, field_name="entity_cls")
         if entity_type in self._sdk._entity_types_by_class_registry():
             return self.extend(entity_cls)
@@ -917,14 +1100,12 @@ class _SDKSchemaManager:
 
 
 class _SDKFieldsManager:
-    """Layer 2 namespace manager for field-cell operations(per ADR-API §4.1).
+    """Read and mutate field cells through ``Field`` plus entity reference.
 
-    Layer 2 navigation key:`Field descriptor + e_ref (+ optional value)`.
-    Assertion ids belong to Layer 3(``fg.assertions.*``);entity macros belong
-    to Layer 1(``fg.entities.*``).
-
-    Slice 3a Step 7 removes the historical flat write shortcuts. This manager
-    now owns all Field + e_ref user-facing cell operations.
+    Notes:
+        Assertion ids belong to ``fg.assertions`` and whole-entity lifecycle
+        belongs to ``fg.entities``. This namespace performs real ledger writes;
+        Product V2 Scenario offers separate run-local write-like methods.
     """
 
     def __init__(self, sdk: "SDKStore") -> None:
@@ -1022,7 +1203,25 @@ class _SDKFieldsManager:
         *,
         meta: dict[str, Any] | None = None,
     ) -> str:
-        """Write a single-cardinality Field value."""
+        """Write one single-cardinality field value.
+
+        Args:
+            field: Bound SDK ``Field`` descriptor.
+            e_ref: Managed entity reference.
+            value: Value in the field's declared storage domain.
+            meta: Optional ledger claim metadata.
+
+        Returns:
+            Server-assigned assertion id for the appended Claim.
+
+        Raises:
+            SDKStoreError: If the descriptor, entity reference, cardinality,
+                value, metadata, or graph lifecycle is invalid.
+
+        Notes:
+            This is a durable ledger write on Database-backed graphs. Repeated
+            ``set`` appends claims; reads choose the latest active value.
+        """
         self._reject_non_field_descriptor(field, method="set")
         return self._sdk._apply_field_mutation(op="set", field=field, e_ref=e_ref, value=value, meta=meta)
 
@@ -1034,7 +1233,25 @@ class _SDKFieldsManager:
         *,
         meta: dict[str, Any] | None = None,
     ) -> str:
-        """Append a multi-cardinality Field value."""
+        """Add one member to a multi-cardinality field.
+
+        Args:
+            field: Bound multi-cardinality SDK ``Field`` descriptor.
+            e_ref: Managed entity reference.
+            value: One member value, never a container of members.
+            meta: Optional ledger claim metadata.
+
+        Returns:
+            Assertion id for the active member Claim.
+
+        Raises:
+            SDKStoreError: If descriptor, entity, cardinality, value, metadata,
+                or graph lifecycle is invalid.
+
+        Notes:
+            This writes the ledger. Use Product V2 ``fg.scenario().add`` for a
+            run-local hypothetical member instead.
+        """
         self._reject_non_field_descriptor(field, method="add")
         return self._sdk._apply_field_mutation(op="add", field=field, e_ref=e_ref, value=value, meta=meta)
 
@@ -1046,11 +1263,25 @@ class _SDKFieldsManager:
         *,
         meta: dict[str, Any] | None = None,
     ) -> str | None:
-        """Retract the unique active assertion matching ``(field, e_ref, value)``.
+        """Retract the unique active Claim matching a field value.
 
-        Step 5 delegates the chosen assertion id to shipped ``SDKStore.retract``.
-        That preserves Slice 2 INV-7c / `:exists` guard behavior without
-        duplicating the Layer 3 retract guard in Layer 2.
+        Args:
+            field: Bound ``Field`` or protected ``Identity`` descriptor.
+            e_ref: Managed entity reference.
+            value: Exact typed value to retract.
+            meta: Optional metadata for the revoke Claim.
+
+        Returns:
+            Revoker assertion id, or ``None`` only when the lower-level
+            compatibility path returns no id.
+
+        Raises:
+            SDKStoreError: If no unique match exists, the Claim is protected,
+                or the graph is read-only/closed.
+
+        Notes:
+            Retraction appends a ``__system__.revokes`` Claim; it never deletes
+            or edits the original row.
         """
         self._sdk._database_for_application_write("fg.fields.retract")
         schema_pred = self._schema_pred_for_descriptor(field, method="retract", allow_identity=True)
@@ -1081,12 +1312,23 @@ class _SDKFieldsManager:
         *,
         meta: dict[str, Any] | None = None,
     ) -> int:
-        """Retract all active assertions for ``(field, e_ref)``.
+        """Retract every active Claim for one field cell.
 
-        Partial-failure semantics are **fail-fast first-error**:claims are
-        retracted sequentially through shipped ``SDKStore.retract`` and the
-        first error is raised immediately. No rollback or best-effort behavior
-        is introduced in Step 5.
+        Args:
+            field: Bound ``Field`` or protected ``Identity`` descriptor.
+            e_ref: Managed entity reference.
+            meta: Optional metadata copied to each revoke Claim.
+
+        Returns:
+            Number of Claims retracted.
+
+        Raises:
+            SDKStoreError: On a protected Claim, invalid descriptor/reference,
+                or first failed retraction.
+
+        Notes:
+            Retractions are fail-fast and sequential; this convenience method
+            does not add a new rollback or best-effort transaction contract.
         """
         self._sdk._database_for_application_write("fg.fields.delete")
         schema_pred = self._schema_pred_for_descriptor(field, method="delete", allow_identity=True)
@@ -1097,7 +1339,20 @@ class _SDKFieldsManager:
         return count
 
     def get(self, field: Field, e_ref: str) -> Any:
-        """Return the current value for ``(field, e_ref)`` from active claims."""
+        """Read the current active value of one field cell.
+
+        Args:
+            field: Bound SDK ``Field`` descriptor.
+            e_ref: Managed entity reference.
+
+        Returns:
+            Latest scalar value or ``None`` for an empty single field; a
+            canonical tuple for a multi-value field.
+
+        Notes:
+            This reads the current ledger view and never writes metadata or
+            materializes a Scenario.
+        """
         schema_pred = self._schema_pred_for_descriptor(field, method="get")
         claims = self._active_claims_for_field(schema_pred, e_ref)
         if str(schema_pred.get("cardinality", "single")) == "multi":
@@ -1114,17 +1369,12 @@ class _SDKFieldsManager:
 
 
 class _SDKEntitiesManager:
-    """Layer 1 namespace manager for entity-macro operations(per ADR-API §4.1).
+    """Manage entity identity, existence, snapshots and whole-entity removal.
 
-    Layer 1 navigation key:`EntityClass + identity_kwargs` or managed `e_ref`.
-    Layer 1 排他 enforcement(per ADR-API §4.1.1):this namespace does NOT
-    accept ``asrt_id`` parameters(use ``fg.assertions.by_id(asrt_id)`` or
-    ``fg.assertions.retract(asrt_id)`` instead)nor ``(Field, e_ref)`` value
-    writes(use ``fg.fields.*`` for per-cell mutations).
-
-    Slice 3a Step 7 removes the historical ``fg.read.*`` namespace and flat
-    top-level shortcuts. This manager now owns all Layer 1 user-facing entity
-    operations.
+    Notes:
+        Use ``Entity`` class plus identity values, or a managed ``e_ref`` where
+        documented. Assertion ids belong to ``fg.assertions``; per-field writes
+        belong to ``fg.fields``.
     """
 
     def __init__(self, sdk: "SDKStore") -> None:
@@ -1163,7 +1413,19 @@ class _SDKEntitiesManager:
         )
 
     def get(self, entity_cls: type[Entity], **identity_kwargs: Any) -> Any:
-        """Read one entity snapshot by identity values."""
+        """Read one entity snapshot by its complete identity.
+
+        Args:
+            entity_cls: SDK ``Entity`` subclass.
+            **identity_kwargs: Complete identity-field values.
+
+        Returns:
+            An immutable entity snapshot.
+
+        Raises:
+            SDKStoreError: If the class/identity is invalid or the entity is
+                not visible.
+        """
         self._reject_non_entity_class(entity_cls, method="get")
         from .facade import sdk_get
 
@@ -1178,19 +1440,28 @@ class _SDKEntitiesManager:
         _meta: dict[str, Any] | None = None,
         **field_filters: Any,
     ) -> Any:
-        """Find entity snapshots by exact field filters(canonical signature)。
+        """Find entity snapshots using exact field filters.
 
-        Per ADR-API §4.1.2 + §4.4:``where`` is the canonical verb(rename of
-        shipped ``find``)with **unified meta input** — flat ``source=`` /
-        ``trace_id=`` / ``version=`` / ``meta=`` kwargs are rejected;canonical
-        meta filtering accepted via ``_meta`` dict。
+        Args:
+            entity_cls: SDK ``Entity`` subclass to search.
+            policy: Removed read-policy compatibility argument; non-default
+                values are rejected.
+            limit: Optional maximum number of snapshots.
+            _meta: Reserved canonical metadata filter. Non-empty entity-level
+                metadata filtering is not implemented; use assertions instead.
+            **field_filters: Exact field-name/value filters.
 
-        **Slice 3a scope**:field-filter delegation to shipped
-        ``sdk_find`` remains the underlying read implementation;flat meta
-        kwargs are rejected with ADR-API §4.4 pointer。 ``_meta``
-        parameter is accepted in the canonical signature but entity-query
-        metadata projection is not yet implemented; assertion-level metadata
-        filtering lives on ``fg.assertions.where`` and ``AssertionView.where``。
+        Returns:
+            A snapshot collection in canonical runtime order.
+
+        Raises:
+            SDKStoreError: If class, filter, removed policy, or metadata input
+                is invalid.
+
+        Notes:
+            Flat ``source=``, ``trace_id=``, ``version=`` and ``meta=`` inputs
+            are rejected. Use ``fg.assertions.where(_meta=...)`` when filtering
+            assertion metadata.
         """
         self._reject_non_entity_class(entity_cls, method="where")
 
@@ -1232,9 +1503,20 @@ class _SDKEntitiesManager:
         limit: int | None = None,
         **port_constraints: Any,
     ) -> Any:
-        """Match visible snapshots against an application Rule or AND RuleExpr.
+        """Match visible snapshots against a Rule or conjunctive RuleExpr.
 
-        Delegates to the shipped match runtime implementation.
+        Args:
+            entity_cls: Entity type projected as snapshots.
+            template: Application Rule or supported conjunctive RuleExpr.
+            limit: Optional maximum number of snapshots.
+            **port_constraints: Exact public-port constraints.
+
+        Returns:
+            Matching entity snapshots.
+
+        Raises:
+            SDKStoreError: If the class, template, constraints, or closure is
+                unsupported.
         """
         self._reject_non_entity_class(entity_cls, method="match")
         from .match_runtime import sdk_match
@@ -1242,12 +1524,22 @@ class _SDKEntitiesManager:
         return sdk_match(self._sdk, entity_cls, template, limit=limit, **port_constraints)
 
     def ref(self, entity_cls: type[Entity], **identity_values: Any) -> str:
-        """Return a managed e_ref for the entity identified by kwargs。
+        """Create a managed entity-reference value without writing Claims.
 
-        Records the supplied identity into the SDKStore shadow store so that
-        downstream ``fg.fields.set`` / ``fg.fields.add`` can resolve the e_ref。Does NOT write to the
-        ledger — per ADR-IC §4.2.3 + Slice 2 Step 7,shadow store is the
-        legacy lazy-materialization compatibility path,not a Layer 2 contract。
+        Args:
+            entity_cls: SDK ``Entity`` subclass.
+            **identity_values: Complete identity-field values.
+
+        Returns:
+            Canonical managed ``e_ref`` string.
+
+        Raises:
+            SDKStoreError: If the class or identity bundle is invalid.
+
+        Notes:
+            ``ref`` records identity in the SDK compatibility cache but does
+            not establish ledger existence. Use ``entities.create`` for eager
+            identity/existence Claims.
         """
         self._reject_non_entity_class(entity_cls, method="ref")
         return self._sdk._ref(entity_cls, **identity_values)
@@ -1259,33 +1551,27 @@ class _SDKEntitiesManager:
         meta: dict[str, Any] | None = None,
         **identity: Any,
     ) -> str:
-        """Eager-emit Identity Claims + ``<EntityType>:exists`` Claim atomically。
+        """Create an entity and atomically append its existence Claims.
 
-        Per ADR-IC §4.2(application 层 derive)+ ADR-API §4.1.2(entities
-        namespace)+ Slice 3a SF4(eager emission + populate shadow store)。
+        Args:
+            entity_cls: SDK ``Entity`` subclass.
+            meta: Optional metadata copied to the created identity/existence
+                Claims.
+            **identity: Complete immutable identity-field values.
 
-        Flow:
-        1. Layer 1 排他 enforcement(non-Entity-class reject per ADR-API §4.1.1)。
-        2. Identity bundle completeness validation + shadow store populate via
-           shipped ``SDKStore.ref(EC, **identity)`` path(per Slice 2 Step 7
-           shadow store legacy documentation)。
-        3. Build ``EntityCreateCommand`` DTO + delegate to application-layer
-           ``plan_create_command`` + ``apply_create_plan``(per PF-S3 INV-6
-           application-first;SDK manager NEVER does inline planner logic)。
-        4. Return the deterministic e_ref。
+        Returns:
+            Canonical managed ``e_ref`` string.
 
         Raises:
-            ``EntityAlreadyExistsError``(code=``ENTITY_ALREADY_EXISTS``)when
-            an entity with the supplied identity is already visible in the
-            ledger Active set(per blueprint §13.1 duplicate-create rejection)。
-            ``SDKStoreError``(layer-specific)on bad Entity class or missing
-            identity field。
+            EntityAlreadyExistsError: With code ``ENTITY_ALREADY_EXISTS`` when
+                the identity is already active.
+            SDKStoreError: If the class, identity, metadata, or graph lifecycle
+                is invalid.
 
         Notes:
-            Coexists with the lazy ``fg.entities.ref + fg.fields.set``
-            materialization path per SF4 — shadow store is the
-            legacy compat surface;Step 2+ ``fg.entities.create`` is the eager
-            path. Slice 3a does NOT remove the shadow store。
+            This is a ledger write and is atomic on Database-backed graphs.
+            Identity values are immutable; change them by deleting and
+            recreating the entity.
         """
         self._reject_non_entity_class(entity_cls, method="create")
         database = self._sdk._database_for_application_write("fg.entities.create")
@@ -1362,39 +1648,27 @@ class _SDKEntitiesManager:
         meta: dict[str, Any] | None = None,
         **identity: Any,
     ) -> int:
-        """Whole-entity revoke per ADR-IC §4.1 强制点 3 + Slice 3a §5.4。
+        """Atomically retract every active Claim for one entity.
 
-        ``fg.entities.delete`` is the **唯一合法整批撤销 path** for Identity
-        Claims and Field Claims under the e_ref。 Legacy ``<EntityType>:exists``
-        Claims,when present,are retracted through the same path-bound whole-
-        entity revoke path。
-
-        **PF-S2 discriminated signature**(per blueprint §6.1 SF2 lock):
-
-        - Form A:``fg.entities.delete(e_ref: str, *, meta=None)`` — pass a
-          managed e_ref string produced by ``fg.entities.ref(EC, **id)`` or
-          ``fg.entities.create(EC, **id)``。
-        - Form B:``fg.entities.delete(EntityCls, *, meta=None, **identity)`` —
-          pass the EntityClass + full identity_kwargs。
-
-        Tuple selectors are **explicitly forbidden**(per PF-S2 lock)。
-
-        Implementation:per SF3 P1 amend,the SDK shell is a thin normalizer
-        — it builds an ``EntityDeleteCommand`` and delegates to the application-
-        layer planner/executor。 The retract guard bypass for Identity /
-        ``:exists`` Claims is implemented as a **path-bound** structural
-        guarantee in the application layer(``_apply_entity_delete_retract``
-        private helper),NOT a metadata signal on ``PlannedOpDTO``。
+        Args:
+            e_ref_or_cls: Managed ``e_ref`` string, or an SDK ``Entity`` class
+                paired with ``identity`` keyword values.
+            meta: Optional metadata copied to revoke Claims.
+            **identity: Complete identity bundle for the Entity-class form.
 
         Returns:
-            The number of Active Claims atomically retracted。
+            Number of active Claims retracted.
 
         Raises:
-            ``SDKStoreError`` if the input shape does not match Form A or B,
-            if Form A's e_ref is not managed(``UNRESOLVABLE_E_REF``),or if
-            Form B's identity bundle is incomplete(``missing identity field``)。
-            ``EntityNotFoundError``(``ENTITY_NOT_FOUND``)if the target
-            entity is not visible in the active view。
+            EntityNotFoundError: With code ``ENTITY_NOT_FOUND`` when no active
+                entity matches.
+            SDKStoreError: With code ``UNRESOLVABLE_E_REF`` for unmanaged refs,
+                or when selector/identity/lifecycle input is invalid.
+
+        Notes:
+            This is the only public whole-entity path allowed to revoke
+            protected Identity and compatibility ``:exists`` Claims. It appends
+            revocations; original Claims remain immutable.
         """
         database = self._sdk._database_for_application_write("fg.entities.delete")
         # Form A vs Form B vs forbidden tuple — discriminate per PF-S2。
@@ -1475,11 +1749,15 @@ class _SDKEntitiesManager:
         return len(result.applied)
 
     def exists(self, entity_cls: type[Entity], **identity: Any) -> bool:
-        """Return whether the entity is visible via active Identity Claims.
+        """Return whether an entity has a complete active identity bundle.
 
-        ``self._sdk._ref`` supplies the Form I complete-identity validation and
-        deterministic e_ref encoding while preserving the Slice 2 shadow-store
-        compatibility behavior until the future eager-create-only migration.
+        Args:
+            entity_cls: SDK ``Entity`` subclass.
+            **identity: Complete identity-field values.
+
+        Returns:
+            ``True`` only when the entity is visible through active Identity
+            Claims.
         """
         self._reject_non_entity_class(entity_cls, method="exists")
         e_ref = self._sdk._ref(entity_cls, **identity)
@@ -1493,7 +1771,19 @@ class _SDKEntitiesManager:
         )
 
     def edit(self, entity_cls: type[Entity], **identity_kwargs: Any) -> Any:
-        """Open an EntityEditor for an existing entity."""
+        """Open a writable editor for an existing entity.
+
+        Args:
+            entity_cls: SDK ``Entity`` subclass.
+            **identity_kwargs: Complete identity-field values.
+
+        Returns:
+            An ``EntityEditor`` bound to the entity.
+
+        Raises:
+            SDKStoreError: If the graph is read-only/closed or the target is
+                invalid.
+        """
         self._sdk._database_for_application_write("fg.entities.edit")
         self._reject_non_entity_class(entity_cls, method="edit")
         from .facade import sdk_edit
@@ -1520,7 +1810,15 @@ class _SDKRulesManager:
         return self._sdk._inspect_rule(*args, **kwargs)
 
     def structure(self, *args: Any, **kwargs: Any) -> Any:
-        """Return the RuleStructure static projection for a Rule or RuleExpr."""
+        """Return the static RuleStructure projection for a Rule or RuleExpr.
+
+        Args:
+            *args: Rule or RuleExpr input.
+            **kwargs: Optional explicit head for a RuleExpr.
+
+        Returns:
+            Canonical authored structure without engine execution.
+        """
         return self._sdk._structure_rule(*args, **kwargs)
 
 
@@ -1551,7 +1849,18 @@ class _SDKEvalManager:
         raise FrozenSnapshotError("FactGraph.eval namespace is read-only")
 
     def evaluate(self, *args: Any, **kwargs: Any) -> Any:
-        """Evaluate an Inference, application Rule/RuleExpr, or compiled EvaluationQuery."""
+        """Evaluate a legacy Inference, Rule/RuleExpr, or compiled Query.
+
+        Args:
+            *args: Evaluation target and positional compatibility inputs.
+            **kwargs: Engine, config, capture, or evaluation options.
+
+        Returns:
+            A legacy ``EvaluateResult`` or target-specific compatibility result.
+
+        Notes:
+            Product V2 uses ``fg.query(...).plan(profile=...).run()`` instead.
+        """
         return self._sdk._evaluate(*args, **kwargs)
 
     def evaluate_candidates(self, *args: Any, **kwargs: Any) -> Any:
@@ -1567,19 +1876,46 @@ class _SDKEvalManager:
         return self._sdk._evaluate_candidates(*args, **kwargs)
 
     def explain(self, *args: Any, **kwargs: Any) -> Any:
-        """Explain a closed-head evaluation replay."""
+        """Explain a legacy closed-head evaluation replay.
+
+        Args:
+            *args: Closed-head Rule/evaluation inputs.
+            **kwargs: Legacy engine and evidence options.
+
+        Returns:
+            A legacy ``Explanation``.
+        """
         return self._sdk._explain(*args, **kwargs)
 
     def run_scenario(self, *args: Any, **kwargs: Any) -> Any:
-        """Capture one bounded replacement-only ScenarioRun."""
+        """Capture one bounded legacy replacement ScenarioRun.
+
+        Returns:
+            A detached ``ScenarioRunV0``.
+
+        Notes:
+            Product Scenario V2 uses the typed Query planning terminal.
+        """
         return self._sdk._run_scenario(*args, **kwargs)
 
     def capture_query(self, *args: Any, **kwargs: Any) -> Any:
-        """Capture one targeted native Query with detached observations."""
+        """Capture one targeted native compatibility Query.
+
+        Returns:
+            A detached captured Query run with observation records.
+        """
         return self._sdk._capture_targeted_evaluation_query_run(*args, **kwargs)
 
     def evaluate_program(self, *args: Any, **kwargs: Any) -> Any:
-        """Evaluate a selected Horn program read-only on this ledger."""
+        """Evaluate a selected Horn program read-only on this ledger.
+
+        Args:
+            *args: RuleProgram and closed goal inputs.
+            **kwargs: Engine and premise-scope options.
+
+        Returns:
+            A ``RuleProgramResult`` with captured support when available.
+        """
         from .rule_program_runtime import evaluate_rule_program
 
         return evaluate_rule_program(self._sdk, *args, **kwargs)
@@ -1656,7 +1992,14 @@ class _SDKAuditManager:
         return claim.pred_id, claim.e_ref
 
     def explain(self, target: Any) -> Any:
-        """Explain chosen-policy state for the assertion's predicate/entity cell."""
+        """Explain chosen-policy state for one assertion cell.
+
+        Args:
+            target: Assertion id or assertion record.
+
+        Returns:
+            Chosen/conflict diagnostics from the current ledger state.
+        """
         claim = self._claim_for_audit_target(target, method="explain")
         val_atoms = tuple(value for _tag, value in claim.rest_terms)
         result = self._sdk._store.explain_fact(claim.pred_id, claim.e_ref, *val_atoms)
@@ -1665,12 +2008,27 @@ class _SDKAuditManager:
         return result
 
     def conflicts(self, target: Any) -> Any:
-        """Return conflict diagnostics for an assertion record or entity field cell."""
+        """Return conflict diagnostics for an assertion or entity field cell.
+
+        Args:
+            target: Assertion id/record or ``(entity, field)`` pair.
+
+        Returns:
+            Current conflict and chosen-value diagnostics.
+        """
         pred_id, e_ref = self._conflict_cell_for_target(target)
         return self._sdk._store.conflicts(pred_id, e_ref)
 
     def diff_proof_frames(self, *args: Any, **kwargs: Any) -> Any:
-        """Compare two recorded proof-frame outcomes."""
+        """Compare two recorded proof-frame outcomes.
+
+        Args:
+            *args: Recorded proof-frame inputs.
+            **kwargs: Comparison options.
+
+        Returns:
+            A structured post-hoc proof-frame diff.
+        """
         return self._sdk._diff_proof_frames(*args, **kwargs)
 
 
@@ -1690,6 +2048,15 @@ class _SDKMetaManager:
         raise FrozenSnapshotError("FactGraph.meta namespace is read-only")
 
     def capabilities(self) -> Mapping[str, frozenset[str]]:
+        """Return the value kinds and cardinalities supported by this runtime.
+
+        Returns:
+            An immutable mapping from capability category to supported values.
+
+        Notes:
+            The result describes the installed runtime. It is read-only and
+            does not imply that every execution engine supports every feature.
+        """
         from factgraph.application.capabilities import compute_capabilities
 
         return compute_capabilities()
@@ -1713,7 +2080,15 @@ class _SDKPackageManager:
         return self._sdk.export_package(*args, **kwargs)
 
     def run_package(self, *args: Any, **kwargs: Any) -> Any:
-        """Run an exported package with the selected engine."""
+        """Run an exported compatibility package with the selected engine.
+
+        Args:
+            *args: Package directory or positional runner inputs.
+            **kwargs: Entrypoints and engine selection.
+
+        Returns:
+            The legacy package runner result.
+        """
         return self._sdk.run_package(*args, **kwargs)
 
 
@@ -1772,17 +2147,22 @@ def _schema_non_additive_message(exc: SDKStoreError) -> str:
 
 
 class SDKStore:
-    """Main SDK graph object, exported to users as `FactGraph`.
+    """Own a compiled schema, fact ledger, and public SDK namespaces.
 
-    `FactGraph` is a literal alias of this class and is the recommended public
-    name. It owns the compiled schema, append-only ledger, optional authoring
-    registry, optional workspace path, and user-facing namespaces such as
-    `schema`, `read`, `write`, `rules`, `inferences`, `eval`, `audit`,
-    `package`, and `assertion_views`.
+    ``FactGraph`` is a literal alias and the recommended public name. Current
+    namespaces include ``entities``, ``fields``, ``assertions``, ``schema``,
+    ``rules``, ``eval``, ``execution``, ``problog``, ``audit``, ``meta``,
+    ``package`` and ``assertion_views``. Product builders return immutable
+    assets directly; there is no Rule/Policy/Function registry lookup.
 
-    `create` and `load_workspace` own an internal `Database`; `attach` borrows
-    a caller-owned Database. `from_schema_classes` remains the lower-level
+    ``create`` and ``load_workspace`` own an internal ``Database``; ``attach``
+    borrows a caller-owned Database. ``from_schema_classes`` is the lower-level
     compatibility constructor for unmanaged in-memory or injected Ledgers.
+
+    Notes:
+        Database-backed writes are write-through. Product Scenario is a
+        separate run-local overlay, and EvaluationRun replay is a separate
+        sealed artifact rather than workspace persistence.
     """
 
     def __init__(
@@ -1917,10 +2297,9 @@ class SDKStore:
                 `from_schema_classes` for an unmanaged Ledger path.
             path: Optional workspace directory.
             artifact_store_root: Optional artifact sidecar root.
-            registry_root: REMOVED by A20(E) / Q6-A; raises `SDKStoreError`
-                immediately if provided. Pass workspace path via `path=` only.
-            registry: REMOVED by A20(E) / Q6-A; raises `SDKStoreError`
-                immediately if provided.
+            registry_root: Removed compatibility argument; always rejected.
+                Pass the workspace directory through ``path``.
+            registry: Removed compatibility argument; always rejected.
             default_row_format: Optional default output row format for rule
                 evaluation.
 
@@ -1928,8 +2307,13 @@ class SDKStore:
             A `FactGraph` / `SDKStore` bound to the compiled schema.
 
         Raises:
-            SDKStoreError: If `registry_root=` or `registry=` is provided, or
+            SDKStoreError: If removed registry arguments are provided, or
                 if constructor paths or schema classes are invalid.
+
+        Notes:
+            Creating an in-memory graph omits durable workspace storage.
+            Product Rule/Function/Policy assets remain in-process values and
+            are not registered by this constructor.
         """
         # Q6-A (e.1): explicit reject before any workspace path resolution so
         # users get the migration message without ambiguous downstream errors.
@@ -1977,6 +2361,29 @@ class SDKStore:
         registry: Any | None = None,
         default_row_format: str | None = None,
     ) -> "SDKStore":
+        """Create the lower-level unmanaged-Ledger compatibility runtime.
+
+        Args:
+            classes: Non-empty SDK ``Entity`` class list.
+            ledger: Optional caller-owned in-memory/open Ledger.
+            ledger_path: Optional unmanaged Ledger file path.
+            artifact_store_root: Optional artifact sidecar root.
+            registry_root: Removed argument; always rejected when supplied.
+            registry: Removed argument; always rejected when supplied.
+            default_row_format: Optional legacy evaluation row format.
+
+        Returns:
+            An ``SDKStore`` using the compatibility Ledger lifecycle.
+
+        Raises:
+            SDKStoreError: If inputs conflict, removed registry arguments are
+                supplied, or schema digests disagree.
+
+        Notes:
+            New durable code should prefer ``FactGraph.create(path=...)`` or
+            ``load_workspace(...)``. This path is not the Product V2 run/replay
+            persistence boundary.
+        """
         # Q6-A (e.1): same rejection as create(...).
         if registry_root is not None or registry is not None:
             _raise_registry_root_removed()
@@ -2011,10 +2418,17 @@ class SDKStore:
             schema_classes: Entity classes matching the saved workspace schema.
             default_row_format: Optional default output row format.
 
+        Returns:
+            An SDK-owned ``FactGraph`` holding the workspace's exclusive
+            writer lock until ``close()``.
+
         Raises:
             SDKStoreError: If the workspace contains a legacy `registry/`
-                marker (Q6-A (d.3): run the migration CLI first), or if the
-                schema digest does not match.
+                marker, cannot be opened, or has a mismatching schema digest.
+
+        Notes:
+            Loading never performs implicit migration. Product assets and
+            EvaluationRun artifacts are not restored from workspace storage.
         """
         if schema_classes is None:
             raise SDKStoreError("schema_classes is required for FactGraph.load_workspace(...)")
@@ -2051,6 +2465,27 @@ class SDKStore:
         default_row_format: str | None = None,
         **kwargs: Any,
     ) -> "SDKStore":
+        """Attach the SDK facade to a caller-owned Database.
+
+        Args:
+            db: Open ``Database`` retained and closed by the caller.
+            schema_classes: Entity classes matching ``db.schema_digest``.
+            view: Optional frozen assertion set; when supplied the attached
+                graph is read-only.
+            default_row_format: Optional legacy evaluation row format.
+            **kwargs: Rejected compatibility keywords.
+
+        Returns:
+            A writable base attachment or read-only view attachment.
+
+        Raises:
+            SDKStoreError: If ``db`` is invalid, schema digests differ, or an
+                unsupported lifecycle keyword is supplied.
+
+        Notes:
+            Closing the returned graph does not close the caller-owned
+            Database.
+        """
         if not isinstance(db, Database):
             raise SDKStoreError("FactGraph.attach(db) expects a Database instance")
         if kwargs:
@@ -2113,7 +2548,12 @@ class SDKStore:
         self.close()
 
     def close(self) -> None:
-        """Release an internally owned Database; attached Databases remain caller-owned."""
+        """Release resources owned by this FactGraph.
+
+        Notes:
+            The operation is idempotent. SDK-created/loaded Databases are
+            closed; Databases passed to ``attach`` remain caller-owned.
+        """
         if self._owns_database and self._database is not None:
             self._database.close()
             self._owns_database = False
@@ -2161,10 +2601,22 @@ class SDKStore:
 
     @property
     def store(self) -> Store:
+        """Return the lower-level core Store used by this graph.
+
+        Notes:
+            This advanced compatibility escape hatch bypasses Product SDK
+            ergonomics. Prefer namespaced ``fg.*`` APIs for new code.
+        """
         return self._store
 
     @property
     def ledger(self) -> Ledger:
+        """Return the underlying append-only Ledger.
+
+        Notes:
+            Direct Ledger mutation can bypass Database transaction routing.
+            Prefer ``fg.fields``, ``fg.assertions`` or ``fg.batch`` writes.
+        """
         return self._store.ledger
 
     @property
@@ -2288,6 +2740,7 @@ class SDKStore:
 
     @property
     def schema_ir(self) -> dict[str, Any]:
+        """Return the canonical schema IR associated with this graph."""
         return self._schema_ir
 
     def rule_builder(
@@ -2295,38 +2748,150 @@ class SDKStore:
         id: str,
         *,
         version: str | None = None,
-        meta: Any | None = None,
-    ) -> Any:
-        """Start a product Rule builder bound to this graph's trusted schema.
+        meta: AssetMeta | None = None,
+    ) -> RuleBuilder:
+        """Start staged Product Rule construction for this graph.
 
         The builder resolves its complete semantic-port declaration at build
-        time and returns a ``ProductRuleV1``.  It is neither a Rule registry
-        nor a deferred compiler: the returned value is immediately usable by
-        :meth:`policy_builder` / :meth:`query`.
+        time and returns a ``ProductRuleV1``.
+
+        Args:
+            id: Stable application-defined Rule identifier.
+            version: Optional application-defined version.
+            meta: Optional ``AssetMeta`` descriptor.
+
+        Returns:
+            A graph-bound ``RuleBuilder``.
+
+        Raises:
+            ProductAuthoringError: If asset identity or metadata is invalid.
+
+        Notes:
+            This is neither a Rule registry nor a deferred compiler. It does
+            not execute or persist a Rule.
         """
 
         from .product_authoring import rule_builder
 
         return rule_builder(self, id, version=version, meta=meta)
 
+    def function_builder(
+        self,
+        id: str,
+        *,
+        version: str | None = None,
+        meta: AssetMeta | None = None,
+    ) -> FunctionBuilder:
+        """Start staged deterministic Product Function construction.
+
+        Args:
+            id: Stable application-defined Function identifier.
+            version: Optional application-defined version.
+            meta: Optional ``AssetMeta`` descriptor.
+
+        Returns:
+            A graph-independent ``FunctionBuilder``.
+
+        Raises:
+            ProductAuthoringError: If asset identity or metadata is invalid.
+
+        Notes:
+            This constructs an immutable asset; it does not register a tool,
+            mutate the graph, invoke the callable, or make Function callable
+            from Rule. Product Policy is their only composition owner.
+        """
+
+        from .product_authoring import function_builder
+
+        return function_builder(id, version=version, meta=meta)
+
+    def build_function(
+        self,
+        *,
+        id: str,
+        implementation: Callable[..., object],
+        inputs: Any | None = None,
+        output: Any | None = None,
+        output_name: str = "result",
+        implementation_digest: str | None = None,
+        version: str | None = None,
+        meta: AssetMeta | None = None,
+    ) -> ProductFunctionV1:
+        """Build a deterministic Product Function in one call.
+
+        Args:
+            id: Stable application-defined Function identifier.
+            implementation: Pure synchronous Python callable.
+            inputs: Optional explicit ordered scalar input domains.
+            output: Optional explicit scalar output domain.
+            output_name: Public name for the single output port.
+            implementation_digest: Optional explicit implementation pin.
+            version: Optional application-defined version.
+            meta: Optional ``AssetMeta`` descriptor.
+
+        Returns:
+            A sealed ``ProductFunctionV1``.
+
+        Raises:
+            ProductAuthoringError: If the callable or asset contract is
+                invalid.
+
+        Notes:
+            This method does not register a tool, invoke the callable, or
+            write the ledger. Detached replay never calls the implementation.
+        """
+
+        from .product_authoring import build_function
+
+        return build_function(
+            id=id,
+            implementation=implementation,
+            inputs=inputs,
+            output=output,
+            output_name=output_name,
+            implementation_digest=implementation_digest,
+            version=version,
+            meta=meta,
+        )
+
     def build_rule(
         self,
         *,
         id: str,
-        when: Any,
-        ports: Any,
-        semantic_ports: Any,
+        when: Sequence[Any],
+        ports: Mapping[str, Any],
+        semantic_ports: Mapping[str, Any],
         version: str | None = None,
-        meta: Any | None = None,
+        meta: AssetMeta | None = None,
         repr: str | None = None,
-    ) -> Any:
-        """Direct product Rule construction through :meth:`rule_builder`.
+    ) -> ProductRuleV1:
+        """Build and resolve a Product Rule in one call.
 
         ``semantic_ports`` must completely describe the SDK Rule's public
         ports. Product code can use an ``Entity`` class for its identity port
         and a bound ``Field`` descriptor for a scalar field port (for example
         ``{"person": Person, "age": Person.age}``); resolution occurs
         against this exact graph before the product wrapper is returned.
+
+        Args:
+            id: Stable application-defined Rule identifier.
+            when: Logical SDK Rule body.
+            ports: Public port-to-variable mapping.
+            semantic_ports: Complete semantic meaning for every public port.
+            version: Optional application-defined version.
+            meta: Optional ``AssetMeta`` descriptor.
+            repr: Optional legacy presentation template.
+
+        Returns:
+            A sealed graph-bound ``ProductRuleV1``.
+
+        Raises:
+            ProductAuthoringError: If Rule construction or semantic resolution
+                fails.
+
+        Notes:
+            This method neither registers nor evaluates the Rule and never
+            writes the ledger.
         """
 
         from .product_authoring import build_rule
@@ -2347,9 +2912,25 @@ class SDKStore:
         id: str,
         *,
         version: str | None = None,
-        meta: Any | None = None,
-    ) -> Any:
-        """Start one product Policy builder with local typed occurrences only."""
+        meta: AssetMeta | None = None,
+    ) -> PolicyBuilder:
+        """Start one Product Policy builder with local typed occurrences.
+
+        Args:
+            id: Stable application-defined Policy identifier.
+            version: Optional application-defined version.
+            meta: Optional ``AssetMeta`` descriptor.
+
+        Returns:
+            An owner-bound ``PolicyBuilder``.
+
+        Raises:
+            ProductAuthoringError: If asset identity or metadata is invalid.
+
+        Notes:
+            The builder is local, not a Policy registry. Rule and Function
+            occurrences become part of the asset only when ``build`` succeeds.
+        """
 
         from .product_authoring import PolicyBuilder
 
@@ -2359,15 +2940,33 @@ class SDKStore:
         self,
         *,
         id: str,
-        build: Any,
+        build: Callable[[PolicyBuilder], Any],
         version: str | None = None,
-        meta: Any | None = None,
-    ) -> Any:
-        """Build one product Policy by invoking ``build`` on one exact builder.
+        meta: AssetMeta | None = None,
+    ) -> ProductPolicyV1:
+        """Build a Product Policy with one callback-local builder.
 
         The callback receives the same builder whose final ``build(...)`` call
         is used, preserving Q19 owner-bound occurrence/port handles.  This is
         intentionally local construction, never registration by ``id``.
+
+        Args:
+            id: Stable application-defined Policy identifier.
+            build: Callback receiving one ``PolicyBuilder`` and returning its
+                root node.
+            version: Optional application-defined version.
+            meta: Optional ``AssetMeta`` descriptor.
+
+        Returns:
+            A sealed ``ProductPolicyV1``.
+
+        Raises:
+            SDKStoreError: If ``build`` is not callable or raises a non-SDK
+                exception.
+            ProductAuthoringError: If the returned topology is invalid.
+
+        Notes:
+            This method does not evaluate or persist the Policy.
         """
 
         if not callable(build):
@@ -2381,13 +2980,20 @@ class SDKStore:
             raise SDKStoreError(f"build_policy callback raised: {exc}") from exc
         return builder.build(root)
 
-    def scenario(self) -> Any:
-        """Start one run-local, immutable-on-build Scenario V2 request.
+    def scenario(self) -> ScenarioBuilderV2:
+        """Start one run-local Product V2 Scenario request.
 
         The returned builder accepts ordinary SDK ``Field`` descriptors,
         managed entity references and a strict ``meta=`` mapping.  It only
         constructs ``ScenarioSpecV2``: it does not write to the ledger,
         resolve a captured world or execute a query.
+
+        Returns:
+            A mutable-while-authoring ``ScenarioBuilderV2``.
+
+        Notes:
+            Scenario ``meta`` is strictly lowered into fact semantics,
+            provenance and display lanes. It is not ledger ``claim_meta``.
         """
 
         from .product_scenario_execution import scenario_builder_v2
@@ -2407,8 +3013,13 @@ class SDKStore:
 
         return policy_draft(self, policy_id, version=version)
 
-    def query(self, target: Any, *, address_space: Any | None = None) -> Any:
-        """Start a typed Query over one resolved Rule or managed Policy.
+    def query(
+        self,
+        target: Any,
+        *,
+        address_space: Any | None = None,
+    ) -> EvaluationQueryBuilderV1:
+        """Start a typed Query over one resolved Rule or Policy target.
 
         This is a target-normalization facade, never a string registry lookup.
         ``target`` must be a resolved Rule, raw managed Policy, SDK-authored
@@ -2426,6 +3037,25 @@ class SDKStore:
         retains the original Product Rule/Policy envelope for sealed capture;
         it never reinterprets V0/V1 providers, expectations, or evidence
         scopes.
+
+        Args:
+            target: Resolved Rule, raw managed Policy, authored Product target,
+                or explicit provider composite.
+            address_space: Advanced address space required only for compatible
+                raw Policy targets. Product targets already carry it.
+
+        Returns:
+            An immutable ``EvaluationQueryBuilderV1`` supporting typed
+            ``bind`` / ordered ``select`` and generation-specific terminals.
+
+        Raises:
+            SDKStoreError: If the target is unsupported, unresolved, or paired
+                with an invalid address space.
+
+        Notes:
+            Constructing a Query does not read the ledger or execute an
+            engine. A bare Provider is not a Query target. Product Function
+            outputs may be selected but never bound as Query inputs.
         """
 
         from .evaluation_query_builder import build_evaluation_query_builder
@@ -2438,88 +3068,103 @@ class SDKStore:
 
     @property
     def assertion_views(self) -> _SDKAssertionViewsManager:
+        """Return the namespace for persisted frozen assertion-set views."""
         return self._assertion_views_manager
 
     @property
     def assertions(self) -> AssertionsManager:
+        """Return the namespace for assertion-level reads and mutations."""
         return self._assertions_manager
 
     @property
     def schema(self) -> _SDKSchemaManager:
-        """`schema` taxonomy namespace (post-L redesign §5.2 lock).
-
-        Read-only manager exposing ``ingest`` and ``validate_provenance``.
-        Delegates to flat ``SDKStore.<method>`` per §5.4 Option 2 lock.
-        """
+        """Return the read-only schema/ingest namespace."""
         return self._schema_manager
 
     @property
     def entities(self) -> _SDKEntitiesManager:
-        """`entities` Layer 1 namespace per ADR-API §4.1。
-
-        Slice 3a Step 7 owns Layer 1 user-facing entity operations after
-        removing the historical ``fg.read.*`` namespace and flat shortcuts。
-        """
+        """Return the read-only entity lifecycle and snapshot namespace."""
         return self._entities_manager
 
     @property
     def fields(self) -> _SDKFieldsManager:
-        """`fields` Layer 2 namespace per ADR-API §4.1。
-
-        Slice 3a Step 7 owns Layer 2 user-facing field-cell operations after
-        removing the historical ``fg.write.*`` namespace and flat shortcuts。
-        """
+        """Return the read-only namespace for field-cell reads and writes."""
         return self._fields_manager
 
     @property
     def rules(self) -> _SDKRulesManager:
-        """`rules` taxonomy namespace exposing pure rule/derivation structure inspection."""
+        """Return the read-only Rule structure-inspection namespace."""
         return self._rules_manager
 
     @property
     def inferences(self) -> _SDKInferencesManager:
-        """`inferences` taxonomy namespace exposing persisted Inference asset handles."""
+        """Return the legacy Inference asset namespace."""
         return self._inferences_manager
 
     @property
     def eval(self) -> _SDKEvalManager:
-        """`eval` taxonomy namespace exposing T5 evaluate/explain APIs."""
+        """Return the legacy live evaluate/explain namespace."""
         return self._eval_manager
 
     @property
-    def execution(self) -> Any:
+    def execution(self) -> _SDKExecutionManagerV2:
         """Read-only V2 execution-profile construction namespace.
 
         ``fg.execution.native_deterministic(...)`` and
         ``fg.execution.problog(...)`` produce detached, strictly pinned V2
         profile builders.  They do not replace legacy ``fg.eval`` config
         compatibility APIs or invoke an engine.
+
+        Returns:
+            A read-only manager exposing ``native_deterministic``,
+            ``portable_deterministic`` and ``problog`` builders.
         """
 
         return self._execution_manager
 
     @property
-    def problog(self) -> Any:
-        """Read-only closed semantic-marker factory for V2 ProbLog profiles."""
+    def problog(self) -> _SDKProbLogManagerV2:
+        """Return the read-only Product V2 ProbLog semantics namespace.
+
+        Returns:
+            A marker factory for Rule, occurrence and WeightedChoice profile
+            attachments. Marker creation does not execute ProbLog.
+        """
 
         return self._problog_manager
 
     @property
     def audit(self) -> _SDKAuditManager:
-        """`audit` taxonomy namespace exposing ``explain`` / ``conflicts`` / ``diff_proof_frames``."""
+        """Return the ledger/audit inspection namespace."""
         return self._audit_manager
 
     @property
     def meta(self) -> _SDKMetaManager:
-        """`meta` namespace exposing read-only runtime introspection (`capabilities()`)."""
+        """Return read-only runtime schema-capability introspection."""
         return self._meta_manager
 
     @property
     def package(self) -> _SDKPackageManager:
-        """`package` taxonomy namespace exposing ``export_package`` / ``run_package``."""
+        """Return the legacy package export/execution namespace."""
         return self._package_manager
 
     def commit_assertions(self, assertions: Sequence[AssertionInput]) -> CommitResult:
+        """Commit canonical assertion inputs to an attached Database.
+
+        Args:
+            assertions: Canonical assertions to append atomically.
+
+        Returns:
+            The Database commit result.
+
+        Raises:
+            SDKStoreError: If the graph is not attached to a writable Database
+                or an assertion violates the write protocol.
+
+        Notes:
+            This is a durable factual write and a lower-level escape hatch.
+            Prefer ``fg.fields.set`` or ``fg.fields.add`` for ordinary SDK use.
+        """
         if self._database is None:
             raise SDKStoreError(
                 "fg.commit_assertions(...) is only available on FactGraph.attach(db) runtimes; "
@@ -2534,6 +3179,23 @@ class SDKStore:
         assertions: Sequence[AssertionInput],
         revocations: Sequence[RevocationInput],
     ) -> CommitResult:
+        """Commit assertions and revocations in one Database transaction.
+
+        Args:
+            assertions: Canonical assertions to append.
+            revocations: Canonical assertion revocations to append.
+
+        Returns:
+            The atomic Database commit result.
+
+        Raises:
+            SDKStoreError: If the graph is not attached to a writable Database
+                or the change set violates the write protocol.
+
+        Notes:
+            This mutates durable factual state. It is not equivalent to a
+            run-local Scenario and cannot be undone by omitting a save call.
+        """
         if self._database is None:
             raise SDKStoreError(
                 "fg.commit_changes(...) is only available on FactGraph.attach(db) runtimes"
@@ -2543,6 +3205,22 @@ class SDKStore:
         return database.commit_changes(assertions, revocations)
 
     def batch(self, *, meta: dict[str, Any] | None = None):
+        """Open an SDK transaction builder for a batch of factual writes.
+
+        Args:
+            meta: Optional transaction metadata accepted by the batch protocol.
+
+        Returns:
+            A batch transaction context that commits its staged changes
+            atomically.
+
+        Raises:
+            SDKStoreError: If the graph is read-only or cannot accept writes.
+
+        Notes:
+            Batch metadata is transaction metadata, not Scenario premise
+            semantics and not an execution-engine configuration.
+        """
         self._database_for_application_write("fg.batch")
         from .batch import SDKBatchTx
 
@@ -2570,6 +3248,25 @@ class SDKStore:
         *schema_class_args: type[Entity],
         schema_classes: list[type[Entity]] | None = None,
     ) -> SchemaAddResult:
+        """Register or additively extend one or more Entity schemas.
+
+        Args:
+            *schema_class_args: Entity classes supplied positionally.
+            schema_classes: Entity classes supplied as a list instead.
+
+        Returns:
+            The schema-add result and resulting schema identity.
+
+        Raises:
+            SDKStoreError: If positional and keyword forms are mixed.
+            SchemaConflictError: If a new entity conflicts with the schema.
+            SchemaNonAdditiveError: If an existing entity change is not
+                additive.
+
+        Notes:
+            Database-backed schema changes are committed immediately. Existing
+            identity or field definitions cannot be rewritten through this API.
+        """
         if schema_class_args and schema_classes is not None:
             raise SDKStoreError("pass either positional schema classes or schema_classes=, not both")
         if schema_classes is None:
@@ -2979,7 +3676,23 @@ class SDKStore:
         raise SDKStoreError("rules.structure(...) expects application Rule or RuleExpr input")
 
     def save_workspace(self, path: str | Path | None = None) -> dict[str, Any]:
-        """Touch workspace lifecycle metadata; canonical writes are already durable."""
+        """Touch durable workspace lifecycle metadata.
+
+        Args:
+            path: Optional guard that must name the already-bound workspace.
+
+        Returns:
+            Workspace paths and the updated lifecycle timestamp.
+
+        Raises:
+            SDKStoreError: If no durable workspace is bound or ``path`` tries
+                to copy/rebind the graph.
+
+        Notes:
+            Canonical writes are already durable when their write call returns.
+            This method does not commit facts, advance the head, or implement
+            Save As.
+        """
         database = self._database_for_application_write("fg.save_workspace")
         if database is None or self._workspace_path is None:
             raise SDKStoreError(
@@ -4951,9 +5664,37 @@ class SDKStore:
         return f"derive:{uuid4().hex[:8]}"
 
     def export_package(self, out_dir, options: ExportOptions, **kwargs: Any):
+        """Export a legacy runnable package from the current graph.
+
+        Args:
+            out_dir: Destination directory for the package artifact.
+            options: Package export options.
+            **kwargs: Additional exporter options.
+
+        Returns:
+            The package export result.
+
+        Notes:
+            A package is an execution artifact, not a durable FactGraph
+            workspace and not an EvaluationRun V2 replay payload.
+        """
         return export_package(self._store, out_dir, options, **kwargs)
 
     def run_package(self, package_dir, *, entrypoints: list[str], engine: str = "souffle"):
+        """Run a previously exported legacy package.
+
+        Args:
+            package_dir: Directory containing the exported package.
+            entrypoints: Package entrypoints to execute.
+            engine: Execution engine name. Defaults to ``"souffle"``.
+
+        Returns:
+            The package runner result.
+
+        Notes:
+            This compatibility terminal is separate from Product V2
+            ``fg.query(...).plan(profile=...).run()`` and its replay contract.
+        """
         return run_package(package_dir, entrypoints=entrypoints, engine=engine)
 
     def _compile_rule_input(self, rule: Any) -> dict[str, Any]:

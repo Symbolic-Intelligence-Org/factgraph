@@ -304,6 +304,15 @@ def Not(body: list[Any]) -> NotExpr:
 
     Use `Not([...])` for absence or anti-join style checks. The wrapped body
     may correlate with variables already bound by earlier atoms.
+
+    Args:
+        body: Non-empty list of body atoms to negate.
+
+    Returns:
+        A symbolic negation expression for a legacy DSL body.
+
+    Raises:
+        SDKDSLError: If ``body`` is not a non-empty list.
     """
 
     if not isinstance(body, list) or not body:
@@ -317,6 +326,12 @@ def Pred(pred_id: str, *terms: Any) -> PredAtom:
     Args:
         pred_id: Predicate id such as `"User:exists"` or `"User:tag"`.
         *terms: Logic variables or literal terms passed to the predicate.
+
+    Returns:
+        A symbolic predicate atom for the legacy DSL.
+
+    Raises:
+        SDKDSLError: If the predicate id or term list is empty.
     """
 
     if not isinstance(pred_id, str) or not pred_id:

@@ -149,17 +149,21 @@ class ProvenanceLocatorV1:
 
     @classmethod
     def opaque(cls, opaque_ref: str) -> "ProvenanceLocatorV1":
+        """Create a caller-owned opaque locator without embedding source content."""
         return cls(kind="opaque", opaque_ref=opaque_ref)
 
     @classmethod
     def line_span(cls, start: int, end: int) -> "ProvenanceLocatorV1":
+        """Create an inclusive one-based source line span."""
         return cls(kind="line_span", line_start=start, line_end=end)
 
     @classmethod
     def json_pointer(cls, *segments: str) -> "ProvenanceLocatorV1":
+        """Create a canonical JSON-pointer locator from decoded segments."""
         return cls(kind="json_pointer", pointer=tuple(segments))
 
     def to_wire(self) -> dict[str, object]:
+        """Return the closed canonical locator payload."""
         if self.kind == "opaque":
             return {"kind": "opaque", "opaque_ref": self.opaque_ref}
         if self.kind == "line_span":
@@ -172,6 +176,7 @@ class ProvenanceLocatorV1:
 
     @classmethod
     def from_wire(cls, value: object) -> "ProvenanceLocatorV1":
+        """Decode and validate a closed provenance-locator payload."""
         if not isinstance(value, Mapping):
             raise ProtocolShapeError("ProvenanceLocatorV1 wire must be object")
         keys = set(value)
@@ -227,6 +232,7 @@ class ProvenanceRefV1:
         )
 
     def to_wire(self) -> dict[str, object]:
+        """Return the safe opaque provenance-reference payload."""
         return {
             "ref": self.source_ref,
             "locator": self.locator.to_wire(),
@@ -237,6 +243,7 @@ class ProvenanceRefV1:
 
     @classmethod
     def from_wire(cls, value: object) -> "ProvenanceRefV1":
+        """Decode and validate a closed provenance-reference payload."""
         if not isinstance(value, Mapping) or set(value) != {
             "ref",
             "locator",

@@ -20,16 +20,18 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from decimal import Decimal, InvalidOperation, localcontext
+import inspect
 import json
 import re
 import unicodedata
-from typing import TYPE_CHECKING, Any, Literal, TypeAlias
+from typing import TYPE_CHECKING, Any, Callable, Literal, TypeAlias, get_type_hints
 
 from factgraph.application.protocol.policy import (
     Policy,
     PolicyAll,
     PolicyAny,
     PolicyCompare,
+    PolicyFunctionOccurrenceV1,
     PolicyNode,
     PolicyOccurrence,
     PolicyUnify,
@@ -42,6 +44,8 @@ from factgraph.application.protocol.semantic_address import SemanticPortAddress
 from factgraph.application.protocol.semantic_port import (
     EntityIdentityEndpoint,
     FieldEndpoint,
+    FunctionValueEndpointV1,
+    ResolvedRuleContract,
     SemanticEndpoint,
     SemanticRulePort,
     entity_identity,
@@ -53,7 +57,7 @@ from factgraph.application.semantic_port_runtime import (
     resolve_rule_contract,
 )
 from factgraph.core.protocol.digests import sha256_hex
-from factgraph.core.rules.where_ast import Var
+from factgraph.core.rules.where_ast import PredAtom, Var
 
 from .dsl.application_rule import build_application_rule
 from .errors import SDKStoreError
@@ -66,6 +70,7 @@ from .policy_authoring import (
     PolicyNodeHandle,
     PolicyOccurrenceHandle,
     PolicyPortHandle,
+    PolicyScalarPortHandle,
     policy_draft,
 )
 from .schema import Entity, Field
@@ -78,6 +83,9 @@ ASSET_META_FORMAT_V1 = "asset_meta_v1"
 ASSET_BINDING_FORMAT_V1 = "asset_binding_v1"
 PRODUCT_RULE_IDENTITY_FORMAT_V1 = "product_rule_logical_identity_v1"
 PRODUCT_POLICY_IDENTITY_FORMAT_V1 = "product_policy_logical_identity_v1"
+PRODUCT_FUNCTION_IDENTITY_FORMAT_V1 = "product_function_logical_identity_v1"
+PRODUCT_FUNCTION_SIGNATURE_FORMAT_V1 = "product_function_signature_v1"
+PRODUCT_FUNCTION_TOPOLOGY_FORMAT_V1 = "product_function_occurrence_v1"
 WEIGHTED_CHOICE_FORMAT_V1 = "weighted_choice_v1"
 
 MAX_ASSET_NAME_CHARS_V1 = 256
@@ -142,11 +150,22 @@ def _require_display_text(value: object, *, label: str, maximum: int) -> str:
 
 @dataclass(frozen=True)
 class AssetMeta:
-    """A canonical, descriptive asset descriptor outside logical semantics.
+    """Describe a Product Rule, Function, or Policy for human-facing use.
 
     The descriptor is deliberately immutable and does not participate in a
     Rule's ``content_digest`` or a Policy's compiler digest.  A product wrapper
     binds this separate descriptor to its exact logical target instead.
+
+    Attributes:
+        name: Required display name.
+        description: Optional bounded description.
+        tags: Canonically sorted, de-duplicated display tags.
+        descriptor_digest: Derived digest of the canonical descriptor.
+
+    Notes:
+        ``AssetMeta`` is presentation metadata, not engine configuration,
+        provenance authority, or a registry record. Changing it preserves the
+        logical target identity but changes the product asset binding.
     """
 
     name: str
@@ -214,9 +233,11 @@ class AssetMetaAbsentV1:
 
     @property
     def descriptor_digest(self) -> Literal["absent"]:
+        """Return the canonical marker used when no asset descriptor exists."""
         return "absent"
 
     def to_wire(self) -> dict[str, str]:
+        """Return the canonical wire representation of absent metadata."""
         return {"format": ASSET_META_FORMAT_V1, "state": "absent"}
 
 
@@ -235,9 +256,19 @@ def _normalize_asset_meta(value: AssetMeta | AssetMetaAbsentV1 | None) -> AssetM
 
 
 def asset_meta_for_target(target: object) -> AssetMetaStateV1:
-    """Return a target's descriptor or the explicit raw ``absent`` state."""
+    """Return a target's descriptor or the explicit raw ``absent`` state.
 
-    if isinstance(target, (ProductRuleV1, ProductPolicyV1)):
+    Args:
+        target: Product or compatible raw Rule/Policy target.
+
+    Returns:
+        The immutable descriptor, or ``ASSET_META_ABSENT_V1``.
+
+    Raises:
+        ProductAuthoringError: If the target kind is unsupported.
+    """
+
+    if isinstance(target, (ProductRuleV1, ProductPolicyV1, ProductFunctionV1)):
         return target.asset_meta
     if isinstance(target, (ResolvedRuleBundle, AuthoredPolicyTargetV1, Policy)):
         return ASSET_META_ABSENT_V1
@@ -263,21 +294,26 @@ def _rule_logical_identity(bundle: ResolvedRuleBundle) -> str:
 def _policy_logical_identity(
     target: AuthoredPolicyTargetV1,
     choices: tuple["WeightedChoiceTopologyV1", ...],
+    functions: tuple["FunctionOccurrenceTopologyV1", ...] = (),
 ) -> str:
-    return _token(
-        PRODUCT_POLICY_IDENTITY_FORMAT_V1,
-        {
-            "policy_id": target.policy.id,
-            "policy_version": target.policy.version,
-            "root_node_id": target.policy.when.node_id,
-            "address_space_digest": target.address_space.address_space_digest,
-            "weighted_choice_node_ids": tuple(choice.node_id for choice in choices),
-        },
-    )
+    payload: dict[str, object] = {
+        "policy_id": target.policy.id,
+        "policy_version": target.policy.version,
+        "root_node_id": target.policy.when.node_id,
+        "address_space_digest": target.address_space.address_space_digest,
+        "weighted_choice_node_ids": tuple(choice.node_id for choice in choices),
+    }
+    # Preserve every pre-Q21 product Policy identity byte-for-byte.
+    if functions:
+        payload["function_occurrence_digests"] = tuple(item.topology_digest for item in functions)
+    return _token(PRODUCT_POLICY_IDENTITY_FORMAT_V1, payload)
 
 
 def _asset_binding_digest(
-    *, target_kind: Literal["rule", "policy"], logical_identity_digest: str, meta: AssetMetaStateV1
+    *,
+    target_kind: Literal["rule", "policy", "function"],
+    logical_identity_digest: str,
+    meta: AssetMetaStateV1,
 ) -> str:
     return _token(
         ASSET_BINDING_FORMAT_V1,
@@ -331,7 +367,629 @@ class ProductRuleV1(ResolvedRuleBundle):
         return self
 
     def asset_snapshot(self) -> dict[str, object]:
+        """Return the sealed Rule descriptor and logical-identity binding."""
         return asset_snapshot_v1(self)
+
+
+_FunctionScalarDomainV1: TypeAlias = Literal["string", "int", "float64", "bool", "time", "uuid"]
+
+
+@dataclass(frozen=True)
+class FunctionPortV1:
+    """One named scalar port in a pure Product Function signature."""
+
+    name: str
+    scalar_domain: _FunctionScalarDomainV1
+
+    def __post_init__(self) -> None:
+        if (
+            not isinstance(self.name, str)
+            or not self.name.isidentifier()
+            or self.name.startswith("_")
+        ):
+            raise ProductAuthoringError(
+                "Function port name must be a public Python identifier",
+                code="PRODUCT_FUNCTION_INVALID_PORT",
+            )
+        if self.scalar_domain not in {"string", "int", "float64", "bool", "time", "uuid"}:
+            raise ProductAuthoringError(
+                "Function port scalar domain is unsupported",
+                code="PRODUCT_FUNCTION_INVALID_PORT",
+            )
+
+
+@dataclass(frozen=True)
+class ProductFunctionV1:
+    """Represent one sealed, deterministic scalar Product Function.
+
+    The callable is an in-process implementation capability and is excluded
+    from equality/repr.  Durable identity uses the explicit implementation
+    digest plus the canonical typed signature.  Replay captures materialized
+    calls and therefore never invokes this callable again.
+
+    Attributes:
+        id: Application-defined Function identifier.
+        implementation: Trusted synchronous Python callable.
+        inputs: Ordered scalar input ports.
+        output: The single scalar output port.
+        implementation_digest: Pinned implementation identity.
+        version: Optional application-defined version.
+        asset_meta: Human-facing descriptor or explicit absent state.
+
+    Notes:
+        This is not a Rule builtin, action tool, MCP tool, or sandbox. Product
+        Policy is the only composition owner, and Function-to-Function calls
+        are intentionally unsupported in the current profile.
+    """
+
+    id: str
+    implementation: Callable[..., object] = field(repr=False, compare=False, hash=False)
+    inputs: tuple[FunctionPortV1, ...]
+    output: FunctionPortV1
+    implementation_digest: str
+    version: str | None = None
+    asset_meta: AssetMetaStateV1 = ASSET_META_ABSENT_V1
+    signature_digest: str = field(init=False)
+    logical_identity_digest: str = field(init=False)
+    asset_binding_digest: str = field(init=False)
+    _implementation_capability_id: int = field(init=False, repr=False, compare=False)
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.id, str) or not self.id:
+            raise ProductAuthoringError(
+                "Function id must be a non-empty string", code="PRODUCT_FUNCTION_INVALID_ID"
+            )
+        if self.version is not None and (not isinstance(self.version, str) or not self.version):
+            raise ProductAuthoringError(
+                "Function version must be a non-empty string or None",
+                code="PRODUCT_FUNCTION_INVALID_VERSION",
+            )
+        if not callable(self.implementation):
+            raise ProductAuthoringError(
+                "Function implementation must be callable",
+                code="PRODUCT_FUNCTION_IMPLEMENTATION_REQUIRED",
+            )
+        if (
+            not isinstance(self.inputs, tuple)
+            or not self.inputs
+            or not all(isinstance(item, FunctionPortV1) for item in self.inputs)
+        ):
+            raise ProductAuthoringError(
+                "Function inputs must be a non-empty FunctionPortV1 tuple",
+                code="PRODUCT_FUNCTION_INVALID_SIGNATURE",
+            )
+        if len({item.name for item in self.inputs}) != len(self.inputs):
+            raise ProductAuthoringError(
+                "Function input names must be unique", code="PRODUCT_FUNCTION_INVALID_SIGNATURE"
+            )
+        if not isinstance(self.output, FunctionPortV1) or self.output.name in {
+            item.name for item in self.inputs
+        }:
+            raise ProductAuthoringError(
+                "Function output must have a distinct public name",
+                code="PRODUCT_FUNCTION_INVALID_SIGNATURE",
+            )
+        if not isinstance(
+            self.implementation_digest, str
+        ) or not self.implementation_digest.startswith("sha256:"):
+            raise ProductAuthoringError(
+                "Function implementation_digest must be a sha256 token",
+                code="PRODUCT_FUNCTION_INVALID_IMPLEMENTATION_DIGEST",
+            )
+        meta = _normalize_asset_meta(self.asset_meta)
+        signature = _token(
+            PRODUCT_FUNCTION_SIGNATURE_FORMAT_V1,
+            {
+                "inputs": tuple((item.name, item.scalar_domain) for item in self.inputs),
+                "output": (self.output.name, self.output.scalar_domain),
+            },
+        )
+        logical = _token(
+            PRODUCT_FUNCTION_IDENTITY_FORMAT_V1,
+            {
+                "id": self.id,
+                "version": self.version,
+                "signature_digest": signature,
+                "implementation_digest": self.implementation_digest,
+                "semantics": "pure_deterministic_total_v1",
+            },
+        )
+        object.__setattr__(self, "asset_meta", meta)
+        # This is deliberately an in-process freshness guard, not durable
+        # identity.  Durable capture pins ``implementation_digest`` and replay
+        # never receives the callable.  The object id only prevents a frozen
+        # live asset from being re-blessed after its callable field is swapped.
+        object.__setattr__(self, "_implementation_capability_id", id(self.implementation))
+        object.__setattr__(self, "signature_digest", signature)
+        object.__setattr__(self, "logical_identity_digest", logical)
+        object.__setattr__(
+            self,
+            "asset_binding_digest",
+            _asset_binding_digest(
+                target_kind="function", logical_identity_digest=logical, meta=meta
+            ),
+        )
+
+    @property
+    def meta(self) -> AssetMetaStateV1:
+        """Return the immutable Function asset descriptor state."""
+        return self.asset_meta
+
+    def asset_snapshot(self) -> dict[str, object]:
+        """Return the sealed Function descriptor and identity binding."""
+        return asset_snapshot_v1(self)
+
+
+def _derived_implementation_digest(implementation: Callable[..., object]) -> str:
+    try:
+        source = inspect.getsource(implementation)
+    except (OSError, TypeError):
+        source = None
+    code = getattr(implementation, "__code__", None)
+    payload = {
+        "module": getattr(implementation, "__module__", None),
+        "qualname": getattr(implementation, "__qualname__", None),
+        "source": source,
+        "code": None if code is None else code.co_code.hex(),
+        "constants": None if code is None else tuple(repr(item) for item in code.co_consts),
+        "defaults": repr(getattr(implementation, "__defaults__", None)),
+    }
+    if payload["source"] is None and payload["code"] is None:
+        raise ProductAuthoringError(
+            "Function implementation needs an explicit implementation_digest",
+            code="PRODUCT_FUNCTION_IMPLEMENTATION_DIGEST_REQUIRED",
+        )
+    return _token("product_function_python_implementation_v1", payload)
+
+
+def _domain_from_annotation(value: object, *, label: str) -> _FunctionScalarDomainV1:
+    mapping: dict[object, _FunctionScalarDomainV1] = {
+        str: "string",
+        int: "int",
+        float: "float64",
+        bool: "bool",
+    }
+    domain = mapping.get(value)
+    if domain is None:
+        raise ProductAuthoringError(
+            f"{label} annotation is not a supported Function scalar",
+            code="PRODUCT_FUNCTION_INVALID_SIGNATURE",
+        )
+    return domain
+
+
+class FunctionBuilder:
+    """Build one graph-independent deterministic Product Function.
+
+    Use the staged builder when asset metadata is assembled separately from
+    the callable. ``FactGraph.build_function(...)`` is the equivalent direct
+    spelling.
+
+    Notes:
+        Constructing the builder does not register a name, invoke user code,
+        or write to a FactGraph ledger.
+    """
+
+    __slots__ = ("_id", "_version", "_meta")
+
+    def __init__(
+        self,
+        id: str,
+        *,
+        version: str | None = None,
+        meta: AssetMeta | None = None,
+    ) -> None:
+        self._id = id
+        self._version = version
+        self._meta = _normalize_asset_meta(meta)
+
+    def build(
+        self,
+        implementation: Callable[..., object],
+        *,
+        inputs: Mapping[str, _FunctionScalarDomainV1] | None = None,
+        output: _FunctionScalarDomainV1 | None = None,
+        output_name: str = "result",
+        implementation_digest: str | None = None,
+    ) -> ProductFunctionV1:
+        """Validate and seal the callable as a Product Function.
+
+        Args:
+            implementation: Pure synchronous callable with required positional
+                scalar parameters.
+            inputs: Optional explicit input domains in exact Python signature
+                order. When omitted, domains are inferred from annotations.
+            output: Optional explicit output domain. When omitted, the return
+                annotation is used.
+            output_name: Public Policy/Query name for the single output port.
+            implementation_digest: Optional explicit ``sha256:`` identity for
+                callables whose source/code cannot be inspected reliably.
+
+        Returns:
+            A sealed ``ProductFunctionV1`` ready for
+            ``policy.use(function).as_(...)``.
+
+        Raises:
+            ProductAuthoringError: If the callable, signature, domains, output
+                name, or implementation digest is invalid.
+
+        Examples:
+            >>> def decade(age: int) -> int:
+            ...     return age // 10
+            >>> function = fg.function_builder("age_decade").build(decade)
+
+        Notes:
+            Validation does not execute ``implementation``. The callable runs
+            later during V2 pre-engine materialization and is never called by
+            detached replay.
+        """
+        if not callable(implementation):
+            raise ProductAuthoringError(
+                "Function implementation must be callable",
+                code="PRODUCT_FUNCTION_IMPLEMENTATION_REQUIRED",
+            )
+        try:
+            signature = inspect.signature(implementation)
+            hints = get_type_hints(implementation)
+        except (TypeError, ValueError, NameError) as exc:
+            raise ProductAuthoringError(
+                f"Function signature cannot be inspected: {exc}",
+                code="PRODUCT_FUNCTION_INVALID_SIGNATURE",
+            ) from exc
+        if any(
+            parameter.kind
+            not in {inspect.Parameter.POSITIONAL_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD}
+            or parameter.default is not inspect.Parameter.empty
+            for parameter in signature.parameters.values()
+        ):
+            raise ProductAuthoringError(
+                "Function inputs must be required positional scalar parameters",
+                code="PRODUCT_FUNCTION_INVALID_SIGNATURE",
+            )
+        if inputs is None:
+            input_ports = tuple(
+                FunctionPortV1(
+                    name,
+                    _domain_from_annotation(hints.get(name), label=f"Function input {name}"),
+                )
+                for name in signature.parameters
+            )
+        else:
+            if tuple(inputs) != tuple(signature.parameters):
+                raise ProductAuthoringError(
+                    "Function inputs must exactly follow the Python signature order",
+                    code="PRODUCT_FUNCTION_INVALID_SIGNATURE",
+                )
+            input_ports = tuple(FunctionPortV1(name, domain) for name, domain in inputs.items())
+        output_domain = (
+            _domain_from_annotation(hints.get("return"), label="Function return")
+            if output is None
+            else output
+        )
+        return ProductFunctionV1(
+            id=self._id,
+            version=self._version,
+            implementation=implementation,
+            inputs=input_ports,
+            output=FunctionPortV1(output_name, output_domain),
+            implementation_digest=(
+                _derived_implementation_digest(implementation)
+                if implementation_digest is None
+                else implementation_digest
+            ),
+            asset_meta=self._meta,
+        )
+
+
+def function_builder(
+    id: str,
+    *,
+    version: str | None = None,
+    meta: AssetMeta | None = None,
+) -> FunctionBuilder:
+    """Start staged Product Function construction.
+
+    Args:
+        id: Stable application-defined Function identifier.
+        version: Optional application-defined version.
+        meta: Optional human-facing asset descriptor.
+
+    Returns:
+        A ``FunctionBuilder``. No registration, execution, or ledger write
+        occurs.
+
+    Raises:
+        ProductAuthoringError: If the asset id, version, or metadata is
+            invalid.
+    """
+    return FunctionBuilder(id, version=version, meta=meta)
+
+
+def build_function(
+    *,
+    id: str,
+    implementation: Callable[..., object],
+    inputs: Mapping[str, _FunctionScalarDomainV1] | None = None,
+    output: _FunctionScalarDomainV1 | None = None,
+    output_name: str = "result",
+    implementation_digest: str | None = None,
+    version: str | None = None,
+    meta: AssetMeta | None = None,
+) -> ProductFunctionV1:
+    """Build a deterministic Product Function in one call.
+
+    Args:
+        id: Stable application-defined Function identifier.
+        implementation: Pure synchronous Python callable.
+        inputs: Optional explicit ordered input-domain mapping.
+        output: Optional explicit scalar output domain.
+        output_name: Public name of the single output port.
+        implementation_digest: Optional explicit ``sha256:`` implementation
+            identity.
+        version: Optional application-defined version.
+        meta: Optional human-facing asset descriptor.
+
+    Returns:
+        A sealed ``ProductFunctionV1``.
+
+    Raises:
+        ProductAuthoringError: If any asset or callable contract is invalid.
+
+    Notes:
+        This is the direct equivalent of
+        ``function_builder(...).build(...)``. It does not register a tool,
+        invoke the callable, or write the ledger.
+    """
+    return function_builder(id, version=version, meta=meta).build(
+        implementation,
+        inputs=inputs,
+        output=output,
+        output_name=output_name,
+        implementation_digest=implementation_digest,
+    )
+
+
+def _function_relation_predicate_id(function: ProductFunctionV1, alias: str) -> str:
+    suffix = sha256_hex(
+        _canonical_json_bytes(
+            {
+                "function_digest": function.logical_identity_digest,
+                "occurrence_alias": alias,
+            }
+        )
+    )
+    return f"__factgraph_function_v1:{suffix}"
+
+
+def _function_port_predicate_id(relation_predicate_id: str, port_name: str) -> str:
+    """Return one binary EDB predicate within a Function relation namespace."""
+
+    return f"{relation_predicate_id}:{port_name}"
+
+
+def _function_resolved_bundle(
+    function: ProductFunctionV1,
+    *,
+    schema_digest: str,
+    alias: str,
+) -> ResolvedRuleBundle:
+    relation_predicate_id = _function_relation_predicate_id(function, alias)
+    call_key = Var("$__function_call_key")
+    input_vars = tuple(Var(f"$__function_input_{index}") for index, _ in enumerate(function.inputs))
+    output_var = Var("$__function_output")
+    ordered_ports = (*function.inputs, function.output)
+    ordered_vars = (*input_vars, output_var)
+    rule = Rule(
+        id=f"__factgraph_function_v1__{function.id}",
+        version=function.version,
+        when=tuple(
+            PredAtom(_function_port_predicate_id(relation_predicate_id, port.name), [call_key, var])
+            for port, var in zip(ordered_ports, ordered_vars, strict=True)
+        ),
+        ports={
+            port.name: variable for port, variable in zip(ordered_ports, ordered_vars, strict=True)
+        },
+    )
+    contract = ResolvedRuleContract(
+        rule_id=rule.id,
+        rule_version=rule.version,
+        rule_content_digest=rule.content_digest,
+        schema_digest=schema_digest,
+        ports={
+            port.name: SemanticRulePort(
+                variable,
+                FunctionValueEndpointV1(
+                    function_digest=function.logical_identity_digest,
+                    relation_predicate_id=_function_port_predicate_id(
+                        relation_predicate_id, port.name
+                    ),
+                    port_name=port.name,
+                    mode="output" if port is function.output else "input",
+                    scalar_domain=port.scalar_domain,
+                    position=index,
+                ),
+            )
+            for index, (port, variable) in enumerate(
+                zip(ordered_ports, ordered_vars, strict=True), start=1
+            )
+        },
+    )
+    return ResolvedRuleBundle(rule, contract)
+
+
+@dataclass(frozen=True)
+class FunctionInputBindingV1:
+    """Bind one Product Function input port to a Rule occurrence address."""
+
+    port_name: str
+    source: SemanticPortAddress
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.port_name, str) or not self.port_name:
+            raise ProductAuthoringError(
+                "Function input binding port must be non-empty",
+                code="PRODUCT_FUNCTION_INVALID_BINDING",
+            )
+        if not isinstance(self.source, SemanticPortAddress):
+            raise ProductAuthoringError(
+                "Function input binding source must be a semantic address",
+                code="PRODUCT_FUNCTION_INVALID_BINDING",
+            )
+
+
+@dataclass(frozen=True)
+class FunctionOccurrenceTopologyV1:
+    """Sealed Product Function occurrence and its Rule-port input edges."""
+
+    alias: str
+    function: ProductFunctionV1
+    input_bindings: tuple[FunctionInputBindingV1, ...]
+    relation_predicate_id: str
+    topology_digest: str = field(init=False)
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.alias, str) or not self.alias:
+            raise ProductAuthoringError(
+                "Function occurrence alias must be non-empty",
+                code="PRODUCT_FUNCTION_INVALID_OCCURRENCE",
+            )
+        if not isinstance(self.function, ProductFunctionV1):
+            raise ProductAuthoringError(
+                "Function occurrence requires ProductFunctionV1",
+                code="PRODUCT_FUNCTION_INVALID_OCCURRENCE",
+            )
+        if self.relation_predicate_id != _function_relation_predicate_id(self.function, self.alias):
+            raise ProductAuthoringError(
+                "Function occurrence relation predicate does not match the Function",
+                code="PRODUCT_FUNCTION_INVALID_OCCURRENCE",
+            )
+        bindings = tuple(sorted(self.input_bindings, key=lambda item: item.port_name))
+        if tuple(item.port_name for item in bindings) != tuple(
+            sorted(port.name for port in self.function.inputs)
+        ):
+            raise ProductAuthoringError(
+                "Function occurrence inputs must exactly cover the Function signature",
+                code="PRODUCT_FUNCTION_INPUT_COVERAGE_MISMATCH",
+            )
+        source_aliases = {item.source.occurrence_alias for item in bindings}
+        if len(source_aliases) != 1 or self.alias in source_aliases:
+            raise ProductAuthoringError(
+                "Function inputs must come from one Rule occurrence, never a Function occurrence",
+                code="PRODUCT_FUNCTION_INPUT_SOURCE_UNSUPPORTED",
+            )
+        object.__setattr__(self, "input_bindings", bindings)
+        object.__setattr__(
+            self,
+            "topology_digest",
+            _token(
+                PRODUCT_FUNCTION_TOPOLOGY_FORMAT_V1,
+                {
+                    "alias": self.alias,
+                    "function_digest": self.function.logical_identity_digest,
+                    "signature_digest": self.function.signature_digest,
+                    "relation_predicate_id": self.relation_predicate_id,
+                    "input_bindings": tuple(
+                        (item.port_name, item.source.occurrence_alias, item.source.port_name)
+                        for item in bindings
+                    ),
+                },
+            ),
+        )
+
+
+class FunctionOccurrenceHandleV1(PolicyOccurrenceHandle):
+    """Represent one owner-bound Product Function call site in a Policy."""
+
+    __slots__ = ("function", "_input_bindings", "_function_occurrences")
+
+    def __init__(
+        self,
+        base: PolicyOccurrenceHandle,
+        function: ProductFunctionV1,
+        function_occurrences: Mapping[str, "FunctionOccurrenceHandleV1"],
+    ) -> None:
+        super().__init__(base._owner, base._managed, base._schema_index)
+        self.function = function
+        self._input_bindings: dict[str, PolicyScalarPortHandle] = {}
+        self._function_occurrences = function_occurrences
+
+    def inputs(self, **sources: PolicyScalarPortHandle) -> "FunctionOccurrenceHandleV1":
+        """Connect every Function input to direct scalar Rule ports.
+
+        Args:
+            **sources: Input-name to Rule scalar-port mapping. Names must cover
+                the Function signature exactly, and all ports must come from
+                one Rule occurrence in this Policy builder.
+
+        Returns:
+            This occurrence handle for fluent authoring.
+
+        Raises:
+            ProductAuthoringError: If coverage, domain, ownership, source
+                occurrence, or topology constraints fail.
+
+        Notes:
+            Function outputs are directional and cannot be Query bindings or
+            inputs to another Function in the current profile.
+        """
+        expected = {item.name: item for item in self.function.inputs}
+        if set(sources) != set(expected):
+            raise ProductAuthoringError(
+                "Function inputs must exactly cover the declared signature",
+                code="PRODUCT_FUNCTION_INPUT_COVERAGE_MISMATCH",
+            )
+        aliases: set[str] = set()
+        for name, source in sources.items():
+            if not isinstance(source, PolicyScalarPortHandle) or source._owner is not self._owner:
+                raise ProductAuthoringError(
+                    "Function inputs must use scalar ports from this Policy builder",
+                    code="POLICY_CROSS_DRAFT_HANDLE",
+                )
+            if isinstance(source, PolicyFieldHandle):
+                raise ProductAuthoringError(
+                    "Function inputs currently require direct scalar Rule ports; expose the field as a Rule port first",
+                    code="PRODUCT_FUNCTION_NAVIGATION_INPUT_UNSUPPORTED",
+                )
+            if source.scalar_domain != expected[name].scalar_domain:
+                raise ProductAuthoringError(
+                    f"Function input {name!r} has an incompatible scalar domain",
+                    code="PRODUCT_FUNCTION_INPUT_DOMAIN_MISMATCH",
+                )
+            aliases.add(source.address.occurrence_alias)
+        if len(aliases) != 1 or any(alias in self._function_occurrences for alias in aliases):
+            raise ProductAuthoringError(
+                "Function inputs must come from one Rule occurrence, never another Function",
+                code="PRODUCT_FUNCTION_INPUT_SOURCE_UNSUPPORTED",
+            )
+        self._input_bindings = dict(sources)
+        return self
+
+    def topology(self) -> FunctionOccurrenceTopologyV1:
+        """Return the validated topology captured for this Function occurrence."""
+        return FunctionOccurrenceTopologyV1(
+            alias=self.alias,
+            function=self.function,
+            input_bindings=tuple(
+                FunctionInputBindingV1(name, handle.address)
+                for name, handle in self._input_bindings.items()
+            ),
+            relation_predicate_id=_function_relation_predicate_id(self.function, self.alias),
+        )
+
+
+class _PendingPolicyUseV1:
+    __slots__ = ("_builder", "_asset")
+
+    def __init__(
+        self, builder: "PolicyBuilder", asset: ResolvedRuleBundle | ProductFunctionV1
+    ) -> None:
+        self._builder = builder
+        self._asset = asset
+
+    def as_(self, alias: str) -> PolicyOccurrenceHandle:
+        occurrence = self._builder.use(self._asset, as_=alias)
+        assert isinstance(occurrence, PolicyOccurrenceHandle)
+        return occurrence
 
 
 def _canonical_probability(value: object) -> str:
@@ -499,6 +1157,14 @@ class WeightedChoiceTopologyV1:
         object.__setattr__(self, "node_id", f"wc:{sha256_hex(_canonical_json_bytes(payload))}")
 
     def to_wire(self, *, include_digests: bool = True) -> dict[str, object]:
+        """Return the canonical WeightedChoice topology payload.
+
+        Args:
+            include_digests: Include the derived node and topology digests.
+
+        Returns:
+            A canonical mapping suitable for sealed Product V2 capture.
+        """
         payload: dict[str, object] = {
             "format": WEIGHTED_CHOICE_FORMAT_V1,
             "choice_id": self.choice_id,
@@ -574,6 +1240,7 @@ class ProductPolicyV1(AuthoredPolicyTargetV1):
 
     asset_meta: AssetMetaStateV1 = ASSET_META_ABSENT_V1
     weighted_choices: tuple[WeightedChoiceTopologyV1, ...] = ()
+    function_occurrences: tuple[FunctionOccurrenceTopologyV1, ...] = ()
     logical_identity_digest: str = field(init=False)
     asset_binding_digest: str = field(init=False)
 
@@ -604,11 +1271,31 @@ class ProductPolicyV1(AuthoredPolicyTargetV1):
                 code="WEIGHTED_CHOICE_AST_SIDECAR_MISMATCH",
             )
         _assert_intrinsic_weighted_choice_nodes_current(self.policy)
-        _validate_product_policy_execution_marker(self.policy, choices)
         _validate_weighted_choices_against_target(self.policy, self.address_space, choices)
-        logical_identity_digest = _policy_logical_identity(self, choices)
+        if not isinstance(self.function_occurrences, tuple) or not all(
+            isinstance(item, FunctionOccurrenceTopologyV1) for item in self.function_occurrences
+        ):
+            raise ProductAuthoringError(
+                "function_occurrences must be FunctionOccurrenceTopologyV1 values",
+                code="PRODUCT_FUNCTION_INVALID_TOPOLOGY",
+            )
+        functions = tuple(sorted(self.function_occurrences, key=lambda item: item.alias))
+        if len({item.alias for item in functions}) != len(functions):
+            raise ProductAuthoringError(
+                "Function occurrence aliases must be unique",
+                code="PRODUCT_FUNCTION_INVALID_TOPOLOGY",
+            )
+        _validate_function_occurrences_against_target(self.policy, self.address_space, functions)
+        if choices and functions:
+            raise ProductAuthoringError(
+                "WeightedChoice and Function occurrences cannot share one first-slice Policy",
+                code="PRODUCT_FUNCTION_WEIGHTED_CHOICE_UNSUPPORTED",
+            )
+        _validate_product_policy_execution_marker(self.policy, choices, functions)
+        logical_identity_digest = _policy_logical_identity(self, choices, functions)
         object.__setattr__(self, "asset_meta", meta)
         object.__setattr__(self, "weighted_choices", choices)
+        object.__setattr__(self, "function_occurrences", functions)
         object.__setattr__(self, "logical_identity_digest", logical_identity_digest)
         object.__setattr__(
             self,
@@ -620,14 +1307,75 @@ class ProductPolicyV1(AuthoredPolicyTargetV1):
 
     @property
     def meta(self) -> AssetMetaStateV1:
+        """Return the immutable Policy asset descriptor state."""
         return self.asset_meta
 
     @property
     def requires_v2_profile(self) -> bool:
-        return bool(self.weighted_choices)
+        """Return whether this Policy contains Product V2-only topology."""
+        return bool(self.weighted_choices or self.function_occurrences)
 
     def asset_snapshot(self) -> dict[str, object]:
+        """Return the sealed Policy descriptor and logical-identity binding."""
         return asset_snapshot_v1(self)
+
+
+def _function_markers_from_policy_ast(
+    policy: Policy,
+) -> tuple[PolicyFunctionOccurrenceV1, ...]:
+    return tuple(
+        sorted(
+            (
+                node
+                for node in _policy_nodes(policy.when)
+                if isinstance(node, PolicyFunctionOccurrenceV1)
+            ),
+            key=lambda item: item.alias,
+        )
+    )
+
+
+def _validate_function_occurrences_against_target(
+    policy: Policy,
+    address_space: SemanticAddressSpace,
+    functions: tuple[FunctionOccurrenceTopologyV1, ...],
+) -> None:
+    markers = _function_markers_from_policy_ast(policy)
+    if tuple(item.alias for item in markers) != tuple(item.alias for item in functions):
+        raise ProductAuthoringError(
+            "Function sidecar must exactly cover intrinsic Policy Function markers",
+            code="PRODUCT_FUNCTION_AST_SIDECAR_MISMATCH",
+        )
+    for marker, topology in zip(markers, functions, strict=True):
+        expected_bindings = tuple((item.port_name, item.source) for item in topology.input_bindings)
+        if (
+            marker.function_digest != topology.function.logical_identity_digest
+            or marker.signature_digest != topology.function.signature_digest
+            or marker.relation_predicate_id != topology.relation_predicate_id
+            or marker.input_bindings != expected_bindings
+        ):
+            raise ProductAuthoringError(
+                "intrinsic Policy Function marker does not match its sealed sidecar",
+                code="PRODUCT_FUNCTION_AST_SIDECAR_MISMATCH",
+            )
+        try:
+            managed = next(
+                item
+                for item in address_space.occurrences
+                if item.occurrence.alias == topology.alias
+            )
+        except StopIteration as exc:
+            raise ProductAuthoringError(
+                "Function occurrence is absent from the semantic address space",
+                code="PRODUCT_FUNCTION_ADDRESS_SPACE_MISMATCH",
+            ) from exc
+        for port in (*topology.function.inputs, topology.function.output):
+            semantic = managed.contract.ports.get(port.name)
+            if not isinstance(getattr(semantic, "endpoint", None), FunctionValueEndpointV1):
+                raise ProductAuthoringError(
+                    "Function occurrence semantic ports do not match the Function signature",
+                    code="PRODUCT_FUNCTION_ADDRESS_SPACE_MISMATCH",
+                )
 
 
 def _weighted_choices_from_policy_ast(policy: Policy) -> tuple[WeightedChoiceTopologyV1, ...]:
@@ -740,6 +1488,11 @@ def _embed_weighted_choices_in_policy_ast(
     def transform_node(node: PolicyNode) -> PolicyNode:
         if isinstance(node, (PolicyUnify, PolicyCompare, PolicyOccurrence)):
             return node
+        if isinstance(node, PolicyFunctionOccurrenceV1):
+            raise ProductAuthoringError(
+                "WeightedChoice embedding cannot consume an intrinsic Function node",
+                code="WEIGHTED_CHOICE_AST_INVALID",
+            )
         if isinstance(node, PolicyWeightedChoice):
             raise ProductAuthoringError(
                 "builder cannot embed an already intrinsic WeightedChoice node",
@@ -781,7 +1534,12 @@ def _embed_weighted_choices_in_policy_ast(
                     )
                 children.append(transformed)
             return PolicyAny(tuple(children))
-        return PolicyAll(tuple(transform_node(child) for child in node.children))
+        if isinstance(node, PolicyAll):
+            return PolicyAll(tuple(transform_node(child) for child in node.children))
+        raise ProductAuthoringError(
+            "WeightedChoice AST conversion received an unsupported Policy node",
+            code="WEIGHTED_CHOICE_AST_INVALID",
+        )
 
     root = transform_node(policy.when)
     if not isinstance(root, (PolicyOccurrence, PolicyAll, PolicyAny, PolicyWeightedChoice)):
@@ -798,6 +1556,70 @@ def _embed_weighted_choices_in_policy_ast(
     return embedded
 
 
+def _embed_function_occurrences_in_policy_ast(
+    policy: Policy,
+    functions: tuple[FunctionOccurrenceTopologyV1, ...],
+) -> Policy:
+    """Replace synthetic compiler occurrences with intrinsic V2 markers."""
+
+    if not functions:
+        return policy
+    by_alias = {item.alias: item for item in functions}
+
+    def transform(node: PolicyNode) -> PolicyNode:
+        if isinstance(node, PolicyOccurrence):
+            topology = by_alias.get(node.alias)
+            if topology is None:
+                return node
+            return PolicyFunctionOccurrenceV1(
+                alias=topology.alias,
+                function_digest=topology.function.logical_identity_digest,
+                relation_predicate_id=topology.relation_predicate_id,
+                signature_digest=topology.function.signature_digest,
+                input_bindings=tuple(
+                    (item.port_name, item.source) for item in topology.input_bindings
+                ),
+            )
+        if isinstance(node, (PolicyUnify, PolicyCompare, PolicyFunctionOccurrenceV1)):
+            return node
+        if isinstance(node, PolicyWeightedChoice):
+            raise ProductAuthoringError(
+                "Function and WeightedChoice cannot share one first-slice Policy",
+                code="PRODUCT_FUNCTION_WEIGHTED_CHOICE_UNSUPPORTED",
+            )
+        children = tuple(transform(child) for child in node.children)
+        if isinstance(node, PolicyAny):
+            if not all(
+                isinstance(
+                    child,
+                    (
+                        PolicyOccurrence,
+                        PolicyFunctionOccurrenceV1,
+                        PolicyAll,
+                        PolicyAny,
+                    ),
+                )
+                for child in children
+            ):
+                raise ProductAuthoringError(
+                    "Function AST conversion produced an invalid Any child",
+                    code="PRODUCT_FUNCTION_AST_INVALID",
+                )
+            return PolicyAny(children)  # type: ignore[arg-type]
+        return PolicyAll(children)
+
+    root = transform(policy.when)
+    if not isinstance(
+        root,
+        (PolicyOccurrence, PolicyFunctionOccurrenceV1, PolicyAll, PolicyAny),
+    ):
+        raise ProductAuthoringError(
+            "Function AST conversion produced an invalid Policy root",
+            code="PRODUCT_FUNCTION_AST_INVALID",
+        )
+    return Policy(policy.id, root, policy.version)
+
+
 def _policy_nodes(node: PolicyNode) -> tuple[PolicyNode, ...]:
     if isinstance(node, (PolicyAll, PolicyAny, PolicyWeightedChoice)):
         return (node, *(nested for child in node.children for nested in _policy_nodes(child)))
@@ -807,7 +1629,7 @@ def _policy_nodes(node: PolicyNode) -> tuple[PolicyNode, ...]:
 def _policy_branch_aliases(node: PolicyNode) -> tuple[frozenset[str], ...]:
     from factgraph.application.protocol.policy import PolicyCompare, PolicyOccurrence, PolicyUnify
 
-    if isinstance(node, PolicyOccurrence):
+    if isinstance(node, (PolicyOccurrence, PolicyFunctionOccurrenceV1)):
         return (frozenset((node.alias,)),)
     if isinstance(node, (PolicyUnify, PolicyCompare)):
         return (frozenset(),)
@@ -829,6 +1651,7 @@ def _policy_branch_aliases(node: PolicyNode) -> tuple[frozenset[str], ...]:
 def _validate_product_policy_execution_marker(
     policy: Policy,
     choices: tuple[WeightedChoiceTopologyV1, ...],
+    functions: tuple[FunctionOccurrenceTopologyV1, ...] = (),
 ) -> None:
     """Verify the derived choice capture agrees with the public intrinsic AST.
 
@@ -844,9 +1667,9 @@ def _validate_product_policy_execution_marker(
             "WeightedChoice sidecar does not match the authored Policy AST",
             code="WEIGHTED_CHOICE_AST_SIDECAR_MISMATCH",
         )
-    if not choices and isinstance(policy, PolicyV2Only):
+    if not choices and not functions and isinstance(policy, PolicyV2Only):
         raise ProductAuthoringError(
-            "V2-only Policy marker requires at least one WeightedChoice topology",
+            "V2-only Policy marker requires WeightedChoice or Function topology",
             code="WEIGHTED_CHOICE_V2_MARKER_UNEXPECTED",
         )
 
@@ -956,10 +1779,22 @@ def _assert_weighted_choice_topology_current_v1(choice: WeightedChoiceTopologyV1
         )
 
 
-def asset_snapshot_v1(target: ProductRuleV1 | ProductPolicyV1) -> dict[str, object]:
-    """Return a side-specific descriptor/binding snapshot for V2 capture code."""
+def asset_snapshot_v1(
+    target: ProductRuleV1 | ProductPolicyV1 | ProductFunctionV1,
+) -> dict[str, object]:
+    """Return a side-specific descriptor/binding snapshot for V2 capture.
 
-    if not isinstance(target, (ProductRuleV1, ProductPolicyV1)):
+    Args:
+        target: Sealed Product Rule, Policy, or Function asset.
+
+    Returns:
+        Canonical logical identity, descriptor, and association digests.
+
+    Raises:
+        ProductAuthoringError: If the target or one of its seals is stale.
+    """
+
+    if not isinstance(target, (ProductRuleV1, ProductPolicyV1, ProductFunctionV1)):
         raise ProductAuthoringError(
             "asset snapshot requires ProductRuleV1 or ProductPolicyV1",
             code="ASSET_META_UNSUPPORTED_TARGET",
@@ -973,16 +1808,25 @@ def asset_snapshot_v1(target: ProductRuleV1 | ProductPolicyV1) -> dict[str, obje
     }
 
 
-def assert_asset_binding_current_v1(target: ProductRuleV1 | ProductPolicyV1) -> None:
+def assert_asset_binding_current_v1(
+    target: ProductRuleV1 | ProductPolicyV1 | ProductFunctionV1,
+) -> None:
     """Fail closed if a descriptor/target association was structurally spliced.
 
     Product wrappers are frozen in normal Python use, but V2 capture/replay
     treats all in-memory input as untrusted enough to recompute this seal.  In
     particular, swapping a complete descriptor snapshot from target B onto A
     without recomputing A's association cannot pass this check.
+
+    Args:
+        target: Product Rule, Policy, or Function to verify.
+
+    Raises:
+        ProductAuthoringError: If any logical, topology, implementation, or
+            descriptor association seal is stale.
     """
 
-    if not isinstance(target, (ProductRuleV1, ProductPolicyV1)):
+    if not isinstance(target, (ProductRuleV1, ProductPolicyV1, ProductFunctionV1)):
         raise ProductAuthoringError(
             "asset binding requires ProductRuleV1 or ProductPolicyV1",
             code="ASSET_META_UNSUPPORTED_TARGET",
@@ -995,7 +1839,29 @@ def assert_asset_binding_current_v1(target: ProductRuleV1 | ProductPolicyV1) -> 
                 "AssetMeta descriptor digest does not match its descriptor",
                 code="ASSET_DESCRIPTOR_DIGEST_MISMATCH",
             )
-    if isinstance(target, ProductRuleV1):
+    if isinstance(target, ProductFunctionV1):
+        fresh = ProductFunctionV1(
+            id=target.id,
+            version=target.version,
+            implementation=target.implementation,
+            inputs=target.inputs,
+            output=target.output,
+            implementation_digest=target.implementation_digest,
+            asset_meta=meta,
+        )
+        expected_identity = fresh.logical_identity_digest
+        expected_binding = fresh.asset_binding_digest
+        if (
+            target.signature_digest != fresh.signature_digest
+            or target.inputs != fresh.inputs
+            or target.output != fresh.output
+            or target._implementation_capability_id != fresh._implementation_capability_id
+        ):
+            raise ProductAuthoringError(
+                "Function signature or live implementation capability seal is stale",
+                code="PRODUCT_FUNCTION_SIGNATURE_STALE",
+            )
+    elif isinstance(target, ProductRuleV1):
         ResolvedRuleBundle.__post_init__(target)
         expected_identity = _rule_logical_identity(target)
         expected_binding = _asset_binding_digest(
@@ -1026,9 +1892,33 @@ def assert_asset_binding_current_v1(target: ProductRuleV1 | ProductPolicyV1) -> 
                 code="WEIGHTED_CHOICE_AST_SIDECAR_MISMATCH",
             )
         _assert_intrinsic_weighted_choice_nodes_current(target.policy)
-        _validate_product_policy_execution_marker(target.policy, choices)
+        functions = target.function_occurrences
+        if not isinstance(functions, tuple) or not all(
+            isinstance(item, FunctionOccurrenceTopologyV1) for item in functions
+        ):
+            raise ProductAuthoringError(
+                "Function topology has invalid runtime shape",
+                code="PRODUCT_FUNCTION_INVALID_TOPOLOGY",
+            )
+        for item in functions:
+            assert_asset_binding_current_v1(item.function)
+            fresh_topology = FunctionOccurrenceTopologyV1(
+                alias=item.alias,
+                function=item.function,
+                input_bindings=item.input_bindings,
+                relation_predicate_id=item.relation_predicate_id,
+            )
+            if fresh_topology.topology_digest != item.topology_digest:
+                raise ProductAuthoringError(
+                    "Function occurrence topology seal is stale",
+                    code="PRODUCT_FUNCTION_TOPOLOGY_STALE",
+                )
+        _validate_function_occurrences_against_target(
+            target.policy, target.address_space, functions
+        )
+        _validate_product_policy_execution_marker(target.policy, choices, functions)
         _validate_weighted_choices_against_target(target.policy, target.address_space, choices)
-        expected_identity = _policy_logical_identity(target, choices)
+        expected_identity = _policy_logical_identity(target, choices, functions)
         expected_binding = _asset_binding_digest(
             target_kind="policy", logical_identity_digest=expected_identity, meta=meta
         )
@@ -1175,7 +2065,15 @@ def _sdk_entity_type_name(entity_cls: type[Entity]) -> str:
 
 
 class RuleBuilder:
-    """Staged builder that resolves one authored SDK Rule against one graph."""
+    """Resolve one authored SDK Rule against one exact FactGraph schema.
+
+    The staged builder owns asset identity/metadata; :meth:`build` supplies
+    the logical body, public ports, and semantic-port contract.
+
+    Notes:
+        Building returns an immutable resolved asset. It does not register the
+        Rule by id, execute it, or write to the ledger.
+    """
 
     __slots__ = ("_graph", "_id", "_version", "_meta")
 
@@ -1203,14 +2101,17 @@ class RuleBuilder:
 
     @property
     def id(self) -> str:
+        """Return the Product Rule identifier owned by this builder."""
         return self._id
 
     @property
     def version(self) -> str | None:
+        """Return the optional Product Rule version."""
         return self._version
 
     @property
     def meta(self) -> AssetMetaStateV1:
+        """Return the immutable descriptor that will be bound to the Rule."""
         return self._meta
 
     def build(
@@ -1221,7 +2122,7 @@ class RuleBuilder:
         semantic_ports: Mapping[str, SemanticEndpoint | SemanticRulePort | type[Entity] | Field],
         repr: str | None = None,
     ) -> ProductRuleV1:
-        """Build and fully resolve a Rule; no later ``.use`` lookup is needed.
+        """Build and fully resolve a Product Rule.
 
         Product code can declare ``semantic_ports`` entirely with public SDK
         schema values: use an ``Entity`` class for its complete identity and a
@@ -1229,6 +2130,25 @@ class RuleBuilder:
         ``{"person": Person, "age": Person.age}``. Existing explicit
         endpoint / ``SemanticRulePort`` forms remain advanced compatibility
         inputs. Every form is resolved against this builder's graph.
+
+        Args:
+            when: Logical SDK Rule body.
+            ports: Mapping from public port names to Rule variables.
+            semantic_ports: Complete semantic meaning for every public port.
+            repr: Optional legacy presentation template.
+
+        Returns:
+            A graph-bound ``ProductRuleV1`` usable by Product Policy and typed
+            Query without a later registry lookup.
+
+        Raises:
+            ProductAuthoringError: If Rule construction, port coverage, schema
+                resolution, or semantic typing fails.
+
+        Notes:
+            Product Function calls and engine settings do not belong in a
+            Rule body. Policy composes Rule and Function as peer occurrences;
+            an execution profile owns adapter semantics.
         """
 
         rule = _build_raw_rule(
@@ -1260,6 +2180,17 @@ def rule_builder(
     version: str | None = None,
     meta: AssetMeta | None = None,
 ) -> RuleBuilder:
+    """Start staged Product Rule construction for one graph.
+
+    Args:
+        graph: FactGraph whose compiled schema resolves semantic ports.
+        id: Stable application-defined Rule identifier.
+        version: Optional application-defined version.
+        meta: Optional human-facing asset descriptor.
+
+    Returns:
+        A graph-bound ``RuleBuilder`` without executing or registering a Rule.
+    """
     return RuleBuilder(graph, id, version=version, meta=meta)
 
 
@@ -1274,10 +2205,30 @@ def build_rule(
     meta: AssetMeta | None = None,
     repr: str | None = None,
 ) -> ProductRuleV1:
-    """Direct form of :class:`RuleBuilder`; it has no separate compiler path.
+    """Build and resolve a Product Rule in one call.
 
     ``semantic_ports`` accepts the same public ``Entity`` / ``Field`` forms
     as :meth:`RuleBuilder.build`.
+
+    Args:
+        graph: FactGraph whose schema resolves semantic ports.
+        id: Stable application-defined Rule identifier.
+        when: Logical SDK Rule body.
+        ports: Public port-to-variable mapping.
+        semantic_ports: Complete semantic meaning for every public port.
+        version: Optional application-defined version.
+        meta: Optional human-facing asset descriptor.
+        repr: Optional legacy presentation template.
+
+    Returns:
+        A sealed, graph-bound ``ProductRuleV1``.
+
+    Raises:
+        ProductAuthoringError: If construction or semantic resolution fails.
+
+    Notes:
+        This is the direct equivalent of ``rule_builder(...).build(...)`` and
+        has no separate compiler or registry path.
     """
 
     return rule_builder(graph, id, version=version, meta=meta).build(
@@ -1293,9 +2244,27 @@ _ProductAllInput: TypeAlias = ProductPolicyNode | PolicyOccurrenceHandle | Polic
 
 
 class PolicyBuilder:
-    """Product façade over one Q19 ``PolicyDraft`` and its exact owner token."""
+    """Compose graph-bound Rule and Function assets into one Product Policy.
 
-    __slots__ = ("_graph", "_draft", "_meta", "_owner", "_choices", "_choice_conditions")
+    Handles issued by a builder carry its private owner token. Mixing handles
+    across builders fails before compilation, even when aliases happen to
+    match.
+
+    Notes:
+        ``id`` and ``version`` identify the authored asset; they do not create
+        a global registry entry. Policy is the only composition owner for
+        Product Rule and Product Function.
+    """
+
+    __slots__ = (
+        "_graph",
+        "_draft",
+        "_meta",
+        "_owner",
+        "_choices",
+        "_choice_conditions",
+        "_functions",
+    )
 
     def __init__(
         self,
@@ -1311,42 +2280,144 @@ class PolicyBuilder:
         self._owner = object()
         self._choices: list[WeightedChoiceTopologyV1] = []
         self._choice_conditions: dict[str, PolicyNodeHandle] = {}
+        self._functions: dict[str, FunctionOccurrenceHandleV1] = {}
 
     @property
     def id(self) -> str:
+        """Return the Product Policy identifier owned by this builder."""
         return self._draft.id
 
     @property
     def version(self) -> str | None:
+        """Return the optional Product Policy version."""
         return self._draft.version
 
     @property
     def meta(self) -> AssetMetaStateV1:
+        """Return the immutable descriptor that will be bound to the Policy."""
         return self._meta
 
     def use(
         self,
-        rule: ResolvedRuleBundle,
+        asset: ResolvedRuleBundle | ProductFunctionV1,
         *,
-        as_: str,
-    ) -> PolicyOccurrenceHandle:
-        """Declare one local occurrence; a product Rule is already resolved."""
+        as_: str | None = None,
+    ) -> PolicyOccurrenceHandle | _PendingPolicyUseV1:
+        """Declare a local Rule or Function occurrence.
 
-        return self._draft.use(rule, as_=as_)
+        Args:
+            asset: Resolved Product Rule or Product Function to compose.
+            as_: Optional local alias. When omitted, call ``.as_(alias)`` on
+                the returned pending-use object.
+
+        Returns:
+            An owner-bound occurrence handle, or a pending handle supporting
+            the fluent ``policy.use(asset).as_(...)`` spelling.
+
+        Raises:
+            ProductAuthoringError: If the asset type, alias, topology, or
+                current first-slice Function/WeightedChoice combination is
+                unsupported.
+
+        Notes:
+            ``use`` declares a Policy-local occurrence. It does not register,
+            execute, or mutate the source asset.
+        """
+
+        if as_ is None:
+            return _PendingPolicyUseV1(self, asset)
+        if isinstance(asset, ProductFunctionV1):
+            if self._choices:
+                raise ProductAuthoringError(
+                    "Function and WeightedChoice cannot share one first-slice Policy",
+                    code="PRODUCT_FUNCTION_WEIGHTED_CHOICE_UNSUPPORTED",
+                )
+            bundle = _function_resolved_bundle(
+                asset,
+                schema_digest=self._graph._application_schema_index.schema_digest,
+                alias=as_,
+            )
+            base = self._draft.use(bundle, as_=as_)
+            handle = FunctionOccurrenceHandleV1(base, asset, self._functions)
+            self._draft._occurrences[as_] = handle
+            self._functions[as_] = handle
+            return handle
+        if not isinstance(asset, ResolvedRuleBundle):
+            raise ProductAuthoringError(
+                "Policy use requires ProductRuleV1/ResolvedRuleBundle or ProductFunctionV1",
+                code="PRODUCT_POLICY_UNSUPPORTED_ASSET",
+            )
+        return self._draft.use(asset, as_=as_)
 
     occurrence = use
 
     def all(self, *items: _ProductAllInput) -> ProductPolicyNode:
+        """Require every supplied occurrence, node, or constraint.
+
+        Nested topology is preserved for structured Explain. Use this method
+        instead of Python ``and``, whose truthiness is rejected.
+
+        Args:
+            *items: Owner-bound Rule/Function occurrences, structural nodes,
+                or typed constraints that must all hold.
+
+        Returns:
+            An owner-bound logical conjunction for further composition or
+            final ``build(...)``.
+
+        Raises:
+            ProductAuthoringError: If an item is unsupported, cross-owned, or
+                violates Function/choice structural restrictions.
+
+        Notes:
+            Nested authored topology is retained for structured Explain; this
+            method does not flatten the Policy into engine branches.
+        """
         raw = tuple(self._raw_all_item(item) for item in items)
         return ProductPolicyNode(self._owner, self._draft.all(*raw))
 
     def any(self, *items: _ProductStructuralInput) -> ProductPolicyNode:
+        """Require at least one supplied occurrence or structural node.
+
+        ``any`` is logical OR and carries no probability. Use
+        :meth:`weighted_choice` for an exclusive categorical model.
+
+        Args:
+            *items: Owner-bound occurrences or structural nodes of which at
+                least one must hold.
+
+        Returns:
+            An owner-bound logical disjunction for further composition or
+            final ``build(...)``.
+
+        Raises:
+            ProductAuthoringError: If an item is unsupported, cross-owned, or
+                cannot participate in this deterministic topology.
+
+        Notes:
+            ``any`` never accepts weights or engine settings. Use
+            ``weighted_choice(...)`` only when the authored business model is
+            explicitly exclusive and probabilistic.
+        """
         raw = tuple(self._raw_structural_item(item) for item in items)
         return ProductPolicyNode(self._owner, self._draft.any(*raw))
 
     def same(
         self, left: PolicyEntityPortHandle, right: PolicyEntityPortHandle
     ) -> PolicyConstraintHandle:
+        """Require two entity-valued ports to refer to the same entity.
+
+        Args:
+            left: First owner-bound entity port.
+            right: Second owner-bound entity port.
+
+        Returns:
+            An identity-unification constraint for a containing ``all`` node.
+
+        Raises:
+            ProductAuthoringError: If the handles do not belong to this builder
+                or are not entity ports.
+        """
         return self._draft.same(left, right)
 
     def choice(
@@ -1356,7 +2427,16 @@ class PolicyBuilder:
         probability: str,
         when: _ProductStructuralInput,
     ) -> WeightedChoiceArmV1:
-        """Describe one arm before assembling an exclusive ``weighted_choice``."""
+        """Describe one arm of an exclusive ``weighted_choice``.
+
+        Args:
+            id: Stable arm identifier local to the choice.
+            probability: Canonical decimal probability string.
+            when: Structural condition for this arm.
+
+        Returns:
+            An owner-bound arm descriptor for :meth:`weighted_choice`.
+        """
 
         raw = self._raw_structural_item(when)
         arm = WeightedChoiceArmV1(id, probability, raw._node.node_id, self._owner)
@@ -1377,17 +2457,40 @@ class PolicyBuilder:
         choices: tuple[WeightedChoiceArmV1, ...],
         kind: Literal["exclusive"] = "exclusive",
     ) -> WeightedChoiceHandle:
-        """Create an explicit categorical choice, never an ordinary ``any``.
+        """Create an explicit exclusive categorical choice.
 
         The returned handle can be nested in :meth:`all` or :meth:`any`.  It is
         V2-only; its builder-time structural carrier is replaced with an
         intrinsic ``PolicyWeightedChoice`` before the public Policy is built.
+
+        Args:
+            id: Stable Policy-local choice identifier.
+            on: Non-empty tuple of direct ports defining the selection key.
+            choices: Arms created by this exact builder.
+            kind: Choice model; currently only ``"exclusive"``.
+
+        Returns:
+            A V2-only structural handle.
+
+        Raises:
+            ProductAuthoringError: If keys/arms cross builders, probabilities
+                are invalid, more than one choice is authored, or the topology
+                conflicts with a Product Function occurrence.
+
+        Notes:
+            Arm weights belong to authored Policy semantics. A ProbLog profile
+            only activates the choice and cannot override them.
         """
 
         if self._choices:
             raise ProductAuthoringError(
                 "this V2 authoring surface supports exactly one WeightedChoice per Policy",
                 code="WEIGHTED_CHOICE_MULTIPLE_UNSUPPORTED",
+            )
+        if self._functions:
+            raise ProductAuthoringError(
+                "Function and WeightedChoice cannot share one first-slice Policy",
+                code="PRODUCT_FUNCTION_WEIGHTED_CHOICE_UNSUPPORTED",
             )
 
         if not isinstance(on, tuple) or not on:
@@ -1434,7 +2537,46 @@ class PolicyBuilder:
         return WeightedChoiceHandle(self._owner, skeleton, topology)
 
     def build(self, root: _ProductStructuralInput) -> ProductPolicyV1:
+        """Validate and seal the final Product Policy target.
+
+        Args:
+            root: Root structural node or occurrence from this exact builder.
+
+        Returns:
+            A ``ProductPolicyV1`` containing the logical Policy, semantic
+            address space, asset binding, and any V2-only topology captures.
+
+        Raises:
+            PolicyAuthoringError: If occurrence coverage or authored Policy
+                structure is invalid.
+            ProductAuthoringError: If Product Function or WeightedChoice
+                topology is incomplete, stale, or cross-owned.
+
+        Notes:
+            Building does not evaluate the Policy or write the ledger. V2-only
+            Function/WeightedChoice markers make legacy terminals fail closed
+            rather than degrading their semantics.
+        """
         raw = self._raw_structural_item(root)
+        function_topologies = tuple(
+            self._functions[alias].topology() for alias in sorted(self._functions)
+        )
+        if function_topologies:
+            constraints = tuple(
+                PolicyCompare.eq(
+                    SemanticPortAddress(topology.alias, binding.port_name),
+                    binding.source,
+                )
+                for topology in function_topologies
+                for binding in topology.input_bindings
+            )
+            node = raw._node
+            node = (
+                PolicyAll((*node.children, *constraints))
+                if isinstance(node, PolicyAll)
+                else PolicyAll((node, *constraints))
+            )
+            raw = PolicyNodeHandle(self._draft._owner, node)
         try:
             target = self._draft.build(raw)
         except PolicyAuthoringError:
@@ -1446,8 +2588,9 @@ class PolicyBuilder:
         # semantics.  The V2 bridge is the only place allowed to derive a
         # transient PolicyAny form again for typed compilation.
         intrinsic = _embed_weighted_choices_in_policy_ast(target.policy, tuple(self._choices))
+        intrinsic = _embed_function_occurrences_in_policy_ast(intrinsic, function_topologies)
         policy: Policy
-        if self._choices:
+        if self._choices or function_topologies:
             policy = PolicyV2Only(intrinsic.id, intrinsic.when, intrinsic.version)
         else:
             policy = intrinsic
@@ -1457,6 +2600,7 @@ class PolicyBuilder:
             target._authoring_owner,
             self._meta,
             tuple(self._choices),
+            function_topologies,
         )
 
     def _raw_all_item(self, value: _ProductAllInput) -> PolicyNodeHandle | PolicyConstraintHandle:
@@ -1517,10 +2661,16 @@ __all__ = [
     "AssetMeta",
     "AssetMetaAbsentV1",
     "AssetMetaStateV1",
+    "FunctionBuilder",
+    "FunctionInputBindingV1",
+    "FunctionOccurrenceHandleV1",
+    "FunctionOccurrenceTopologyV1",
+    "FunctionPortV1",
     "PolicyBuilder",
     "ProductAuthoringError",
     "ProductPolicyNode",
     "ProductPolicyV1",
+    "ProductFunctionV1",
     "ProductRuleV1",
     "RuleBuilder",
     "WEIGHTED_CHOICE_FORMAT_V1",
@@ -1531,5 +2681,7 @@ __all__ = [
     "asset_meta_for_target",
     "asset_snapshot_v1",
     "build_rule",
+    "build_function",
+    "function_builder",
     "rule_builder",
 ]

@@ -272,6 +272,8 @@ class GoalRowExpectationV1:
 
 @dataclass(frozen=True)
 class ContainsRowExpectationV1:
+    """Require a V1 selected-row result to contain one expected row."""
+
     expectation_id: str
     row: GoalRowExpectationV1
     expectation_digest: str = field(init=False)
@@ -341,6 +343,8 @@ class ExactLocalAbsenceExpectationV1:
 
 @dataclass(frozen=True)
 class ExistsExpectationV1:
+    """Require the V1 result's existence observation to match a boolean."""
+
     expectation_id: str
     expected: bool
     expectation_digest: str = field(init=False)
@@ -359,6 +363,8 @@ class ExistsExpectationV1:
 
 @dataclass(frozen=True)
 class CountEqExpectationV1:
+    """Require the V1 selected-row count to equal an exact integer."""
+
     expectation_id: str
     expected_count: int
     expectation_digest: str = field(init=False)
@@ -380,6 +386,8 @@ class CountEqExpectationV1:
 
 @dataclass(frozen=True)
 class SetEqualsExpectationV1:
+    """Require the V1 selected-row set to equal an exact expected set."""
+
     expectation_id: str
     rows: tuple[GoalRowExpectationV1, ...]
     expectation_digest: str = field(init=False)

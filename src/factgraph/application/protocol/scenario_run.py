@@ -445,7 +445,14 @@ class ScenarioRunV0:
         )
 
     def diff(self) -> ScenarioResultDiffV0:
-        """Return the captured result-multiset summary without reading a Store."""
+        """Return the captured result-multiset summary.
+
+        Returns:
+            The sealed baseline/effective diff.
+
+        Notes:
+            This validates the run seal and never reads a live Store.
+        """
 
         from factgraph.application.scenario_run_runtime import _assert_scenario_run_current
 
@@ -458,23 +465,49 @@ class ScenarioRunV0:
         side: Literal["baseline", "effective"],
         row_capture_digest: str,
     ) -> "ScenarioRunExplanationV0":
+        """Explain one positive row from a captured Scenario side.
+
+        Args:
+            side: Captured baseline or effective side.
+            row_capture_digest: Exact captured row to explain.
+
+        Returns:
+            Detached evidence and authored Policy projection.
+        """
         from factgraph.application.scenario_run_runtime import explain_scenario_run_v0
 
         return explain_scenario_run_v0(self, side=side, row_capture_digest=row_capture_digest)
 
     def verify(self) -> "ScenarioRunVerificationV0":
+        """Verify both sides against their isolated captured relations.
+
+        Returns:
+            A paired verification record with explicit truth boundaries.
+        """
         from factgraph.application.scenario_run_runtime import verify_scenario_run_v0
 
         return verify_scenario_run_v0(self)
 
     def to_bytes(self) -> bytes:
+        """Serialize this detached Scenario run to canonical bytes.
+
+        Returns:
+            Canonical bytes containing both sealed captures and the diff.
+        """
         from factgraph.application.scenario_run_runtime import scenario_run_bytes
 
         return scenario_run_bytes(self)
 
     @classmethod
     def from_bytes(cls, raw: bytes) -> "ScenarioRunV0":
-        """Decode a detached ScenarioRun without consulting a live Store."""
+        """Decode a detached ScenarioRun without consulting a live Store.
+
+        Args:
+            raw: Canonical ScenarioRun bytes.
+
+        Returns:
+            A validated detached Scenario run.
+        """
 
         from factgraph.application.scenario_run_runtime import scenario_run_from_bytes
 
@@ -567,6 +600,7 @@ class ScenarioRunVerificationV0:
 
     @property
     def matched(self) -> bool:
+        """Return whether both captured sides matched isolated replay."""
         return self.baseline.verdict in {
             "matched_declared_runtime",
             "matched_unpinned_runtime",

@@ -117,6 +117,50 @@ Examples of rejected forms (all raise `WriteProtocolError` at write time):
 
 Anything not listed in §2.1 is preserved as-is in `AssertionMeta.raw` (a plain `dict`). The runtime does not interpret unknown keys — feel free to add tenant ids, workflow tags, custom audit fields, anything that's serialisable into one of the `META_KINDS`. The only constraint is that the `kind` is one of the six accepted values.
 
+### 2.4 Ledger `meta` and Product V2 Scenario `meta` are different contracts
+
+Product V2 deliberately gives Scenario operations a familiar write-like form:
+
+```python
+scenario = (
+    fg.scenario()
+      .set(
+          User.risk_flag,
+          user_ref,
+          True,
+          meta={
+              "raw_kind": "probabilistic",
+              "bound": [0.8, 0.8],
+              "source": {
+                  "ref": "model:risk-v3",
+                  "locator": {"kind": "opaque", "opaque_ref": "prediction-7"},
+                  "origin_role": "imported_record",
+              },
+              "note": "run-local hypothesis",
+          },
+      )
+      .build()
+)
+```
+
+The spelling is similar, but Scenario does **not** append a Claim or a
+`claim_meta` event. Its strict `meta` input is immediately separated into:
+
+- evaluator-visible fact semantics (`raw_kind` and `bound`);
+- safe opaque provenance references (`source` / `sources`); and
+- display/audit annotations (`note` / `labels`).
+
+Those lanes receive separate semantic-world and resolution-evidence digests.
+Changing only a source reference does not change the evaluator-visible world,
+but it still changes the sealed run and its structured Explain data. Scenario
+facts are marked as run-local synthetic premises; caller metadata cannot turn
+them into ledger assertions or authoritative sources.
+
+Probabilistic Scenario facts currently execute only under a Product V2
+ProbLog point profile. Native and Soufflé return typed unsupported frames
+rather than ignoring the metadata. See the
+[complete Product V2 workflow](product_workflow_v2.md#9-probabilistic-scenario-facts).
+
 ## 3. Append-only retract
 
 The ledger never modifies a row in place. To "remove" a claim, the runtime appends a **revoke claim** — an ordinary `claims` row in the reserved `__system__.revokes` predicate. The in-memory logical type is `factgraph.core.store.ledger.Revokes` (`revoker_asrt_id`, `revoked_asrt_id`), but there is no separate `revokes` table.

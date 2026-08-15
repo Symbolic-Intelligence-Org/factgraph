@@ -41,11 +41,18 @@ class ProductEvaluationOutcomeErrorV2(SDKStoreError):
 
 @dataclass(frozen=True, repr=False)
 class ProductEvaluationOutcomeV2:
-    """Ergonomic read facade for exactly one sealed ``EvaluationRunV2``.
+    """Open one sealed Product V2 run as user-facing result views.
 
     ``run`` remains public and is the original durable carrier.  Result views
     are lazily opened per named side, so the facade never chooses a row or
     turns point probability into an ordinary Boolean result.
+
+    Attributes:
+        run: Original integrity-validated ``EvaluationRunV2`` carrier.
+
+    Notes:
+        The facade is read-only. It does not reevaluate the Query, read the
+        live ledger, or reinterpret probabilities as Boolean truth.
     """
 
     run: EvaluationRunV2
@@ -66,7 +73,21 @@ class ProductEvaluationOutcomeV2:
 
     @classmethod
     def from_run(cls, run: EvaluationRunV2) -> "ProductEvaluationOutcomeV2":
-        """Open an already sealed raw run without changing its representation."""
+        """Open an already sealed raw run.
+
+        Args:
+            run: Integrity-valid Product V2 run.
+
+        Returns:
+            A read-only ``ProductEvaluationOutcomeV2`` facade.
+
+        Raises:
+            ProductEvaluationOutcomeErrorV2: If the run type or any nested
+                seal is invalid.
+
+        Notes:
+            Opening does not change, reseal, replay, or authenticate the run.
+        """
 
         return cls(run=run)
 
@@ -94,12 +115,29 @@ class ProductEvaluationOutcomeV2:
         self,
         target: EvaluationRunV2RowView | EvaluationRunV2ExplainTarget,
     ) -> EvaluationRunV2ExplanationDataV2:
-        """Return data-first Explain material for one caller-selected row.
+        """Return structured Explain data for one explicit row.
 
         Passing a row view is merely shorthand for its own explicit V2 target;
         the target's run/side/engine/observation links are revalidated by the
         product Explain adapter.  A string, row ordinal, empty result, or a
         Boolean request is intentionally not accepted.
+
+        Args:
+            target: Row view from this run or its explicit Explain target.
+
+        Returns:
+            Machine-readable ``EvaluationRunV2ExplanationDataV2`` including
+            available Scenario, asset, probability, Function, choice, and
+            evidence sections.
+
+        Raises:
+            ProductEvaluationOutcomeErrorV2: If the target is invalid,
+                cross-run, cross-side, stale, or unsupported.
+
+        Notes:
+            ``render_text()`` / ``narrate()`` are presentation helpers; product
+            code should parse the structured fields. No EvidenceGraph is
+            fabricated when the run did not capture one.
         """
 
         if isinstance(target, EvaluationRunV2RowView):
@@ -123,7 +161,17 @@ class ProductEvaluationOutcomeV2:
             ) from exc
 
     def replay(self) -> "EvaluationRunReplayV2":
-        """Replay the sealed raw run; no graph or live evaluator is reopened."""
+        """Replay the sealed run without live dependencies.
+
+        Returns:
+            An ``EvaluationRunReplayV2`` report, normally with status
+            ``"matched"`` when the capture reproduces its recorded frames.
+
+        Notes:
+            Replay does not read the live ledger, invoke a Provider, or call a
+            Product Function. A match is deterministic agreement with the
+            capture, not source authority or artifact authentication.
+        """
 
         from factgraph.application.goal_plan_v2_runtime import replay_evaluation_run_v2
 
@@ -156,7 +204,30 @@ class ProductEvaluationOutcomeV2:
 
 
 def outcome_from_run_v2(run: EvaluationRunV2) -> ProductEvaluationOutcomeV2:
-    """Public functional spelling of :meth:`ProductEvaluationOutcomeV2.from_run`."""
+    """Open a sealed Product V2 run through the user-facing outcome facade.
+
+    Args:
+        run: Integrity-valid ``EvaluationRunV2`` returned by a Product Query.
+
+    Returns:
+        A ``ProductEvaluationOutcomeV2`` with named baseline/effective and
+        optional candidate views.
+
+    Raises:
+        ProductEvaluationOutcomeErrorV2: If the run or a nested seal is stale
+            or malformed.
+
+    Examples:
+        >>> outcome = outcome_from_run_v2(query.plan(profile=profile).run())
+        >>> row = outcome.effective.rows[0]
+        >>> data = outcome.explain(row)
+        >>> outcome.replay().status
+        'matched'
+
+    Notes:
+        This is the functional spelling of
+        ``ProductEvaluationOutcomeV2.from_run(run)``.
+    """
 
     return ProductEvaluationOutcomeV2.from_run(run)
 

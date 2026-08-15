@@ -158,11 +158,27 @@ class GoalPlanRunV1:
     scenario_diff: ScenarioDiffV1 | None = None
 
     def explain(self, target: ExplainTargetV1) -> EvaluationRunExplanationV1:
+        """Explain one explicit V1 row or summary target.
+
+        Args:
+            target: Run-bound Explain target; no implicit first row is chosen.
+
+        Returns:
+            A detached V1 explanation under the run's evidence boundary.
+        """
         from .evaluation_run_v1_runtime import explain_evaluation_run_v1
 
         return explain_evaluation_run_v1(self.run, target=target)
 
     def replay(self) -> EvaluationRunReplayV1:
+        """Replay the sealed V1 capture without consulting live graph state.
+
+        Returns:
+            A detached replay comparison and typed parity status.
+
+        Notes:
+            Replay never invokes a live Provider or reads the current ledger.
+        """
         from .evaluation_run_v1_runtime import replay_evaluation_run_v1
 
         return replay_evaluation_run_v1(self.run)
@@ -187,6 +203,11 @@ class GoalPlanInvocationV1:
     provider: RelationProviderV1 | None = None
 
     def run(self) -> GoalPlanRunV1 | GoalPlanFailureV1:
+        """Capture one view and execute this compiled V1 invocation.
+
+        Returns:
+            A completed sealed run or an explicit fail-closed outcome.
+        """
         return execute_goal_plan_invocation_v1(self)
 
 
@@ -201,6 +222,13 @@ def native_deterministic_profile_v1(
     ``EvaluationExecutionProfileV1``.  V1 rejects arbitrary engine config
     until a canonical config codec exists, so this factory cannot hide config
     drift behind an opaque digest.
+
+    Args:
+        native_engine_version: Exact Native engine version pin.
+        native_adapter_version: Exact Native adapter version pin.
+
+    Returns:
+        A sealed zero-config Native deterministic V1 profile.
     """
 
     return EvaluationExecutionProfileV1(
@@ -220,7 +248,23 @@ def portable_deterministic_profile_v1(
     problog_engine_version: str = "problog-v1",
     problog_adapter_version: str = "factgraph-problog-adapter-v1",
 ) -> EvaluationExecutionProfileV1:
-    """Return the explicit all-three-engine selected-row parity profile."""
+    """Return the explicit all-three-engine selected-row parity profile.
+
+    Args:
+        native_engine_version: Native engine version pin.
+        native_adapter_version: Native adapter version pin.
+        souffle_engine_version: Soufflé engine version pin.
+        souffle_adapter_version: Soufflé adapter version pin.
+        problog_engine_version: ProbLog engine version pin.
+        problog_adapter_version: ProbLog adapter version pin.
+
+    Returns:
+        A sealed deterministic V1 profile for Native, Soufflé and ProbLog.
+
+    Notes:
+        The profile claims selected-row parity only; proof parity remains
+        explicitly unclaimed.
+    """
 
     return EvaluationExecutionProfileV1(
         kind="portable_deterministic_v1",
@@ -1059,7 +1103,18 @@ def _provider_bindings(
 
 
 def provider_binding_slot_v1(occurrence_alias: str, port_name: str) -> str:
-    """Return the opaque canonical provider slot for one structured port."""
+    """Return the opaque canonical Provider slot for one structured port.
+
+    Args:
+        occurrence_alias: Structured Rule occurrence alias.
+        port_name: Public semantic-port name.
+
+    Returns:
+        A stable opaque slot token for a Provider request.
+
+    Raises:
+        GoalPlanRuntimeError: If either name is empty.
+    """
 
     if not isinstance(occurrence_alias, str) or not occurrence_alias:
         raise GoalPlanRuntimeError(

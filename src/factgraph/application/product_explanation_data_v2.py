@@ -52,6 +52,7 @@ from .product_result_views_v2 import (
     EvaluationRunV2RowView,
     ExecutionProfileViewV2,
     ExecutionViewV2,
+    FunctionCaptureViewV2,
     ProductRunSideV2,
     ProductViewErrorV2,
     ProbabilityMaterializationViewV2,
@@ -613,6 +614,7 @@ class EvaluationRunV2ExplanationDataV2:
     asset: AssetDescriptorCaptureViewV2 = dc_field(repr=False)
     scenario: ScenarioCaptureViewV2 = dc_field(repr=False)
     choice: ChoiceCaptureViewV2 = dc_field(repr=False)
+    functions: FunctionCaptureViewV2 = dc_field(repr=False)
     evidence: EvidenceSupportViewV2 = dc_field(repr=False)
     boundaries: ExplainBoundaryViewV2 = dc_field(default_factory=ExplainBoundaryViewV2)
 
@@ -801,6 +803,7 @@ def evaluation_explanation_data_v2_from_evaluation_run_v2(
         asset=view.asset,
         scenario=view.scenario,
         choice=view.choice,
+        functions=view.functions,
         evidence=evidence,
     )
 
@@ -1577,6 +1580,11 @@ def narrate_evaluation_run_v2_explanation_v2(
         lines.append(f"Evidence availability: {data.evidence.reason_code}")
     lines.append(f"Asset descriptor: {data.asset.descriptor_capture.state}")
     lines.append(f"Choice topology: {data.choice.authored_topology.state}")
+    lines.append(
+        "Function materialization: "
+        f"{data.functions.materialization_capture.state} "
+        f"({len(data.functions.occurrences)} occurrence(s))"
+    )
     lines.append(
         "Boundary: no evidence graph, Boolean conclusion, negative proof, source authority, or action authorization is claimed"
     )

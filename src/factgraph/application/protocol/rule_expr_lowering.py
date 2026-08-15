@@ -520,7 +520,21 @@ def compile_derivation_plan(
     ``head`` is required: a ``Rule`` or ``RuleExpr`` says what holds, not what it
     concludes, and a default head would invent the conclusion.
 
-    Raises ``RuleExprError`` for anything the lowering rejects, unchanged.
+    Args:
+        source: Application Rule or composed RuleExpr to lower.
+        head: Explicit conclusion/projection Rule.
+        engine: Target engine materialization. Defaults to ``"native"``.
+
+    Returns:
+        A compiled derivation plan for the selected engine.
+
+    Raises:
+        RuleExprError: If source, head, joins, closure, or engine lowering is
+            invalid.
+
+    Notes:
+        This advanced compiler surface does not execute the plan or read the
+        ledger.
     """
     if isinstance(source, Rule):
         lowering = _lower_application_rule(source, head=head)

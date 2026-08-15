@@ -118,7 +118,12 @@ fg.entities.match(
 
 There is no upper bound on how many `port_constraints` you can pass. Each one is independently translated and AND-joined into the template's body. A `Field` binding generates two implicit atoms — `(projected_entity, $hidden_var) ∈ <field_pred>` and `<port_var> == $hidden_var` — so you can think of `name=User.name` as "the named port equals whatever `User.name` is on the matched user".
 
-Cross-entity `Field` constraints are **not** supported via `port_constraints`: every `Field` descriptor passed as a constraint must belong to `EntityCls`. If you pass a Field of a different entity class, the call raises `"cross-entity Field constraints are not supported by fg.read.match(...); use RuleExpr.join_by_ports(...) to connect entities"`. To match across entities, express the join inside the `RuleExpr` (e.g., `RuleExpr.join_by_ports(...)`) rather than as a port constraint.
+Cross-entity `Field` constraints are **not** supported via `port_constraints`:
+every `Field` descriptor passed as a constraint must belong to `EntityCls`. If
+you pass a Field of a different entity class, the call raises a cross-entity
+constraint error for `fg.entities.match(...)`. To match across entities,
+express the join inside the `RuleExpr` (for the compatibility path) or author
+multiple typed occurrences and comparisons in a Product Policy.
 
 **Connectivity requirement.** When you provide any `port_constraints`, every constrained port must be reachable from the projection port through the template's body atoms. A constraint on a port that the template does not connect to the projection port raises. In practice this means: for every constrained port, at least one atom in the rule body must transitively tie that port's variable to the projected entity's variable. The check fires before any ledger work, so disconnected templates fail fast rather than silently returning an empty result.
 

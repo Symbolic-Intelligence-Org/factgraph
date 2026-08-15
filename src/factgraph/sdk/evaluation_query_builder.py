@@ -59,6 +59,7 @@ from .product_authoring import ProductPolicyV1, ProductRuleV1, WeightedChoiceTop
 
 if TYPE_CHECKING:
     from factgraph.application.goal_plan_v1_runtime import GoalPlanInvocationV1
+    from factgraph.application.goal_plan_v2_runtime import ProductEvaluationInvocationV2
 
     from .store import SDKStore
 
@@ -83,7 +84,12 @@ class ProviderQueryTargetV1:
 
 @dataclass(frozen=True)
 class EvaluationQueryBuilderV1:
-    """Immutable native builder that delegates every semantic check downstream."""
+    """Build typed Query intent over one resolved Rule or Policy target.
+
+    Each method returns a new immutable builder. Authoring does not read the
+    ledger or execute an engine; a terminal compiles and/or runs the captured
+    intent under its explicit V0, V1, or Product V2 contract.
+    """
 
     _graph: "SDKStore"
     _target: ResolvedEvaluationQueryTargetV1
@@ -93,6 +99,7 @@ class EvaluationQueryBuilderV1:
     _provider: RelationProviderV1 | None = None
     _authored_policy_owner: object | None = None
     _weighted_choices: tuple[WeightedChoiceTopologyV1, ...] = ()
+    _requires_product_v2: bool = False
     # The resolved target below is sufficient for legacy/V1 compilation, but
     # V2 capture also needs the original product envelope: AssetMeta binding,
     # WeightedChoice topology and the exact immutable wrapper.  Retain it as
@@ -104,7 +111,23 @@ class EvaluationQueryBuilderV1:
         address: SemanticPortAddress | PolicyPortHandle,
         value: Any,
     ) -> "EvaluationQueryBuilderV1":
-        """Add one direct-port binding from a structured address or SDK handle."""
+        """Bind one direct input port to a typed value.
+
+        Args:
+            address: Direct semantic address or owner-bound Policy port.
+            value: Value for the port's declared semantic domain.
+
+        Returns:
+            A new builder containing the binding.
+
+        Raises:
+            SDKStoreError: If the handle crosses Policy owners, the port is a
+                field navigation or Function output, or the value is invalid.
+
+        Notes:
+            ``bind`` constrains an input. It never turns a selected/computed
+            output into an engine input and does not execute the Query.
+        """
 
         if isinstance(address, PolicyFieldHandle):
             raise SDKStoreError(
@@ -131,7 +154,24 @@ class EvaluationQueryBuilderV1:
             | PolicyFieldHandle
         ),
     ) -> "EvaluationQueryBuilderV1":
-        """Add one ordered direct-port or structured field projection."""
+        """Add one ordered output projection.
+
+        Args:
+            alias: Unique output-column name.
+            source: Direct port, Function output, or supported field
+                navigation from this Query target.
+
+        Returns:
+            A new builder containing the ordered selection.
+
+        Raises:
+            SDKStoreError: If the alias/source is invalid or an owner-bound
+                handle comes from another Policy.
+
+        Notes:
+            Projection does not reverse dataflow. A Function output can be
+            selected but remains invalid as a Query binding.
+        """
 
         try:
             selection: EvaluationQuerySelectionItem
@@ -187,6 +227,21 @@ class EvaluationQueryBuilderV1:
 
         This does not modify the Policy or the Query projection.  Exact aliases
         and typed values are resolved only at compile time against ``select``.
+
+        Args:
+            expectation_id: Unique expectation identifier.
+            **selected_values: Expected selected aliases and typed values.
+
+        Returns:
+            A new immutable builder containing the observation request.
+
+        Raises:
+            SDKStoreError: If the id or expected row shape is invalid.
+
+        Notes:
+            This is the V0 compatibility expectation. V1 typed expectations
+            belong to ``plan(expectations=...)`` and Product V2 currently
+            rejects expectations.
         """
 
         try:
@@ -205,6 +260,19 @@ class EvaluationQueryBuilderV1:
         providers materialize a sealed finite relation before Scenario and are
         recorded in a V1 Run/Replay payload, rather than being silently
         executed from the old live evaluator.
+
+        Args:
+            provider: Restricted typed Provider contract to attach.
+
+        Returns:
+            A new immutable builder carrying the Provider.
+
+        Raises:
+            SDKStoreError: If ``provider`` is not a ``RelationProviderV1``.
+
+        Notes:
+            A Provider is not a standalone Query target and is invoked only by
+            the V1 GoalPlan terminal.
         """
 
         if not isinstance(provider, RelationProviderV1):
@@ -227,14 +295,39 @@ class EvaluationQueryBuilderV1:
             | None
         ) = None,
         candidate_address_space: SemanticAddressSpace | None = None,
-    ) -> Any:
-        """Compile one immutable V1 GoalPlan without evaluating it.
+    ) -> GoalPlanInvocationV1 | ProductEvaluationInvocationV2:
+        """Create an immutable V1 or Product V2 execution invocation.
 
         Rule and Policy targets use exactly the same typed Query compiler as
         the compatibility path.  ``scenario`` is declarative input only; its
         resolver runs later against one captured relation.  An optional
         candidate is compiled independently with the identical bind/select
         declaration for immutable policy comparison.
+
+        Args:
+            result_mode: V1 result mode. Product V2 currently accepts
+                ``"rows"`` only.
+            expectations: Typed V1 expectations; unsupported in Product V2.
+            scenario: V1 Scenario or Product V2 Scenario matching ``profile``.
+            evidence_scope: Optional V1 evidence capture scope.
+            profile: Explicit V1 or Product V2 execution profile.
+            candidate: Optional independently authored comparison target.
+            candidate_address_space: Advanced address space for a raw Policy
+                candidate.
+
+        Returns:
+            A generation-specific immutable invocation whose ``run()`` method
+            performs evaluation.
+
+        Raises:
+            SDKStoreError: If generations are mixed, the target/profile pins
+                disagree, or a requested feature is unsupported.
+
+        Notes:
+            Product V2 selection is explicit through
+            ``EvaluationExecutionProfileV2``. No Scenario, Provider,
+            expectation, or evidence contract is silently translated across
+            generations.
         """
 
         # V2 is an explicitly separate terminal rather than an extension of
@@ -332,7 +425,7 @@ class EvaluationQueryBuilderV1:
             | None
         ),
         candidate_address_space: SemanticAddressSpace | None,
-    ) -> Any:
+    ) -> ProductEvaluationInvocationV2:
         """Create a V2 invocation without widening the V1 GoalPlan contract."""
 
         if not isinstance(profile, EvaluationExecutionProfileV2) or (
@@ -429,14 +522,29 @@ class EvaluationQueryBuilderV1:
             | None
         ) = None,
         candidate_address_space: SemanticAddressSpace | None = None,
-    ) -> Any:
-        """Explicit alias for the V2 branch of :meth:`plan`.
+    ) -> ProductEvaluationInvocationV2:
+        """Create an explicit Product V2 execution invocation.
 
         New code may use either this spelling or
         ``query.plan(scenario=v2, profile=v2)``.  ``scenario`` is optional:
         omitting it selects the sealed empty V2 world.  Both route to exactly
         the same V2 invocation factory and preserve the original product
         target.
+
+        Args:
+            scenario: Optional run-local V2 overlay; omission seals an empty
+                overlay rather than falling back to V1.
+            profile: Target-pinned Product V2 execution profile.
+            candidate: Optional independently authored Product candidate.
+            candidate_address_space: Advanced address space for a raw Policy
+                candidate.
+
+        Returns:
+            A Product V2 invocation ready for ``run()``.
+
+        Raises:
+            SDKStoreError: If target, profile, Scenario, or candidate pins are
+                incoherent.
         """
 
         return self.plan(
@@ -447,7 +555,19 @@ class EvaluationQueryBuilderV1:
         )
 
     def compile(self) -> TargetedCompiledEvaluationQueryV0:
-        """Return the existing compiled Query inside a source-target envelope."""
+        """Compile typed Query intent into the compatibility target envelope.
+
+        Returns:
+            The compiled Query plus resolved source-target identity.
+
+        Raises:
+            SDKStoreError: If bindings, selections, target topology, Provider,
+                or generation-specific features are invalid.
+
+        Notes:
+            Compilation does not execute an engine. Product V2-only Function
+            and WeightedChoice targets intentionally reject this V0 terminal.
+        """
 
         return self._compile_query(allow_provider=False)
 
@@ -465,11 +585,17 @@ class EvaluationQueryBuilderV1:
         provider exactly once through the sealed V1 runtime.
         """
 
-        if self._weighted_choices:
-            raise SDKStoreError(
+        if self._requires_product_v2:
+            message = (
                 "WeightedChoice targets are V2 ProbLog-only; legacy compile/evaluate/capture/"
-                "what_if and V1 plan terminals reject them before deterministic Policy lowering",
-                code="WEIGHTED_CHOICE_V2_ONLY",
+                "what_if and V1 plan terminals reject them before deterministic Policy lowering"
+                if self._weighted_choices
+                else "Function targets are Product V2-only; legacy compile/evaluate/capture/"
+                "what_if and V1 plan terminals cannot execute or ignore the Function"
+            )
+            raise SDKStoreError(
+                message,
+                code=("WEIGHTED_CHOICE_V2_ONLY" if self._weighted_choices else "FUNCTION_V2_ONLY"),
             )
         if self._provider is not None and not allow_provider:
             raise SDKStoreError(
@@ -522,16 +648,34 @@ class EvaluationQueryBuilderV1:
             raise SDKStoreError(f"V2 query compilation rejected: {exc}", code=code) from exc
 
     def evaluate(self, **kwargs: Any) -> Any:
-        """Compile then use the sole native evaluator; no default kwargs are injected."""
+        """Run the legacy live evaluator over this Query.
+
+        Args:
+            **kwargs: Legacy ``fg.eval.evaluate`` keyword arguments.
+
+        Returns:
+            A legacy ``EvaluateResult``.
+
+        Notes:
+            Product V2 Function/WeightedChoice targets and attached Providers
+            fail closed here. Use ``plan(profile=...).run()`` for those paths.
+        """
 
         return self._graph.eval.evaluate(self.compile(), **kwargs)
 
     def capture(self) -> Any:
-        """Capture this exact native Query and its optional observations.
+        """Capture this exact legacy native Query and its observations.
 
         This is terminal.  It does not widen ordinary ``evaluate(...,
         capture=...)``: the returned outer artifact retains the compiled
         expectation inventory separately from F4's bundle contract.
+
+        Returns:
+            A detached legacy captured-Query artifact.
+
+        Notes:
+            This is not Product V2 run capture. Function, WeightedChoice and
+            V2 Scenario/profile semantics are intentionally rejected.
         """
 
         return self._graph.eval.capture_query(self.compile())
@@ -545,6 +689,19 @@ class EvaluationQueryBuilderV1:
         This is terminal by design: binding, projection and expectation intent
         must already be present, so there is still only one Query compiler and
         one immutable Query contract.
+
+        Args:
+            scenario: A bounded V0 field substitution or V1 Scenario spec.
+
+        Returns:
+            A generation-specific Scenario terminal wrapper.
+
+        Raises:
+            SDKStoreError: If expectations, Providers, or Scenario generation
+                are incompatible with the selected terminal.
+
+        Notes:
+            Product V2 Scenarios use ``plan(profile=v2, scenario=v2)`` instead.
         """
 
         if isinstance(scenario, ScenarioSpecV1):
@@ -577,7 +734,18 @@ class ScenarioQueryBuilderV0:
     _scenario: ScenarioFieldSubstitutionV0 | ScenarioFieldSubstitutionSetV0
 
     def run(self) -> Any:
-        """Compile once and enter the captured ScenarioRun API."""
+        """Compile and execute the fixed V0 Scenario query.
+
+        Returns:
+            A captured ``ScenarioRunV0`` compatibility result.
+
+        Raises:
+            SDKStoreError: If Query compilation or Scenario execution fails.
+
+        Notes:
+            This is the V0 compatibility terminal. Product V2 Scenario code
+            should use ``query.plan(profile=v2, scenario=v2).run()``.
+        """
 
         return self._query._graph.eval.run_scenario(self._query.compile(), self._scenario)
 
@@ -590,11 +758,35 @@ class ScenarioGoalPlanBuilderV1:
     _scenario: ScenarioSpecV1
 
     def plan(self, **kwargs: Any) -> "GoalPlanInvocationV1":
+        """Build a V1 GoalPlan with this Scenario already fixed.
+
+        Args:
+            **kwargs: Remaining V1 GoalPlan options except ``scenario``.
+
+        Returns:
+            A compiled V1 invocation ready for ``run()``.
+        """
         if "scenario" in kwargs:
             raise SDKStoreError("Scenario is already fixed by query.what_if(ScenarioSpecV1)")
         return self._query.plan(scenario=self._scenario, **kwargs)
 
     def run(self, **kwargs: Any) -> Any:
+        """Plan and execute this fixed V1 Scenario convenience path.
+
+        Args:
+            **kwargs: Remaining V1 GoalPlan options except ``scenario``.
+
+        Returns:
+            A completed ``GoalPlanRunV1`` or fail-closed
+            ``GoalPlanFailureV1``.
+
+        Raises:
+            SDKStoreError: If the supplied planning options are invalid.
+
+        Notes:
+            This convenience method is equivalent to
+            ``builder.plan(**kwargs).run()`` and never enters Product V2.
+        """
         return self.plan(**kwargs).run()
 
 
@@ -615,6 +807,7 @@ def build_evaluation_query_builder(
     provider: RelationProviderV1 | None = None
     authored_policy_owner: object | None = None
     weighted_choices: tuple[WeightedChoiceTopologyV1, ...] = ()
+    requires_product_v2 = False
     if isinstance(target, ProviderQueryTargetV1):
         provider = target.provider
         target = target.target
@@ -625,6 +818,7 @@ def build_evaluation_query_builder(
     product_target = _product_target_for_v2(target)
     if isinstance(target, ProductPolicyV1):
         weighted_choices = target.weighted_choices
+        requires_product_v2 = target.requires_v2_profile
     if isinstance(target, AuthoredPolicyTargetV1):
         if address_space is not None:
             raise SDKStoreError(
@@ -650,6 +844,7 @@ def build_evaluation_query_builder(
         _provider=provider,
         _authored_policy_owner=authored_policy_owner,
         _weighted_choices=weighted_choices,
+        _requires_product_v2=requires_product_v2,
         _product_target=product_target,
     )
 

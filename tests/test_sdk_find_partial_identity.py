@@ -161,9 +161,13 @@ class SDKFindPartialIdentityTests(unittest.TestCase):
         # projection), bringing the explicit total to 152. Q19 deliberately
         # adds ten typed Policy-authoring values (the frozen target, draft,
         # authoring error, and seven typed handle categories), bringing the
-        # explicit total to 162.
+        # explicit total to 162. Q20 deliberately adds 38 Product Rule/Policy,
+        # Scenario V2, provenance, execution-profile, ProbLog-semantics and
+        # Product outcome façade names, bringing the total to 200. Q21 adds
+        # eight Product Function asset/builder/occurrence/binding names,
+        # bringing the explicit total to 208.
         # Intent unchanged: no ACCIDENTAL name creep.
-        self.assertEqual(len(sdk_module.__all__), 162)
+        self.assertEqual(len(sdk_module.__all__), 208)
         self.assertIn("compile_derivation_plan", sdk_module.__all__)
         self.assertIn("RuleProgram", sdk_module.__all__)
         self.assertIn("RuleProgramFact", sdk_module.__all__)

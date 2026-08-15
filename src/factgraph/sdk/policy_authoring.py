@@ -31,6 +31,7 @@ from factgraph.application.protocol.semantic_address import SemanticPortAddress
 from factgraph.application.protocol.semantic_port import (
     EntityIdentityEndpoint,
     FieldEndpoint,
+    FunctionValueEndpointV1,
 )
 from factgraph.application.schema_runtime import (
     SchemaResolutionError,
@@ -170,9 +171,21 @@ class PolicyOccurrenceHandle(PolicyNodeHandle):
 
     @property
     def alias(self) -> str:
+        """Return this occurrence's Policy-local alias."""
         return self._managed.occurrence.alias
 
     def port(self, name: str) -> "PolicyPortHandle":
+        """Resolve one declared semantic port as an owner-bound handle.
+
+        Args:
+            name: Public semantic-port name on the resolved Rule contract.
+
+        Returns:
+            A typed entity or scalar port handle.
+
+        Raises:
+            PolicyAuthoringError: If the port is unknown or unsupported.
+        """
         if not isinstance(name, str) or not name:
             raise PolicyAuthoringError(
                 "Policy port name must be a non-empty string", code="POLICY_UNKNOWN_PORT"
@@ -213,6 +226,8 @@ class PolicyOccurrenceHandle(PolicyNodeHandle):
                 address,
                 value_type.scalar_domain,
             )
+        if isinstance(endpoint, FunctionValueEndpointV1):
+            return PolicyScalarPortHandle(self._owner, address, endpoint.scalar_domain)
         raise PolicyAuthoringError(
             f"Policy port {self.alias}.{name} has an unsupported semantic endpoint",
             code="POLICY_UNSUPPORTED_PORT_ENDPOINT",
@@ -267,6 +282,18 @@ class PolicyEntityPortHandle(PolicyPortHandle):
         self._schema_index = schema_index
 
     def field(self, name: str) -> "PolicyFieldHandle":
+        """Navigate an entity port to one single scalar field.
+
+        Args:
+            name: Field name on the entity type.
+
+        Returns:
+            An owner-bound scalar field-navigation handle.
+
+        Raises:
+            PolicyAuthoringError: If the field is unknown or not a supported
+                single scalar field.
+        """
         if not isinstance(name, str) or not name:
             raise PolicyAuthoringError(
                 "Policy field name must be a non-empty string", code="POLICY_INVALID_FIELD"
@@ -406,6 +433,7 @@ class PolicyFieldHandle(_PolicyScalarHandle):
 
     @property
     def navigation(self) -> PolicyFieldNavigation:
+        """Return the canonical Policy field-navigation operand."""
         assert isinstance(self._operand, PolicyFieldNavigation)
         return self._operand
 
@@ -432,13 +460,31 @@ class PolicyDraft:
 
     @property
     def id(self) -> str:
+        """Return the Policy identifier assigned to this draft."""
         return self._id
 
     @property
     def version(self) -> str | None:
+        """Return the optional Policy version assigned to this draft."""
         return self._version
 
     def use(self, rule: ResolvedRuleBundle, *, as_: str) -> PolicyOccurrenceHandle:
+        """Declare one resolved Rule occurrence in this Policy draft.
+
+        Args:
+            rule: Resolved Rule bundle compatible with this graph's schema.
+            as_: Unique Policy-local occurrence alias.
+
+        Returns:
+            An owner-bound occurrence handle exposing typed semantic ports.
+
+        Raises:
+            PolicyAuthoringError: If the Rule, schema, or alias is invalid.
+
+        Notes:
+            This declares local topology; it does not register or execute the
+            Rule and does not write to the ledger.
+        """
         if not isinstance(rule, ResolvedRuleBundle):
             raise PolicyAuthoringError(
                 "PolicyDraft.use(...) requires a resolved Rule bundle",
@@ -464,6 +510,17 @@ class PolicyDraft:
         return handle
 
     def all(self, *items: PolicyNodeHandle | PolicyConstraintHandle) -> PolicyNodeHandle:
+        """Compose structural nodes and constraints with logical conjunction.
+
+        Args:
+            *items: Owner-bound nodes or direct constraints from this draft.
+
+        Returns:
+            A structural handle preserving the authored ``All`` topology.
+
+        Raises:
+            PolicyAuthoringError: If the group is empty or crosses drafts.
+        """
         nodes = self._owned_nodes(items, label="Policy all")
         try:
             return PolicyNodeHandle(self._owner, PolicyAll(nodes))
@@ -471,6 +528,18 @@ class PolicyDraft:
             raise PolicyAuthoringError(f"Policy all is invalid: {exc}", code=exc.code) from exc
 
     def any(self, *items: PolicyNodeHandle) -> PolicyNodeHandle:
+        """Compose structural nodes with logical disjunction.
+
+        Args:
+            *items: Owner-bound structural nodes from this draft.
+
+        Returns:
+            A structural handle preserving the authored ``Any`` topology.
+
+        Raises:
+            PolicyAuthoringError: If the group is empty, crosses drafts, or
+                contains a constraint outside an ``all`` group.
+        """
         nodes: list[_AuthoringNode] = []
         for item in items:
             self._require_owned(item, label="Policy any")
@@ -492,6 +561,19 @@ class PolicyDraft:
     def same(
         self, left: PolicyEntityPortHandle, right: PolicyEntityPortHandle
     ) -> PolicyConstraintHandle:
+        """Require two entity-identity ports to refer to the same entity.
+
+        Args:
+            left: First owner-bound entity port.
+            right: Second owner-bound entity port.
+
+        Returns:
+            An identity-unification constraint for a containing ``all`` node.
+
+        Raises:
+            PolicyAuthoringError: If either endpoint is not an entity port or
+                comes from another draft.
+        """
         self._require_owned(left, label="Policy identity unification")
         self._require_owned(right, label="Policy identity unification")
         if not isinstance(left, PolicyEntityPortHandle) or not isinstance(
@@ -509,6 +591,21 @@ class PolicyDraft:
             ) from exc
 
     def build(self, root: PolicyNodeHandle) -> AuthoredPolicyTargetV1:
+        """Freeze the authored topology as a typed Query target.
+
+        Args:
+            root: Structural root containing every declared occurrence once.
+
+        Returns:
+            An immutable Policy plus its exact semantic address space.
+
+        Raises:
+            PolicyAuthoringError: If ownership, occurrence coverage, or
+                address-space resolution is invalid.
+
+        Notes:
+            Building does not execute the Policy or write it to a registry.
+        """
         self._require_owned(root, label="Policy root")
         if not isinstance(root, PolicyNodeHandle):
             raise PolicyAuthoringError(

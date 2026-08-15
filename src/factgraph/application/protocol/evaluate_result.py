@@ -91,6 +91,14 @@ _FORM1_ROW_SUPPORT_KINDS = frozenset({_NATIVE_FORM1_SUPPORT_KIND, SOUFFLE_WITNES
 
 @dataclass(frozen=True)
 class EvaluateRow:
+    """One row returned by the legacy live evaluation surface.
+
+    Notes:
+        ``explain()`` and ``close()`` require the row to remain attached to its
+        originating ``EvaluateResult``. Product V2 rows instead use explicit
+        sealed result views and explain targets.
+    """
+
     row_id: str
     bindings: Mapping[str, Any]
     kind: ClaimKind
@@ -117,14 +125,32 @@ class EvaluateRow:
         return self._result_resolver()
 
     def explain(self) -> Explanation:
+        """Explain this live row with its originating evaluation context.
+
+        Returns:
+            A legacy ``Explanation`` containing evidence when supported.
+
+        Raises:
+            DetachedRowError: If the row is detached from its result.
+        """
         return _explain_live_row(self, self._require_live_result())
 
     def close(self) -> Rule:
+        """Close this live row into a projection Rule.
+
+        Returns:
+            A Rule whose closed head represents this row.
+
+        Raises:
+            DetachedRowError: If the row is detached from its result.
+        """
         return _close_live_row(self, self._require_live_result())
 
 
 @dataclass(frozen=True)
 class ResultFingerprint:
+    """Stable semantic and execution digests for a legacy evaluation result."""
+
     expr_digest: str
     rule_set_digest: str
     view_snapshot_digest: str
@@ -144,6 +170,13 @@ class ResultFingerprint:
 
 @dataclass(frozen=True)
 class EvaluateResult:
+    """Legacy live evaluation rows plus engine and result identity.
+
+    Notes:
+        This V0-compatible object retains sequence conveniences and live-row
+        Explain. Product V2 uses sealed named result views instead.
+    """
+
     result_id: str
     rows: tuple[EvaluateRow, ...]
     head: Rule
@@ -281,41 +314,49 @@ class EvaluateResult:
 
     @property
     def run_id(self) -> str:
+        """Return the deprecated run id alias from ``fingerprint``."""
         _warn_deprecated_result_field("run_id", "EvaluateResult.fingerprint.run_id")
         return self.fingerprint.run_id
 
     @property
     def engine_version(self) -> str | None:
+        """Return the deprecated engine-version alias from ``engine_meta``."""
         _warn_deprecated_result_field("engine_version", "EvaluateResult.engine_meta['engine_version']")
         return _engine_meta_optional_str(self.engine_meta, "engine_version")
 
     @property
     def adapter_version(self) -> str | None:
+        """Return the deprecated adapter-version alias from ``engine_meta``."""
         _warn_deprecated_result_field("adapter_version", "EvaluateResult.engine_meta['adapter_version']")
         return _engine_meta_optional_str(self.engine_meta, "adapter_version")
 
     @property
     def expr_digest(self) -> str:
+        """Return the deprecated expression digest alias from ``fingerprint``."""
         _warn_deprecated_result_field("expr_digest", "EvaluateResult.fingerprint.expr_digest")
         return self.fingerprint.expr_digest
 
     @property
     def rule_set_digest(self) -> str:
+        """Return the deprecated Rule-set digest alias from ``fingerprint``."""
         _warn_deprecated_result_field("rule_set_digest", "EvaluateResult.fingerprint.rule_set_digest")
         return self.fingerprint.rule_set_digest
 
     @property
     def view_snapshot_digest(self) -> str:
+        """Return the deprecated view digest alias from ``fingerprint``."""
         _warn_deprecated_result_field("view_snapshot_digest", "EvaluateResult.fingerprint.view_snapshot_digest")
         return self.fingerprint.view_snapshot_digest
 
     @property
     def config_digest(self) -> str | None:
+        """Return the deprecated engine-config digest alias from ``fingerprint``."""
         _warn_deprecated_result_field("config_digest", "EvaluateResult.fingerprint.config_digest")
         return self.fingerprint.config_digest
 
     @property
     def result_digest(self) -> str:
+        """Return the deprecated result digest alias from ``fingerprint``."""
         _warn_deprecated_result_field("result_digest", "EvaluateResult.fingerprint.result_digest")
         return self.fingerprint.result_digest
 
@@ -329,17 +370,27 @@ class EvaluateResult:
         return self.rows[index]
 
     def first(self) -> EvaluateRow | None:
+        """Return the first row, or ``None`` when the result is empty."""
         return self.rows[0] if self.rows else None
 
     def exists(self) -> bool:
+        """Return whether at least one row exists."""
         return bool(self.rows)
 
     def count(self) -> int:
+        """Return the number of selected rows."""
         return len(self.rows)
 
 
 @dataclass(frozen=True)
 class Explanation:
+    """Legacy structured evidence with optional text renderings.
+
+    Notes:
+        ``evidence`` is the machine-readable source of truth. ``repr`` and
+        ``narrate()`` are presentation helpers and are not replay artifacts.
+    """
+
     status: ExplanationStatus
     evidence: EvidenceGraph | None
     row: EvaluateRow | None
@@ -398,6 +449,7 @@ class Explanation:
 
     @property
     def repr(self) -> tuple[str, ...] | None:
+        """Return cached structural evidence lines when rendering is supported."""
         if self.status in {"unsupported", "invalid_request"}:
             return None
         if self._repr_cache is not None:
@@ -408,6 +460,7 @@ class Explanation:
         return lines
 
     def narrate(self) -> tuple[str, ...] | None:
+        """Return cached human-readable evidence lines when supported."""
         if self.status in {"unsupported", "invalid_request"}:
             return None
         if self._narrate_cache is not None:
