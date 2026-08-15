@@ -16,6 +16,7 @@
 | 2026-08-15 | final verification | Corrective scope closed | 783 tests + 838 subtests passed; focused docstring/quickstart cohort 7 + 656 subtests; Ruff, focused mypy/formatter and diff-check passed. |
 | 2026-08-15 | hover audit | Fluent return types corrected | `fg.*_builder`, `fg.build_*`, `fg.scenario`, and `fg.query` no longer return `Any`; Query planning exposes its V1/V2 invocation types, preserving hover/completion through `.build()` and `.run()`. |
 | 2026-08-15 | re-verification | Hover correction green | 784 tests + 853 subtests passed; the docstring contract includes 15 concrete-return-type subtests. |
+| 2026-08-15 | archived | Blueprint pair archived | Complete-surface census, concrete fluent types and IDE-facing documentation were reverified before integration. |
 
 ## Classification
 

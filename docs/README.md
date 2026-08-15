@@ -16,4 +16,3 @@ New Python product code should begin with the
 Maintainer-facing implementation contracts live beside their modules under
 `src/factgraph/*/docs/`. Workflow blueprints, audits and design decisions live
 under `workflow/`; they are not substitutes for the current user docs above.
-

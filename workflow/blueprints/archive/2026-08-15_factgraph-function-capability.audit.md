@@ -13,6 +13,7 @@
 | 2026-08-15 | implementation | Structured Result/Explain and tutorial landed | Function definition/call views are data-first; no EvidenceGraph is fabricated. The Product V2 notebook executes the real three-engine path. |
 | 2026-08-15 | verification | Blueprint completed | 776 tests + 182 subtests green; Ruff, mypy, diff-check and fully executed factpy notebook green. |
 | 2026-08-15 | implemented | Product Function slice closed | Public SDK, execution, replay, structured Explain, documentation and verification criteria are complete. |
+| 2026-08-15 | archived | Blueprint pair archived | Product implementation was independently reverified before worktree integration. |
 
 ## Decision Notes
 

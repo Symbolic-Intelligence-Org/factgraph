@@ -11,6 +11,7 @@
 | 2026-08-15 | compatibility | Legacy generation retained | V0 `fg.eval.evaluate`, V1 GoalPlan and Q19 `fg.policy` are still documented, but explicitly separated from V2 Scenario/profile/result contracts. |
 | 2026-08-15 | verification | Documentation integration complete | Local-link scan clean; executable quickstart and 69-test Product cohort green; Ruff and diff-check clean. |
 | 2026-08-15 | implemented | Quickstart integration closed | Current Product workflow, compatibility boundaries and executable drift coverage are aligned. |
+| 2026-08-15 | archived | Blueprint pair archived | Documentation and executable workflow were reverified before worktree integration. |
 
 ## Decision Notes
 

@@ -1,6 +1,6 @@
 # Task Blueprint: FactGraph complete public SDK docstring surface
 
-- Status: implemented
+- Status: archived
 - Created: 2026-08-15
 - Last Updated: 2026-08-15
 - Supersedes:

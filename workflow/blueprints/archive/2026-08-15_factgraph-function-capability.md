@@ -1,6 +1,6 @@
 # Task Blueprint: FactGraph first-class Function capability
 
-- Status: implemented
+- Status: archived
 - Created: 2026-08-15
 - Last Updated: 2026-08-15
 - Related Modules:
