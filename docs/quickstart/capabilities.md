@@ -40,6 +40,12 @@ The intent: callers can cache and share the result across threads / processes wi
 - Not a contract for future SDK versions — values may grow when new types ship; consume the result, don't hardcode against it.
 - Not an exhaustive feature flag — only enumeration-style boundaries are reported. Cross-cutting capabilities (engine support, transaction modes, etc.) are not in scope here.
 - Not a constraint schema — there's no `constraint_kinds` key today because the runtime has no declarative constraint system; if one ships, it will appear in `capabilities()` then.
+- Not a registry of Product Rules, Policies or Functions. Those are immutable
+  graph-bound assets returned directly by builders; Product Function is not a
+  remotely discoverable or callable tool registry.
+- Not an execution-support matrix. Native/Soufflé/ProbLog support, Scenario
+  uncertainty and `WeightedChoice` are selected by a target-pinned Product V2
+  execution profile and fail closed when unsupported.
 
 ## 4. Use it for
 
@@ -58,3 +64,4 @@ if user_field["cardinality"] not in caps["cardinalities"]:
 
 - [`schema_definition.md`](schema_definition.md) — where `value_kind` / `cardinality` are declared on a `Field`
 - [`evaluate_and_evidence.md`](evaluate_and_evidence.md) §2.2 — where `scalar_tags` appear inside `row.bindings` typed-term dicts
+- [`product_workflow_v2.md`](product_workflow_v2.md) — Product assets, execution profiles and structured Result/Explain

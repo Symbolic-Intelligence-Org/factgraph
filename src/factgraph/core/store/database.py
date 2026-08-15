@@ -111,6 +111,8 @@ class HeadConflictError(DatabaseError):
 
 @dataclass(frozen=True)
 class MetaEntry:
+    """One typed metadata key/value included in a canonical write."""
+
     key: str
     kind: str
     value: Any
@@ -118,6 +120,8 @@ class MetaEntry:
 
 @dataclass(frozen=True)
 class AssertionInput:
+    """Canonical assertion payload accepted by ``Database.commit_*``."""
+
     pred_id: str
     fact_tuple: tuple[tuple[str, Any], ...]
     meta: tuple[MetaEntry, ...] = ()
@@ -125,12 +129,16 @@ class AssertionInput:
 
 @dataclass(frozen=True)
 class RevocationInput:
+    """Canonical request to revoke one existing assertion."""
+
     revoked_asrt_id: str
     meta: tuple[MetaEntry, ...] = ()
 
 
 @dataclass(frozen=True)
 class MetaAppendInput:
+    """Canonical metadata append request for one assertion."""
+
     asrt_id: str
     key: str
     kind: str
@@ -217,6 +225,8 @@ class FrozenAssertionSet:
 
 @dataclass(frozen=True)
 class CommitResult:
+    """Committed transaction result with the new head and written records."""
+
     parent_tx_id: str
     value: DatabaseValue
     assertions: tuple[AssertionRecord, ...]
@@ -523,6 +533,13 @@ class Database:
             return
 
     def close(self) -> None:
+        """Close the Database and release its durable workspace lock.
+
+        Notes:
+            Closing is idempotent. A ``FactGraph`` created with
+            ``FactGraph.attach(db, ...)`` does not own this Database; the
+            caller must close it or use ``Database`` as a context manager.
+        """
         if getattr(self, "_closed", True):
             return
         self._closed = True
@@ -539,6 +556,18 @@ class Database:
 
     @classmethod
     def create(cls, path: str | Path = ":memory:", *, schema_ir: dict[str, Any]) -> Database:
+        """Create a new in-memory or durable Database.
+
+        Args:
+            path: ``":memory:"`` or a new workspace directory.
+            schema_ir: Canonical schema IR for the Database.
+
+        Returns:
+            An open Database owning its Ledger and workspace lock.
+
+        Raises:
+            DatabaseError: If the schema or destination is invalid.
+        """
         if _is_memory_path(path):
             return cls._create_memory(schema_ir=schema_ir)
         return cls._create_workspace(path=Path(path), schema_ir=schema_ir)
@@ -645,6 +674,18 @@ class Database:
 
     @classmethod
     def open(cls, path: str | Path, *, schema_ir: dict[str, Any]) -> Database:
+        """Open an existing durable Database workspace.
+
+        Args:
+            path: Existing v0.3 Database workspace directory.
+            schema_ir: Canonical schema IR expected by the workspace.
+
+        Returns:
+            An open Database holding the exclusive writer lock.
+
+        Raises:
+            DatabaseError: If the workspace, schema, or format is invalid.
+        """
         if _is_memory_path(path):
             raise DatabaseError("Database.open does not support ':memory:'")
         paths = resolve_database_workspace_paths(path)
@@ -727,7 +768,20 @@ class Database:
         schema_ir: dict[str, Any],
         reason: str = "explicit-rebuild",
     ) -> Database:
-        """Rebuild state from ledger data and append an explicit repair event."""
+        """Rebuild state from ledger data and append an explicit repair event.
+
+        Args:
+            path: Durable Database workspace to repair.
+            schema_ir: Canonical schema expected by the workspace.
+            reason: Non-empty operator reason recorded in the repair event.
+
+        Returns:
+            The repaired open Database.
+
+        Raises:
+            DatabaseError: If the workspace, schema, reason, or integrity state
+                cannot be repaired safely.
+        """
         if _is_memory_path(path):
             raise DatabaseError("Database.repair requires a durable workspace")
         if not isinstance(reason, str) or not reason.strip():
@@ -839,10 +893,12 @@ class Database:
 
     @property
     def db_id(self) -> str:
+        """Return the stable Database identity token."""
         return self._db_id
 
     @property
     def schema_digest(self) -> str:
+        """Return the schema digest pinned by this Database."""
         return self._schema_digest
 
     def touch_saved_at(self) -> int:
@@ -1066,6 +1122,16 @@ class Database:
         return self._ledger
 
     def head(self) -> DatabaseValue:
+        """Return the current transaction/state head after integrity checks.
+
+        Returns:
+            The authoritative current ``DatabaseValue`` including transaction
+            id, sequence, schema digest, and state digest.
+
+        Raises:
+            DatabaseIntegrityError: If persisted head metadata or transaction
+                linkage fails verification.
+        """
         self._ensure_open()
         value = _read_ledger_head(
             self._ledger,
@@ -1079,6 +1145,17 @@ class Database:
         return value
 
     def commit_assertions(self, assertions: Sequence[AssertionInput]) -> CommitResult:
+        """Commit one non-empty assertion batch atomically.
+
+        Args:
+            assertions: Canonical assertion inputs.
+
+        Returns:
+            The resulting transaction and Database head.
+
+        Raises:
+            DatabaseError: If the batch is empty or invalid.
+        """
         if not assertions:
             raise DatabaseError("commit_assertions requires at least one assertion")
         return self.commit_changes(assertions=assertions, revocations=())
@@ -1092,6 +1169,21 @@ class Database:
         *,
         meta_defaults: Sequence[MetaEntry] = (),
     ) -> CommitResult:
+        """Commit one canonical change set atomically.
+
+        Args:
+            assertions: Assertions to append.
+            revocations: Assertion revocations to append.
+            meta_appends: Metadata append/unset operations.
+            schema_transition: Optional isolated additive schema transition.
+            meta_defaults: Transaction-level defaults for declared liftable keys.
+
+        Returns:
+            The resulting transaction and Database head.
+
+        Raises:
+            DatabaseError: If the change set is empty, conflicting, or invalid.
+        """
         self._ensure_open()
         if (
             not assertions
@@ -1368,6 +1460,20 @@ class Database:
         *,
         base: DatabaseValue | None = None,
     ) -> FrozenAssertionSet:
+        """Persist a named frozen assertion set at the current head.
+
+        Args:
+            name: Stable view name.
+            asrt_ids: Existing assertion ids to include.
+            base: Optional current-head guard.
+
+        Returns:
+            The persisted frozen assertion-set descriptor.
+
+        Raises:
+            DatabaseError: If the Database is in-memory, the base is stale, or
+                an assertion id does not exist.
+        """
         if self._workspace_paths is None:
             raise DatabaseError("durable view persistence requires a new-layout Database workspace")
 

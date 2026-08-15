@@ -81,6 +81,22 @@ Additional boundaries:
   `Store.evaluate(mode="souffle")` remains a single-engine adapter
   contract.
 
+### V1 sealed portable-query boundary
+
+`portable_deterministic_v1` is a separate FactGraph application contract, not
+a new general `Store.evaluate` mode. Its runtime materializes one finite,
+dependency-complete positive relation into a fresh isolated Store and invokes
+the existing Soufflé adapter there alongside native and ProbLog. It accepts
+only the documented deterministic common subset and returns a typed
+`succeeded`, `failed`, or `unsupported` frame. A missing binary, lowering
+restriction, or output mismatch is visible to the V1 Run; it never silently
+falls back to native.
+
+The portable contract compares only canonical selected-row sets. It does not
+claim Soufflé reach/witness receipts, certainty carriers, provenance trees or
+detached Explain output are equivalent to the other engines. The older adapter
+workflows below retain their existing semantics.
+
 ## 4. Typical workflows
 
 ### 4.1 Souffle engine evaluation
@@ -92,7 +108,7 @@ The main flow of `evaluate_store_engine(...)`:
    the query where)
 3. `run_package(..., engine="souffle")` executes
 4. Read `outputs/<query_rel>.out.facts` and parse bindings
-5. Convert into `CandidateSet` (entity / fact candidate)
+5. Convert into `DerivationOutput` (entity / fact output; legacy materialization still uses the `CandidateSet` alias)
 
 Note: `engine_eval` strictly verifies that
 `run_manifest.engine_mode == "souffle"`; if the runner falls back

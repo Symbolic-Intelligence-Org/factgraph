@@ -1,7 +1,7 @@
 # Application Explain Module
 
 - Scope: `src/factgraph/application/explain`
-- Last updated: 2026-06-26
+- Last updated: 2026-08-13
 - Audience: developers building explain consumers, adapter writers, SDK layer maintainers, and test authors
 
 ---
@@ -39,10 +39,18 @@ thin compatibility facade over the paths model.
 
 Core tree DTOs:
 
-- `EvidenceTree(tree_id, status, rules, joins, certainty, metadata)`
+- `EvidenceTree(tree_id, status, rules, joins, certainty, metadata, policy_conditions=())`
 - `EvidenceRule(occurrence_alias, rule_id, role, status, ports, atoms)`
 - `EvidenceAtom(form, verdict, atom_id, repr_text, negated=False, timestep=None)`
 - `EvidenceJoin(left, right, status, join_id)`
+
+`policy_conditions` is empty for ordinary RuleExpr evidence. When a managed
+Policy uses a direct comparison, it contains compiler-owned
+`EvidencePolicyCondition(policy_node_id, condition_id, role, atom)` values for
+the optional `left_field` / `right_field` lookup and the final `compare` atom.
+They are Policy evidence, not atoms of a reusable `EvidenceRule`; this prevents
+an injected navigation lookup from being presented as authored Rule logic. The
+legacy serialized tree shape remains unchanged when this tuple is empty.
 
 `role` is either `"head"` or `"body"`. Native trees include a separate head
 rule and one body rule per real `RuleExpr` occurrence.

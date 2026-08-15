@@ -112,12 +112,20 @@ def _structure_branch(
 ) -> StructureBranch:
     join_indexes = {join.materialized_condition_index for join in trace.join_materializations}
     head_link_indexes = {link.materialized_condition_index for link in trace.head_port_link_materializations}
+    navigation_indexes = {
+        index
+        for navigation in trace.query_navigation_materializations
+        for index in (
+            navigation.lookup_materialized_condition_index,
+            navigation.projection_head_link_materialized_condition_index,
+        )
+    }
     body_atoms: dict[str, list[StructureAtom]] = {alias: [] for alias in lowered_branch.occurrence_aliases}
     head_atoms: list[StructureAtom] = []
     fallback_alias = lowered_branch.occurrence_aliases[0] if lowered_branch.occurrence_aliases else ""
 
     for index, atom in enumerate(atoms):
-        if index in join_indexes or index in head_link_indexes:
+        if index in join_indexes or index in head_link_indexes or index in navigation_indexes:
             continue
         structure_atom = _structure_atom(
             atom,

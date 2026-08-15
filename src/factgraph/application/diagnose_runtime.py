@@ -11,7 +11,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from factgraph.core.derivation.candidates import CandidateSet
+from factgraph.core.derivation.candidates import DerivationOutput
 from factgraph.core.rules.rule_ir import RuleCompileError, RuleRegistry
 from factgraph.core.rules.ruleref_substrate import evaluate_native_where
 from factgraph.core.rules.where_eval import (
@@ -543,8 +543,8 @@ def _diagnose_souffle(
         eval_request, store=store, registry=registry
     )
 
-    matches: list[tuple[CandidateSet, ProofReceipt, dict[str, Any]]] = []
-    lookup_miss: list[CandidateSet] = []
+    matches: list[tuple[DerivationOutput, ProofReceipt, dict[str, Any]]] = []
+    lookup_miss: list[DerivationOutput] = []
     for candidate in candidates:
         artifact = _lookup_support_artifact(store, candidate.support_digest)
         if artifact is None:
@@ -556,7 +556,7 @@ def _diagnose_souffle(
 
     if matches:
         def _sort_key(
-            item: tuple[CandidateSet, ProofReceipt, dict[str, Any]],
+            item: tuple[DerivationOutput, ProofReceipt, dict[str, Any]],
         ) -> tuple[Any, ...]:
             candidate, artifact, binding = item
             case_index = _derive_case_index_from_artifact(artifact)
@@ -647,8 +647,8 @@ def _diagnose_problog_pyreason(
         eval_request, store=store, registry=registry
     )
 
-    matches: list[tuple[CandidateSet, ProvenanceEnvelope, dict[str, Any]]] = []
-    lookup_miss: list[CandidateSet] = []
+    matches: list[tuple[DerivationOutput, ProvenanceEnvelope, dict[str, Any]]] = []
+    lookup_miss: list[DerivationOutput] = []
     for candidate in candidates:
         envelope = _lookup_provenance_envelope(store, candidate.support_digest)
         if envelope is None:
@@ -663,7 +663,7 @@ def _diagnose_problog_pyreason(
 
     if matches:
         def _sort_key(
-            item: tuple[CandidateSet, ProvenanceEnvelope, dict[str, Any]],
+            item: tuple[DerivationOutput, ProvenanceEnvelope, dict[str, Any]],
         ) -> tuple[Any, ...]:
             candidate, _envelope, binding = item
             return (candidate.candidate_key, normalize_binding_items(binding))
@@ -723,7 +723,7 @@ def _lookup_provenance_envelope(
 
 def _extract_head_var_binding(
     *,
-    candidate: CandidateSet,
+    candidate: DerivationOutput,
     plan: Any,
 ) -> dict[str, Any]:
     """Extract var → value mapping from a candidate via head-var alignment."""

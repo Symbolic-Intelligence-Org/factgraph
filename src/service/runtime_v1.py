@@ -20,7 +20,7 @@ from factgraph.authoring.derivation_compile import (
 from factgraph.authoring.rules import compile_authoring_rule_v1
 from factgraph.application.protocol import EvaluateResult, EvaluateRow, ResultFingerprint
 from factgraph.application.protocol.evaluate_result import (
-    _candidate_set_to_evaluate_row,
+    _derivation_output_to_evaluate_row,
     _claim_arguments_for_row,
     _claim_name_for_row_result,
     _claim_repr_for_row_result,
@@ -41,8 +41,7 @@ from factgraph.application.protocol.evaluate_result import (
     view_snapshot_digest_for_parts,
 )
 from factgraph.application.protocol.rule import Rule as ApplicationRule
-from factgraph.core.derivation.accept import AcceptOptions, AcceptResult
-from factgraph.core.derivation.candidates import CONFIDENCE_KINDS, CandidateSet
+from factgraph.core.derivation.candidates import DerivationOutput
 from factgraph.core.evidence.write_protocol import add_field, retract_by_asrt, set_field
 from factgraph.core.mapping.canon import MappingConflictError, MappingResolution
 from factgraph.core.protocol.digests import sha256_hex
@@ -999,7 +998,7 @@ def evaluate_runtime_derivation(session_id: str, dto: dict[str, Any]) -> dict[st
             active_registry = RuleRegistry()
             _apply_ephemeral_rules(active_registry, session)
         runtime_engine_ext = _resolve_runtime_derivation_engine_ext(compiled, mode=mode)
-        candidates = session.store.evaluate(
+        outputs = session.store.evaluate(
             derivation_id=compiled["derivation_id"],
             version=compiled["version"],
             target_pred_id=compiled["target_pred_id"],
@@ -1012,9 +1011,9 @@ def evaluate_runtime_derivation(session_id: str, dto: dict[str, Any]) -> dict[st
             engine_ext=runtime_engine_ext,
             semantics_profile=semantics_profile,
         )
-        result = _evaluate_result_from_candidates(
+        result = _evaluate_result_from_outputs(
             session,
-            candidates=candidates,
+            outputs=outputs,
             compiled=compiled,
             mode=mode,
             semantics_profile=semantics_profile,
@@ -1786,10 +1785,10 @@ def _session_to_dict(session: RuntimeSession) -> dict[str, Any]:
 def _cache_derivation_recipe(
     session: RuntimeSession,
     *,
-    candidates: list[CandidateSet],
+    outputs: list[DerivationOutput],
     compiled: dict[str, Any],
 ) -> None:
-    run_ids = {candidate.run_id for candidate in candidates if candidate.run_id}
+    run_ids = {output.run_id for output in outputs if output.run_id}
     if not run_ids:
         return
     recipe = RuntimeDerivationRecipe(
@@ -2327,10 +2326,10 @@ def _jsonable_row(row: tuple[Any, ...]) -> list[Any]:
     return [item for item in row]
 
 
-def _evaluate_result_from_candidates(
+def _evaluate_result_from_outputs(
     session: RuntimeSession,
     *,
-    candidates: list[CandidateSet],
+    outputs: list[DerivationOutput],
     compiled: dict[str, Any],
     mode: str,
     semantics_profile: SemanticsProfile | None,
@@ -2357,15 +2356,15 @@ def _evaluate_result_from_candidates(
     )
     closed_head_digest = closed_head_digest_for(head)
     rows = tuple(
-        _candidate_set_to_evaluate_row(
-            candidate,
+        _derivation_output_to_evaluate_row(
+            output,
             head=head,
             result_id=result_id,
             run_id=run_id,
             closed_head_digest=closed_head_digest,
             claim_name=head.id,
         )
-        for candidate in candidates
+        for output in outputs
     )
     result_digest = result_digest_for(
         result_id=result_id,
@@ -2500,179 +2499,6 @@ def _application_rule_to_dict(rule: ApplicationRule) -> dict[str, Any]:
         "ports": {name: var.name for name, var in rule.ports.items()},
         "where": [repr(atom) for atom in rule.when],
     }
-
-
-def _candidate_to_dict(candidate: CandidateSet) -> dict[str, Any]:
-    return {
-        "candidate_id": candidate.candidate_id,
-        "candidate_key": candidate.candidate_key,
-        "candidate_kind": candidate.candidate_kind,
-        "derivation_id": candidate.derivation_id,
-        "derivation_version": candidate.derivation_version,
-        "run_id": candidate.run_id,
-        "target": candidate.target,
-        "key_tuple_digest": candidate.key_tuple_digest,
-        "tup_digest": candidate.tup_digest,
-        "payload": _to_jsonable(candidate.payload),
-        "support_digest": candidate.support_digest,
-        "support_kind": candidate.support_kind,
-        "generated_at": candidate.generated_at,
-        "state": candidate.state,
-    }
-
-
-def _candidate_from_dict(value: Any, *, path: str) -> CandidateSet:
-    if not isinstance(value, dict):
-        raise facade_error("candidate must be object", kind="shape", path=path)
-    generated_at = value.get("generated_at")
-    if not isinstance(generated_at, int) or isinstance(generated_at, bool):
-        raise facade_error("generated_at must be int", kind="shape", path=f"{path}.generated_at")
-    return CandidateSet(
-        derivation_id=_require_non_empty_str(value.get("derivation_id"), path=f"{path}.derivation_id"),
-        derivation_version=_require_non_empty_str(value.get("derivation_version"), path=f"{path}.derivation_version"),
-        run_id=_require_non_empty_str(value.get("run_id"), path=f"{path}.run_id"),
-        target=_require_non_empty_str(value.get("target"), path=f"{path}.target"),
-        key_tuple_digest=_require_non_empty_str(value.get("key_tuple_digest"), path=f"{path}.key_tuple_digest"),
-        tup_digest=_optional_str_or_none(value.get("tup_digest"), path=f"{path}.tup_digest"),
-        payload=_candidate_payload_from_dict(value.get("payload"), path=f"{path}.payload"),
-        support_digest=_require_non_empty_str(value.get("support_digest"), path=f"{path}.support_digest"),
-        support_kind=_require_non_empty_str(value.get("support_kind"), path=f"{path}.support_kind"),
-        generated_at=generated_at,
-        state=_require_non_empty_str(value.get("state"), path=f"{path}.state"),
-        confidence=_optional_candidate_confidence(value.get("confidence"), path=f"{path}.confidence"),
-        confidence_kind=_candidate_confidence_kind(
-            value.get("confidence_kind", "none"),
-            path=f"{path}.confidence_kind",
-        ),
-        candidate_id=_optional_str_or_none(value.get("candidate_id"), path=f"{path}.candidate_id") or "",
-        candidate_key=_optional_str_or_none(value.get("candidate_key"), path=f"{path}.candidate_key") or "",
-        candidate_kind=_require_non_empty_str(value.get("candidate_kind"), path=f"{path}.candidate_kind"),
-    )
-
-
-def _optional_candidate_confidence(value: Any, *, path: str) -> float | None:
-    if value is None:
-        return None
-    if isinstance(value, bool) or not isinstance(value, float):
-        raise facade_error("confidence must be float or null", kind="shape", path=path)
-    return value
-
-
-def _candidate_confidence_kind(value: Any, *, path: str) -> str:
-    if not isinstance(value, str) or not value:
-        raise facade_error("confidence_kind must be non-empty string", kind="shape", path=path)
-    if value not in CONFIDENCE_KINDS:
-        allowed = ", ".join(sorted(CONFIDENCE_KINDS))
-        raise facade_error(
-            f"confidence_kind must be one of: {allowed}",
-            kind="shape",
-            path=path,
-        )
-    return value
-
-
-def _candidate_payload_from_dict(value: Any, *, path: str) -> dict[str, Any]:
-    if not isinstance(value, dict):
-        raise facade_error("payload must be object", kind="shape", path=path)
-    payload = dict(value)
-    if isinstance(payload.get("terms"), list):
-        payload["terms"] = _normalize_candidate_terms(payload.get("terms"), path=f"{path}.terms")
-        pred_id = payload.get("pred_id")
-        if pred_id is not None:
-            payload["pred_id"] = _require_non_empty_str(pred_id, path=f"{path}.pred_id")
-        return payload
-    if isinstance(payload.get("entity_type"), str) and isinstance(payload.get("identity_fields"), list):
-        payload["entity_type"] = _require_non_empty_str(payload.get("entity_type"), path=f"{path}.entity_type")
-        payload["identity_fields"] = [
-            _require_non_empty_str(item, path=f"{path}.identity_fields[]")
-            for item in payload.get("identity_fields", [])
-        ]
-        resolved_identity = payload.get("resolved_identity")
-        if resolved_identity is None:
-            resolved_identity = {}
-        if not isinstance(resolved_identity, dict):
-            raise facade_error("resolved_identity must be object", kind="shape", path=f"{path}.resolved_identity")
-        payload["resolved_identity"] = dict(resolved_identity)
-        missing_identity_fields = payload.get("missing_identity_fields")
-        if missing_identity_fields is None:
-            missing_identity_fields = []
-        if not isinstance(missing_identity_fields, list):
-            raise facade_error(
-                "missing_identity_fields must be list",
-                kind="shape",
-                path=f"{path}.missing_identity_fields",
-            )
-        payload["missing_identity_fields"] = [
-            _require_non_empty_str(item, path=f"{path}.missing_identity_fields[]")
-            for item in missing_identity_fields
-        ]
-        if "identity_types" in payload:
-            identity_types = payload.get("identity_types")
-            if not isinstance(identity_types, dict):
-                raise facade_error("identity_types must be object", kind="shape", path=f"{path}.identity_types")
-            payload["identity_types"] = {
-                _require_non_empty_str(k, path=f"{path}.identity_types.key"): _require_non_empty_str(
-                    v,
-                    path=f"{path}.identity_types[{k}]",
-                )
-                for k, v in identity_types.items()
-            }
-        if "proposed_entity_ref" in payload and payload.get("proposed_entity_ref") is not None:
-            payload["proposed_entity_ref"] = _require_non_empty_str(
-                payload.get("proposed_entity_ref"),
-                path=f"{path}.proposed_entity_ref",
-            )
-        return payload
-    raise facade_error(
-        "payload must be v2 fact payload (pred_id+terms) or v2 entity payload",
-        kind="shape",
-        path=path,
-    )
-
-
-def _accept_options_from_dto(value: Any, *, path: str) -> AcceptOptions:
-    if value is None:
-        return AcceptOptions()
-    if not isinstance(value, dict):
-        raise facade_error("options must be object", kind="shape", path=path)
-    unknown = sorted(set(value.keys()) - {"approved_by", "note", "dry_run", "identity_override"})
-    if unknown:
-        raise facade_error(
-            f"unknown accept options: {', '.join(unknown)}",
-            kind="shape",
-            path=f"{path}.{unknown[0]}",
-        )
-    approved_by = _optional_str_or_none(value.get("approved_by"), path=f"{path}.approved_by")
-    note = _optional_str_or_none(value.get("note"), path=f"{path}.note")
-    dry_run = value.get("dry_run", False)
-    if not isinstance(dry_run, bool):
-        raise facade_error("dry_run must be bool", kind="shape", path=f"{path}.dry_run")
-    identity_override = _optional_dict(value.get("identity_override"), path=f"{path}.identity_override")
-    return AcceptOptions(
-        approved_by=approved_by,
-        note=note,
-        dry_run=dry_run,
-        identity_override=identity_override,
-    )
-
-
-def _accept_result_to_dict(result: AcceptResult) -> dict[str, Any]:
-    return {
-        "candidate_id": result.candidate_id,
-        "candidate_key": result.candidate_key,
-        "run_id": result.run_id,
-        "accepted_count": result.accepted_count,
-        "skipped_count": result.skipped_count,
-        "written_assertions": _to_jsonable(result.written_assertions),
-        "skipped_reason_counts": dict(result.skipped_reason_counts),
-        "diagnostics_contract_version": result.diagnostics_contract_version,
-        "diagnostics": _to_jsonable(result.diagnostics),
-        "entity_ref": result.entity_ref,
-    }
-
-
-def _accept_result_terminal(result: AcceptResult) -> bool:
-    return bool(result.skipped_reason_counts.get("aborted", 0))
 
 
 def _require_mapping_predicate(store: Store, pred_id: str, *, path: str) -> dict[str, Any]:
@@ -2853,39 +2679,6 @@ def _normalize_rest_terms(value: Any, *, path: str) -> list[tuple[str, Any]]:
         if not isinstance(tag, str) or not tag:
             raise facade_error("rest_terms tag must be non-empty string", kind="shape", path=f"{item_path}[0]")
         out.append((tag, _normalize_tagged_value(tag, item[1], path=f"{item_path}[1]")))
-    return out
-
-
-def _normalize_candidate_terms(value: Any, *, path: str) -> list[dict[str, Any]]:
-    if not isinstance(value, list):
-        raise facade_error("terms must be list", kind="shape", path=path)
-    out: list[dict[str, Any]] = []
-    for idx, item in enumerate(value):
-        item_path = f"{path}[{idx}]"
-        if not isinstance(item, dict):
-            raise facade_error("term must be object", kind="shape", path=item_path)
-        kind = item.get("kind")
-        if kind == "entity_ref":
-            out.append(
-                {
-                    "kind": "entity_ref",
-                    "value": _require_non_empty_str(item.get("value"), path=f"{item_path}.value"),
-                }
-            )
-            continue
-        if kind == "candidate_ref":
-            out.append(
-                {
-                    "kind": "candidate_ref",
-                    "candidate_key": _require_non_empty_str(item.get("candidate_key"), path=f"{item_path}.candidate_key"),
-                }
-            )
-            continue
-        if kind == "literal":
-            tag = _require_non_empty_str(item.get("tag"), path=f"{item_path}.tag")
-            out.append({"kind": "literal", "tag": tag, "value": _normalize_tagged_value(tag, item.get("value"), path=f"{item_path}.value")})
-            continue
-        raise facade_error("unsupported term kind", kind="shape", path=f"{item_path}.kind")
     return out
 
 

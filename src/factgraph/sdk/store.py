@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import dataclass
+from collections.abc import Callable, Iterable, Mapping, Sequence
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 import os
 from pathlib import Path
@@ -16,7 +16,41 @@ from factgraph.application.schema_mutation_runtime import (
     add_schema_classes as app_add_schema_classes,
 )
 from factgraph.application.workspace_runtime import resolve_workspace_paths
-from factgraph.application.derivation_runtime import evaluate_derivation_plans
+from factgraph.application.derivation_runtime import (
+    _evaluate_derivation_plans_with_native_relation_capture,
+    _evaluate_derivation_plans_with_native_effective_relation,
+    _evaluate_derivation_plans_with_native_effective_relation_capture,
+    evaluate_derivation_plans,
+)
+from factgraph.application.evaluation_scenario_runtime import (
+    ScenarioResolutionError,
+    assert_resolved_scenario_compatibility_current,
+    resolve_scenario_field_substitution_set_v0,
+    resolve_scenario_field_substitution_v0,
+)
+from factgraph.application.evaluation_query_runtime import (
+    CompiledEvaluationQueryV0,
+    _assert_compiled_evaluation_query_current,
+)
+from factgraph.application.evaluation_query_target_runtime import (
+    TargetedCompiledEvaluationQueryV0,
+    assert_targeted_evaluation_query_current,
+    targeted_evaluation_query_wrapper_digest_v0,
+)
+from factgraph.application.evaluation_expectation_runtime import (
+    EvaluationExpectationError,
+    evaluate_contains_row_expectations_v0,
+)
+from factgraph.application.evaluation_run_bundle_runtime import _build_evaluation_run_bundle_v0
+from factgraph.application.captured_evaluation_query_run_runtime import (
+    build_captured_evaluation_query_run_v0,
+)
+from factgraph.application.scenario_run_runtime import build_scenario_run_v0
+from factgraph.application.evaluation_run_runtime import (
+    EVALUATION_QUERY_PROJECTION_ADAPTER_VERSION,
+    NATIVE_WHERE_SEMANTICS_VERSION,
+    build_evaluation_run_anchor_v0,
+)
 from factgraph.application.explain import EvidenceGraph, probe_native
 from factgraph.application.explain.evidence_tree import (
     Const,
@@ -54,18 +88,26 @@ from factgraph.application.protocol import (
     FieldPath,
     Rule as ApplicationRule,
     RuleExprError,
+    ScenarioFieldSubstitutionV0,
+    ScenarioFieldSubstitutionSetV0,
+    ScenarioResultDiffV0,
+    ScenarioRunV0,
+    CapturedEvaluationQueryRunV0,
+    MAX_CAPTURED_EVALUATION_QUERY_EXPECTATIONS_V0,
 )
 from factgraph.application.protocol.certainty import BOOLEAN_CERTAINTY, Certainty
 from factgraph.application.protocol.evaluate_result import (
+    ClaimKind,
     EvaluateResult,
     ResultFingerprint,
     _FORM1_ROW_SUPPORT_KINDS,
     _build_closed_head_from_row,
     _build_minimal_row_evidence_graph,
-    _candidate_set_to_evaluate_row,
+    _derivation_output_to_evaluate_row,
     _legacy_candidate_payload_for_row_result,
     _public_term_value,
     _row_digest_for,
+    _scenario_semantic_rows_digest,
     canonical_bytes_for_evaluate,
     closed_head_digest_for,
     expr_digest_for_payload,
@@ -91,7 +133,7 @@ from factgraph.application.protocol.rule_expr_lowering import (
 from factgraph.application.schema_runtime import build_schema_index, display_value, entity_type_from_ref
 from factgraph.authoring.derivations import compile_authoring_derivation_v1
 from factgraph.authoring.rules import compile_authoring_rule_v1
-from factgraph.core.derivation.candidates import CandidateSet
+from factgraph.core.derivation.candidates import DerivationOutput
 from factgraph.core.evidence.write_protocol import WriteProtocolError, retract_by_asrt
 from factgraph.core.protocol.digests import sha256_hex
 from factgraph.core.rules.where_ast import PredAtom, Var
@@ -164,6 +206,23 @@ from .semantics import ProbLogConfig, PyReasonConfig
 
 if TYPE_CHECKING:
     from factgraph.audit.proof_frame_diff import ProofFrameDiff
+
+    from .evaluation_query_builder import EvaluationQueryBuilderV1
+    from .policy_authoring import PolicyDraft
+    from .product_authoring import (
+        AssetMeta,
+        FunctionBuilder,
+        PolicyBuilder,
+        ProductFunctionV1,
+        ProductPolicyV1,
+        ProductRuleV1,
+        RuleBuilder,
+    )
+    from .product_scenario_execution import (
+        ScenarioBuilderV2,
+        _SDKExecutionManagerV2,
+        _SDKProbLogManagerV2,
+    )
 
 
 @dataclass(frozen=True)
@@ -461,6 +520,17 @@ class _SDKAssertionViewsManager:
 
         An assertion set stores assertion ids only. It does not store a read
         policy and it is not included in `fg.save_workspace(...)` persistence.
+
+        Args:
+            name: Unique in-process view name.
+            asrt_ids: Assertion ids to freeze.
+            asrts: Assertion records to freeze instead of ids.
+
+        Returns:
+            The newly frozen assertion set.
+
+        Raises:
+            SDKStoreError: If the name exists or the inputs are invalid.
         """
         normalized = _normalize_view_name(name)
         if normalized in self._views:
@@ -480,7 +550,19 @@ class _SDKAssertionViewsManager:
         asrt_ids: Iterable[str] | None = None,
         asrts: Iterable[Any] | None = None,
     ) -> FrozenAssertionSet:
-        """Replace the assertion ids for an existing frozen assertion set."""
+        """Replace an existing frozen assertion set.
+
+        Args:
+            name: Existing in-process view name.
+            asrt_ids: Replacement assertion ids.
+            asrts: Replacement assertion records instead of ids.
+
+        Returns:
+            The replacement frozen assertion set.
+
+        Raises:
+            SDKStoreError: If the name is missing or inputs are invalid.
+        """
         normalized = _normalize_view_name(name)
         if normalized not in self._views:
             raise SDKStoreError(f"view not found: {normalized}")
@@ -493,26 +575,53 @@ class _SDKAssertionViewsManager:
         return entry
 
     def delete(self, name: str) -> None:
-        """Delete a named frozen assertion set."""
+        """Delete a named in-process frozen assertion set.
+
+        Args:
+            name: Existing view name.
+
+        Raises:
+            SDKStoreError: If the name does not exist.
+        """
         normalized = _normalize_view_name(name)
         if normalized not in self._views:
             raise SDKStoreError(f"view not found: {normalized}")
         self._views.pop(normalized, None)
 
     def get(self, name: str) -> FrozenAssertionSet:
-        """Return a named frozen assertion set."""
+        """Return a named frozen assertion set.
+
+        Args:
+            name: Existing view name.
+
+        Returns:
+            The immutable assertion-id selection.
+
+        Raises:
+            SDKStoreError: If the name does not exist.
+        """
         normalized = _normalize_view_name(name)
         if normalized not in self._views:
             raise SDKStoreError(f"view not found: {normalized}")
         return self._views[normalized]
 
     def list(self) -> dict[str, FrozenAssertionSet]:
-        """Return all frozen assertion sets keyed by set name."""
+        """Return all in-process frozen assertion sets keyed by name.
+
+        Returns:
+            A new mapping of view names to immutable selections.
+        """
         return {name: spec for name, spec in self._views.items()}
 
 
 class AssertionsManager:
-    """Layer 3 namespace manager for assertion records and asrt_id retraction."""
+    """Read assertion records and append assertion-level revocations/metadata.
+
+    Notes:
+        The navigation key is an assertion id or explicit assertion filter.
+        Entity lifecycle belongs to ``fg.entities`` and field-cell operations
+        belong to ``fg.fields``.
+    """
 
     def __init__(self, sdk: "SDKStore") -> None:
         object.__setattr__(self, "_sdk", sdk)
@@ -521,11 +630,34 @@ class AssertionsManager:
         raise FrozenSnapshotError("FactGraph.assertions namespace is read-only")
 
     def by_id(self, asrt_id: str) -> Any:
+        """Read one assertion record by server-assigned id.
+
+        Args:
+            asrt_id: Non-empty assertion id.
+
+        Returns:
+            The assertion record, or ``None`` when no record exists.
+
+        Raises:
+            SDKStoreError: If ``asrt_id`` is malformed.
+        """
         if not isinstance(asrt_id, str) or not asrt_id:
             raise SDKStoreError("fg.assertions.by_id(asrt_id) expects non-empty string")
         return _assertion_record_by_id(self._sdk, asrt_id)
 
     def by_ids(self, asrt_ids: Iterable[str], *, strict: bool = False) -> Any:
+        """Read an assertion-record set by ids.
+
+        Args:
+            asrt_ids: Iterable of non-empty assertion ids.
+            strict: Reject duplicates and missing records when ``True``.
+
+        Returns:
+            Canonically ordered ``AssertionRecordSet``.
+
+        Raises:
+            SDKStoreError: If ids are malformed or strict validation fails.
+        """
         if isinstance(asrt_ids, (str, bytes)):
             raise SDKStoreError("fg.assertions.by_ids(asrt_ids) expects iterable[str], not string")
         if not isinstance(strict, bool):
@@ -558,12 +690,14 @@ class AssertionsManager:
 
     @property
     def active(self) -> Any:
+        """Return all currently active assertion records."""
         from .facade import AssertionRecordSet
 
         return AssertionRecordSet(record for record in self.all if record.is_active)
 
     @property
     def all(self) -> Any:
+        """Return active and revoked assertion history records."""
         from .facade import AssertionRecordSet, _assertion_record_from_claim, _claim_sort_key
 
         records = [
@@ -573,6 +707,17 @@ class AssertionsManager:
         return AssertionRecordSet(records)
 
     def field(self, field: Field) -> Any:
+        """Open active/history assertion views for one SDK field.
+
+        Args:
+            field: Bound SDK ``Field`` descriptor.
+
+        Returns:
+            An ``AssertionView`` with active and historical records.
+
+        Raises:
+            SDKStoreError: If the descriptor is invalid or unresolved.
+        """
         if not isinstance(field, Field):
             raise SDKStoreError("fg.assertions.field(...) expects sdk.Field descriptor; string names are ambiguous")
         schema_pred = self._sdk._schema_pred_for_field(field)
@@ -604,11 +749,24 @@ class AssertionsManager:
         value_tag: Any = _ASSERTION_FILTER_MISSING,
         _meta: Any = _ASSERTION_FILTER_MISSING,
     ) -> Any:
-        """Filter active assertion records by canonical Layer 3 criteria.
+        """Filter active assertion records by canonical criteria.
 
-        Step 6 intentionally scopes manager-level `where` to active assertions.
-        Historical filtering remains available by chaining from `all()` until
-        Step 8/9 unify AssertionView and hard-remove flat meta kwargs.
+        Args:
+            field: Optional SDK ``Field`` descriptor.
+            e_ref: Optional exact entity reference.
+            value: Optional exact decoded value.
+            value_tag: Optional canonical scalar tag.
+            _meta: Optional effective metadata key/value filters.
+
+        Returns:
+            An ``AssertionRecordSet`` containing active matches.
+
+        Raises:
+            SDKStoreError: If a filter has the wrong layer or type.
+
+        Notes:
+            This manager-level query searches active Claims only. Use
+            ``fg.assertions.all`` or an ``AssertionView`` for history.
         """
         from .facade import AssertionRecordSet, _assertion_record_from_claim, _claim_sort_key
 
@@ -662,7 +820,25 @@ class AssertionsManager:
         meta: dict[str, Any] | None = None,
         **kwargs: Any,
     ) -> str | None:
-        """Retract one assertion by id with Slice 2 guard semantics preserved."""
+        """Retract one assertion by id.
+
+        Args:
+            asrt_id: Server-assigned assertion id.
+            meta: Optional metadata for the revoke Claim.
+            **kwargs: Rejected legacy selector arguments.
+
+        Returns:
+            Revoker assertion id, or the existing revoker for an idempotent
+            repeated request.
+
+        Raises:
+            SDKStoreError: If the id is missing, malformed, protected, or the
+                graph is read-only/closed.
+
+        Notes:
+            Identity and ``:exists`` Claims must be removed through
+            ``fg.entities.delete``. Retraction appends a revoke Claim.
+        """
         if kwargs:
             raise SDKStoreError(
                 "fg.assertions.retract requires asrt_id (Layer 3); pass "
@@ -745,30 +921,23 @@ class AssertionsManager:
             raise SDKStoreError(str(exc), code=code) from exc
 
     def append_meta(self, asrt_id: str, key: str, value: Any) -> None:
-        """Append one meta row to an existing assertion (public reclassification seam).
+        """Append one metadata event to an existing assertion.
 
-        Meta rows are append-only: the new row never replaces earlier rows, it
-        extends the assertion's meta history. Every canonical read resolves a
-        key LAST-WINS — ``record.meta.raw`` (``_meta_raw_for_assertion``,
-        sdk/facade.py) and the premise admissibility filter
-        (``core/store/premise_filter.py::is_premise_excluded``) both take the
-        most recently written row. Appending e.g. a new ``provenance_class``
-        value therefore reclassifies the assertion for rule evaluation (moves
-        it INTO or OUT OF an excluded class). ``fg.ledger.find_meta(...)`` is
-        only the non-tombstone compatibility projection; complete ordered
-        history, including UNSET events, is available solely through the
-        narrow ``factgraph.audit.meta_history.read_meta_history`` audit/debug
-        interface, not a general SDK history API.
+        Args:
+            asrt_id: Existing assertion id.
+            key: Non-empty, non-system-managed metadata key.
+            value: Supported scalar metadata value.
 
-        This is the supported public surface for post-write meta
-        reclassification. ``Ledger.append_meta`` remains a deprecated
-        compatibility seam and may be downgraded to private in a later
-        cleanup phase; consumers should call this method instead.
+        Raises:
+            SDKStoreError: If the assertion/key/value is invalid, the key is
+                system-managed, or the graph is read-only/closed.
 
-        ``value`` must be a scalar (str/bool/int/float — the same shape free
-        meta keys accept at write time); the row kind is derived from the
-        Python type. Raises ``SDKStoreError`` for invalid input or an unknown
-        ``asrt_id``.
+        Notes:
+            Metadata is append-only and latest-event-wins on ordinary reads;
+            earlier events remain available through the narrow audit history
+            interface. This is the supported post-write reclassification path.
+            It is unrelated to Product V2 Scenario ``meta``, which is run-local
+            and never appended to ``claim_meta``.
         """
         if not isinstance(asrt_id, str) or not asrt_id:
             raise SDKStoreError(
@@ -831,13 +1000,53 @@ class _SDKSchemaManager:
         raise FrozenSnapshotError("FactGraph.schema namespace is read-only")
 
     def ingest(self, *args: Any, **kwargs: Any) -> Any:
+        """Ingest SDK-shaped entity data into the graph.
+
+        Args:
+            *args: Positional inputs accepted by the SDK ingest protocol.
+            **kwargs: Ingest metadata and validation options.
+
+        Returns:
+            The typed ingest result produced by the SDK ingest pipeline.
+
+        Raises:
+            SDKStoreError: If the input, metadata, or managed entity references
+                violate the ingest contract.
+
+        Notes:
+            Ingest is a factual write. On a database-backed graph it is durable
+            when this method returns; it is not a Scenario or What-if mutation.
+        """
         return self._sdk._ingest(*args, **kwargs)
 
     def validate_provenance(self, *args: Any, **kwargs: Any) -> Any:
+        """Validate an ingest result against a provenance standard.
+
+        Args:
+            *args: The object or ingest result to validate.
+            **kwargs: Validation options, including the provenance standard.
+
+        Returns:
+            The typed provenance-validation result.
+
+        Notes:
+            Validation inspects provenance structure; it does not admit a
+            source, grant source authority, or write to the ledger.
+        """
         return self._sdk._validate_provenance(*args, **kwargs)
 
     def register(self, entity_cls: type[Entity]) -> SchemaAddResult:
-        """Register a new Entity type."""
+        """Register one new Entity type additively.
+
+        Args:
+            entity_cls: New compiled SDK Entity declaration.
+
+        Returns:
+            The committed schema-add result.
+
+        Raises:
+            SchemaConflictError: If the entity type already exists.
+        """
         entity_type = _entity_type_for_schema_class(entity_cls, field_name="entity_cls")
         if entity_type in self._sdk._entity_types_by_class_registry():
             raise SchemaConflictError(
@@ -851,7 +1060,18 @@ class _SDKSchemaManager:
         )
 
     def extend(self, entity_cls: type[Entity]) -> SchemaAddResult:
-        """Add non-identity Fields to an existing Entity type."""
+        """Add non-identity Fields to an existing Entity type.
+
+        Args:
+            entity_cls: Complete additive Entity declaration.
+
+        Returns:
+            The committed schema-add result.
+
+        Raises:
+            SchemaNotFoundError: If the entity type is unknown.
+            SchemaNonAdditiveError: If the declaration changes existing shape.
+        """
         entity_type = _entity_type_for_schema_class(entity_cls, field_name="entity_cls")
         if entity_type not in self._sdk._entity_types_by_class_registry():
             raise SchemaNotFoundError(
@@ -865,7 +1085,14 @@ class _SDKSchemaManager:
         )
 
     def apply(self, entity_cls: type[Entity]) -> SchemaAddResult:
-        """Register a new Entity or extend an existing Entity."""
+        """Register a new Entity or additively extend an existing one.
+
+        Args:
+            entity_cls: Compiled SDK Entity declaration.
+
+        Returns:
+            The committed schema-add result.
+        """
         entity_type = _entity_type_for_schema_class(entity_cls, field_name="entity_cls")
         if entity_type in self._sdk._entity_types_by_class_registry():
             return self.extend(entity_cls)
@@ -873,14 +1100,12 @@ class _SDKSchemaManager:
 
 
 class _SDKFieldsManager:
-    """Layer 2 namespace manager for field-cell operations(per ADR-API §4.1).
+    """Read and mutate field cells through ``Field`` plus entity reference.
 
-    Layer 2 navigation key:`Field descriptor + e_ref (+ optional value)`.
-    Assertion ids belong to Layer 3(``fg.assertions.*``);entity macros belong
-    to Layer 1(``fg.entities.*``).
-
-    Slice 3a Step 7 removes the historical flat write shortcuts. This manager
-    now owns all Field + e_ref user-facing cell operations.
+    Notes:
+        Assertion ids belong to ``fg.assertions`` and whole-entity lifecycle
+        belongs to ``fg.entities``. This namespace performs real ledger writes;
+        Product V2 Scenario offers separate run-local write-like methods.
     """
 
     def __init__(self, sdk: "SDKStore") -> None:
@@ -978,7 +1203,25 @@ class _SDKFieldsManager:
         *,
         meta: dict[str, Any] | None = None,
     ) -> str:
-        """Write a single-cardinality Field value."""
+        """Write one single-cardinality field value.
+
+        Args:
+            field: Bound SDK ``Field`` descriptor.
+            e_ref: Managed entity reference.
+            value: Value in the field's declared storage domain.
+            meta: Optional ledger claim metadata.
+
+        Returns:
+            Server-assigned assertion id for the appended Claim.
+
+        Raises:
+            SDKStoreError: If the descriptor, entity reference, cardinality,
+                value, metadata, or graph lifecycle is invalid.
+
+        Notes:
+            This is a durable ledger write on Database-backed graphs. Repeated
+            ``set`` appends claims; reads choose the latest active value.
+        """
         self._reject_non_field_descriptor(field, method="set")
         return self._sdk._apply_field_mutation(op="set", field=field, e_ref=e_ref, value=value, meta=meta)
 
@@ -990,7 +1233,25 @@ class _SDKFieldsManager:
         *,
         meta: dict[str, Any] | None = None,
     ) -> str:
-        """Append a multi-cardinality Field value."""
+        """Add one member to a multi-cardinality field.
+
+        Args:
+            field: Bound multi-cardinality SDK ``Field`` descriptor.
+            e_ref: Managed entity reference.
+            value: One member value, never a container of members.
+            meta: Optional ledger claim metadata.
+
+        Returns:
+            Assertion id for the active member Claim.
+
+        Raises:
+            SDKStoreError: If descriptor, entity, cardinality, value, metadata,
+                or graph lifecycle is invalid.
+
+        Notes:
+            This writes the ledger. Use Product V2 ``fg.scenario().add`` for a
+            run-local hypothetical member instead.
+        """
         self._reject_non_field_descriptor(field, method="add")
         return self._sdk._apply_field_mutation(op="add", field=field, e_ref=e_ref, value=value, meta=meta)
 
@@ -1002,11 +1263,25 @@ class _SDKFieldsManager:
         *,
         meta: dict[str, Any] | None = None,
     ) -> str | None:
-        """Retract the unique active assertion matching ``(field, e_ref, value)``.
+        """Retract the unique active Claim matching a field value.
 
-        Step 5 delegates the chosen assertion id to shipped ``SDKStore.retract``.
-        That preserves Slice 2 INV-7c / `:exists` guard behavior without
-        duplicating the Layer 3 retract guard in Layer 2.
+        Args:
+            field: Bound ``Field`` or protected ``Identity`` descriptor.
+            e_ref: Managed entity reference.
+            value: Exact typed value to retract.
+            meta: Optional metadata for the revoke Claim.
+
+        Returns:
+            Revoker assertion id, or ``None`` only when the lower-level
+            compatibility path returns no id.
+
+        Raises:
+            SDKStoreError: If no unique match exists, the Claim is protected,
+                or the graph is read-only/closed.
+
+        Notes:
+            Retraction appends a ``__system__.revokes`` Claim; it never deletes
+            or edits the original row.
         """
         self._sdk._database_for_application_write("fg.fields.retract")
         schema_pred = self._schema_pred_for_descriptor(field, method="retract", allow_identity=True)
@@ -1037,12 +1312,23 @@ class _SDKFieldsManager:
         *,
         meta: dict[str, Any] | None = None,
     ) -> int:
-        """Retract all active assertions for ``(field, e_ref)``.
+        """Retract every active Claim for one field cell.
 
-        Partial-failure semantics are **fail-fast first-error**:claims are
-        retracted sequentially through shipped ``SDKStore.retract`` and the
-        first error is raised immediately. No rollback or best-effort behavior
-        is introduced in Step 5.
+        Args:
+            field: Bound ``Field`` or protected ``Identity`` descriptor.
+            e_ref: Managed entity reference.
+            meta: Optional metadata copied to each revoke Claim.
+
+        Returns:
+            Number of Claims retracted.
+
+        Raises:
+            SDKStoreError: On a protected Claim, invalid descriptor/reference,
+                or first failed retraction.
+
+        Notes:
+            Retractions are fail-fast and sequential; this convenience method
+            does not add a new rollback or best-effort transaction contract.
         """
         self._sdk._database_for_application_write("fg.fields.delete")
         schema_pred = self._schema_pred_for_descriptor(field, method="delete", allow_identity=True)
@@ -1053,7 +1339,20 @@ class _SDKFieldsManager:
         return count
 
     def get(self, field: Field, e_ref: str) -> Any:
-        """Return the current value for ``(field, e_ref)`` from active claims."""
+        """Read the current active value of one field cell.
+
+        Args:
+            field: Bound SDK ``Field`` descriptor.
+            e_ref: Managed entity reference.
+
+        Returns:
+            Latest scalar value or ``None`` for an empty single field; a
+            canonical tuple for a multi-value field.
+
+        Notes:
+            This reads the current ledger view and never writes metadata or
+            materializes a Scenario.
+        """
         schema_pred = self._schema_pred_for_descriptor(field, method="get")
         claims = self._active_claims_for_field(schema_pred, e_ref)
         if str(schema_pred.get("cardinality", "single")) == "multi":
@@ -1070,17 +1369,12 @@ class _SDKFieldsManager:
 
 
 class _SDKEntitiesManager:
-    """Layer 1 namespace manager for entity-macro operations(per ADR-API §4.1).
+    """Manage entity identity, existence, snapshots and whole-entity removal.
 
-    Layer 1 navigation key:`EntityClass + identity_kwargs` or managed `e_ref`.
-    Layer 1 排他 enforcement(per ADR-API §4.1.1):this namespace does NOT
-    accept ``asrt_id`` parameters(use ``fg.assertions.by_id(asrt_id)`` or
-    ``fg.assertions.retract(asrt_id)`` instead)nor ``(Field, e_ref)`` value
-    writes(use ``fg.fields.*`` for per-cell mutations).
-
-    Slice 3a Step 7 removes the historical ``fg.read.*`` namespace and flat
-    top-level shortcuts. This manager now owns all Layer 1 user-facing entity
-    operations.
+    Notes:
+        Use ``Entity`` class plus identity values, or a managed ``e_ref`` where
+        documented. Assertion ids belong to ``fg.assertions``; per-field writes
+        belong to ``fg.fields``.
     """
 
     def __init__(self, sdk: "SDKStore") -> None:
@@ -1119,7 +1413,19 @@ class _SDKEntitiesManager:
         )
 
     def get(self, entity_cls: type[Entity], **identity_kwargs: Any) -> Any:
-        """Read one entity snapshot by identity values."""
+        """Read one entity snapshot by its complete identity.
+
+        Args:
+            entity_cls: SDK ``Entity`` subclass.
+            **identity_kwargs: Complete identity-field values.
+
+        Returns:
+            An immutable entity snapshot.
+
+        Raises:
+            SDKStoreError: If the class/identity is invalid or the entity is
+                not visible.
+        """
         self._reject_non_entity_class(entity_cls, method="get")
         from .facade import sdk_get
 
@@ -1134,19 +1440,28 @@ class _SDKEntitiesManager:
         _meta: dict[str, Any] | None = None,
         **field_filters: Any,
     ) -> Any:
-        """Find entity snapshots by exact field filters(canonical signature)。
+        """Find entity snapshots using exact field filters.
 
-        Per ADR-API §4.1.2 + §4.4:``where`` is the canonical verb(rename of
-        shipped ``find``)with **unified meta input** — flat ``source=`` /
-        ``trace_id=`` / ``version=`` / ``meta=`` kwargs are rejected;canonical
-        meta filtering accepted via ``_meta`` dict。
+        Args:
+            entity_cls: SDK ``Entity`` subclass to search.
+            policy: Removed read-policy compatibility argument; non-default
+                values are rejected.
+            limit: Optional maximum number of snapshots.
+            _meta: Reserved canonical metadata filter. Non-empty entity-level
+                metadata filtering is not implemented; use assertions instead.
+            **field_filters: Exact field-name/value filters.
 
-        **Slice 3a scope**:field-filter delegation to shipped
-        ``sdk_find`` remains the underlying read implementation;flat meta
-        kwargs are rejected with ADR-API §4.4 pointer。 ``_meta``
-        parameter is accepted in the canonical signature but entity-query
-        metadata projection is not yet implemented; assertion-level metadata
-        filtering lives on ``fg.assertions.where`` and ``AssertionView.where``。
+        Returns:
+            A snapshot collection in canonical runtime order.
+
+        Raises:
+            SDKStoreError: If class, filter, removed policy, or metadata input
+                is invalid.
+
+        Notes:
+            Flat ``source=``, ``trace_id=``, ``version=`` and ``meta=`` inputs
+            are rejected. Use ``fg.assertions.where(_meta=...)`` when filtering
+            assertion metadata.
         """
         self._reject_non_entity_class(entity_cls, method="where")
 
@@ -1188,9 +1503,20 @@ class _SDKEntitiesManager:
         limit: int | None = None,
         **port_constraints: Any,
     ) -> Any:
-        """Match visible snapshots against an application Rule or AND RuleExpr.
+        """Match visible snapshots against a Rule or conjunctive RuleExpr.
 
-        Delegates to the shipped match runtime implementation.
+        Args:
+            entity_cls: Entity type projected as snapshots.
+            template: Application Rule or supported conjunctive RuleExpr.
+            limit: Optional maximum number of snapshots.
+            **port_constraints: Exact public-port constraints.
+
+        Returns:
+            Matching entity snapshots.
+
+        Raises:
+            SDKStoreError: If the class, template, constraints, or closure is
+                unsupported.
         """
         self._reject_non_entity_class(entity_cls, method="match")
         from .match_runtime import sdk_match
@@ -1198,12 +1524,22 @@ class _SDKEntitiesManager:
         return sdk_match(self._sdk, entity_cls, template, limit=limit, **port_constraints)
 
     def ref(self, entity_cls: type[Entity], **identity_values: Any) -> str:
-        """Return a managed e_ref for the entity identified by kwargs。
+        """Create a managed entity-reference value without writing Claims.
 
-        Records the supplied identity into the SDKStore shadow store so that
-        downstream ``fg.fields.set`` / ``fg.fields.add`` can resolve the e_ref。Does NOT write to the
-        ledger — per ADR-IC §4.2.3 + Slice 2 Step 7,shadow store is the
-        legacy lazy-materialization compatibility path,not a Layer 2 contract。
+        Args:
+            entity_cls: SDK ``Entity`` subclass.
+            **identity_values: Complete identity-field values.
+
+        Returns:
+            Canonical managed ``e_ref`` string.
+
+        Raises:
+            SDKStoreError: If the class or identity bundle is invalid.
+
+        Notes:
+            ``ref`` records identity in the SDK compatibility cache but does
+            not establish ledger existence. Use ``entities.create`` for eager
+            identity/existence Claims.
         """
         self._reject_non_entity_class(entity_cls, method="ref")
         return self._sdk._ref(entity_cls, **identity_values)
@@ -1215,33 +1551,27 @@ class _SDKEntitiesManager:
         meta: dict[str, Any] | None = None,
         **identity: Any,
     ) -> str:
-        """Eager-emit Identity Claims + ``<EntityType>:exists`` Claim atomically。
+        """Create an entity and atomically append its existence Claims.
 
-        Per ADR-IC §4.2(application 层 derive)+ ADR-API §4.1.2(entities
-        namespace)+ Slice 3a SF4(eager emission + populate shadow store)。
+        Args:
+            entity_cls: SDK ``Entity`` subclass.
+            meta: Optional metadata copied to the created identity/existence
+                Claims.
+            **identity: Complete immutable identity-field values.
 
-        Flow:
-        1. Layer 1 排他 enforcement(non-Entity-class reject per ADR-API §4.1.1)。
-        2. Identity bundle completeness validation + shadow store populate via
-           shipped ``SDKStore.ref(EC, **identity)`` path(per Slice 2 Step 7
-           shadow store legacy documentation)。
-        3. Build ``EntityCreateCommand`` DTO + delegate to application-layer
-           ``plan_create_command`` + ``apply_create_plan``(per PF-S3 INV-6
-           application-first;SDK manager NEVER does inline planner logic)。
-        4. Return the deterministic e_ref。
+        Returns:
+            Canonical managed ``e_ref`` string.
 
         Raises:
-            ``EntityAlreadyExistsError``(code=``ENTITY_ALREADY_EXISTS``)when
-            an entity with the supplied identity is already visible in the
-            ledger Active set(per blueprint §13.1 duplicate-create rejection)。
-            ``SDKStoreError``(layer-specific)on bad Entity class or missing
-            identity field。
+            EntityAlreadyExistsError: With code ``ENTITY_ALREADY_EXISTS`` when
+                the identity is already active.
+            SDKStoreError: If the class, identity, metadata, or graph lifecycle
+                is invalid.
 
         Notes:
-            Coexists with the lazy ``fg.entities.ref + fg.fields.set``
-            materialization path per SF4 — shadow store is the
-            legacy compat surface;Step 2+ ``fg.entities.create`` is the eager
-            path. Slice 3a does NOT remove the shadow store。
+            This is a ledger write and is atomic on Database-backed graphs.
+            Identity values are immutable; change them by deleting and
+            recreating the entity.
         """
         self._reject_non_entity_class(entity_cls, method="create")
         database = self._sdk._database_for_application_write("fg.entities.create")
@@ -1318,39 +1648,27 @@ class _SDKEntitiesManager:
         meta: dict[str, Any] | None = None,
         **identity: Any,
     ) -> int:
-        """Whole-entity revoke per ADR-IC §4.1 强制点 3 + Slice 3a §5.4。
+        """Atomically retract every active Claim for one entity.
 
-        ``fg.entities.delete`` is the **唯一合法整批撤销 path** for Identity
-        Claims and Field Claims under the e_ref。 Legacy ``<EntityType>:exists``
-        Claims,when present,are retracted through the same path-bound whole-
-        entity revoke path。
-
-        **PF-S2 discriminated signature**(per blueprint §6.1 SF2 lock):
-
-        - Form A:``fg.entities.delete(e_ref: str, *, meta=None)`` — pass a
-          managed e_ref string produced by ``fg.entities.ref(EC, **id)`` or
-          ``fg.entities.create(EC, **id)``。
-        - Form B:``fg.entities.delete(EntityCls, *, meta=None, **identity)`` —
-          pass the EntityClass + full identity_kwargs。
-
-        Tuple selectors are **explicitly forbidden**(per PF-S2 lock)。
-
-        Implementation:per SF3 P1 amend,the SDK shell is a thin normalizer
-        — it builds an ``EntityDeleteCommand`` and delegates to the application-
-        layer planner/executor。 The retract guard bypass for Identity /
-        ``:exists`` Claims is implemented as a **path-bound** structural
-        guarantee in the application layer(``_apply_entity_delete_retract``
-        private helper),NOT a metadata signal on ``PlannedOpDTO``。
+        Args:
+            e_ref_or_cls: Managed ``e_ref`` string, or an SDK ``Entity`` class
+                paired with ``identity`` keyword values.
+            meta: Optional metadata copied to revoke Claims.
+            **identity: Complete identity bundle for the Entity-class form.
 
         Returns:
-            The number of Active Claims atomically retracted。
+            Number of active Claims retracted.
 
         Raises:
-            ``SDKStoreError`` if the input shape does not match Form A or B,
-            if Form A's e_ref is not managed(``UNRESOLVABLE_E_REF``),or if
-            Form B's identity bundle is incomplete(``missing identity field``)。
-            ``EntityNotFoundError``(``ENTITY_NOT_FOUND``)if the target
-            entity is not visible in the active view。
+            EntityNotFoundError: With code ``ENTITY_NOT_FOUND`` when no active
+                entity matches.
+            SDKStoreError: With code ``UNRESOLVABLE_E_REF`` for unmanaged refs,
+                or when selector/identity/lifecycle input is invalid.
+
+        Notes:
+            This is the only public whole-entity path allowed to revoke
+            protected Identity and compatibility ``:exists`` Claims. It appends
+            revocations; original Claims remain immutable.
         """
         database = self._sdk._database_for_application_write("fg.entities.delete")
         # Form A vs Form B vs forbidden tuple — discriminate per PF-S2。
@@ -1431,11 +1749,15 @@ class _SDKEntitiesManager:
         return len(result.applied)
 
     def exists(self, entity_cls: type[Entity], **identity: Any) -> bool:
-        """Return whether the entity is visible via active Identity Claims.
+        """Return whether an entity has a complete active identity bundle.
 
-        ``self._sdk._ref`` supplies the Form I complete-identity validation and
-        deterministic e_ref encoding while preserving the Slice 2 shadow-store
-        compatibility behavior until the future eager-create-only migration.
+        Args:
+            entity_cls: SDK ``Entity`` subclass.
+            **identity: Complete identity-field values.
+
+        Returns:
+            ``True`` only when the entity is visible through active Identity
+            Claims.
         """
         self._reject_non_entity_class(entity_cls, method="exists")
         e_ref = self._sdk._ref(entity_cls, **identity)
@@ -1449,7 +1771,19 @@ class _SDKEntitiesManager:
         )
 
     def edit(self, entity_cls: type[Entity], **identity_kwargs: Any) -> Any:
-        """Open an EntityEditor for an existing entity."""
+        """Open a writable editor for an existing entity.
+
+        Args:
+            entity_cls: SDK ``Entity`` subclass.
+            **identity_kwargs: Complete identity-field values.
+
+        Returns:
+            An ``EntityEditor`` bound to the entity.
+
+        Raises:
+            SDKStoreError: If the graph is read-only/closed or the target is
+                invalid.
+        """
         self._sdk._database_for_application_write("fg.entities.edit")
         self._reject_non_entity_class(entity_cls, method="edit")
         from .facade import sdk_edit
@@ -1476,7 +1810,15 @@ class _SDKRulesManager:
         return self._sdk._inspect_rule(*args, **kwargs)
 
     def structure(self, *args: Any, **kwargs: Any) -> Any:
-        """Return the RuleStructure static projection for a Rule or RuleExpr."""
+        """Return the static RuleStructure projection for a Rule or RuleExpr.
+
+        Args:
+            *args: Rule or RuleExpr input.
+            **kwargs: Optional explicit head for a RuleExpr.
+
+        Returns:
+            Canonical authored structure without engine execution.
+        """
         return self._sdk._structure_rule(*args, **kwargs)
 
 
@@ -1507,23 +1849,73 @@ class _SDKEvalManager:
         raise FrozenSnapshotError("FactGraph.eval namespace is read-only")
 
     def evaluate(self, *args: Any, **kwargs: Any) -> Any:
-        """Evaluate an `Inference`, application `Rule`, or RuleExpr."""
+        """Evaluate a legacy Inference, Rule/RuleExpr, or compiled Query.
+
+        Args:
+            *args: Evaluation target and positional compatibility inputs.
+            **kwargs: Engine, config, capture, or evaluation options.
+
+        Returns:
+            A legacy ``EvaluateResult`` or target-specific compatibility result.
+
+        Notes:
+            Product V2 uses ``fg.query(...).plan(profile=...).run()`` instead.
+        """
         return self._sdk._evaluate(*args, **kwargs)
 
     def evaluate_candidates(self, *args: Any, **kwargs: Any) -> Any:
-        """Evaluate an Inference/derivation and return its raw CandidateSets.
+        """Evaluate an Inference/derivation and return raw DerivationOutputs.
 
         Read-only: candidates are hypothetical until accepted on a writing
         surface; this method never writes to the ledger.
+
+        Temporary cross-repository compatibility debt: Meander still consumes
+        this raw-output seam. New callers should use :meth:`evaluate`, whose
+        ``EvaluateResult`` keeps engine outputs internal.
         """
         return self._sdk._evaluate_candidates(*args, **kwargs)
 
     def explain(self, *args: Any, **kwargs: Any) -> Any:
-        """Explain a closed-head evaluation replay."""
+        """Explain a legacy closed-head evaluation replay.
+
+        Args:
+            *args: Closed-head Rule/evaluation inputs.
+            **kwargs: Legacy engine and evidence options.
+
+        Returns:
+            A legacy ``Explanation``.
+        """
         return self._sdk._explain(*args, **kwargs)
 
+    def run_scenario(self, *args: Any, **kwargs: Any) -> Any:
+        """Capture one bounded legacy replacement ScenarioRun.
+
+        Returns:
+            A detached ``ScenarioRunV0``.
+
+        Notes:
+            Product Scenario V2 uses the typed Query planning terminal.
+        """
+        return self._sdk._run_scenario(*args, **kwargs)
+
+    def capture_query(self, *args: Any, **kwargs: Any) -> Any:
+        """Capture one targeted native compatibility Query.
+
+        Returns:
+            A detached captured Query run with observation records.
+        """
+        return self._sdk._capture_targeted_evaluation_query_run(*args, **kwargs)
+
     def evaluate_program(self, *args: Any, **kwargs: Any) -> Any:
-        """Evaluate a selected Horn program read-only on this ledger."""
+        """Evaluate a selected Horn program read-only on this ledger.
+
+        Args:
+            *args: RuleProgram and closed goal inputs.
+            **kwargs: Engine and premise-scope options.
+
+        Returns:
+            A ``RuleProgramResult`` with captured support when available.
+        """
         from .rule_program_runtime import evaluate_rule_program
 
         return evaluate_rule_program(self._sdk, *args, **kwargs)
@@ -1600,7 +1992,14 @@ class _SDKAuditManager:
         return claim.pred_id, claim.e_ref
 
     def explain(self, target: Any) -> Any:
-        """Explain chosen-policy state for the assertion's predicate/entity cell."""
+        """Explain chosen-policy state for one assertion cell.
+
+        Args:
+            target: Assertion id or assertion record.
+
+        Returns:
+            Chosen/conflict diagnostics from the current ledger state.
+        """
         claim = self._claim_for_audit_target(target, method="explain")
         val_atoms = tuple(value for _tag, value in claim.rest_terms)
         result = self._sdk._store.explain_fact(claim.pred_id, claim.e_ref, *val_atoms)
@@ -1609,12 +2008,27 @@ class _SDKAuditManager:
         return result
 
     def conflicts(self, target: Any) -> Any:
-        """Return conflict diagnostics for an assertion record or entity field cell."""
+        """Return conflict diagnostics for an assertion or entity field cell.
+
+        Args:
+            target: Assertion id/record or ``(entity, field)`` pair.
+
+        Returns:
+            Current conflict and chosen-value diagnostics.
+        """
         pred_id, e_ref = self._conflict_cell_for_target(target)
         return self._sdk._store.conflicts(pred_id, e_ref)
 
     def diff_proof_frames(self, *args: Any, **kwargs: Any) -> Any:
-        """Compare two recorded proof-frame outcomes."""
+        """Compare two recorded proof-frame outcomes.
+
+        Args:
+            *args: Recorded proof-frame inputs.
+            **kwargs: Comparison options.
+
+        Returns:
+            A structured post-hoc proof-frame diff.
+        """
         return self._sdk._diff_proof_frames(*args, **kwargs)
 
 
@@ -1634,6 +2048,15 @@ class _SDKMetaManager:
         raise FrozenSnapshotError("FactGraph.meta namespace is read-only")
 
     def capabilities(self) -> Mapping[str, frozenset[str]]:
+        """Return the value kinds and cardinalities supported by this runtime.
+
+        Returns:
+            An immutable mapping from capability category to supported values.
+
+        Notes:
+            The result describes the installed runtime. It is read-only and
+            does not imply that every execution engine supports every feature.
+        """
         from factgraph.application.capabilities import compute_capabilities
 
         return compute_capabilities()
@@ -1657,7 +2080,15 @@ class _SDKPackageManager:
         return self._sdk.export_package(*args, **kwargs)
 
     def run_package(self, *args: Any, **kwargs: Any) -> Any:
-        """Run an exported package with the selected engine."""
+        """Run an exported compatibility package with the selected engine.
+
+        Args:
+            *args: Package directory or positional runner inputs.
+            **kwargs: Entrypoints and engine selection.
+
+        Returns:
+            The legacy package runner result.
+        """
         return self._sdk.run_package(*args, **kwargs)
 
 
@@ -1716,17 +2147,22 @@ def _schema_non_additive_message(exc: SDKStoreError) -> str:
 
 
 class SDKStore:
-    """Main SDK graph object, exported to users as `FactGraph`.
+    """Own a compiled schema, fact ledger, and public SDK namespaces.
 
-    `FactGraph` is a literal alias of this class and is the recommended public
-    name. It owns the compiled schema, append-only ledger, optional authoring
-    registry, optional workspace path, and user-facing namespaces such as
-    `schema`, `read`, `write`, `rules`, `inferences`, `eval`, `audit`,
-    `package`, and `assertion_views`.
+    ``FactGraph`` is a literal alias and the recommended public name. Current
+    namespaces include ``entities``, ``fields``, ``assertions``, ``schema``,
+    ``rules``, ``eval``, ``execution``, ``problog``, ``audit``, ``meta``,
+    ``package`` and ``assertion_views``. Product builders return immutable
+    assets directly; there is no Rule/Policy/Function registry lookup.
 
-    `create` and `load_workspace` own an internal `Database`; `attach` borrows
-    a caller-owned Database. `from_schema_classes` remains the lower-level
+    ``create`` and ``load_workspace`` own an internal ``Database``; ``attach``
+    borrows a caller-owned Database. ``from_schema_classes`` is the lower-level
     compatibility constructor for unmanaged in-memory or injected Ledgers.
+
+    Notes:
+        Database-backed writes are write-through. Product Scenario is a
+        separate run-local overlay, and EvaluationRun replay is a separate
+        sealed artifact rather than workspace persistence.
     """
 
     def __init__(
@@ -1797,6 +2233,13 @@ class SDKStore:
         self._rules_manager = _SDKRulesManager(self)
         self._inferences_manager = _SDKInferencesManager(self)
         self._eval_manager = _SDKEvalManager(self)
+        # Q20's V2 Scenario/profile construction is deliberately a separate
+        # product facade.  Import it lazily here so the store remains the
+        # foundational SDK type and the facade never becomes a second runner.
+        from .product_scenario_execution import _SDKExecutionManagerV2, _SDKProbLogManagerV2
+
+        self._execution_manager = _SDKExecutionManagerV2(self)
+        self._problog_manager = _SDKProbLogManagerV2(self)
         self._audit_manager = _SDKAuditManager(self)
         self._meta_manager = _SDKMetaManager(self)
         self._package_manager = _SDKPackageManager(self)
@@ -1854,10 +2297,9 @@ class SDKStore:
                 `from_schema_classes` for an unmanaged Ledger path.
             path: Optional workspace directory.
             artifact_store_root: Optional artifact sidecar root.
-            registry_root: REMOVED by A20(E) / Q6-A; raises `SDKStoreError`
-                immediately if provided. Pass workspace path via `path=` only.
-            registry: REMOVED by A20(E) / Q6-A; raises `SDKStoreError`
-                immediately if provided.
+            registry_root: Removed compatibility argument; always rejected.
+                Pass the workspace directory through ``path``.
+            registry: Removed compatibility argument; always rejected.
             default_row_format: Optional default output row format for rule
                 evaluation.
 
@@ -1865,8 +2307,13 @@ class SDKStore:
             A `FactGraph` / `SDKStore` bound to the compiled schema.
 
         Raises:
-            SDKStoreError: If `registry_root=` or `registry=` is provided, or
+            SDKStoreError: If removed registry arguments are provided, or
                 if constructor paths or schema classes are invalid.
+
+        Notes:
+            Creating an in-memory graph omits durable workspace storage.
+            Product Rule/Function/Policy assets remain in-process values and
+            are not registered by this constructor.
         """
         # Q6-A (e.1): explicit reject before any workspace path resolution so
         # users get the migration message without ambiguous downstream errors.
@@ -1914,6 +2361,29 @@ class SDKStore:
         registry: Any | None = None,
         default_row_format: str | None = None,
     ) -> "SDKStore":
+        """Create the lower-level unmanaged-Ledger compatibility runtime.
+
+        Args:
+            classes: Non-empty SDK ``Entity`` class list.
+            ledger: Optional caller-owned in-memory/open Ledger.
+            ledger_path: Optional unmanaged Ledger file path.
+            artifact_store_root: Optional artifact sidecar root.
+            registry_root: Removed argument; always rejected when supplied.
+            registry: Removed argument; always rejected when supplied.
+            default_row_format: Optional legacy evaluation row format.
+
+        Returns:
+            An ``SDKStore`` using the compatibility Ledger lifecycle.
+
+        Raises:
+            SDKStoreError: If inputs conflict, removed registry arguments are
+                supplied, or schema digests disagree.
+
+        Notes:
+            New durable code should prefer ``FactGraph.create(path=...)`` or
+            ``load_workspace(...)``. This path is not the Product V2 run/replay
+            persistence boundary.
+        """
         # Q6-A (e.1): same rejection as create(...).
         if registry_root is not None or registry is not None:
             _raise_registry_root_removed()
@@ -1948,10 +2418,17 @@ class SDKStore:
             schema_classes: Entity classes matching the saved workspace schema.
             default_row_format: Optional default output row format.
 
+        Returns:
+            An SDK-owned ``FactGraph`` holding the workspace's exclusive
+            writer lock until ``close()``.
+
         Raises:
             SDKStoreError: If the workspace contains a legacy `registry/`
-                marker (Q6-A (d.3): run the migration CLI first), or if the
-                schema digest does not match.
+                marker, cannot be opened, or has a mismatching schema digest.
+
+        Notes:
+            Loading never performs implicit migration. Product assets and
+            EvaluationRun artifacts are not restored from workspace storage.
         """
         if schema_classes is None:
             raise SDKStoreError("schema_classes is required for FactGraph.load_workspace(...)")
@@ -1988,6 +2465,27 @@ class SDKStore:
         default_row_format: str | None = None,
         **kwargs: Any,
     ) -> "SDKStore":
+        """Attach the SDK facade to a caller-owned Database.
+
+        Args:
+            db: Open ``Database`` retained and closed by the caller.
+            schema_classes: Entity classes matching ``db.schema_digest``.
+            view: Optional frozen assertion set; when supplied the attached
+                graph is read-only.
+            default_row_format: Optional legacy evaluation row format.
+            **kwargs: Rejected compatibility keywords.
+
+        Returns:
+            A writable base attachment or read-only view attachment.
+
+        Raises:
+            SDKStoreError: If ``db`` is invalid, schema digests differ, or an
+                unsupported lifecycle keyword is supplied.
+
+        Notes:
+            Closing the returned graph does not close the caller-owned
+            Database.
+        """
         if not isinstance(db, Database):
             raise SDKStoreError("FactGraph.attach(db) expects a Database instance")
         if kwargs:
@@ -2050,7 +2548,12 @@ class SDKStore:
         self.close()
 
     def close(self) -> None:
-        """Release an internally owned Database; attached Databases remain caller-owned."""
+        """Release resources owned by this FactGraph.
+
+        Notes:
+            The operation is idempotent. SDK-created/loaded Databases are
+            closed; Databases passed to ``attach`` remain caller-owned.
+        """
         if self._owns_database and self._database is not None:
             self._database.close()
             self._owns_database = False
@@ -2098,10 +2601,22 @@ class SDKStore:
 
     @property
     def store(self) -> Store:
+        """Return the lower-level core Store used by this graph.
+
+        Notes:
+            This advanced compatibility escape hatch bypasses Product SDK
+            ergonomics. Prefer namespaced ``fg.*`` APIs for new code.
+        """
         return self._store
 
     @property
     def ledger(self) -> Ledger:
+        """Return the underlying append-only Ledger.
+
+        Notes:
+            Direct Ledger mutation can bypass Database transaction routing.
+            Prefer ``fg.fields``, ``fg.assertions`` or ``fg.batch`` writes.
+        """
         return self._store.ledger
 
     @property
@@ -2225,74 +2740,431 @@ class SDKStore:
 
     @property
     def schema_ir(self) -> dict[str, Any]:
+        """Return the canonical schema IR associated with this graph."""
         return self._schema_ir
+
+    def rule_builder(
+        self,
+        id: str,
+        *,
+        version: str | None = None,
+        meta: AssetMeta | None = None,
+    ) -> RuleBuilder:
+        """Start staged Product Rule construction for this graph.
+
+        The builder resolves its complete semantic-port declaration at build
+        time and returns a ``ProductRuleV1``.
+
+        Args:
+            id: Stable application-defined Rule identifier.
+            version: Optional application-defined version.
+            meta: Optional ``AssetMeta`` descriptor.
+
+        Returns:
+            A graph-bound ``RuleBuilder``.
+
+        Raises:
+            ProductAuthoringError: If asset identity or metadata is invalid.
+
+        Notes:
+            This is neither a Rule registry nor a deferred compiler. It does
+            not execute or persist a Rule.
+        """
+
+        from .product_authoring import rule_builder
+
+        return rule_builder(self, id, version=version, meta=meta)
+
+    def function_builder(
+        self,
+        id: str,
+        *,
+        version: str | None = None,
+        meta: AssetMeta | None = None,
+    ) -> FunctionBuilder:
+        """Start staged deterministic Product Function construction.
+
+        Args:
+            id: Stable application-defined Function identifier.
+            version: Optional application-defined version.
+            meta: Optional ``AssetMeta`` descriptor.
+
+        Returns:
+            A graph-independent ``FunctionBuilder``.
+
+        Raises:
+            ProductAuthoringError: If asset identity or metadata is invalid.
+
+        Notes:
+            This constructs an immutable asset; it does not register a tool,
+            mutate the graph, invoke the callable, or make Function callable
+            from Rule. Product Policy is their only composition owner.
+        """
+
+        from .product_authoring import function_builder
+
+        return function_builder(id, version=version, meta=meta)
+
+    def build_function(
+        self,
+        *,
+        id: str,
+        implementation: Callable[..., object],
+        inputs: Any | None = None,
+        output: Any | None = None,
+        output_name: str = "result",
+        implementation_digest: str | None = None,
+        version: str | None = None,
+        meta: AssetMeta | None = None,
+    ) -> ProductFunctionV1:
+        """Build a deterministic Product Function in one call.
+
+        Args:
+            id: Stable application-defined Function identifier.
+            implementation: Pure synchronous Python callable.
+            inputs: Optional explicit ordered scalar input domains.
+            output: Optional explicit scalar output domain.
+            output_name: Public name for the single output port.
+            implementation_digest: Optional explicit implementation pin.
+            version: Optional application-defined version.
+            meta: Optional ``AssetMeta`` descriptor.
+
+        Returns:
+            A sealed ``ProductFunctionV1``.
+
+        Raises:
+            ProductAuthoringError: If the callable or asset contract is
+                invalid.
+
+        Notes:
+            This method does not register a tool, invoke the callable, or
+            write the ledger. Detached replay never calls the implementation.
+        """
+
+        from .product_authoring import build_function
+
+        return build_function(
+            id=id,
+            implementation=implementation,
+            inputs=inputs,
+            output=output,
+            output_name=output_name,
+            implementation_digest=implementation_digest,
+            version=version,
+            meta=meta,
+        )
+
+    def build_rule(
+        self,
+        *,
+        id: str,
+        when: Sequence[Any],
+        ports: Mapping[str, Any],
+        semantic_ports: Mapping[str, Any],
+        version: str | None = None,
+        meta: AssetMeta | None = None,
+        repr: str | None = None,
+    ) -> ProductRuleV1:
+        """Build and resolve a Product Rule in one call.
+
+        ``semantic_ports`` must completely describe the SDK Rule's public
+        ports. Product code can use an ``Entity`` class for its identity port
+        and a bound ``Field`` descriptor for a scalar field port (for example
+        ``{"person": Person, "age": Person.age}``); resolution occurs
+        against this exact graph before the product wrapper is returned.
+
+        Args:
+            id: Stable application-defined Rule identifier.
+            when: Logical SDK Rule body.
+            ports: Public port-to-variable mapping.
+            semantic_ports: Complete semantic meaning for every public port.
+            version: Optional application-defined version.
+            meta: Optional ``AssetMeta`` descriptor.
+            repr: Optional legacy presentation template.
+
+        Returns:
+            A sealed graph-bound ``ProductRuleV1``.
+
+        Raises:
+            ProductAuthoringError: If Rule construction or semantic resolution
+                fails.
+
+        Notes:
+            This method neither registers nor evaluates the Rule and never
+            writes the ledger.
+        """
+
+        from .product_authoring import build_rule
+
+        return build_rule(
+            self,
+            id=id,
+            when=when,
+            ports=ports,
+            semantic_ports=semantic_ports,
+            version=version,
+            meta=meta,
+            repr=repr,
+        )
+
+    def policy_builder(
+        self,
+        id: str,
+        *,
+        version: str | None = None,
+        meta: AssetMeta | None = None,
+    ) -> PolicyBuilder:
+        """Start one Product Policy builder with local typed occurrences.
+
+        Args:
+            id: Stable application-defined Policy identifier.
+            version: Optional application-defined version.
+            meta: Optional ``AssetMeta`` descriptor.
+
+        Returns:
+            An owner-bound ``PolicyBuilder``.
+
+        Raises:
+            ProductAuthoringError: If asset identity or metadata is invalid.
+
+        Notes:
+            The builder is local, not a Policy registry. Rule and Function
+            occurrences become part of the asset only when ``build`` succeeds.
+        """
+
+        from .product_authoring import PolicyBuilder
+
+        return PolicyBuilder(self, id, version=version, meta=meta)
+
+    def build_policy(
+        self,
+        *,
+        id: str,
+        build: Callable[[PolicyBuilder], Any],
+        version: str | None = None,
+        meta: AssetMeta | None = None,
+    ) -> ProductPolicyV1:
+        """Build a Product Policy with one callback-local builder.
+
+        The callback receives the same builder whose final ``build(...)`` call
+        is used, preserving Q19 owner-bound occurrence/port handles.  This is
+        intentionally local construction, never registration by ``id``.
+
+        Args:
+            id: Stable application-defined Policy identifier.
+            build: Callback receiving one ``PolicyBuilder`` and returning its
+                root node.
+            version: Optional application-defined version.
+            meta: Optional ``AssetMeta`` descriptor.
+
+        Returns:
+            A sealed ``ProductPolicyV1``.
+
+        Raises:
+            SDKStoreError: If ``build`` is not callable or raises a non-SDK
+                exception.
+            ProductAuthoringError: If the returned topology is invalid.
+
+        Notes:
+            This method does not evaluate or persist the Policy.
+        """
+
+        if not callable(build):
+            raise SDKStoreError("build_policy(build=...) requires a callable")
+        builder = self.policy_builder(id, version=version, meta=meta)
+        try:
+            root = build(builder)
+        except SDKStoreError:
+            raise
+        except Exception as exc:
+            raise SDKStoreError(f"build_policy callback raised: {exc}") from exc
+        return builder.build(root)
+
+    def scenario(self) -> ScenarioBuilderV2:
+        """Start one run-local Product V2 Scenario request.
+
+        The returned builder accepts ordinary SDK ``Field`` descriptors,
+        managed entity references and a strict ``meta=`` mapping.  It only
+        constructs ``ScenarioSpecV2``: it does not write to the ledger,
+        resolve a captured world or execute a query.
+
+        Returns:
+            A mutable-while-authoring ``ScenarioBuilderV2``.
+
+        Notes:
+            Scenario ``meta`` is strictly lowered into fact semantics,
+            provenance and display lanes. It is not ledger ``claim_meta``.
+        """
+
+        from .product_scenario_execution import scenario_builder_v2
+
+        return scenario_builder_v2(self)
+
+    def policy(self, policy_id: str, *, version: str | None = None) -> "PolicyDraft":
+        """Start one typed, in-process Policy authoring draft.
+
+        The draft emits the existing managed Policy and SemanticAddressSpace
+        contract when ``build(...)`` is called. It is not a string registry or
+        a second evaluator; the resulting target enters the normal
+        :meth:`query` compiler path.
+        """
+
+        from .policy_authoring import policy_draft
+
+        return policy_draft(self, policy_id, version=version)
+
+    def query(
+        self,
+        target: Any,
+        *,
+        address_space: Any | None = None,
+    ) -> EvaluationQueryBuilderV1:
+        """Start a typed Query over one resolved Rule or Policy target.
+
+        This is a target-normalization facade, never a string registry lookup.
+        ``target`` must be a resolved Rule, raw managed Policy, SDK-authored
+        Policy target, or their explicit provider composite; a bare
+        ``RelationProviderV1`` is rejected because it has no independent Query
+        projection. SDK-authored Policy port and navigation handles are accepted
+        by ``bind`` / ``select`` and lower to the same structured address forms.
+
+        The established terminal methods (``compile()``, ``evaluate()``,
+        ``capture()``, and V0 ``what_if(...)``) retain their V0 compatibility
+        contracts.  ``plan(...)`` preserves its V1 GoalPlan behavior for V1
+        inputs.  Supplying an ``EvaluationExecutionProfileV2`` selects the
+        separate V2 product terminal, optionally with a ``ScenarioSpecV2``
+        overlay (absence means an explicit empty V2 world).  The V2 terminal
+        retains the original Product Rule/Policy envelope for sealed capture;
+        it never reinterprets V0/V1 providers, expectations, or evidence
+        scopes.
+
+        Args:
+            target: Resolved Rule, raw managed Policy, authored Product target,
+                or explicit provider composite.
+            address_space: Advanced address space required only for compatible
+                raw Policy targets. Product targets already carry it.
+
+        Returns:
+            An immutable ``EvaluationQueryBuilderV1`` supporting typed
+            ``bind`` / ordered ``select`` and generation-specific terminals.
+
+        Raises:
+            SDKStoreError: If the target is unsupported, unresolved, or paired
+                with an invalid address space.
+
+        Notes:
+            Constructing a Query does not read the ledger or execute an
+            engine. A bare Provider is not a Query target. Product Function
+            outputs may be selected but never bound as Query inputs.
+        """
+
+        from .evaluation_query_builder import build_evaluation_query_builder
+
+        return build_evaluation_query_builder(
+            self,
+            target,
+            address_space=address_space,
+        )
 
     @property
     def assertion_views(self) -> _SDKAssertionViewsManager:
+        """Return the namespace for persisted frozen assertion-set views."""
         return self._assertion_views_manager
 
     @property
     def assertions(self) -> AssertionsManager:
+        """Return the namespace for assertion-level reads and mutations."""
         return self._assertions_manager
 
     @property
     def schema(self) -> _SDKSchemaManager:
-        """`schema` taxonomy namespace (post-L redesign §5.2 lock).
-
-        Read-only manager exposing ``ingest`` and ``validate_provenance``.
-        Delegates to flat ``SDKStore.<method>`` per §5.4 Option 2 lock.
-        """
+        """Return the read-only schema/ingest namespace."""
         return self._schema_manager
 
     @property
     def entities(self) -> _SDKEntitiesManager:
-        """`entities` Layer 1 namespace per ADR-API §4.1。
-
-        Slice 3a Step 7 owns Layer 1 user-facing entity operations after
-        removing the historical ``fg.read.*`` namespace and flat shortcuts。
-        """
+        """Return the read-only entity lifecycle and snapshot namespace."""
         return self._entities_manager
 
     @property
     def fields(self) -> _SDKFieldsManager:
-        """`fields` Layer 2 namespace per ADR-API §4.1。
-
-        Slice 3a Step 7 owns Layer 2 user-facing field-cell operations after
-        removing the historical ``fg.write.*`` namespace and flat shortcuts。
-        """
+        """Return the read-only namespace for field-cell reads and writes."""
         return self._fields_manager
 
     @property
     def rules(self) -> _SDKRulesManager:
-        """`rules` taxonomy namespace exposing pure rule/derivation structure inspection."""
+        """Return the read-only Rule structure-inspection namespace."""
         return self._rules_manager
 
     @property
     def inferences(self) -> _SDKInferencesManager:
-        """`inferences` taxonomy namespace exposing persisted Inference asset handles."""
+        """Return the legacy Inference asset namespace."""
         return self._inferences_manager
 
     @property
     def eval(self) -> _SDKEvalManager:
-        """`eval` taxonomy namespace exposing T5 evaluate/explain APIs."""
+        """Return the legacy live evaluate/explain namespace."""
         return self._eval_manager
 
     @property
+    def execution(self) -> _SDKExecutionManagerV2:
+        """Read-only V2 execution-profile construction namespace.
+
+        ``fg.execution.native_deterministic(...)`` and
+        ``fg.execution.problog(...)`` produce detached, strictly pinned V2
+        profile builders.  They do not replace legacy ``fg.eval`` config
+        compatibility APIs or invoke an engine.
+
+        Returns:
+            A read-only manager exposing ``native_deterministic``,
+            ``portable_deterministic`` and ``problog`` builders.
+        """
+
+        return self._execution_manager
+
+    @property
+    def problog(self) -> _SDKProbLogManagerV2:
+        """Return the read-only Product V2 ProbLog semantics namespace.
+
+        Returns:
+            A marker factory for Rule, occurrence and WeightedChoice profile
+            attachments. Marker creation does not execute ProbLog.
+        """
+
+        return self._problog_manager
+
+    @property
     def audit(self) -> _SDKAuditManager:
-        """`audit` taxonomy namespace exposing ``explain`` / ``conflicts`` / ``diff_proof_frames``."""
+        """Return the ledger/audit inspection namespace."""
         return self._audit_manager
 
     @property
     def meta(self) -> _SDKMetaManager:
-        """`meta` namespace exposing read-only runtime introspection (`capabilities()`)."""
+        """Return read-only runtime schema-capability introspection."""
         return self._meta_manager
 
     @property
     def package(self) -> _SDKPackageManager:
-        """`package` taxonomy namespace exposing ``export_package`` / ``run_package``."""
+        """Return the legacy package export/execution namespace."""
         return self._package_manager
 
     def commit_assertions(self, assertions: Sequence[AssertionInput]) -> CommitResult:
+        """Commit canonical assertion inputs to an attached Database.
+
+        Args:
+            assertions: Canonical assertions to append atomically.
+
+        Returns:
+            The Database commit result.
+
+        Raises:
+            SDKStoreError: If the graph is not attached to a writable Database
+                or an assertion violates the write protocol.
+
+        Notes:
+            This is a durable factual write and a lower-level escape hatch.
+            Prefer ``fg.fields.set`` or ``fg.fields.add`` for ordinary SDK use.
+        """
         if self._database is None:
             raise SDKStoreError(
                 "fg.commit_assertions(...) is only available on FactGraph.attach(db) runtimes; "
@@ -2307,6 +3179,23 @@ class SDKStore:
         assertions: Sequence[AssertionInput],
         revocations: Sequence[RevocationInput],
     ) -> CommitResult:
+        """Commit assertions and revocations in one Database transaction.
+
+        Args:
+            assertions: Canonical assertions to append.
+            revocations: Canonical assertion revocations to append.
+
+        Returns:
+            The atomic Database commit result.
+
+        Raises:
+            SDKStoreError: If the graph is not attached to a writable Database
+                or the change set violates the write protocol.
+
+        Notes:
+            This mutates durable factual state. It is not equivalent to a
+            run-local Scenario and cannot be undone by omitting a save call.
+        """
         if self._database is None:
             raise SDKStoreError(
                 "fg.commit_changes(...) is only available on FactGraph.attach(db) runtimes"
@@ -2316,6 +3205,22 @@ class SDKStore:
         return database.commit_changes(assertions, revocations)
 
     def batch(self, *, meta: dict[str, Any] | None = None):
+        """Open an SDK transaction builder for a batch of factual writes.
+
+        Args:
+            meta: Optional transaction metadata accepted by the batch protocol.
+
+        Returns:
+            A batch transaction context that commits its staged changes
+            atomically.
+
+        Raises:
+            SDKStoreError: If the graph is read-only or cannot accept writes.
+
+        Notes:
+            Batch metadata is transaction metadata, not Scenario premise
+            semantics and not an execution-engine configuration.
+        """
         self._database_for_application_write("fg.batch")
         from .batch import SDKBatchTx
 
@@ -2343,6 +3248,25 @@ class SDKStore:
         *schema_class_args: type[Entity],
         schema_classes: list[type[Entity]] | None = None,
     ) -> SchemaAddResult:
+        """Register or additively extend one or more Entity schemas.
+
+        Args:
+            *schema_class_args: Entity classes supplied positionally.
+            schema_classes: Entity classes supplied as a list instead.
+
+        Returns:
+            The schema-add result and resulting schema identity.
+
+        Raises:
+            SDKStoreError: If positional and keyword forms are mixed.
+            SchemaConflictError: If a new entity conflicts with the schema.
+            SchemaNonAdditiveError: If an existing entity change is not
+                additive.
+
+        Notes:
+            Database-backed schema changes are committed immediately. Existing
+            identity or field definitions cannot be rewritten through this API.
+        """
         if schema_class_args and schema_classes is not None:
             raise SDKStoreError("pass either positional schema classes or schema_classes=, not both")
         if schema_classes is None:
@@ -2752,7 +3676,23 @@ class SDKStore:
         raise SDKStoreError("rules.structure(...) expects application Rule or RuleExpr input")
 
     def save_workspace(self, path: str | Path | None = None) -> dict[str, Any]:
-        """Touch workspace lifecycle metadata; canonical writes are already durable."""
+        """Touch durable workspace lifecycle metadata.
+
+        Args:
+            path: Optional guard that must name the already-bound workspace.
+
+        Returns:
+            Workspace paths and the updated lifecycle timestamp.
+
+        Raises:
+            SDKStoreError: If no durable workspace is bound or ``path`` tries
+                to copy/rebind the graph.
+
+        Notes:
+            Canonical writes are already durable when their write call returns.
+            This method does not commit facts, advance the head, or implement
+            Save As.
+        """
         database = self._database_for_application_write("fg.save_workspace")
         if database is None or self._workspace_path is None:
             raise SDKStoreError(
@@ -2842,10 +3782,10 @@ class SDKStore:
             raise SDKStoreError("SDK public semantics require Rule, RuleExpr, or Inference object input")
         return (engine, _lower_public_semantics(raw_config, derivation=derivation))
 
-    def _candidates_for_derivation(
+    def _outputs_for_derivation(
         self, derivation: Any, *, raw_engine: Any, raw_config: Any
-    ) -> tuple[list[CandidateSet], list[dict[str, Any]], str, "SemanticsProfile | None"]:
-        """Erzeugt die rohen CandidateSets für eine Inference oder ein Derivation-Dict.
+    ) -> tuple[list[DerivationOutput], list[dict[str, Any]], str, "SemanticsProfile | None"]:
+        """Erzeugt die rohen DerivationOutputs für eine Inference oder ein Derivation-Dict.
 
         Gemeinsamer Kern von _evaluate und _evaluate_candidates: engine/semantics
         auflösen, bei einer Inference zusätzlich die runtime registry, kompilieren,
@@ -2867,13 +3807,13 @@ class SDKStore:
             else None
         )
         compiled_plans = self._compile_derivation_input(derivation)
-        candidates = self._evaluate_compiled_derivation_plans(
+        outputs = self._evaluate_compiled_derivation_plans(
             compiled_plans,
             mode=engine,
             registry=runtime_registry,
             semantics_profile=semantics_profile,
         )
-        return candidates, compiled_plans, engine, semantics_profile
+        return outputs, compiled_plans, engine, semantics_profile
 
     def _evaluate(self, *args: Any, **kwargs: Any) -> EvaluateResult:
         if "view" in kwargs:
@@ -2903,6 +3843,28 @@ class SDKStore:
             raise SDKStoreError(
                 "string derivation DSL is not supported in SDK v1; use Inference object or structured derivation dict"
             )
+        if args and isinstance(args[0], TargetedCompiledEvaluationQueryV0):
+            return self._evaluate_targeted_compiled_evaluation_query_input(
+                args,
+                kwargs,
+                raw_engine=raw_engine,
+                raw_config=raw_config,
+            )
+        if args and isinstance(args[0], CompiledEvaluationQueryV0):
+            return self._evaluate_compiled_evaluation_query_input(
+                args,
+                kwargs,
+                raw_engine=raw_engine,
+                raw_config=raw_config,
+            )
+        if "capture" in kwargs:
+            raise SDKStoreError(
+                "evaluate() capture= is only accepted for CompiledEvaluationQueryV0"
+            )
+        if "scenario" in kwargs:
+            raise SDKStoreError(
+                "evaluate() scenario= is only accepted for CompiledEvaluationQueryV0"
+            )
         if args and isinstance(args[0], (ApplicationRule, _RuleExpr)):
             return self._evaluate_rule_expr_input(
                 args,
@@ -2911,30 +3873,30 @@ class SDKStore:
                 raw_config=raw_config,
             )
         if args and hasattr(args[0], "to_authoring_payload"):
-            candidates, compiled_plans, engine, semantics_profile = (
-                self._candidates_for_derivation(
+            outputs, compiled_plans, engine, semantics_profile = (
+                self._outputs_for_derivation(
                     args[0], raw_engine=raw_engine, raw_config=raw_config
                 )
             )
             app_plans = _application_plans_from_compiled_dicts(compiled_plans, mode=engine)
             head = _head_rule_for_compiled_plans(app_plans)
-            return self._candidate_sets_to_evaluate_result(
-                candidates,
+            return self._derivation_outputs_to_evaluate_result(
+                outputs,
                 compiled_plans=app_plans,
                 head=head,
                 engine=engine,
                 semantics_profile=semantics_profile,
             )
         if args and isinstance(args[0], dict) and ("derivation_id" in args[0] or "target_pred_id" in args[0] or "head" in args[0]):
-            candidates, compiled_plans, engine, semantics_profile = (
-                self._candidates_for_derivation(
+            outputs, compiled_plans, engine, semantics_profile = (
+                self._outputs_for_derivation(
                     args[0], raw_engine=raw_engine, raw_config=raw_config
                 )
             )
             app_plans = _application_plans_from_compiled_dicts(compiled_plans, mode=engine)
             head = _head_rule_for_compiled_plans(app_plans)
-            return self._candidate_sets_to_evaluate_result(
-                candidates,
+            return self._derivation_outputs_to_evaluate_result(
+                outputs,
                 compiled_plans=app_plans,
                 head=head,
                 engine=engine,
@@ -2946,7 +3908,12 @@ class SDKStore:
             "derivation dict"
         )
 
-    def _evaluate_candidates(self, *args: Any, **kwargs: Any) -> list[CandidateSet]:
+    def _evaluate_candidates(self, *args: Any, **kwargs: Any) -> list[DerivationOutput]:
+        if "scenario" in kwargs:
+            raise SDKStoreError(
+                "evaluate_candidates() does not accept scenario=; "
+                "use evaluate(compiled_query, scenario=...)"
+            )
         if "view" in kwargs:
             raise SDKStoreError(
                 "method-level view= is not supported by evaluate_candidates(); use FactGraph.attach(db, view=view) instead"
@@ -2972,9 +3939,19 @@ class SDKStore:
             raise SDKStoreError(
                 "string derivation DSL is not supported in SDK v1; use Inference object or structured derivation dict"
             )
+        if args and isinstance(args[0], CompiledEvaluationQueryV0):
+            raise SDKStoreError(
+                "evaluate_candidates() does not accept CompiledEvaluationQueryV0; "
+                "use evaluate(compiled_query) and consume its projection rows"
+            )
+        if args and isinstance(args[0], TargetedCompiledEvaluationQueryV0):
+            raise SDKStoreError(
+                "evaluate_candidates() does not accept TargetedCompiledEvaluationQueryV0; "
+                "use evaluate(compiled_query) and consume its projection rows"
+            )
         if args and isinstance(args[0], (ApplicationRule, _RuleExpr)):
             # RuleExpr/Rule candidates come from the SAME lowering + evaluation as
-            # evaluate(rule_expr, head=): the returned CandidateSets are exactly the
+            # evaluate(rule_expr, head=): the returned outputs are exactly the
             # ones whose EvaluateResult rows explain()/narrate(). This is the write
             # leg of the RuleExpr path (feed accept_derivation_candidate_set), with no
             # second evaluator and no recompute outside the FactGraph evaluation.
@@ -2983,14 +3960,14 @@ class SDKStore:
                     "evaluate_candidates(rule_expr, head=) requires a closed application Rule head "
                     "(same head you would pass to evaluate(rule_expr, head=))"
                 )
-            candidates, *_rest = self._rule_expr_candidates_core(
+            outputs, *_rest = self._rule_expr_outputs_core(
                 args[0],
                 head=head,
                 raw_engine=raw_engine,
                 raw_config=raw_config,
                 api_path="evaluate_candidates(rule_expr)",
             )
-            return candidates
+            return outputs
         if head is not None:
             raise SDKStoreError(
                 "head= is only accepted by evaluate_candidates(rule_expr, head=); "
@@ -3007,17 +3984,27 @@ class SDKStore:
                 )
             )
         ):
-            candidates, _compiled_plans, _engine, _semantics = (
-                self._candidates_for_derivation(
+            outputs, _compiled_plans, _engine, _semantics = (
+                self._outputs_for_derivation(
                     args[0], raw_engine=raw_engine, raw_config=raw_config
                 )
             )
-            return candidates
+            return outputs
         raise SDKStoreError(
             "evaluate_candidates() requires an Inference object or a structured derivation dict"
         )
 
     def _explain(self, *args: Any, **kwargs: Any) -> Explanation:
+        if args and isinstance(args[0], TargetedCompiledEvaluationQueryV0):
+            raise SDKStoreError(
+                "eval.explain() does not accept TargetedCompiledEvaluationQueryV0; "
+                "evaluate it first and call row.explain()"
+            )
+        if args and isinstance(args[0], CompiledEvaluationQueryV0):
+            raise SDKStoreError(
+                "eval.explain() does not accept CompiledEvaluationQueryV0; "
+                "evaluate it first and call row.explain()"
+            )
         if len(args) != 1:
             raise SDKStoreError("eval.explain(expr, ...) accepts exactly one RuleExpr or Rule input")
         if "head" not in kwargs:
@@ -3137,7 +4124,7 @@ class SDKStore:
         registry: RuleRegistry | None,
         engine_options: dict[str, Any] | None = None,
         semantics_profile: SemanticsProfile | None = None,
-    ) -> list[CandidateSet]:
+    ) -> list[DerivationOutput]:
         if not compiled_plans:
             return []
         resolved_mode = _resolve_compiled_derivation_mode(compiled_plans, explicit_mode=mode)
@@ -3164,6 +4151,673 @@ class SDKStore:
             registry=registry,
         )
 
+    def _evaluate_compiled_evaluation_query_input(
+        self,
+        args: tuple[Any, ...],
+        kwargs: dict[str, Any],
+        *,
+        raw_engine: Any,
+        raw_config: Any,
+        source_target: Any | None = None,
+    ) -> EvaluateResult:
+        if len(args) != 1:
+            raise SDKStoreError(
+                "evaluate(compiled_query) accepts exactly one CompiledEvaluationQueryV0"
+            )
+        capture_supplied = "capture" in kwargs
+        capture = kwargs.pop("capture", None)
+        scenario = kwargs.pop("scenario", None)
+        expectations = () if source_target is None else source_target.expectations
+        if scenario is not None and not isinstance(
+            scenario,
+            (ScenarioFieldSubstitutionV0, ScenarioFieldSubstitutionSetV0),
+        ):
+            raise SDKStoreError(
+                "evaluate(compiled_query) scenario= must be ScenarioFieldSubstitutionV0 "
+                "or ScenarioFieldSubstitutionSetV0"
+            )
+        if scenario is not None and capture_supplied:
+            scenario_name = (
+                "ScenarioFieldSubstitutionSetV0"
+                if isinstance(scenario, ScenarioFieldSubstitutionSetV0)
+                else "ScenarioFieldSubstitutionV0"
+            )
+            raise SDKStoreError(
+                f"evaluate(compiled_query) {scenario_name} does not support capture="
+            )
+        if expectations and capture_supplied:
+            raise SDKStoreError(
+                "evaluate(targeted_compiled_query) expectations do not support capture="
+            )
+        if expectations and scenario is not None:
+            raise SDKStoreError(
+                "evaluate(targeted_compiled_query) expectations do not support scenario="
+            )
+        if capture is not None and (
+            type(capture) is not str or capture != "run_bundle_v0"
+        ):
+            raise SDKStoreError(
+                "evaluate(compiled_query) capture= accepts only 'run_bundle_v0'"
+            )
+        if kwargs:
+            unknown = ", ".join(sorted(kwargs))
+            raise SDKStoreError(
+                f"unknown evaluate(compiled_query) keyword(s): {unknown}"
+            )
+        if raw_config is not None:
+            raise SDKStoreError(
+                "evaluate(compiled_query) is native-only in v0 and does not accept config="
+            )
+        engine = self._resolve_public_engine(
+            raw_engine,
+            api_path="evaluate(compiled_query)",
+        )
+        if engine != "native":
+            raise SDKStoreError(
+                "evaluate(compiled_query) supports only engine='native' in v0"
+            )
+
+        compiled_query = args[0]
+        self._assert_evaluation_query_artifact_current(compiled_query)
+        if compiled_query.schema_digest != self._application_schema_index.schema_digest:
+            raise SDKStoreError(
+                "compiled EvaluationQuery schema does not match this FactGraph"
+            )
+        if source_target is not None:
+            try:
+                assert_targeted_evaluation_query_current(source_target)
+            except ValueError as exc:
+                raise SDKStoreError(
+                    "targeted compiled Query failed its pre-evaluation integrity check"
+                ) from exc
+        if (
+            self._store.premise_exclusions
+            or self._store.premise_allowances
+            or self._store.premise_blocks
+        ):
+            raise SDKStoreError(
+                "evaluate(compiled_query) does not yet support premise-filtered execution"
+            )
+
+        view_snapshot_digest = self._view_snapshot_digest(query_typed_values=True)
+        try:
+            compiled_plan, _traces = _materialize_adapter_derivation_plan(
+                compiled_query._lowering_plan,
+                engine="native",
+            )
+        except (RuleExprError, ValueError) as exc:
+            raise SDKStoreError(
+                "compiled EvaluationQuery could not be materialized for native execution"
+            ) from exc
+        if scenario is not None:
+            try:
+                if isinstance(scenario, ScenarioFieldSubstitutionSetV0):
+                    resolved_scenario = resolve_scenario_field_substitution_set_v0(
+                        scenario,
+                        compiled_query=compiled_query,
+                        materialized_body=compiled_plan.body_ir,
+                        store=self._store,
+                        schema_index=self._application_schema_index,
+                        base_view_digest=view_snapshot_digest,
+                    )
+                else:
+                    resolved_scenario = resolve_scenario_field_substitution_v0(
+                        scenario,
+                        compiled_query=compiled_query,
+                        materialized_body=compiled_plan.body_ir,
+                        store=self._store,
+                        schema_index=self._application_schema_index,
+                        base_view_digest=view_snapshot_digest,
+                    )
+            except ScenarioResolutionError as exc:
+                scenario_name = (
+                    "ScenarioFieldSubstitutionSetV0"
+                    if isinstance(scenario, ScenarioFieldSubstitutionSetV0)
+                    else "ScenarioFieldSubstitutionV0"
+                )
+                raise SDKStoreError(f"{scenario_name} rejected: {exc.code}") from exc
+            self._assert_evaluation_query_execution_current(compiled_query, view_snapshot_digest)
+            self._assert_scenario_effective_snapshot_current(
+                resolved_scenario,
+                compiled_query=compiled_query,
+                base_view_digest=view_snapshot_digest,
+            )
+            request = DerivationEvaluateRequest(plans=(compiled_plan,), engine="native")
+            baseline_outputs = _evaluate_derivation_plans_with_native_effective_relation(
+                request,
+                store=self._store,
+                effective_relation=resolved_scenario.baseline_relation,
+            )
+            self._assert_evaluation_query_execution_current(compiled_query, view_snapshot_digest)
+            self._assert_scenario_effective_snapshot_current(
+                resolved_scenario,
+                compiled_query=compiled_query,
+                base_view_digest=view_snapshot_digest,
+            )
+            effective_outputs = _evaluate_derivation_plans_with_native_effective_relation(
+                request,
+                store=self._store,
+                effective_relation=resolved_scenario.effective_relation,
+            )
+            self._assert_evaluation_query_execution_current(compiled_query, view_snapshot_digest)
+            self._assert_scenario_effective_snapshot_current(
+                resolved_scenario,
+                compiled_query=compiled_query,
+                base_view_digest=view_snapshot_digest,
+            )
+            baseline_result = self._derivation_outputs_to_evaluate_result(
+                baseline_outputs,
+                compiled_plans=[compiled_plan],
+                head=compiled_query.projection_head,
+                engine="native",
+                semantics_profile=None,
+                lowering_plan=compiled_query._lowering_plan,
+                lowering_rules_by_id=_rule_expr_rules_by_id(
+                    compiled_query.compiled_policy.rule_expr,
+                    head=compiled_query.projection_head,
+                ),
+                evaluation_query=compiled_query,
+                view_snapshot_digest_override=view_snapshot_digest,
+                attach_run_anchor=False,
+                collect_support_artifacts=False,
+            )
+            result = self._derivation_outputs_to_evaluate_result(
+                effective_outputs,
+                compiled_plans=[compiled_plan],
+                head=compiled_query.projection_head,
+                engine="native",
+                semantics_profile=None,
+                lowering_plan=compiled_query._lowering_plan,
+                lowering_rules_by_id=_rule_expr_rules_by_id(
+                    compiled_query.compiled_policy.rule_expr,
+                    head=compiled_query.projection_head,
+                ),
+                evaluation_query=compiled_query,
+                view_snapshot_digest_override=resolved_scenario.resolution.effective_relation_digest,
+                attach_run_anchor=False,
+                collect_support_artifacts=False,
+            )
+            result_diff = _scenario_result_diff(baseline_result, result)
+            result = replace(
+                result,
+                scenario=replace(resolved_scenario.resolution, result_diff=result_diff),
+            )
+            self._assert_evaluation_query_execution_current(compiled_query, view_snapshot_digest)
+            return result
+        if capture == "run_bundle_v0":
+            outputs, effective_relation = _evaluate_derivation_plans_with_native_relation_capture(
+                DerivationEvaluateRequest(plans=(compiled_plan,), engine="native"),
+                store=self._store,
+            )
+        else:
+            outputs = evaluate_derivation_plans(
+                DerivationEvaluateRequest(plans=(compiled_plan,), engine="native"),
+                store=self._store,
+                registry=None,
+            )
+        self._assert_evaluation_query_execution_current(compiled_query, view_snapshot_digest)
+
+        result = self._derivation_outputs_to_evaluate_result(
+            outputs,
+            compiled_plans=[compiled_plan],
+            head=compiled_query.projection_head,
+            engine="native",
+            semantics_profile=None,
+            lowering_plan=compiled_query._lowering_plan,
+            lowering_rules_by_id=_rule_expr_rules_by_id(
+                compiled_query.compiled_policy.rule_expr,
+                head=compiled_query.projection_head,
+            ),
+                evaluation_query=compiled_query,
+                evaluation_query_source_target=(
+                    None if source_target is None else source_target.target.run_target
+                ),
+            view_snapshot_digest_override=view_snapshot_digest,
+        )
+        self._assert_evaluation_query_execution_current(compiled_query, view_snapshot_digest)
+        if source_target is not None:
+            try:
+                assert_targeted_evaluation_query_current(source_target)
+            except ValueError as exc:
+                raise SDKStoreError(
+                    "targeted compiled Query changed during execution"
+                ) from exc
+        if expectations:
+            try:
+                result = replace(
+                    result,
+                    expectation_results=evaluate_contains_row_expectations_v0(
+                        expectations,
+                        result=result,
+                        targeted_query_wrapper_digest=source_target.wrapper_digest,
+                        completeness_basis="complete_native_enumeration_v0",
+                    ),
+                )
+            except EvaluationExpectationError as exc:
+                raise SDKStoreError(f"compiled Query expectation failed: {exc}", code=exc.code) from exc
+            self._assert_evaluation_query_execution_current(compiled_query, view_snapshot_digest)
+            try:
+                assert_targeted_evaluation_query_current(source_target)
+            except ValueError as exc:
+                raise SDKStoreError(
+                    "targeted compiled Query changed while attaching expectation outcomes"
+                ) from exc
+        if capture == "run_bundle_v0":
+            if result._row_support_artifacts is None:
+                raise SDKStoreError("native EvaluationQuery capture did not produce one complete execution record")
+            try:
+                bundle = _build_evaluation_run_bundle_v0(
+                    compiled_query,
+                    result,
+                    materialized_plan=compiled_plan,
+                    schema_ir=self._schema_ir,
+                    effective_relations=effective_relation,
+                    proof_receipts=result._row_support_artifacts,
+                )
+                result = replace(result, run_bundle=bundle)
+            except (TypeError, ValueError) as exc:
+                raise SDKStoreError(f"failed to capture EvaluationRun bundle: {exc}") from exc
+            self._assert_evaluation_query_execution_current(compiled_query, view_snapshot_digest)
+        return result
+
+    def _evaluate_targeted_compiled_evaluation_query_input(
+        self,
+        args: tuple[Any, ...],
+        kwargs: dict[str, Any],
+        *,
+        raw_engine: Any,
+        raw_config: Any,
+    ) -> EvaluateResult:
+        if len(args) != 1:
+            raise SDKStoreError(
+                "evaluate(targeted_compiled_query) accepts exactly one TargetedCompiledEvaluationQueryV0"
+            )
+        targeted = args[0]
+        try:
+            assert_targeted_evaluation_query_current(targeted)
+        except ValueError as exc:
+            raise SDKStoreError(
+                "targeted compiled Query failed its execution-time integrity check"
+            ) from exc
+        return self._evaluate_compiled_evaluation_query_input(
+            (targeted.compiled_query,),
+            kwargs,
+            raw_engine=raw_engine,
+            raw_config=raw_config,
+            source_target=targeted,
+        )
+
+    def _capture_targeted_evaluation_query_run(
+        self,
+        *args: Any,
+        **kwargs: Any,
+    ) -> CapturedEvaluationQueryRunV0:
+        """Capture a targeted Query without widening ordinary evaluate contracts.
+
+        A private expectation-free wrapper runs through the existing F4 capture
+        seam, retaining the original resolved target.  The original wrapper is
+        then rechecked and its observations are sealed *outside* EvaluateResult.
+        """
+
+        if len(args) != 1 or kwargs:
+            if kwargs:
+                unknown = ", ".join(sorted(kwargs))
+                raise SDKStoreError(
+                    "eval.capture_query(...) accepts one TargetedCompiledEvaluationQueryV0 "
+                    f"and no keyword(s); got {unknown}"
+                )
+            raise SDKStoreError(
+                "eval.capture_query(...) accepts exactly one TargetedCompiledEvaluationQueryV0"
+            )
+        targeted = args[0]
+        if not isinstance(targeted, TargetedCompiledEvaluationQueryV0):
+            raise SDKStoreError(
+                "eval.capture_query(...) requires TargetedCompiledEvaluationQueryV0"
+            )
+        try:
+            assert_targeted_evaluation_query_current(targeted)
+        except ValueError as exc:
+            raise SDKStoreError(
+                "targeted compiled Query failed its capture-time integrity check"
+            ) from exc
+        if len(targeted.expectations) > MAX_CAPTURED_EVALUATION_QUERY_EXPECTATIONS_V0:
+            raise SDKStoreError(
+                "targeted Query capture expectation inventory exceeds the v0 limit"
+            )
+        view_snapshot_digest = self._view_snapshot_digest(query_typed_values=True)
+        capture_wrapper = TargetedCompiledEvaluationQueryV0(
+            compiled_query=targeted.compiled_query,
+            target=targeted.target,
+            wrapper_digest=targeted_evaluation_query_wrapper_digest_v0(
+                targeted.compiled_query.query_digest,
+                targeted.target.run_target.target_digest,
+                (),
+            ),
+            expectations=(),
+        )
+        result = self._evaluate_compiled_evaluation_query_input(
+            (capture_wrapper.compiled_query,),
+            {"capture": "run_bundle_v0"},
+            raw_engine=None,
+            raw_config=None,
+            source_target=capture_wrapper,
+        )
+        self._assert_evaluation_query_execution_current(
+            targeted.compiled_query,
+            view_snapshot_digest,
+        )
+        try:
+            assert_targeted_evaluation_query_current(targeted)
+        except ValueError as exc:
+            raise SDKStoreError(
+                "targeted compiled Query changed during capture"
+            ) from exc
+        if result.run_bundle is None:
+            raise SDKStoreError("targeted Query capture did not produce an EvaluationRun bundle")
+        try:
+            return build_captured_evaluation_query_run_v0(
+                bundle=result.run_bundle,
+                targeted_query_wrapper_digest=targeted.wrapper_digest,
+                expectations=targeted.expectations,
+            )
+        except (TypeError, ValueError) as exc:
+            raise SDKStoreError(f"failed to capture targeted Query run: {exc}") from exc
+
+    def _run_scenario(self, *args: Any, **kwargs: Any) -> ScenarioRunV0:
+        """Capture a bounded ScenarioRun without changing legacy ``scenario=``.
+
+        The old ``eval.evaluate(query, scenario=...)`` path deliberately
+        remains a non-captured compatibility route.  This separate entrance is
+        the only Scenario path allowed to create detached receipt evidence.
+        """
+
+        if len(args) != 2:
+            raise SDKStoreError(
+                "eval.run_scenario(query, scenario) accepts exactly one Query and one Scenario"
+            )
+        if kwargs:
+            unknown = ", ".join(sorted(kwargs))
+            raise SDKStoreError(f"unknown eval.run_scenario(...) keyword(s): {unknown}")
+        raw_query, scenario = args
+        source_target = None
+        if isinstance(raw_query, TargetedCompiledEvaluationQueryV0):
+            try:
+                assert_targeted_evaluation_query_current(raw_query)
+            except ValueError as exc:
+                raise SDKStoreError(
+                    "targeted compiled Query failed its ScenarioRun integrity check"
+                ) from exc
+            if raw_query.expectations:
+                raise SDKStoreError(
+                    "eval.run_scenario(targeted_compiled_query) does not support expectations"
+                )
+            source_target = raw_query.target.run_target
+            compiled_query = raw_query.compiled_query
+        elif isinstance(raw_query, CompiledEvaluationQueryV0):
+            compiled_query = raw_query
+        else:
+            raise SDKStoreError(
+                "eval.run_scenario(...) Query must be CompiledEvaluationQueryV0 "
+                "or TargetedCompiledEvaluationQueryV0"
+            )
+        if not isinstance(
+            scenario,
+            (ScenarioFieldSubstitutionV0, ScenarioFieldSubstitutionSetV0),
+        ):
+            raise SDKStoreError(
+                "eval.run_scenario(...) scenario must be ScenarioFieldSubstitutionV0 "
+                "or ScenarioFieldSubstitutionSetV0"
+            )
+        self._assert_evaluation_query_artifact_current(compiled_query)
+        if compiled_query.schema_digest != self._application_schema_index.schema_digest:
+            raise SDKStoreError("compiled EvaluationQuery schema does not match this FactGraph")
+        if self._evaluation_query_has_premise_filters():
+            raise SDKStoreError("eval.run_scenario(...) does not support premise-filtered execution")
+
+        base_view_digest = self._view_snapshot_digest(query_typed_values=True)
+        try:
+            compiled_plan, _traces = _materialize_adapter_derivation_plan(
+                compiled_query._lowering_plan,
+                engine="native",
+            )
+        except (RuleExprError, ValueError) as exc:
+            raise SDKStoreError(
+                "compiled EvaluationQuery could not be materialized for native ScenarioRun"
+            ) from exc
+        try:
+            if isinstance(scenario, ScenarioFieldSubstitutionSetV0):
+                resolved = resolve_scenario_field_substitution_set_v0(
+                    scenario,
+                    compiled_query=compiled_query,
+                    materialized_body=compiled_plan.body_ir,
+                    store=self._store,
+                    schema_index=self._application_schema_index,
+                    base_view_digest=base_view_digest,
+                )
+            else:
+                resolved = resolve_scenario_field_substitution_v0(
+                    scenario,
+                    compiled_query=compiled_query,
+                    materialized_body=compiled_plan.body_ir,
+                    store=self._store,
+                    schema_index=self._application_schema_index,
+                    base_view_digest=base_view_digest,
+                )
+        except ScenarioResolutionError as exc:
+            raise SDKStoreError(f"ScenarioRun scenario rejected: {exc.code}") from exc
+
+        self._assert_scenario_run_query_current(
+            compiled_query,
+            base_view_digest,
+            targeted=raw_query if isinstance(raw_query, TargetedCompiledEvaluationQueryV0) else None,
+        )
+        self._assert_scenario_effective_snapshot_current(
+            resolved,
+            compiled_query=compiled_query,
+            base_view_digest=base_view_digest,
+        )
+        request = DerivationEvaluateRequest(plans=(compiled_plan,), engine="native")
+        baseline_outputs, baseline_receipts = (
+            _evaluate_derivation_plans_with_native_effective_relation_capture(
+                request,
+                store=self._store,
+                effective_relation=resolved.baseline_relation,
+            )
+        )
+        self._assert_scenario_run_query_current(
+            compiled_query,
+            base_view_digest,
+            targeted=raw_query if isinstance(raw_query, TargetedCompiledEvaluationQueryV0) else None,
+        )
+        self._assert_scenario_effective_snapshot_current(
+            resolved,
+            compiled_query=compiled_query,
+            base_view_digest=base_view_digest,
+        )
+        effective_outputs, effective_receipts = (
+            _evaluate_derivation_plans_with_native_effective_relation_capture(
+                request,
+                store=self._store,
+                effective_relation=resolved.effective_relation,
+            )
+        )
+        self._assert_scenario_run_query_current(
+            compiled_query,
+            base_view_digest,
+            targeted=raw_query if isinstance(raw_query, TargetedCompiledEvaluationQueryV0) else None,
+        )
+        self._assert_scenario_effective_snapshot_current(
+            resolved,
+            compiled_query=compiled_query,
+            base_view_digest=base_view_digest,
+        )
+
+        shared_kwargs = {
+            "compiled_plans": [compiled_plan],
+            "head": compiled_query.projection_head,
+            "engine": "native",
+            "semantics_profile": None,
+            "lowering_plan": compiled_query._lowering_plan,
+            "lowering_rules_by_id": _rule_expr_rules_by_id(
+                compiled_query.compiled_policy.rule_expr,
+                head=compiled_query.projection_head,
+            ),
+            "evaluation_query": compiled_query,
+            "evaluation_query_source_target": source_target,
+            "attach_run_anchor": True,
+            "collect_support_artifacts": False,
+        }
+        baseline_result = self._derivation_outputs_to_evaluate_result(
+            baseline_outputs,
+            view_snapshot_digest_override=base_view_digest,
+            **shared_kwargs,
+        )
+        effective_result = self._derivation_outputs_to_evaluate_result(
+            effective_outputs,
+            view_snapshot_digest_override=resolved.resolution.effective_relation_digest,
+            **shared_kwargs,
+        )
+        baseline_result = replace(
+            baseline_result,
+            _row_support_artifacts=self._ephemeral_row_receipts(
+                baseline_outputs,
+                baseline_result.rows,
+                baseline_receipts,
+            ),
+        )
+        effective_result = replace(
+            effective_result,
+            _row_support_artifacts=self._ephemeral_row_receipts(
+                effective_outputs,
+                effective_result.rows,
+                effective_receipts,
+            ),
+        )
+        try:
+            assert baseline_result.run_anchor is not None and effective_result.run_anchor is not None
+            baseline_bundle = _build_evaluation_run_bundle_v0(
+                compiled_query,
+                baseline_result,
+                materialized_plan=compiled_plan,
+                schema_ir=self._schema_ir,
+                effective_relations=resolved.baseline_relation,
+                proof_receipts=baseline_result._row_support_artifacts or {},
+            )
+            effective_bundle = _build_evaluation_run_bundle_v0(
+                compiled_query,
+                effective_result,
+                materialized_plan=compiled_plan,
+                schema_ir=self._schema_ir,
+                effective_relations=resolved.effective_relation,
+                proof_receipts=effective_result._row_support_artifacts or {},
+            )
+            run = build_scenario_run_v0(
+                compiled_query=compiled_query,
+                target=(
+                    source_target
+                    if source_target is not None
+                    else baseline_bundle.run_anchor.target
+                ),
+                base_view_digest=base_view_digest,
+                baseline_relation_digest=resolved.resolution.baseline_relation_digest,
+                effective_relation_digest=resolved.resolution.effective_relation_digest,
+                premise_bindings=resolved.premise_bindings,
+                result_diff=_scenario_result_diff(baseline_result, effective_result),
+                baseline_bundle=baseline_bundle,
+                effective_bundle=effective_bundle,
+            )
+        except (TypeError, ValueError) as exc:
+            raise SDKStoreError(f"failed to capture ScenarioRun: {exc}") from exc
+        self._assert_scenario_run_query_current(
+            compiled_query,
+            base_view_digest,
+            targeted=raw_query if isinstance(raw_query, TargetedCompiledEvaluationQueryV0) else None,
+        )
+        return run
+
+    @staticmethod
+    def _ephemeral_row_receipts(
+        outputs: Sequence[DerivationOutput],
+        rows: Sequence[Any],
+        receipts_by_support_digest: Mapping[str, ProofReceipt],
+    ) -> Mapping[str, ProofReceipt]:
+        if len(outputs) != len(rows):
+            raise SDKStoreError("ScenarioRun output/row receipt cardinality changed during capture")
+        receipts: dict[str, ProofReceipt] = {}
+        for output, row in zip(outputs, rows, strict=True):
+            if output.support_kind != "native_binding_v1":
+                raise SDKStoreError("ScenarioRun capture requires native proof receipts")
+            receipt = receipts_by_support_digest.get(output.support_digest)
+            if not isinstance(receipt, ProofReceipt):
+                raise SDKStoreError("ScenarioRun capture did not retain a row proof receipt")
+            if row.row_id in receipts:
+                raise SDKStoreError("ScenarioRun capture produced duplicate result row identity")
+            receipts[row.row_id] = receipt
+        if set(receipts) != {row.row_id for row in rows}:
+            raise SDKStoreError("ScenarioRun receipt inventory does not exactly cover rows")
+        return receipts
+
+    def _assert_scenario_run_query_current(
+        self,
+        compiled_query: CompiledEvaluationQueryV0,
+        digest: str,
+        *,
+        targeted: TargetedCompiledEvaluationQueryV0 | None,
+    ) -> None:
+        self._assert_evaluation_query_execution_current(compiled_query, digest)
+        if targeted is not None:
+            try:
+                assert_targeted_evaluation_query_current(targeted)
+            except ValueError as exc:
+                raise SDKStoreError(
+                    "targeted compiled Query changed during ScenarioRun execution"
+                ) from exc
+
+    @staticmethod
+    def _assert_scenario_effective_snapshot_current(
+        resolved: Any,
+        *,
+        compiled_query: CompiledEvaluationQueryV0,
+        base_view_digest: str,
+    ) -> None:
+        """Check the v1 relation identity before it reaches the evaluator.
+
+        The surrounding caller separately checks the full live-view digest.
+        This helper only guards the private frozen baseline/effective relation
+        pair against a self-consistent or accidental compatibility splice.
+        """
+
+        snapshot = getattr(resolved, "effective_snapshot", None)
+        try:
+            if (
+                snapshot is None
+                or snapshot.query_digest != compiled_query.query_digest
+                or snapshot.policy_digest != compiled_query.policy_digest
+                or snapshot.address_space_digest != compiled_query.address_space_digest
+                or snapshot.schema_digest != compiled_query.schema_digest
+                or snapshot.base_view_digest != base_view_digest
+            ):
+                raise ValueError("Scenario effective snapshot does not match Query execution pins")
+            assert_resolved_scenario_compatibility_current(resolved)
+        except (AttributeError, TypeError, ValueError) as exc:
+            raise SDKStoreError("Scenario effective snapshot failed its execution-time integrity check") from exc
+
+    @staticmethod
+    def _assert_evaluation_query_artifact_current(
+        compiled_query: CompiledEvaluationQueryV0,
+    ) -> None:
+        try:
+            _assert_compiled_evaluation_query_current(compiled_query)
+        except ValueError as exc:
+            raise SDKStoreError("compiled EvaluationQuery failed its execution-time integrity check") from exc
+
+    def _assert_evaluation_query_execution_current(self, query: CompiledEvaluationQueryV0, digest: str) -> None:
+        self._assert_evaluation_query_artifact_current(query)
+        if self._evaluation_query_has_premise_filters():
+            raise SDKStoreError("FactGraph premise policy changed during EvaluationQuery execution")
+        if self._view_snapshot_digest(query_typed_values=True) != digest:
+            raise SDKStoreError("FactGraph view changed during EvaluationQuery execution")
+
     def _evaluate_rule_expr_input(
         self,
         args: tuple[Any, ...],
@@ -3186,8 +4840,8 @@ class SDKStore:
                 "legacy SDK Rule, Inference, dict, string, and inspect objects are not accepted"
             )
 
-        candidates, compiled, plan, rules_by_id, engine, semantics_profile = (
-            self._rule_expr_candidates_core(
+        outputs, compiled, plan, rules_by_id, engine, semantics_profile = (
+            self._rule_expr_outputs_core(
                 args[0],
                 head=head,
                 raw_engine=raw_engine,
@@ -3195,8 +4849,8 @@ class SDKStore:
                 api_path="evaluate(rule_expr)",
             )
         )
-        return self._candidate_sets_to_evaluate_result(
-            candidates,
+        return self._derivation_outputs_to_evaluate_result(
+            outputs,
             compiled_plans=[compiled],
             head=head,
             engine=engine,
@@ -3205,7 +4859,7 @@ class SDKStore:
             lowering_rules_by_id=rules_by_id if engine in {"native", "problog", "souffle"} else None,
         )
 
-    def _rule_expr_candidates_core(
+    def _rule_expr_outputs_core(
         self,
         source: Any,
         *,
@@ -3213,14 +4867,14 @@ class SDKStore:
         raw_engine: Any,
         raw_config: Any,
         api_path: str,
-    ) -> tuple[list[CandidateSet], Any, Any, Any, str, Any]:
-        """Lower a RuleExpr/Rule (+ closed head) and evaluate it to CandidateSets.
+    ) -> tuple[list[DerivationOutput], Any, Any, Any, str, Any]:
+        """Lower a RuleExpr/Rule (+ closed head) and evaluate it to DerivationOutputs.
 
         The single shared RuleExpr evaluation path. ``evaluate(rule_expr)`` wraps the
         returned candidates into an EvaluateResult (whose rows ``explain()``/``narrate()``);
         ``evaluate_candidates(rule_expr, head=)`` returns the same candidates raw (for
         ``accept_derivation_candidate_set``). Identical lowering + identical
-        ``evaluate_derivation_plans`` call, so the accepted CandidateSet is exactly the
+        ``evaluate_derivation_plans`` call, so the materialized output is exactly the
         one the narration explains — no second evaluator.
         """
         if isinstance(source, ApplicationRule):
@@ -3250,7 +4904,7 @@ class SDKStore:
         else:
             compiled, _traces = _materialize_adapter_derivation_plan(plan, engine=engine)
 
-        candidates = evaluate_derivation_plans(
+        outputs = evaluate_derivation_plans(
             DerivationEvaluateRequest(
                 plans=(compiled,),
                 engine=engine,
@@ -3259,11 +4913,11 @@ class SDKStore:
             store=self._store,
             registry=None,
         )
-        return candidates, compiled, plan, rules_by_id, engine, semantics_profile
+        return outputs, compiled, plan, rules_by_id, engine, semantics_profile
 
-    def _candidate_sets_to_evaluate_result(
+    def _derivation_outputs_to_evaluate_result(
         self,
-        candidates: list[CandidateSet],
+        outputs: list[DerivationOutput],
         *,
         compiled_plans: Sequence[CompiledDerivationPlan],
         head: ApplicationRule,
@@ -3271,14 +4925,41 @@ class SDKStore:
         semantics_profile: SemanticsProfile | None,
         lowering_plan: RuleExprLoweringPlan | None = None,
         lowering_rules_by_id: Mapping[str, ApplicationRule] | None = None,
+        evaluation_query: CompiledEvaluationQueryV0 | None = None,
+        evaluation_query_source_target: Any | None = None,
+        view_snapshot_digest_override: str | None = None,
+        attach_run_anchor: bool = True,
+        collect_support_artifacts: bool = True,
     ) -> EvaluateResult:
         run_id = new_run_id()
-        expr_digest = expr_digest_for_payload(
-            "compiled_derivation_plans",
-            {"plans": [_compiled_plan_digest_payload(plan) for plan in compiled_plans]},
-        )
-        rule_set_digest = rule_set_digest_for_entries(_rule_set_entries_for_result(compiled_plans, head=head))
-        view_snapshot_digest = self._view_snapshot_digest()
+        if evaluation_query is None:
+            if view_snapshot_digest_override is not None:
+                raise SDKStoreError(
+                    "view snapshot override is reserved for compiled EvaluationQuery results"
+                )
+            expr_digest = expr_digest_for_payload(
+                "compiled_derivation_plans",
+                {"plans": [_compiled_plan_digest_payload(plan) for plan in compiled_plans]},
+            )
+            rule_set_digest = rule_set_digest_for_entries(
+                _rule_set_entries_for_result(compiled_plans, head=head)
+            )
+            view_snapshot_digest = self._view_snapshot_digest()
+            claim_kind: ClaimKind = "fact_triple"
+            binding_types = None
+        else:
+            if view_snapshot_digest_override is None:
+                raise SDKStoreError("compiled EvaluationQuery result requires its evaluated view digest")
+            expr_digest = f"sha256:{evaluation_query.query_digest}"
+            rule_set_digest = rule_set_digest_for_entries(
+                (
+                    (f"compiled-policy:{evaluation_query.compiled_policy.policy_id}", evaluation_query.policy_digest),
+                    (f"query-projection:{head.id}", head.content_digest),
+                )
+            )
+            view_snapshot_digest = view_snapshot_digest_override
+            claim_kind = "projection"
+            binding_types = {selection.alias: selection.value_type for selection in evaluation_query.selections}
         config_digest = config_digest_for(semantics_profile)
         result_id = result_id_for(
             run_id=run_id,
@@ -3293,19 +4974,39 @@ class SDKStore:
         closed_head_digest = closed_head_digest_for(head)
         try:
             rows = tuple(
-                _candidate_set_to_evaluate_row(
-                    candidate,
+                _derivation_output_to_evaluate_row(
+                    output,
                     head=head,
                     result_id=result_id,
                     run_id=run_id,
                     closed_head_digest=closed_head_digest,
+                    claim_kind=claim_kind,
                     claim_name=head.id,
+                    binding_types=binding_types,
                 )
-                for candidate in candidates
+                for output in outputs
             )
-            row_support_artifacts = self._row_support_artifacts_for_candidates(candidates, rows)
-            row_provenance_envelopes = self._row_provenance_envelopes_for_candidates(candidates, rows)
+            row_support_artifacts = (
+                self._row_support_artifacts_for_outputs(outputs, rows)
+                if collect_support_artifacts
+                else {}
+            )
+            row_provenance_envelopes = (
+                self._row_provenance_envelopes_for_outputs(outputs, rows)
+                if collect_support_artifacts
+                else {}
+            )
             row_digests = tuple(_row_digest_for(row, result_id=result_id, claim_name=head.id) for row in rows)
+            engine_version = (
+                NATIVE_WHERE_SEMANTICS_VERSION
+                if evaluation_query is not None and engine == "native"
+                else None
+            )
+            adapter_version = (
+                EVALUATION_QUERY_PROJECTION_ADAPTER_VERSION
+                if evaluation_query is not None and engine == "native"
+                else None
+            )
             result_digest = result_digest_for(
                 result_id=result_id,
                 run_id=run_id,
@@ -3313,8 +5014,8 @@ class SDKStore:
                 head_id=head.id,
                 head_content_digest=head.content_digest,
                 engine=engine,
-                engine_version=None,
-                adapter_version=None,
+                engine_version=engine_version,
+                adapter_version=adapter_version,
                 expr_digest=expr_digest,
                 rule_set_digest=rule_set_digest,
                 view_snapshot_digest=view_snapshot_digest,
@@ -3328,31 +5029,116 @@ class SDKStore:
                 result_digest=result_digest,
                 run_id=run_id,
             )
-            return EvaluateResult(
+            row_graph_builder = self._row_graph_builder_for_engine(
+                engine=engine,
+                lowering_plan=lowering_plan,
+                lowering_rules_by_id=lowering_rules_by_id,
+                semantics_profile=semantics_profile,
+                row_support_artifacts=row_support_artifacts,
+                row_provenance_envelopes=row_provenance_envelopes,
+            )
+            row_close_builder = self._close_evaluate_row
+            if evaluation_query is not None:
+                row_close_builder = self._evaluation_query_row_close_builder(
+                    evaluation_query,
+                    view_snapshot_digest,
+                )
+                row_graph_builder = self._evaluation_query_row_graph_builder(
+                    evaluation_query,
+                    view_snapshot_digest,
+                    row_graph_builder,
+                )
+            result = EvaluateResult(
                 result_id=result_id,
                 rows=rows,
                 head=head,
                 engine=engine,
                 evaluated_at=datetime.now(timezone.utc),
                 fingerprint=fingerprint,
-                engine_meta={"engine_version": None, "adapter_version": None},
+                engine_meta={
+                    "engine_version": engine_version,
+                    "adapter_version": adapter_version,
+                },
                 _schema_index=self._application_schema_index,
-                _row_close_builder=self._close_evaluate_row,
-                _row_graph_builder=self._row_graph_builder_for_engine(
-                    engine=engine,
-                    lowering_plan=lowering_plan,
-                    lowering_rules_by_id=lowering_rules_by_id,
-                    semantics_profile=semantics_profile,
-                    row_support_artifacts=row_support_artifacts,
-                    row_provenance_envelopes=row_provenance_envelopes,
-                ),
+                _row_close_builder=row_close_builder,
+                _row_graph_builder=row_graph_builder,
                 _row_support_artifacts=row_support_artifacts,
                 _row_provenance_envelopes=row_provenance_envelopes,
             )
+            if evaluation_query is not None and attach_run_anchor:
+                result = replace(
+                    result,
+                    run_anchor=build_evaluation_run_anchor_v0(
+                        evaluation_query,
+                        result,
+                        source_target=evaluation_query_source_target,
+                    ),
+                )
+            return result
         except Exception as exc:
             if isinstance(exc, SDKStoreError):
                 raise
             raise SDKStoreError(f"failed to build EvaluateResult: {exc}") from exc
+
+    def _evaluation_query_row_close_builder(
+        self,
+        compiled_query: CompiledEvaluationQueryV0,
+        view_snapshot_digest: str,
+    ):
+        def _builder(row: Any, result: EvaluateResult) -> ApplicationRule:
+            self._assert_evaluation_query_live_current(compiled_query, view_snapshot_digest)
+            closed = self._close_evaluate_row(row, result)
+            self._assert_evaluation_query_live_current(compiled_query, view_snapshot_digest)
+            return closed
+
+        return _builder
+
+    def _evaluation_query_row_graph_builder(
+        self,
+        compiled_query: CompiledEvaluationQueryV0,
+        view_snapshot_digest: str,
+        delegate: Any,
+    ):
+        graph_builder = delegate or _build_minimal_row_evidence_graph
+
+        def _builder(row: Any, result: EvaluateResult, metadata: Mapping[str, Any]) -> EvidenceGraph:
+            self._assert_evaluation_query_live_current(compiled_query, view_snapshot_digest)
+            graph = graph_builder(row, result, metadata)
+            self._assert_evaluation_query_live_current(compiled_query, view_snapshot_digest)
+            if not any(getattr(path, "status", None) == "holds" for path in graph.paths):
+                raise ValueError("EvaluationQuery explanation has no holding evidence path")
+            return graph
+
+        return _builder
+
+    def _assert_evaluation_query_live_current(
+        self,
+        compiled_query: CompiledEvaluationQueryV0,
+        view_snapshot_digest: str,
+    ) -> None:
+        try:
+            _assert_compiled_evaluation_query_current(compiled_query)
+        except ValueError as exc:
+            raise ValueError("compiled EvaluationQuery failed its live integrity check") from exc
+        if self._evaluation_query_has_premise_filters():
+            raise ValueError("EvaluationQuery result premise policy is stale")
+        self._assert_evaluation_query_view_current(view_snapshot_digest)
+
+    def _evaluation_query_has_premise_filters(self) -> bool:
+        return bool(
+            self._store.premise_exclusions
+            or self._store.premise_allowances
+            or self._store.premise_blocks
+        )
+
+    def _assert_evaluation_query_view_current(
+        self,
+        expected_view_snapshot_digest: str,
+    ) -> None:
+        if self._view_snapshot_digest(query_typed_values=True) != expected_view_snapshot_digest:
+            raise ValueError(
+                "EvaluationQuery result view is stale; re-evaluate before close() or explain()"
+            )
 
     def _row_graph_builder_for_engine(
         self,
@@ -3365,7 +5151,11 @@ class SDKStore:
         row_provenance_envelopes: Mapping[str, ProvenanceEnvelope],
     ):
         if engine == "native" and lowering_plan is not None:
-            return self._row_graph_builder_for_lowering_plan(lowering_plan, rules_by_id=lowering_rules_by_id or {})
+            return self._row_graph_builder_for_lowering_plan(
+                lowering_plan,
+                rules_by_id=lowering_rules_by_id or {},
+                row_support_artifacts=row_support_artifacts,
+            )
         if engine == "souffle":
             return self._souffle_row_graph_builder(
                 row_support_artifacts,
@@ -3388,14 +5178,24 @@ class SDKStore:
         plan: RuleExprLoweringPlan,
         *,
         rules_by_id: Mapping[str, ApplicationRule],
+        row_support_artifacts: Mapping[str, ProofReceipt],
     ):
         def _builder(row: Any, result: EvaluateResult, metadata: Mapping[str, Any]) -> EvidenceGraph:
+            exact_query_navigation_bindings: Mapping[str, Any] | None = None
+            if plan.query_navigation_lookups:
+                receipt = row_support_artifacts.get(row.row_id)
+                if not isinstance(receipt, ProofReceipt):
+                    raise ValueError(
+                        "EvaluationQuery navigation explanation requires an exact native ProofReceipt"
+                    )
+                exact_query_navigation_bindings = binding_dict_from_items(receipt.binding_items)
             return self._probe_evidence_graph_for_lowering_plan(
                 plan,
                 result=result,
                 row=row,
                 metadata=metadata,
                 rules_by_id=rules_by_id,
+                exact_query_navigation_bindings=exact_query_navigation_bindings,
             )
 
         return _builder
@@ -3504,8 +5304,14 @@ class SDKStore:
 
     def _display_bindings_for_row(self, row: Any) -> dict[str, Any]:
         out: dict[str, Any] = {}
-        for key, value in _public_bindings_for_row(row).items():
-            out[key] = self._display_binding_value(value)
+        for key, value in getattr(row, "bindings", {}).items():
+            out[str(key)] = (
+                value.get("value")
+                if getattr(row, "kind", None) == "projection"
+                and isinstance(value, Mapping)
+                and value.get("kind") == "literal"
+                else self._display_binding_value(_public_term_value(value))
+            )
         return out
 
     def _display_binding_value(self, value: Any) -> Any:
@@ -3571,6 +5377,7 @@ class SDKStore:
         metadata: Mapping[str, Any],
         rules_by_id: Mapping[str, ApplicationRule] | None = None,
         pin_bindings: Mapping[str, Any] | None = None,
+        exact_query_navigation_bindings: Mapping[str, Any] | None = None,
     ) -> EvidenceGraph:
         view_facts = project_view_facts(self.ledger, self._schema_ir)
         if pin_bindings is not None:
@@ -3580,6 +5387,12 @@ class SDKStore:
             display_bindings = self._display_pin_bindings(pin_bindings)
         elif row is not None:
             initial_bindings = _initial_probe_bindings_for_row(row, plan)
+            if plan.query_navigation_lookups:
+                if not isinstance(exact_query_navigation_bindings, Mapping):
+                    raise ValueError(
+                        "EvaluationQuery navigation explanation lacks exact receipt bindings"
+                    )
+                initial_bindings.update(exact_query_navigation_bindings)
             display_bindings = self._display_bindings_for_row(row)
         else:
             initial_bindings = {}
@@ -3705,30 +5518,30 @@ class SDKStore:
             pin_bindings=pin_bindings,
         )
 
-    def _row_support_artifacts_for_candidates(
+    def _row_support_artifacts_for_outputs(
         self,
-        candidates: Sequence[CandidateSet],
+        outputs: Sequence[DerivationOutput],
         rows: Sequence[Any],
     ) -> Mapping[str, ProofReceipt]:
         out: dict[str, ProofReceipt] = {}
-        for candidate, row in zip(candidates, rows):
-            if candidate.support_kind not in _FORM1_ROW_SUPPORT_KINDS:
+        for output, row in zip(outputs, rows):
+            if output.support_kind not in _FORM1_ROW_SUPPORT_KINDS:
                 continue
-            artifact = self._store._lookup_support_artifact(candidate.support_digest)
+            artifact = self._store._lookup_support_artifact(output.support_digest)
             if isinstance(artifact, ProofReceipt):
                 out[row.row_id] = artifact
         return out
 
-    def _row_provenance_envelopes_for_candidates(
+    def _row_provenance_envelopes_for_outputs(
         self,
-        candidates: Sequence[CandidateSet],
+        outputs: Sequence[DerivationOutput],
         rows: Sequence[Any],
     ) -> Mapping[str, ProvenanceEnvelope]:
         out: dict[str, ProvenanceEnvelope] = {}
-        for candidate, row in zip(candidates, rows):
-            if candidate.support_kind not in {PROBLOG_PROVENANCE_KIND, PYREASON_PROVENANCE_KIND}:
+        for output, row in zip(outputs, rows):
+            if output.support_kind not in {PROBLOG_PROVENANCE_KIND, PYREASON_PROVENANCE_KIND}:
                 continue
-            envelope = self._store._lookup_provenance_envelope(candidate.support_digest)
+            envelope = self._store._lookup_provenance_envelope(output.support_digest)
             if isinstance(envelope, ProvenanceEnvelope):
                 out[row.row_id] = envelope
         return out
@@ -3793,7 +5606,7 @@ class SDKStore:
             identity[field_name] = rest_terms[0][1]
         return identity
 
-    def _view_snapshot_digest(self) -> str:
+    def _view_snapshot_digest(self, *, query_typed_values: bool = False) -> str:
         schema_token = self._schema_digest
         ledger = self.ledger
         db_id = ledger.get_ledger_meta("db_id")
@@ -3810,7 +5623,11 @@ class SDKStore:
                                 "asrt_id": claim.asrt_id,
                                 "e_ref": claim.e_ref,
                                 "pred_id": claim.pred_id,
-                                "rest_terms": claim.rest_terms,
+                                "rest_terms": (
+                                    _evaluation_query_digest_safe(claim.rest_terms)
+                                    if query_typed_values
+                                    else claim.rest_terms
+                                ),
                             }
                             for claim in sorted(ledger.find_claims(), key=lambda claim: claim.asrt_id)
                         ],
@@ -3847,9 +5664,37 @@ class SDKStore:
         return f"derive:{uuid4().hex[:8]}"
 
     def export_package(self, out_dir, options: ExportOptions, **kwargs: Any):
+        """Export a legacy runnable package from the current graph.
+
+        Args:
+            out_dir: Destination directory for the package artifact.
+            options: Package export options.
+            **kwargs: Additional exporter options.
+
+        Returns:
+            The package export result.
+
+        Notes:
+            A package is an execution artifact, not a durable FactGraph
+            workspace and not an EvaluationRun V2 replay payload.
+        """
         return export_package(self._store, out_dir, options, **kwargs)
 
     def run_package(self, package_dir, *, entrypoints: list[str], engine: str = "souffle"):
+        """Run a previously exported legacy package.
+
+        Args:
+            package_dir: Directory containing the exported package.
+            entrypoints: Package entrypoints to execute.
+            engine: Execution engine name. Defaults to ``"souffle"``.
+
+        Returns:
+            The package runner result.
+
+        Notes:
+            This compatibility terminal is separate from Product V2
+            ``fg.query(...).plan(profile=...).run()`` and its replay contract.
+        """
         return run_package(package_dir, entrypoints=entrypoints, engine=engine)
 
     def _compile_rule_input(self, rule: Any) -> dict[str, Any]:
@@ -4929,6 +6774,23 @@ def _public_bindings_for_row(row: Any) -> dict[str, Any]:
     return {str(port_name): _public_term_value(value) for port_name, value in row_bindings.items()}
 
 
+def _scenario_result_diff(
+    baseline: EvaluateResult,
+    effective: EvaluateResult,
+) -> ScenarioResultDiffV0:
+    """Summarize rows without run/result identities or proof references."""
+
+    baseline_digest = _scenario_semantic_rows_digest(baseline.rows)
+    effective_digest = _scenario_semantic_rows_digest(effective.rows)
+    return ScenarioResultDiffV0(
+        baseline_row_count=len(baseline.rows),
+        effective_row_count=len(effective.rows),
+        baseline_semantic_rows_digest=baseline_digest,
+        effective_semantic_rows_digest=effective_digest,
+        result_changed=baseline_digest != effective_digest,
+    )
+
+
 def _normalize_problog_goal_value(value: Any) -> str:
     text = str(value).strip()
     if len(text) >= 2 and ((text[0] == "'" and text[-1] == "'") or (text[0] == '"' and text[-1] == '"')):
@@ -5099,6 +6961,16 @@ def _evaluate_digest_safe(value: Any) -> Any:
             for key, item in sorted(value.items(), key=lambda item: str(item[0]))
         }
     return repr(value)
+
+
+def _evaluation_query_digest_safe(value: Any) -> Any:
+    if isinstance(value, (bytes, bytearray, memoryview)):
+        return {"__bytes_hex__": bytes(value).hex()}
+    if isinstance(value, (tuple, list)):
+        return tuple(_evaluation_query_digest_safe(item) for item in value)
+    if value is None or isinstance(value, (str, bool, int, float)):
+        return value
+    raise SDKStoreError("unsupported EvaluationQuery view value")
 
 
 def _view_snapshot_asrt_id_for_claim(claim: Any) -> str:

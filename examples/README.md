@@ -28,6 +28,74 @@ earlier ones, but each notebook stands on its own (no cross-notebook state).
 Every code cell asserts on the structured result it produced, so any drift
 in the underlying capabilities surfaces the next time the notebook is run.
 
+## V1 Query / Scenario walkthrough
+
+[`07_v1_query_scenario_closure.ipynb`](07_v1_query_scenario_closure.ipynb)
+is a self-contained FactGraph V1 tutorial. It demonstrates the common
+`fg.query(...).bind(...).select(...).plan().run()` path for Rule and Policy
+targets, Scenario effective worlds, explicit detached Explain/replay,
+expectations, providers, candidate comparison, and the
+`portable_deterministic_v1` Native/Soufflé/ProbLog profile.
+
+Its execution calls are SDK surface. Its direct `PolicyAll` / `PolicyAny` /
+`SemanticAddressSpace` construction is intentionally labelled as advanced
+application/compiler authoring, not as the desired business-user Policy API.
+
+## SDK Policy authoring walkthrough
+
+[`08_sdk_policy_authoring.ipynb`](08_sdk_policy_authoring.ipynb) is the
+user-facing companion to the advanced V1 walkthrough. It starts from a
+resolved Rule asset and uses `fg.policy(...).use(...).build(...)` to create an
+immutable Policy target with typed occurrence and port handles. It demonstrates
+natural scalar comparisons such as `people.age > 12`, cross-occurrence
+comparisons such as `older.age > younger.age`, one-hop field navigation,
+explicit nested `draft.all(...)` / `draft.any(...)`, direct Query binding and
+selection through the same handles, and the sealed Run / Explain / replay
+path. It also demonstrates why Python `and` / `or`, chained comparisons, and
+implicit entity equality deliberately fail loudly.
+
+The first public literal subset is intentionally small: signed-int64 `int` and
+`time` values only. Strings, booleans, floats, `None`, entity literals,
+multi-hop navigation, Actions, a Policy registry, and bare provider Queries
+remain outside this API. The optional portable cell verifies selected-row-set
+parity across real Native, Soufflé, and ProbLog; it does not claim proof parity.
+
+The portable cells make a deliberately narrow claim: canonical selected-row
+set parity for the supported positive deterministic fragment. They do not
+claim cross-engine proof, provenance, certainty, or arbitrary-language
+equivalence. The final cross-entity field-navigation/comparison example is
+included specifically to exercise two occurrences of the same predicate.
+
+## Complete Product V2 workflow (Q20 + Q21)
+
+[`09_product_scenario_execution_v2.ipynb`](09_product_scenario_execution_v2.ipynb)
+is the complete runnable Product V2 workflow. It executes both the symmetric
+`rule_builder` / `build_rule` and `policy_builder` / `build_policy` forms,
+an SDK-owned durable `FactGraph.create(path=...)` / `load_workspace(...)`
+connection plus a caller-owned `Database.create(...)` / `FactGraph.attach(...)`
+connection, `AssetMeta`, rich typed Policy comparisons, and the same
+`fg.query(...).bind(...).select(...).plan(...).run()` terminal. It then shows
+deterministic Scenario CRUD (`set` / `add` / `set_exact` / `without`) without a
+ledger write, an independently authored candidate Policy pinned with
+`for_target(..., side='candidate')` over the shared deterministic Scenario
+world, named baseline/effective/candidate ResultViews, target-scoped
+deterministic and ProbLog profiles, explicit exclusive `WeightedChoice`,
+structured Result/Explain views, declared-decimal → `problog_float64_v1`
+materialization (including the explicit `p=0` omission), first-class Product
+Function authoring/composition, and detached replay. The Function section
+connects a pure scalar Function to a Rule occurrence as a peer Policy node,
+executes the same pre-materialized relation through real Native, Soufflé and
+ProbLog, inspects the structured call capture, and confirms replay does not
+invoke Python.
+
+It intentionally makes the current probability/evidence boundary visible:
+ProbLog is the sole V2 point-probability engine, while Native and Soufflé are
+recorded as `unsupported` frames; an EvidenceGraph that was not captured is
+reported as unavailable rather than fabricated. Candidate comparison is an
+immutable logical variant comparison, not a mutable Policy patch or causal
+claim. The notebook is self-contained and each executable cell asserts its
+observed contract.
+
 ## Canonical script
 
 ```bash

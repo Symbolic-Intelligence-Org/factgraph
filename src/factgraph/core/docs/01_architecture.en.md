@@ -39,7 +39,7 @@ src/factgraph/core/
   policy/                  # active/chosen/policy_ir
   view/                    # fact projection + audit
   rules/                   # where AST/validator + plain evaluator + shared RuleRef substrate + rule runtime
-  derivation/              # CandidateSet generation/accept (including batch accept_many)
+  derivation/              # DerivationOutput generation + legacy candidate materialization
   mapping/                 # mapping conflict resolution and decisions
   annotation/              # internal prototype annotation kernel (A/C workload slice)
   semantics/               # SemanticsProfile validation / inspection scaffolding
@@ -67,7 +67,7 @@ src/factgraph/core/
 | `store._candidate_evidence_tree_summary` | deterministic summary derivation on candidate evidence tree | `summarize_candidate_evidence_tree_dict` |
 | `store._candidate_evidence_tree_narrative` | deterministic narrative rendering on candidate tree summary | `render_candidate_evidence_tree_narrative` |
 | `store._candidate_evidence_tree_nl` | deterministic NL explain rendering on candidate tree summary+narrative | `render_candidate_evidence_tree_nl_explain` |
-| `derivation.candidates` | candidate structure and digest/key computation | `CandidateSet`, `make_candidate` |
+| `derivation.candidates` | read-only output structure plus legacy candidate digest/key compatibility | `DerivationOutput`, `make_derivation_output`, `CandidateSet`, `make_candidate` |
 | `derivation.accept` | candidate accept and batch accept_many | `accept_candidate_set`, `accept_many_candidate_sets` |
 | `mapping.canon` | mapping conflict resolution and tie-break | `resolve_mapping_predicate` |
 | `annotation._min_max` | internal prototype min-max path confidence propagation | `derive_min_max_path_confidence` |
@@ -80,7 +80,7 @@ src/factgraph/core/
 | `store.runtime` | `Store` facade, engine registration, and default in-process / optional sidecar-backed explain readback / backref lookup | `Store`, `register_engine_evaluator`, `Store.explain_support`, `Store.explain_rule_trace`, `Store.get_candidate_support_digest`, `Store.get_candidate_support_kind`, `Store.get_candidate_confidence_kind`, `Store.list_candidate_ids` |
 | `store.evaluation` | public `Store.evaluate` entrypoint | `evaluate_store` |
 | `store.queries` | explain/conflicts/resolve_mapping queries | `explain_fact`, `conflicts`, `resolve_mapping` |
-| `store.builders` | candidate building, head/entity parsing, value coercion | `candidates_from_bindings`, `entity_candidates_from_bindings` |
+| `store.builders` | derivation-output building, head/entity parsing, value coercion | `derivation_outputs_from_bindings`, `entity_derivation_outputs_from_bindings` |
 | `store.api` | compatibility shim for old import paths | `Store`, `register_engine_evaluator` |
 
 ## 4. Core Data Model (Ledger)
@@ -251,7 +251,7 @@ Evaluate now also records a lightweight candidate explain backref after candidat
 - `ProvenanceEnvelope` is stored in `Store._provenance_envelopes` registry (session-scoped, not durably persisted to sidecar)
 - service `explain_ref(kind="candidate")` dispatches: native/Souffle → `explain_support()`, engine provenance → `explain_provenance()` returning the envelope
 - legacy `engine_no_witness_v1` remains as fallback for candidates without a provenance carrier
-- `CandidateSet` retains the narrow `confidence: float | None` field and adds an additive `confidence_kind` value-semantics tag:
+- `DerivationOutput` retains the narrow `confidence: float | None` field and adds an additive `confidence_kind` value-semantics tag (`CandidateSet` remains its materialization alias):
   - `none`
   - `probability`
   - `certainty`
@@ -409,7 +409,7 @@ flowchart LR
   A["Store.evaluate(mode='native')"] --> B["view.projector.project_view_facts"]
   B --> C["rules.ruleref_substrate.evaluate_native_where"]
   C --> D["store.builders.*_from_bindings"]
-  D --> E["CandidateSet list"]
+  D --> E["DerivationOutput list"]
   E --> F["Store._candidate_support_index"]
   F --> G["candidate evidence tree v1 (service/audit derived surface)"]
 ```

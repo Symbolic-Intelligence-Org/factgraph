@@ -8,6 +8,8 @@ The v0.2 open-source / PyPI surface is the `factgraph` package. It provides:
 - the canonical Python runtime authority: `factgraph.application`
 - the Python product surface: `factgraph.sdk`
 - rule / inference authoring, evaluation, and runtime adapters
+- Product Rule / Policy / Function authoring, typed Query, run-local Scenario,
+  target-pinned execution profiles, structured Result/Explain, and replay
 - audit package reader, query, DTO, and evidence graph surfaces
 
 The v0.2 public source and PyPI wheel are scoped to the FactGraph package
@@ -50,27 +52,36 @@ from factgraph.sdk import Entity, Field, Identity, FactGraph
 
 
 class User(Entity):
-    user_id: str = Identity(primary_key=True)
-    name: str = Field(cardinality="single")
+    user_id: str = Identity()
+    name: str = Field()
+    tags: list[str] = Field()
 
 
 fg = FactGraph.create(schema_classes=[User])
 
-alice = fg.read.ref(User, user_id="u-1")
-fg.write.set(User.name, alice, "Alice")
+alice = fg.entities.create(User, user_id="u-1")
+fg.fields.set(User.name, alice, "Alice")
+fg.fields.add(User.tags, alice, "engineer")
 
-snapshot = fg.read.get(User, user_id="u-1")
+snapshot = fg.entities.get(User, user_id="u-1")
 print(snapshot.name)  # Alice
 ```
 
-`FactGraph` is the v0.2 SDK top-level entrypoint. Its taxonomy namespaces
-(`schema` / `read` / `write` / `rules` / `inferences` / `eval` / `audit` /
-`package` / `views`) teach the conceptual layering at first contact.
+`FactGraph` is the SDK top-level entrypoint. Its current data namespaces are
+`entities`, `fields`, `assertions`, `schema`, `assertion_views`, `eval`,
+`audit`, `package`, and `meta`. Product authoring/execution additionally uses
+`rule_builder` / `build_rule`, `function_builder` / `build_function`,
+`policy_builder` / `build_policy`, `scenario`, `execution`, and `problog`.
 
 `factgraph.sdk` is the user-facing Python product surface. Runtime authority
 lives in `factgraph.application`; the SDK adapts ergonomic APIs, schema/DSL
 authoring, snapshots, batches, editors, and compatibility errors into the
 application runtime contract.
+
+Continue with the [quickstart index](docs/quickstart/README.md) or go directly
+to the [complete Product V2 workflow](docs/quickstart/product_workflow_v2.md)
+for Rule/Policy/Function authoring, typed Query, Scenario, execution profiles,
+structured Result/Explain data, and replay.
 
 ## Choose Your Layer
 
@@ -89,11 +100,13 @@ application runtime contract.
 | Advanced importable | `factgraph.application`, `factgraph.audit` | Runtime/query authority for automation, wire bridges, and audit consumers; importable directly, but not an SDK ergonomic facade. |
 | Out of v0.2 package | service, agent, domains, internal workflow docs, tutorials, notebooks | Not part of the `factgraph` v0.2 wheel or public source surface. |
 
-T5/T11 narrowed the v0.2 product surface around `FactGraph`, `Rule` /
-`RuleExpr`, `EvaluateResult`, evidence/explanation envelopes, Database attach,
-durable views, and property-style assertion records. Legacy candidate accept,
-direct check/diagnose/why-not shells, and method-level `view=` are not part of
-the v0.2 public SDK path.
+The compatibility surface retains `Rule` / `RuleExpr`, `EvaluateResult`,
+legacy engine configs, evidence/explanation envelopes, Database attach,
+durable views, and property-style assertion records. The additive Product V2
+path adds resolved Product Rules, Product Policies, peer Product Functions,
+typed Query/Scenario execution, structured Outcome/Explain and detached
+replay. Legacy candidate accept, direct check/diagnose/why-not shells, and
+method-level `view=` are not part of the public SDK path.
 
 ## Kernel Surface
 

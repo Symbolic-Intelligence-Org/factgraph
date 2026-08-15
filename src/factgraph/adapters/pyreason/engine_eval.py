@@ -15,7 +15,7 @@ from factgraph.adapters.pyreason.runner import (
 )
 from factgraph.adapters.pyreason.session import PyReasonSession
 from factgraph.adapters.pyreason.where_compile import compile_where_ir_to_pyreason
-from factgraph.core.derivation.candidates import CandidateSet, make_candidate
+from factgraph.core.derivation.candidates import DerivationOutput, make_derivation_output
 from factgraph.core.evidence.write_protocol import now_epoch_nanos
 from factgraph.core.protocol.tup_v1 import canonical_bytes_tup_v1
 from factgraph.core.protocol.digests import sha256_token
@@ -52,7 +52,7 @@ def pyreason_engine_eval(
     engine_ext: EngineExtBase | None = None,
     engine_options: dict[str, Any] | None = None,
     semantics_profile: SemanticsProfile | None = None,
-) -> list[CandidateSet]:
+) -> list[DerivationOutput]:
     """Evaluate a derivation through the PyReason adapter."""
     del mode
     del head
@@ -99,9 +99,9 @@ def pyreason_engine_eval(
 
     run_id = uuid4().hex
     generated_at = now_epoch_nanos()
-    candidates: list[CandidateSet] = []
+    outputs: list[DerivationOutput] = []
     for fact in result.derived_session.node_facts:
-        candidate = _node_fact_to_candidate(
+        output = _node_fact_to_derivation_output(
             store,
             fact,
             derivation_id=derivation_id,
@@ -109,10 +109,10 @@ def pyreason_engine_eval(
             run_id=run_id,
             generated_at=generated_at,
         )
-        if candidate is not None:
-            candidates.append(candidate)
+        if output is not None:
+            outputs.append(output)
     for fact in result.derived_session.edge_facts:
-        candidate = _edge_fact_to_candidate(
+        output = _edge_fact_to_derivation_output(
             store,
             fact,
             derivation_id=derivation_id,
@@ -120,14 +120,14 @@ def pyreason_engine_eval(
             run_id=run_id,
             generated_at=generated_at,
         )
-        if candidate is not None:
-            candidates.append(candidate)
-    candidates = _attach_pyreason_provenance(store, candidates, result.trace_dict)
+        if output is not None:
+            outputs.append(output)
+    outputs = _attach_pyreason_provenance(store, outputs, result.trace_dict)
 
     if not hasattr(store, "_engine_pending_annotations"):
         store._engine_pending_annotations = {}
     store._engine_pending_annotations[run_id] = list(result.derived_session.annotation_templates)
-    return candidates
+    return outputs
 
 
 def resolve_pyreason_run_config(engine_options: dict[str, Any] | None) -> PyReasonRunConfig:
@@ -161,16 +161,16 @@ def resolve_pyreason_run_config(engine_options: dict[str, Any] | None) -> PyReas
 
 def _attach_pyreason_provenance(
     store: Any,
-    candidates: list[CandidateSet],
+    outputs: list[DerivationOutput],
     trace_dict: dict[str, Any] | None,
-) -> list[CandidateSet]:
-    if not candidates or not isinstance(trace_dict, dict):
-        return candidates
+) -> list[DerivationOutput]:
+    if not outputs or not isinstance(trace_dict, dict):
+        return outputs
 
-    attached: list[CandidateSet] = []
-    for candidate in candidates:
+    attached: list[DerivationOutput] = []
+    for output in outputs:
         envelope = ProvenanceEnvelope(
-            candidate_id=candidate.candidate_id,
+            candidate_id=output.candidate_id,
             engine="pyreason",
             payload_type="event_log",
             payload=trace_dict,
@@ -179,7 +179,7 @@ def _attach_pyreason_provenance(
         store._remember_provenance_envelope(support_digest, envelope)
         attached.append(
             replace(
-                candidate,
+                output,
                 support_digest=support_digest,
                 support_kind=PYREASON_PROVENANCE_KIND,
             )
@@ -618,7 +618,7 @@ def _active_range_for_projected_fact(
     return temporal_state.active_by_asrt_id.get(projected_fact.asrt_id, (0, None))
 
 
-def _node_fact_to_candidate(
+def _node_fact_to_derivation_output(
     store: Any,
     fact: dict[str, Any],
     *,
@@ -626,7 +626,7 @@ def _node_fact_to_candidate(
     version: str,
     run_id: str,
     generated_at: int,
-) -> CandidateSet | None:
+) -> DerivationOutput | None:
     pred_id = fact.get("pred_id")
     node_ref = fact.get("node_ref")
     if not isinstance(pred_id, str) or not pred_id:
@@ -656,7 +656,7 @@ def _node_fact_to_candidate(
     tup_digest = sha256_token(canonical_bytes_tup_v1(tagged_args[1:])) if len(tagged_args) > 1 else None
     confidence = _lower_bound_confidence(fact.get("bound"))
 
-    return make_candidate(
+    return make_derivation_output(
         derivation_id=derivation_id,
         derivation_version=version,
         run_id=run_id,
@@ -671,7 +671,7 @@ def _node_fact_to_candidate(
     )
 
 
-def _edge_fact_to_candidate(
+def _edge_fact_to_derivation_output(
     store: Any,
     fact: dict[str, Any],
     *,
@@ -679,7 +679,7 @@ def _edge_fact_to_candidate(
     version: str,
     run_id: str,
     generated_at: int,
-) -> CandidateSet | None:
+) -> DerivationOutput | None:
     pred_id = fact.get("pred_id")
     from_ref = fact.get("from_ref")
     to_ref = fact.get("to_ref")
@@ -715,7 +715,7 @@ def _edge_fact_to_candidate(
     tup_digest = sha256_token(canonical_bytes_tup_v1(tagged_args[1:]))
     confidence = _lower_bound_confidence(fact.get("bound"))
 
-    return make_candidate(
+    return make_derivation_output(
         derivation_id=derivation_id,
         derivation_version=version,
         run_id=run_id,

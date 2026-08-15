@@ -122,8 +122,11 @@ def draft_to_write_request(
     meta: dict[str, Any] = {"approved_by": confirmed_by or agent_id}
     if confirmed_by and confirmed_by != agent_id:
         meta["agent_executor"] = agent_id
-    if draft.confidence is not None:
-        meta["confidence"] = draft.confidence
+    # Extraction confidence is workflow-local review information.  Core write
+    # metadata deliberately rejects it, and a confidence score must never be
+    # silently reinterpreted as a probabilistic ``raw_kind``/``bound`` fact.
+    # A caller that needs run-local uncertainty must construct the explicit
+    # Scenario semantic input instead of writing it into the durable ledger.
     if draft.source:
         meta["source"] = draft.source
     if draft.source_loc:

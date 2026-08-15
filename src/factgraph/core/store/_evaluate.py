@@ -1,21 +1,43 @@
 from __future__ import annotations
 
-from typing import Any
+from collections.abc import Callable, Mapping, Sequence
+from types import MappingProxyType
+from typing import Any, TypeAlias, cast
 
 from factgraph.core.rules.ruleref_substrate import evaluate_native_where
+from factgraph.core.rules.where_ast import (
+    AggregateAtom,
+    Atom,
+    BuiltinAtom,
+    CmpAtom,
+    Const,
+    InAtom,
+    NotAtom,
+    OrExpr,
+    PredAtom,
+    RuleRefAtom,
+    Term,
+    Var,
+    WhereExpr,
+    parse_where_ir_to_ast,
+)
 from factgraph.core.store._support import (
     _DEGRADED_SUPPORT_KINDS,
     _PROVENANCE_BEARING_SUPPORT_KINDS,
     _WITNESS_BEARING_SUPPORT_KINDS,
+    ENGINE_NO_WITNESS_KIND,
     BindingSupportCapture,
+    ProofReceipt,
+    ProjectedFact,
     compute_support_digest,
+    normalize_binding_items,
 )
 from factgraph.core.store._support_capture import (
     build_support_artifact_for_binding,
     derive_rule_ref_edges_for_binding,
     find_winning_case_index,
 )
-from factgraph.core.derivation.candidates import CandidateSet
+from factgraph.core.derivation.candidates import DerivationOutput
 from factgraph.core.rules.where_eval import WhereValidationError
 from factgraph.core.store import builders
 from factgraph.core.store.premise_filter import premise_scoped_ledger
@@ -29,6 +51,17 @@ from factgraph.core.store.types import (
     WhereIR,
 )
 from factgraph.core.view.projector import project_view_facts, project_view_facts_with_witness
+
+
+_NativeEffectiveRelationSnapshot: TypeAlias = Mapping[
+    str, tuple[ProjectedFact, ...]
+]
+_NativeEffectiveRelationObserver: TypeAlias = Callable[
+    [_NativeEffectiveRelationSnapshot], None
+]
+_NativeEffectiveRelationSupportArtifactObserver: TypeAlias = Callable[
+    [str, ProofReceipt], None
+]
 
 
 def evaluate_store(
@@ -47,7 +80,50 @@ def evaluate_store(
     engine_ext: EngineExtBase | None = None,
     engine_options: EngineOptionsIR = None,
     semantics_profile: Any | None = None,
-) -> list[CandidateSet]:
+) -> list[DerivationOutput]:
+    """Public evaluation entrypoint; native relation capture is not exposed here."""
+    return _evaluate_store(
+        store,
+        derivation_id=derivation_id,
+        version=version,
+        target_pred_id=target_pred_id,
+        head_vars=head_vars,
+        where=where,
+        mode=mode,
+        head=head,
+        engine_evaluate=engine_evaluate,
+        registry=registry,
+        confidence_kind_resolver=confidence_kind_resolver,
+        engine_ext=engine_ext,
+        engine_options=engine_options,
+        semantics_profile=semantics_profile,
+        _native_effective_relation_observer=None,
+    )
+
+
+def _evaluate_store(
+    store: Any,
+    *,
+    derivation_id: str,
+    version: str,
+    target_pred_id: str,
+    head_vars: HeadVarsIR,
+    where: WhereIR,
+    mode: EvaluateMode = "native",
+    head: HeadSpecIR | None = None,
+    engine_evaluate: EngineEvaluatorFn,
+    registry: Any | None = None,
+    confidence_kind_resolver: Any | None = None,
+    engine_ext: EngineExtBase | None = None,
+    engine_options: EngineOptionsIR = None,
+    semantics_profile: Any | None = None,
+    _native_effective_relation_observer: _NativeEffectiveRelationObserver | None = None,
+    _native_effective_relation_override: _NativeEffectiveRelationSnapshot | None = None,
+    _record_support_artifacts: bool = True,
+    _native_effective_relation_support_artifact_observer: (
+        _NativeEffectiveRelationSupportArtifactObserver | None
+    ) = None,
+) -> list[DerivationOutput]:
     if mode == "python":
         raise ValueError("mode='python' is removed; use mode='native'")
     if mode == "engine":
@@ -76,6 +152,61 @@ def evaluate_store(
             )
     if mode == "native" and engine_options:
         raise ValueError("engine_options are not supported for mode='native'")
+    if _native_effective_relation_observer is not None:
+        if not callable(_native_effective_relation_observer):
+            raise TypeError("_native_effective_relation_observer must be callable or None")
+        if mode != "native":
+            raise ValueError(
+                "_native_effective_relation_observer is only supported for mode='native'"
+            )
+        if registry is not None:
+            raise ValueError(
+                "_native_effective_relation_observer does not support registry-backed evaluation"
+            )
+    if not isinstance(_record_support_artifacts, bool):
+        raise TypeError("_record_support_artifacts must be bool")
+    if not _record_support_artifacts and mode != "native":
+        raise ValueError("_record_support_artifacts=False is only supported for mode='native'")
+    if _native_effective_relation_override is not None:
+        if mode != "native":
+            raise ValueError(
+                "_native_effective_relation_override is only supported for mode='native'"
+            )
+        if registry is not None:
+            raise ValueError(
+                "_native_effective_relation_override does not support registry-backed evaluation"
+            )
+        if _native_effective_relation_observer is not None:
+            raise ValueError(
+                "_native_effective_relation_override cannot be combined with native relation capture"
+            )
+        if _record_support_artifacts:
+            raise ValueError(
+                "_native_effective_relation_override requires _record_support_artifacts=False"
+            )
+        if (
+            getattr(store, "premise_exclusions", ())
+            or getattr(store, "premise_allowances", ())
+            or getattr(store, "premise_blocks", ())
+        ):
+            raise ValueError(
+                "_native_effective_relation_override does not support premise-filtered evaluation"
+            )
+    if _native_effective_relation_support_artifact_observer is not None:
+        if not callable(_native_effective_relation_support_artifact_observer):
+            raise TypeError(
+                "_native_effective_relation_support_artifact_observer must be callable or None"
+            )
+        if (
+            mode != "native"
+            or registry is not None
+            or _native_effective_relation_override is None
+            or _record_support_artifacts
+        ):
+            raise ValueError(
+                "_native_effective_relation_support_artifact_observer requires "
+                "native effective-relation execution with durable support disabled"
+            )
 
     if isinstance(head, dict) and head.get("callee_kind") == "entity_type":
         if mode in {"souffle", "problog", "pyreason"}:
@@ -94,9 +225,9 @@ def evaluate_store(
                 engine_kwargs["engine_options"] = engine_options
             if semantics_profile is not None:
                 engine_kwargs["semantics_profile"] = semantics_profile
-            candidates = engine_evaluate(**engine_kwargs)
-            _remember_candidate_support_backrefs(store, candidates)
-            return candidates
+            outputs = engine_evaluate(**engine_kwargs)
+            _remember_output_support_backrefs(store, outputs)
+            return outputs
         if mode != "native":
             raise ValueError("mode must be one of: native, souffle, problog, pyreason")
 
@@ -110,10 +241,16 @@ def evaluate_store(
             where,
             root_result_kind="entity",
             registry=registry,
+            _native_effective_relation_observer=_native_effective_relation_observer,
+            _native_effective_relation_override=_native_effective_relation_override,
+            _record_support_artifacts=_record_support_artifacts,
+            _native_effective_relation_support_artifact_observer=(
+                _native_effective_relation_support_artifact_observer
+            ),
         )
         if not captures:
             return []
-        candidates = builders.entity_candidates_from_bindings(
+        outputs = builders.entity_derivation_outputs_from_bindings(
             store,
             derivation_id=derivation_id,
             version=version,
@@ -121,8 +258,9 @@ def evaluate_store(
             rows=captures,
             confidence_kind_resolver=confidence_kind_resolver,
         )
-        _remember_candidate_support_backrefs(store, candidates)
-        return candidates
+        if _record_support_artifacts:
+            _remember_output_support_backrefs(store, outputs)
+        return outputs
 
     if mode in {"souffle", "problog", "pyreason"}:
         engine_kwargs = {
@@ -140,9 +278,9 @@ def evaluate_store(
             engine_kwargs["engine_options"] = engine_options
         if semantics_profile is not None:
             engine_kwargs["semantics_profile"] = semantics_profile
-        candidates = engine_evaluate(**engine_kwargs)
-        _remember_candidate_support_backrefs(store, candidates)
-        return candidates
+        outputs = engine_evaluate(**engine_kwargs)
+        _remember_output_support_backrefs(store, outputs)
+        return outputs
     if mode != "native":
         raise ValueError("mode must be one of: native, souffle, problog, pyreason")
 
@@ -162,12 +300,18 @@ def evaluate_store(
         where,
         root_result_kind="fact",
         registry=registry,
+        _native_effective_relation_observer=_native_effective_relation_observer,
+        _native_effective_relation_override=_native_effective_relation_override,
+        _record_support_artifacts=_record_support_artifacts,
+        _native_effective_relation_support_artifact_observer=(
+            _native_effective_relation_support_artifact_observer
+        ),
     )
     if not captures:
         return []
 
     if schema_pred is None:
-        candidates = builders.query_style_candidates_from_bindings(
+        outputs = builders.query_style_derivation_outputs_from_bindings(
             store,
             derivation_id=derivation_id,
             version=version,
@@ -177,7 +321,7 @@ def evaluate_store(
             confidence_kind_resolver=confidence_kind_resolver,
         )
     else:
-        candidates = builders.candidates_from_bindings(
+        outputs = builders.derivation_outputs_from_bindings(
             store,
             derivation_id=derivation_id,
             version=version,
@@ -188,8 +332,9 @@ def evaluate_store(
             rows=captures,
             confidence_kind_resolver=confidence_kind_resolver,
         )
-    _remember_candidate_support_backrefs(store, candidates)
-    return candidates
+    if _record_support_artifacts:
+        _remember_output_support_backrefs(store, outputs)
+    return outputs
 
 
 def _evaluate_where_over_view(
@@ -197,8 +342,9 @@ def _evaluate_where_over_view(
     where: WhereIR,
     *,
     registry: Any | None = None,
-    witness_facts: dict[str, list[Any]] | None = None,
+    witness_facts: Mapping[str, Sequence[ProjectedFact]] | None = None,
     ledger: Any | None = None,
+    _record_support_artifacts: bool = True,
 ) -> Any:
     if ledger is None:
         # Premise admissibility: the native projection is the only fact
@@ -211,16 +357,21 @@ def _evaluate_where_over_view(
             getattr(store, "premise_allowances", ()),
             getattr(store, "premise_blocks", ()),
         )
-    view_facts = project_view_facts(
-        ledger,
-        store.schema_ir,
+    view_facts = (
+        project_view_facts(ledger, store.schema_ir)
+        if witness_facts is None
+        else _view_facts_from_projected_relation(witness_facts)
     )
     return evaluate_native_where(
         view_facts,
         where,
         registry=registry,
-        witness_facts=witness_facts,
-        remember_support_artifact=store._remember_support_artifact if witness_facts is not None else None,
+        witness_facts=cast(Any, witness_facts),
+        remember_support_artifact=(
+            store._remember_support_artifact
+            if witness_facts is not None and _record_support_artifacts
+            else None
+        ),
     )
 
 
@@ -230,37 +381,126 @@ def _evaluate_where_over_view_with_support(
     *,
     root_result_kind: str,
     registry: Any | None = None,
+    _native_effective_relation_observer: _NativeEffectiveRelationObserver | None = None,
+    _native_effective_relation_override: _NativeEffectiveRelationSnapshot | None = None,
+    _record_support_artifacts: bool = True,
+    _native_effective_relation_support_artifact_observer: (
+        _NativeEffectiveRelationSupportArtifactObserver | None
+    ) = None,
 ) -> list[BindingSupportCapture]:
-    # One premise-scoped view per evaluate call, shared between the witness
-    # projection and the native where evaluation; visibility is decided live
-    # per access inside the view (see premise_filter.py).
-    ledger = premise_scoped_ledger(
-        store.ledger,
-        getattr(store, "premise_exclusions", ()),
-        getattr(store, "premise_allowances", ()),
-        getattr(store, "premise_blocks", ()),
-    )
-    witness_facts = project_view_facts_with_witness(
-        ledger,
-        store.schema_ir,
-    )
+    if _native_effective_relation_observer is not None and registry is not None:
+        raise ValueError(
+            "_native_effective_relation_observer does not support registry-backed evaluation"
+        )
+    if not isinstance(_record_support_artifacts, bool):
+        raise TypeError("_record_support_artifacts must be bool")
+    if _native_effective_relation_support_artifact_observer is not None:
+        if not callable(_native_effective_relation_support_artifact_observer):
+            raise TypeError(
+                "_native_effective_relation_support_artifact_observer must be callable or None"
+            )
+        if (
+            _native_effective_relation_override is None
+            or _record_support_artifacts
+            or registry is not None
+        ):
+            raise ValueError(
+                "_native_effective_relation_support_artifact_observer requires "
+                "an override relation and disabled durable support"
+            )
+    if _native_effective_relation_override is not None:
+        if _native_effective_relation_observer is not None:
+            raise ValueError(
+                "_native_effective_relation_override cannot be combined with native relation capture"
+            )
+        if _record_support_artifacts:
+            raise ValueError(
+                "_native_effective_relation_override requires _record_support_artifacts=False"
+            )
+        if (
+            getattr(store, "premise_exclusions", ())
+            or getattr(store, "premise_allowances", ())
+            or getattr(store, "premise_blocks", ())
+        ):
+            raise ValueError(
+                "_native_effective_relation_override does not support premise-filtered evaluation"
+            )
+        dependency_predicates = _native_where_dependency_predicates(where)
+        actual_predicates = tuple(sorted(_native_effective_relation_override))
+        expected_predicates = tuple(sorted(dependency_predicates))
+        if actual_predicates != expected_predicates:
+            raise ValueError(
+                "native effective relation override must exactly cover query dependencies"
+            )
+        witness_facts: Mapping[str, Sequence[ProjectedFact]] = _immutable_effective_relation_copy(
+            _native_effective_relation_override
+        )
+        ledger = store.ledger
+    else:
+        # One premise-scoped view per evaluate call, shared between the witness
+        # projection and the native where evaluation; visibility is decided live
+        # per access inside the view (see premise_filter.py).
+        ledger = premise_scoped_ledger(
+            store.ledger,
+            getattr(store, "premise_exclusions", ()),
+            getattr(store, "premise_allowances", ()),
+            getattr(store, "premise_blocks", ()),
+        )
+        witness_facts = project_view_facts_with_witness(ledger, store.schema_ir)
+    if _native_effective_relation_observer is not None:
+        dependency_predicates = _native_where_dependency_predicates(where)
+        reduced_relation = {
+            pred_id: witness_facts[pred_id]
+            for pred_id in dependency_predicates
+            if pred_id in witness_facts
+        }
+        missing_dependencies = tuple(
+            pred_id
+            for pred_id in dependency_predicates
+            if pred_id not in witness_facts
+        )
+        if missing_dependencies:
+            raise ValueError(
+                "native effective relation dependencies are absent from schema projection: "
+                + ", ".join(missing_dependencies)
+            )
+        # Freeze once: capture and evaluator consume the exact same relation
+        # object rather than independently copied/filterable representations.
+        witness_facts = _immutable_effective_relation_copy(reduced_relation)
+        _native_effective_relation_observer(witness_facts)
     evaluation = _evaluate_where_over_view(
         store,
         where,
         registry=registry,
         witness_facts=witness_facts,
         ledger=ledger,
+        _record_support_artifacts=_record_support_artifacts,
     )
     bindings = evaluation.bindings
     if not bindings:
         return []
+
+    if (
+        not _record_support_artifacts
+        and _native_effective_relation_support_artifact_observer is None
+    ):
+        captures = [
+            BindingSupportCapture(
+                binding_items=normalize_binding_items(binding),
+                support_digest=f"sha256:{'0' * 64}",
+                support_kind=ENGINE_NO_WITNESS_KIND,
+            )
+            for binding in bindings
+        ]
+        captures.sort(key=lambda row: (row.binding_items, row.support_digest, row.support_kind))
+        return captures
 
     captures: list[BindingSupportCapture] = []
     for binding in bindings:
         selected_case_index = find_winning_case_index(
             where=where,
             binding=binding,
-            witness_facts=witness_facts,
+            witness_facts=cast(Any, witness_facts),
             rule_ref_resolutions=evaluation.rule_ref_resolutions,
         )
         rule_ref_edges = derive_rule_ref_edges_for_binding(
@@ -272,13 +512,17 @@ def _evaluate_where_over_view_with_support(
         artifact = build_support_artifact_for_binding(
             where=where,
             binding=binding,
-            witness_facts=witness_facts,
+            witness_facts=cast(Any, witness_facts),
             root_result_kind=root_result_kind,
             selected_case_index=selected_case_index,
             rule_ref_edges=rule_ref_edges,
         )
         support_digest = compute_support_digest(artifact)
-        store._remember_support_artifact(support_digest, artifact)
+        if _record_support_artifacts:
+            store._remember_support_artifact(support_digest, artifact)
+        else:
+            assert _native_effective_relation_support_artifact_observer is not None
+            _native_effective_relation_support_artifact_observer(support_digest, artifact)
         captures.append(
             BindingSupportCapture(
                 binding_items=artifact.binding_items,
@@ -289,23 +533,119 @@ def _evaluate_where_over_view_with_support(
     captures.sort(key=lambda row: (row.binding_items, row.support_digest, row.support_kind))
     return captures
 
-def _remember_candidate_support_backrefs(
-    store: Any,
-    candidates: list[CandidateSet],
+
+def _view_facts_from_projected_relation(
+    projected_relation: Mapping[str, Sequence[ProjectedFact]],
+) -> dict[str, list[tuple[Any, ...]]]:
+    """Derive the evaluator input from the already-projected witness relation."""
+
+    return {
+        pred_id: [row.fact_tuple for row in rows]
+        for pred_id, rows in projected_relation.items()
+    }
+
+
+def _immutable_effective_relation_copy(
+    projected_relation: Mapping[str, Sequence[ProjectedFact]],
+) -> _NativeEffectiveRelationSnapshot:
+    """Copy a projected native relation into a callback-safe immutable shape."""
+
+    return MappingProxyType(
+        {
+            pred_id: tuple(
+                ProjectedFact(asrt_id=row.asrt_id, fact_tuple=tuple(row.fact_tuple))
+                for row in rows
+            )
+            for pred_id, rows in projected_relation.items()
+        }
+    )
+
+
+def _native_where_dependency_predicates(where: WhereIR) -> tuple[str, ...]:
+    """Return the exact predicate dependency set for supported native WhereIR."""
+
+    expression = parse_where_ir_to_ast(where)
+    predicates: set[str] = set()
+    _collect_where_expr_predicates(expression, predicates)
+    return tuple(sorted(predicates))
+
+
+def _collect_where_expr_predicates(
+    expression: WhereExpr,
+    predicates: set[str],
 ) -> None:
-    if not candidates:
+    branches = expression.branches if isinstance(expression, OrExpr) else (expression,)
+    for branch in branches:
+        for atom in branch.atoms:
+            _collect_atom_predicates(atom, predicates)
+
+
+def _collect_atom_predicates(atom: Atom, predicates: set[str]) -> None:
+    if isinstance(atom, PredAtom):
+        if not isinstance(atom.pred_id, str) or not atom.pred_id:
+            raise ValueError("native effective relation predicate id must be non-empty string")
+        predicates.add(atom.pred_id)
+        for term in atom.terms:
+            _collect_term_predicates(term, predicates)
+        return
+    if isinstance(atom, NotAtom):
+        _collect_where_expr_predicates(atom.body, predicates)
+        return
+    if isinstance(atom, RuleRefAtom):
+        raise ValueError(
+            "native effective relation capture requires materialized where without ruleref atoms"
+        )
+    if isinstance(atom, CmpAtom):
+        _collect_term_predicates(atom.lhs, predicates)
+        _collect_term_predicates(atom.rhs, predicates)
+        return
+    if isinstance(atom, InAtom):
+        _collect_term_predicates(atom.var, predicates)
+        for value in atom.values:
+            _collect_term_predicates(value, predicates)
+        return
+    if isinstance(atom, BuiltinAtom):
+        for term in atom.args:
+            _collect_term_predicates(term, predicates)
+        return
+    raise ValueError(
+        "native effective relation dependency analysis does not support "
+        f"{type(atom).__name__}"
+    )
+
+
+def _collect_term_predicates(term: Term, predicates: set[str]) -> None:
+    if isinstance(term, AggregateAtom):
+        if term.target is not None:
+            _collect_term_predicates(term.target, predicates)
+        for atom in term.filter:
+            _collect_atom_predicates(atom, predicates)
+        return
+    if isinstance(term, (Var, Const)):
+        return
+    raise ValueError(
+        "native effective relation dependency analysis does not support "
+        f"{type(term).__name__}"
+    )
+
+
+def _remember_output_support_backrefs(
+    store: Any,
+    outputs: list[DerivationOutput],
+) -> None:
+    if not outputs:
         return
 
-    for candidate in candidates:
-        support_kind = candidate.support_kind
-        support_digest = candidate.support_digest
+    for output in outputs:
+        support_kind = output.support_kind
+        support_digest = output.support_digest
         if support_kind in _DEGRADED_SUPPORT_KINDS or support_kind in _PROVENANCE_BEARING_SUPPORT_KINDS:
             store._remember_candidate_support(
-                candidate.candidate_id,
+                output.candidate_id,
                 support_digest,
                 support_kind,
-                confidence_kind=candidate.confidence_kind,
-                target_pred_id=candidate.target,
+                confidence_kind=output.confidence_kind,
+                target_pred_id=output.target,
             )
             continue
         if support_kind not in _WITNESS_BEARING_SUPPORT_KINDS:
@@ -315,9 +655,9 @@ def _remember_candidate_support_backrefs(
         if support_digest == f"sha256:{'0' * 64}":
             continue
         store._remember_candidate_support(
-            candidate.candidate_id,
+            output.candidate_id,
             support_digest,
             support_kind,
-            confidence_kind=candidate.confidence_kind,
-            target_pred_id=candidate.target,
+            confidence_kind=output.confidence_kind,
+            target_pred_id=output.target,
         )

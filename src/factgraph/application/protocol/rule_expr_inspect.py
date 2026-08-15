@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 import re
 from types import MappingProxyType
-from typing import Literal, Mapping
+from typing import Any, Literal, Mapping
 
 from factgraph.core.rules.where_ast import (
     AggregateAtom,
@@ -35,6 +35,8 @@ _REPR_PORT_RE = re.compile(r"%([A-Za-z_][A-Za-z0-9_]*)")
 
 @dataclass(frozen=True)
 class PortInspect:
+    """Read-only description of one inspected public Rule port."""
+
     name: str
     kind: Literal["entity_ref", "value"]
     entity_type: str | None = None
@@ -51,6 +53,8 @@ class PortInspect:
 
 @dataclass(frozen=True)
 class ConditionDescriptor:
+    """Read-only authored condition descriptor for inspection and Explain."""
+
     atom_id: str
     kind: str
     subject: str | None = None
@@ -69,6 +73,8 @@ class ConditionDescriptor:
 
 @dataclass(frozen=True)
 class OccurrenceInspect:
+    """Read-only inspected Rule occurrence with ports and conditions."""
+
     template_id: str
     alias: str
     repr_template: str | None
@@ -88,6 +94,8 @@ class OccurrenceInspect:
 
 @dataclass(frozen=True)
 class RuleExprInspect:
+    """Read-only structural inspection of a Rule or RuleExpr."""
+
     ast: tuple[object, ...]
     occurrences: tuple[OccurrenceInspect, ...]
     joins: tuple[RuleJoinConstraint, ...]
@@ -126,6 +134,7 @@ class RuleExprInspect:
 
     @property
     def templates(self) -> tuple[str, ...]:
+        """Return distinct authored Rule template ids in encounter order."""
         seen: set[str] = set()
         out: list[str] = []
         for occurrence in self.occurrences:
@@ -136,13 +145,23 @@ class RuleExprInspect:
 
     @property
     def port_visibility(self) -> Mapping[str, tuple[str, ...]]:
+        """Return visible public port names by occurrence alias."""
         return MappingProxyType({occurrence.alias: occurrence.ports for occurrence in self.occurrences})
 
     @property
     def ports(self) -> tuple[PortInspect, ...]:
+        """Return inspected head-port descriptors."""
         return self._ports
 
     def render(self, bindings: Mapping[str, object] | None = None) -> str:
+        """Render the inspected topology with optional port bindings.
+
+        Args:
+            bindings: Optional values used in authored representation templates.
+
+        Returns:
+            A deterministic structural text rendering.
+        """
         values = {} if bindings is None else bindings
         if not isinstance(values, Mapping):
             raise RuleExprError("RuleExprInspect.render bindings must be Mapping[str, object] or None")
@@ -157,6 +176,7 @@ class RuleExprInspect:
         return " | ".join(piece for piece in pieces if piece)
 
     def render_compact(self) -> str:
+        """Return a compact deterministic rendering of the expression AST."""
         return _render_ast_compact(self.ast)
 
 

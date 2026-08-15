@@ -1,7 +1,7 @@
 # FactGraph SDK Documentation
 
 - Applicable scope: `src/factgraph/sdk`
-- Last updated: 2026-08-01
+- Last updated: 2026-08-15
 - Audience: SDK users and maintainers of the Python product surface
 
 `factgraph.sdk` provides schema declarations, the `FactGraph` lifecycle,
@@ -24,6 +24,14 @@ evaluation, audit, and package namespaces.
 - Route canonical SDK mutations through `Database.commit_changes(...)` when a
   Database is present, including entity create/delete, field writes, ingest,
   metadata append, schema transition, and batch commit.
+- Author immutable, typed managed Policy targets through `fg.policy(...)`,
+  then route them through the same structured Query/Run/Explain compiler path
+  as resolved Rule targets.
+- Author graph-bound Product Rules, peer Product Functions and Product
+  Policies through the direct `build_*` or staged `*_builder` forms, then run
+  them through typed Query, Scenario and target-pinned Product V2 profiles.
+- Open sealed V2 runs as named ResultViews, row-explicit structured Explain
+  data and detached replay through `outcome_from_run_v2(...)`.
 - Keep `FactGraph.from_schema_classes(...)` as the lower-level unmanaged
   Ledger compatibility constructor.
 
@@ -46,6 +54,13 @@ with FactGraph.load_workspace("./workspace", schema_classes=[User]) as fg:
 ```
 
 `FactGraph` is the canonical entry point and a literal alias of `SDKStore`.
+
+For the current end-to-end product path, continue with the public
+[quickstart index](../../../../docs/quickstart/README.md) and
+[complete Product V2 workflow](../../../../docs/quickstart/product_workflow_v2.md).
+The example notebook
+[`09_product_scenario_execution_v2.ipynb`](../../../../examples/09_product_scenario_execution_v2.ipynb)
+executes that surface with real Native, Soufflé and ProbLog adapters.
 
 ## Lifecycle and Ownership
 
@@ -115,6 +130,30 @@ automatic.
 - `tests/test_sdk_batch_application_delegate.py`
 - `tests/test_schema_mutation_lifecycle.py`
 - `tests/test_a20e_registry_final_removal.py`
+- `tests/sdk/test_public_sdk_docstrings.py`
+
+## Public Docstring Contract
+
+Public SDK classes, functions and high-frequency namespace methods use
+Google-style docstrings. The type signature remains authoritative; prose
+documents behavioral meaning and FactGraph-specific boundaries.
+
+Coverage is mechanically enforced for every name in ``factgraph.sdk.__all__``,
+every public method/property on exported classes, and every public member of
+the concrete ``FactGraph`` namespaces. Query construction is included through
+all terminals: ``bind``, ``select``, ``expect_contains``, ``using``, ``plan``,
+``plan_v2``, ``compile``, ``evaluate``, ``capture`` and ``what_if``.
+
+- Start with one behavioral summary sentence.
+- Add `Args`, `Returns`, `Raises`, `Examples` and `Notes` only when they help a
+  caller make a correct decision.
+- Use `Notes` to identify ledger writes, execution of trusted user code,
+  source/evidence authority, replay behavior and V0/V1/V2 boundaries.
+- Name stable error codes when callers can act on them.
+- Keep full tutorials in `docs/quickstart` and use docstring examples only for
+  the local call pattern.
+- Do not expose blueprint history, internal line references or implementation
+  debates through `help(...)`.
 
 ## Related Historical Blueprints
 
@@ -134,10 +173,11 @@ remain the implementation-truth layer for maintainers and advanced users.
 | [`00_user_guide.en.md`](00_user_guide.en.md) | End-to-end SDK tour and lifecycle examples. |
 | [`01_concepts.en.md`](01_concepts.en.md) | Object lifecycles, layer ownership, frozen DTOs, stability tiers. |
 | [`02_readwrite_and_ingest.en.md`](02_readwrite_and_ingest.en.md) | Read/write and ingest behavior. |
-| [`03_rules_and_inferences.en.md`](03_rules_and_inferences.en.md) | Rule DSL and evaluation namespace. |
+| [`03_rules_and_inferences.en.md`](03_rules_and_inferences.en.md) | Rule DSL, SDK Policy authoring, and evaluation namespace. |
 | [`04_api_surface.en.md`](04_api_surface.en.md) | Public API index and signatures. |
-| [`06_what_if_and_proof.en.md`](06_what_if_and_proof.en.md) | Evidence and closed-head replay overview. |
+| [`06_what_if_and_proof.en.md`](06_what_if_and_proof.en.md) | V1 Query/Scenario What-if, explicit detached evidence/replay, and bounded `ScenarioRunV0` compatibility overview. |
 | [`07_walker_and_advanced.en.md`](07_walker_and_advanced.en.md) | Advanced direct imports and adapters. |
+| [`08_product_scenario_execution_v2.en.md`](08_product_scenario_execution_v2.en.md) | Product `fg.scenario()`, strict metadata/provenance, target-scoped V2 execution profiles, and the V2 Query terminal. |
 
 ## Stability and Versioning
 

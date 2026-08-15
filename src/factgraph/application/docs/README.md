@@ -26,7 +26,30 @@ compatibility.
   - English overview of the application module.
 - `src/factgraph/application/docs/rule.md`
   - Application-layer Rule DTO contract. Stores core rule AST atoms directly
-    and remains below SDK ergonomic authoring.
+    and remains below SDK ergonomic authoring. Also records the optional
+    in-process semantic-port binding and authored occurrence/direct-port
+    address space used by managed Rule consumers, the head-independent managed
+    Policy v0 compiler (including direct scalar comparison and one-hop
+    identity-to-field navigation) and structural-lineage boundary, and the compile-only
+    `EvaluationQuery` typed bind/select projection contract plus opt-in,
+    detached `EvaluationRunBundleV0` capture/codec, isolated verification,
+    single-row evidence playback, readonly `PolicyExplanationViewV0`
+    projection semantics, and the separate outer
+    `CapturedEvaluationQueryRunV0` record for bounded detached Query
+    observations; also records the narrow replacement-only
+    `ScenarioFieldSubstitutionV0` and atomic
+    `ScenarioFieldSubstitutionSetV0` boundaries, including the separate,
+    captured `ScenarioRunV0` lifecycle for detached Scenario evidence and
+    isolated verification; and the parallel, query-dependency-scoped
+    `QueryEffectiveSnapshotV1` pre-evaluation identity used internally by the
+    replacement-only resolver (not a global or historical snapshot); and the
+    parallel GoalPlan/Scenario v1 contract, including captured effective
+    worlds, portable selected-row parity, and explicit detached native-inner
+    EvidenceGraph/Policy-overlay Explain.
+- `src/factgraph/application/docs/product_result_explain_v2.md`
+  - Immutable product read views over a sealed V1 run: explicit row/summary
+    targets, structured Explain data, pure renderers, V1 `not_captured`
+    compatibility states, and sanitized evidence/provenance display boundary.
 - `src/factgraph/application/explain/docs/README.md`
   - Paths-model evidence tree types (`EvidenceGraph`, `EvidenceTree`,
     `EvidenceRule`, `EvidenceAtom`, `Certainty`, `AtomForm`, `Verdict`) and
@@ -38,7 +61,8 @@ compatibility.
   - `EvaluateResult` / `EvaluateRow` / `Explanation` / `ResultFingerprint`
     protocol contract; `EvaluateRow.explain()` dispatch; S5 evidence invariant
     (`{passed,failed} ↔ evidence is not None`); ProbLog/PyReason rich evidence
-    builder dispatch; `walk_evidence` text renderer.
+    builder dispatch; `walk_evidence` text renderer; optional F4A Run anchors
+    and strict F4B1 detached bundle attachment.
 - `src/factgraph/application/walker/docs/README.md`
   - Current implementation contract for the application-layer walker
     module.

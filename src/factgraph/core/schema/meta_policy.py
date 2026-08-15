@@ -79,6 +79,7 @@ class MetaKeyPolicy:
         )
 
     def canonical_attributes(self) -> dict[str, object]:
+        """Return the canonical-minimal non-default policy attributes."""
         out: dict[str, object] = {}
         if self.reader_class != DEFAULT_READER_CLASS:
             out["reader_class"] = self.reader_class
@@ -94,6 +95,18 @@ class MetaKeyPolicy:
 
     @classmethod
     def from_mapping(cls, value: Mapping[str, Any], *, path: str) -> MetaKeyPolicy:
+        """Validate and construct a metadata-key policy from a mapping.
+
+        Args:
+            value: Policy attributes using the public schema vocabulary.
+            path: Diagnostic path used in validation errors.
+
+        Returns:
+            A typed metadata-key policy with defaults applied.
+
+        Raises:
+            MetaKeyPolicyError: If an attribute or value is invalid.
+        """
         if not isinstance(value, Mapping):
             raise MetaKeyPolicyError(f"{path} must be object")
         unknown = sorted(set(value) - _POLICY_ATTRIBUTES)

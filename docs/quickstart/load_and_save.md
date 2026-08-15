@@ -288,3 +288,21 @@ workspace fails closed pending a separately designed re-anchor flow.
 For lower-level integrity and repair details, see
 [`src/factgraph/core/store/docs/README.md`](../../src/factgraph/core/store/docs/README.md).
 For schema evolution, see [`schema_definition.md`](schema_definition.md).
+
+## 10. Workspace persistence is not EvaluationRun replay
+
+A Product V2 `EvaluationRunV2` is a sealed execution artifact, not another
+workspace format. Its replay payload captures the exact program, target pins,
+profile, baseline/effective worlds and materializations needed by
+`outcome.replay()`. Detached replay neither opens nor mutates a workspace and
+does not call a Product Function again.
+
+Conversely, `save_workspace()` does not save an in-memory Rule, Policy,
+Function, Scenario, Query or EvaluationRun. If an application needs to retain
+a run, it must persist/export that versioned run artifact through its own
+artifact boundary. A replay status of `matched` establishes deterministic
+agreement with the sealed capture; it is not a signature, source attestation
+or replacement for workspace integrity checks.
+
+See [Evaluation and evidence](evaluate_and_evidence.md) and the
+[complete Product V2 workflow](product_workflow_v2.md#8-detached-replay).

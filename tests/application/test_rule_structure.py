@@ -10,7 +10,18 @@ import unittest
 import factgraph.sdk as sdk
 from factgraph.adapters.souffle.runner import find_souffle_binary
 from factgraph.application import build_schema_index, entity_info, field_predicate, resolve_selector
-from factgraph.application.explain import probe_native
+from factgraph.application.explain import (
+    Compare as EvidenceCompare,
+    Const as EvidenceConst,
+    EvidenceAtom,
+    EvidenceGraph,
+    EvidencePolicyCondition,
+    EvidenceTree,
+    Holds,
+    evidence_graph_from_dict,
+    evidence_graph_to_dict,
+    probe_native,
+)
 from factgraph.application.protocol import Const as StructureConst
 from factgraph.application.protocol import EntitySelector, FreeVar, HeadClosure, Rule, RuleStructure
 from factgraph.application.protocol.rule_structure import Aggregate
@@ -355,14 +366,13 @@ class RuleStructureTests(unittest.TestCase):
 
 
 class RuleStructureBoundaryTests(unittest.TestCase):
-    def test_evidence_and_explanation_render_sources_have_no_worktree_diff(self) -> None:
+    def test_explanation_render_source_has_no_worktree_diff(self) -> None:
         repo = Path(__file__).resolve().parents[2]
         result = subprocess.run(
             [
                 "git",
                 "diff",
                 "--",
-                "src/factgraph/application/explain/evidence_tree.py",
                 "src/factgraph/application/protocol/explanation_render.py",
             ],
             cwd=repo,
@@ -371,6 +381,53 @@ class RuleStructureBoundaryTests(unittest.TestCase):
             text=True,
         )
         self.assertEqual(result.stdout, "")
+
+    def test_evidence_tree_policy_condition_wire_boundary(self) -> None:
+        """F5C adds condition evidence without rewriting pre-F5C tree payloads."""
+
+        legacy = EvidenceGraph(
+            graph_id="legacy-graph",
+            engine="native",
+            layout_hint="tree",
+            subject_binding={},
+            paths=(EvidenceTree("c0", "holds", ()),),
+        )
+        legacy_payload = evidence_graph_to_dict(legacy)
+        self.assertNotIn("policy_conditions", legacy_payload["paths"][0])
+        self.assertEqual(evidence_graph_from_dict(legacy_payload), legacy)
+
+        condition = EvidencePolicyCondition(
+            policy_node_id="compare-older",
+            condition_id="compare-older:compare",
+            role="compare",
+            atom=EvidenceAtom(
+                form=EvidenceCompare("gt", EvidenceConst(22), EvidenceConst(19)),
+                verdict=Holds(),
+                atom_id="c0:atom:2",
+            ),
+        )
+        with_condition = EvidenceGraph(
+            graph_id="condition-graph",
+            engine="native",
+            layout_hint="tree",
+            subject_binding={},
+            paths=(
+                EvidenceTree(
+                    "c0",
+                    "holds",
+                    (),
+                    policy_conditions=(condition,),
+                ),
+            ),
+        )
+        condition_payload = evidence_graph_to_dict(with_condition)
+        condition_rows = condition_payload["paths"][0]["policy_conditions"]
+        self.assertEqual(len(condition_rows), 1)
+        self.assertEqual(condition_rows[0]["policy_node_id"], "compare-older")
+        self.assertEqual(condition_rows[0]["condition_id"], "compare-older:compare")
+        self.assertEqual(condition_rows[0]["role"], "compare")
+        self.assertEqual(condition_rows[0]["atom"]["form"]["kind"], "compare")
+        self.assertEqual(evidence_graph_from_dict(condition_payload), with_condition)
 
     def test_core_and_derivation_chain_do_not_accept_rule_structure_or_evidence_graph(self) -> None:
         repo = Path(__file__).resolve().parents[2]

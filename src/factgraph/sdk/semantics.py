@@ -142,6 +142,7 @@ class ProbLogConfig:
 
     @property
     def engine(self) -> str:
+        """Return the legacy engine name selected by this configuration."""
         return "problog"
 
     def __post_init__(self) -> None:
@@ -203,6 +204,7 @@ class PyReasonConfig:
 
     @property
     def engine(self) -> str:
+        """Return the legacy engine name selected by this configuration."""
         return "pyreason"
 
     def __post_init__(self) -> None:

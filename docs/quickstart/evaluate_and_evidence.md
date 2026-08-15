@@ -1,6 +1,88 @@
 # Evaluation and evidence
 
-This chapter has two halves stitched into one chapter because they share too much vocabulary to live apart: running a rule (`fg.eval.evaluate(...)` and its result) and reading what the evaluator returned (the `Explanation` DTO and its `EvidenceGraph`). It builds on [`engines_and_configs.md`](engines_and_configs.md) (the `engine=` / `config=` parameters) and [`rules.md`](rules.md) (the `Rule` / `RuleExpr` / `head` declaration shape).
+This chapter distinguishes the current Product V2 outcome/Explain/replay
+facade from the legacy `fg.eval.evaluate(...)` / `EvaluateResult` /
+`Explanation` path. Both are supported, but they have different identity,
+evidence and replay contracts. It builds on
+[`engines_and_configs.md`](engines_and_configs.md) and
+[`rules.md`](rules.md).
+
+## Product V2 Result, Explain and replay (recommended)
+
+Product V2 `.run()` returns the raw sealed `EvaluationRunV2`. Open the thin
+user-facing facade explicitly:
+
+```python
+from factgraph.sdk import outcome_from_run_v2
+
+raw_run = (
+    fg.query(policy)
+      .bind(people.person, alice)
+      .select("age", people.age)
+      .plan(profile=profile, scenario=scenario)
+      .run()
+)
+
+outcome = outcome_from_run_v2(raw_run)
+baseline = outcome.baseline
+effective = outcome.effective
+candidate = outcome.candidate_effective  # None unless independently planned
+
+row = effective.rows[0]       # caller explicitly selects the observation
+data = outcome.explain(row)   # no implicit first row
+replay = outcome.replay()
+```
+
+The facade deliberately has no Boolean coercion, implicit `first()`, live-row
+`close()`, or synthesized absence proof. Named ResultViews expose sealed row
+identity/observation digests, engine frames, completeness and point probability
+when present.
+
+`EvaluationRunV2ExplanationDataV2` is machine-readable business data. Its
+independent sections include:
+
+- run/query/row identity and selected observation;
+- execution profile, engine frames and probability materialization;
+- captured asset descriptor/binding and authored `WeightedChoice` topology;
+- Scenario effective facts, operation evidence and safe provenance references;
+- Product Function definition pins and typed per-side calls; and
+- evidence availability plus explicit proof/source/authority boundaries.
+
+`data.render_text()` / `data.narrate()` are lossy presentation helpers. Do not
+parse their prose in business code.
+
+### Product Function Explain
+
+Function is materialized before the final Query program. Structured Explain
+therefore carries the validated Function asset, occurrence, typed inputs,
+typed output, implementation pin, call digest and materialization digest:
+
+```python
+function = data.functions.occurrences[0]
+call = next(item for item in function.calls if item.inputs[0].value == 35)
+assert call.output.value == 3
+assert function.callable_capture == "not_captured"
+```
+
+The call inventory describes the complete upstream Rule occurrence relation
+for that side, not necessarily only the selected Query row. Match by typed
+values/digests rather than tuple position.
+
+Product V2 does not manufacture an `EvidenceGraph` from structured Function,
+Scenario or ProbLog data. When a graph was not captured,
+`data.evidence.graph is None` and a typed reason explains why. This honesty is
+intentional; the structured sections remain complete enough for a product UI.
+
+### Detached replay
+
+`outcome.replay()` reads only sealed program/profile/world/result/Function
+materialization capture. It does not read the live ledger or re-invoke a
+provider/Function. `matched` is a replay observation, not artifact
+authentication, source authority or a causal explanation.
+
+See [`product_workflow_v2.md`](product_workflow_v2.md) for the complete
+authoring-to-replay path. The remainder of this chapter documents the legacy
+live `EvaluateResult` / `Explanation` API.
 
 ## 1. `fg.eval.evaluate` — running a rule
 
@@ -28,9 +110,10 @@ with vars("u", "r") as (u, r):
 result = fg.eval.evaluate(region_rule, head=region_rule)
 ```
 
-This is the canonical user-facing form: `build_application_rule(...)` with Entity-DSL atoms (see [`rules.md`](rules.md) §2.2).
-
-> **Current shipped status — known gap.** `build_application_rule(when=[User(u).field == v])` lowering auto-prepends `PredAtom("User:exists", [u])`. `fg.entities.create(...)` does not currently emit `User:exists` claims to the ledger, so the body above does not match anything and `result.count()` returns `0` today. The example shows the form you *should* write. Until the gap closes, demonstrations later in this chapter that need live rows fall back to a direct `Rule(...)` + `PredAtom(...)` construction (see §2.1).
+This is the legacy user-facing form: `build_application_rule(...)` with
+Entity-DSL atoms (see [`rules.md`](rules.md) §2.2). New Product code normally
+uses `fg.build_rule(...)` so the typed semantic-port contract is resolved at
+authoring time, then executes through `fg.query(...)`.
 
 ### 1.2 `head=` parameter
 
@@ -523,7 +606,7 @@ This chapter covers the shipped surface. Several user-facing capabilities are *d
 | Capability | Status | Where designed |
 |---|---|---|
 | `fg.diagnose(...)` SDK public surface | Internal application-layer logic shipped; SDK shell deferred | [`explanation-completion-roadmap.zh.md`](../../workflow/design/design-points/active/explanation-completion-roadmap.zh.md) §6.2 (D1) |
-| Why-not / counterfactual explanation | Deferred — only `failure_class="closed_head_false"` available today | [`explanation-completion-roadmap.zh.md`](../../workflow/design/design-points/active/explanation-completion-roadmap.zh.md) §6.2 (D5) |
+| General zero-row why-not / negative proof | Deferred. V1 can project positive-row Policy topology as `holds` / `fails` / `not_reached`, while Product V2 summaries still make no negative-proof claim. | [`explanation-completion-roadmap.zh.md`](../../workflow/design/design-points/active/explanation-completion-roadmap.zh.md) §6.2 (D5) |
 | PyReason multi-timestep timeline evidence | Deferred — current PyReason `EvidenceGraph` is single-conclusion fallback | [`explanation-completion-roadmap.zh.md`](../../workflow/design/design-points/active/explanation-completion-roadmap.zh.md) §6.1 (D11) |
 | Attribution / salience decomposition | Deferred (D6 / D7) | [`explanation-completion-roadmap.zh.md`](../../workflow/design/design-points/active/explanation-completion-roadmap.zh.md) §6.3 |
 | Match witness `as_assertions() / witnesses() / to_view()` | Deferred — `fg.entities.match` returns snapshots only today | [`explanation-completion-roadmap.zh.md`](../../workflow/design/design-points/active/explanation-completion-roadmap.zh.md) §6.5 (D20) |
@@ -544,6 +627,8 @@ from factgraph.sdk import (
     EvaluateRow,     # in result.rows / result.first() / iter(result)
     Explanation,     # what fg.eval.explain / row.explain() returns
     DetachedRowError,  # raised by row.explain() if parent result GC'd
+    ProductEvaluationOutcomeV2,
+    outcome_from_run_v2,
 )
 
 # Application-layer rule construction (for §1.1 minimal example)
@@ -591,12 +676,21 @@ row.close() -> Rule
 fg.audit.explain(target) -> dict       # chosen-policy state for a cell
 fg.audit.conflicts(target) -> dict     # conflict diagnostics for a cell
 fg.audit.diff_proof_frames(...) -> ... # compare two recorded proof outcomes
+
+# Product V2
+raw_run = fg.query(product_target).plan(profile=profile, scenario=scenario).run()
+outcome = outcome_from_run_v2(raw_run)
+data = outcome.explain(outcome.effective.rows[0])
+report = outcome.replay()
 ```
 
 ### 8.4 Related chapters
 
 - [`rules.md`](rules.md) — `Rule` / `RuleExpr` / `head` declaration, and `fg.rules.inspect`
+- [`product_workflow_v2.md`](product_workflow_v2.md) — current Product
+  Rule/Policy/Function, Scenario, Outcome/Explain and replay path
 - [`engines_and_configs.md`](engines_and_configs.md) — `engine=` / `config=` parameters consumed by `evaluate`
 - [`data_model.md`](data_model.md) §2.2 — write-side uncertainty metadata that surfaces as `EvaluateRow.certainty`
-- [`assertions.md`](../official/kernel/quickstart/assertions.md) — assertion-level read APIs that `fg.audit.explain` / `conflicts` resolve against
+- [`three_layer_api.md`](three_layer_api.md) — assertion-level read APIs that
+  `fg.audit.explain` / `conflicts` resolve against
 - [`explanation-completion-roadmap.zh.md`](../../workflow/design/design-points/active/explanation-completion-roadmap.zh.md) — the deferred capabilities listed in §7

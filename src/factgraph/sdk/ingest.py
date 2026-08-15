@@ -14,7 +14,7 @@ from factgraph.application.protocol import (
     IngestSetItem,
     ProtocolShapeError,
 )
-from factgraph.core.derivation.candidates import CandidateSet
+from factgraph.core.derivation.candidates import DerivationOutput
 from factgraph.core.evidence.write_protocol import add_field, set_field
 from factgraph.core.schema.meta_policy import (
     EVENT_TIME_META_KEY,
@@ -74,6 +74,8 @@ DEDUP_AFFECTING_META_KEYS: frozenset[str] = frozenset({"source", "source_loc", "
 
 @dataclass(frozen=True)
 class IngestResult:
+    """Summary, diagnostics and assertion ids produced by SDK ingest."""
+
     written_assertion_ids: list[str]
     skipped_count: int
     duplicate_count: int
@@ -84,6 +86,8 @@ class IngestResult:
 
 @dataclass(frozen=True)
 class ValidationReport:
+    """Structured validation status, warnings and errors for ingest provenance."""
+
     ok: bool
     warnings: list[dict[str, Any]]
     errors: list[dict[str, Any]]
@@ -673,7 +677,7 @@ def _prepare_single_ingest_item(
 
 
 def _coerce_provenance_input(obj: Any) -> dict[str, Any]:
-    if isinstance(obj, CandidateSet):
+    if isinstance(obj, DerivationOutput):
         return {
             "derived_rule_id": obj.derivation_id,
             "derived_rule_version": obj.derivation_version,
@@ -685,7 +689,8 @@ def _coerce_provenance_input(obj: Any) -> dict[str, Any]:
     if isinstance(obj, dict):
         return dict(obj)
     raise SDKStoreError(
-        "validate_provenance(...) currently supports CandidateSet or meta dict input"
+        "validate_provenance(...) currently supports DerivationOutput "
+        "(including the legacy CandidateSet alias) or meta dict input"
     )
 
 

@@ -9,7 +9,7 @@
 
 `adapters.problog` is the external-engine adapter layer. It
 converts `Store + derivation/query where` into a ProbLog program,
-executes it, and reads the results back into `CandidateSet`.
+executes it, and reads the results back into `DerivationOutput`.
 
 It is responsible for:
 
@@ -19,7 +19,7 @@ It is responsible for:
 - Invoking the ProbLog CLI for execution
 - Parsing CLI output back into bindings, then constructing
   candidate sets
-- Writing probability into `CandidateSet.confidence` and tagging
+- Writing probability into `DerivationOutput.confidence` and tagging
   `confidence_kind="probability"`
 - Projecting shared raw uncertainty (`raw_kind` + `bound`) into
   ProbLog point probabilities only when an explicit
@@ -69,7 +69,7 @@ It is not responsible for:
     shared explain assembler
 - `problog_import.py`
   - `parse_problog_output(...)`: parses output and constructs
-    `CandidateSet`
+    `DerivationOutput`
 
 ## 3. Boundary with core
 
@@ -80,6 +80,22 @@ via mode:
 2. `__init__` registers the evaluator under the name `problog`
 3. Calling `Store.evaluate(mode="problog")` enters
    `evaluate_problog(...)`
+
+### V1 sealed portable-query boundary
+
+`portable_deterministic_v1` is a separate FactGraph application contract, not
+a probabilistic `Store.evaluate` extension. It materializes one finite,
+dependency-complete positive relation in a fresh isolated Store and invokes
+the existing ProbLog adapter beside native and Soufflé. The V1 compiler rejects
+probabilities, uncertainty projection, branch weights, negation, recursion,
+aggregates, builtins and all other constructs outside its deterministic common
+subset before execution. Adapter unavailability, failure, or an invalid output
+becomes a typed per-engine frame; no hidden native fallback occurs.
+
+Only canonical selected-row-set parity is comparable under this profile.
+ProbLog probability, trace/provenance, certainty and Explain semantics remain
+adapter-specific and are never promoted to common V1 proof evidence. The
+adapter workflows below otherwise keep their original behavior.
 
 ## 4. Typical workflow
 
@@ -120,7 +136,7 @@ Main flow of `evaluate_problog(...)`:
      configured, export rejects instead of silently choosing a point.
 6. `run_problog(...)` invokes the ProbLog CLI
 7. `parse_problog_output(...)` parses the result and maps it into
-   `CandidateSet`
+   `DerivationOutput`
 8. `parse_problog_trace(...)` parses the same `--trace` output
    into an adapter-local proof trace
 9. The derivation probability is written into
@@ -229,8 +245,8 @@ EvidenceGraph addendum:
 Semantic-delivery addendum:
 
 - internal compatibility lane:
-  - ProbLog may still set `CandidateSet.confidence` and
-    `CandidateSet.confidence_kind="probability"` as session-local output
+  - ProbLog may still set `DerivationOutput.confidence` and
+    `DerivationOutput.confidence_kind="probability"` as session-local output
     carriers
   - `accept` does not persist those legacy carrier fields into assertion
     meta by default
@@ -365,8 +381,8 @@ Constraints:
 - Filters by `query_pred` (default `answer`)
 - For the same binding, takes the maximum probability
 - Then aggregates probability per candidate key and writes back
-  into `CandidateSet.confidence`
-- Also tags `CandidateSet.confidence_kind` as `"probability"`
+  into `DerivationOutput.confidence`
+- Also tags `DerivationOutput.confidence_kind` as `"probability"`
 - Final candidate construction reuses `store_builders` (consistent
   with the native / souffle paths)
 

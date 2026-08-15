@@ -4,6 +4,7 @@ import os
 import unittest
 from unittest.mock import patch
 
+from factgraph.adapters.souffle.engine_eval import _build_souffle_support_artifact
 from factgraph.adapters.souffle.pred_norm import normalize_pred_id
 from factgraph.adapters.souffle.where_compile import (
     build_query_witness_layout,
@@ -13,9 +14,45 @@ from factgraph.adapters.souffle.where_compile import (
 from factgraph.core.rules.ruleref_common import internal_rule_pred_id
 from factgraph.core.rules.rule_ir import RuleRegistry, RuleSpec
 from factgraph.core.rules.where_eval import WhereValidationError
+from factgraph.core.store._support import SOUFFLE_WITNESS_KIND
 
 
 class SouffleWitnessWhereCompileV1Tests(unittest.TestCase):
+    def test_support_receipt_distinguishes_repeated_predicate_occurrences(self) -> None:
+        """A second same-predicate atom must not borrow the first witness."""
+
+        artifact = _build_souffle_support_artifact(
+            store=object(),
+            where=[
+                ("pred", "user:name", ["$older", "$older_name"]),
+                ("pred", "user:name", ["$younger", "$younger_name"]),
+                ("gt", "$older_name", "$younger_name"),
+            ],
+            binding_items=(
+                ("$older", "idref:alice"),
+                ("$older_name", "zoe"),
+                ("$younger", "idref:bob"),
+                ("$younger_name", "amy"),
+            ),
+            root_result_kind="row",
+            selected_case_index=0,
+            witness_ids_by_atom_key={
+                "c0.c0:user:name": {"asrt:older-name"},
+                "c0.c1:user:name": {"asrt:younger-name"},
+            },
+        )
+
+        self.assertEqual(artifact.kind, SOUFFLE_WITNESS_KIND)
+        self.assertEqual(
+            {item.pred_condition_key: item.asrt_ids for item in artifact.pred_witnesses},
+            {
+                "c0.c0:user:name": ("asrt:older-name",),
+                "c0.c1:user:name": ("asrt:younger-name",),
+            },
+        )
+        self.assertEqual(dict(artifact.binding_items)["$older"], "idref:alice")
+        self.assertEqual(dict(artifact.binding_items)["$younger"], "idref:bob")
+
     def test_build_query_witness_layout_collects_pred_atoms_in_branch_order(self) -> None:
         where = [
             [("pred", "user:name", ["$e", "$value"])],
@@ -67,7 +104,10 @@ class SouffleWitnessWhereCompileV1Tests(unittest.TestCase):
         self.assertNotIn(".decl query__test(C0:symbol, W0:symbol, W1:symbol)", program.text)
         self.assertEqual([rel.case_index for rel in program.branch_relations], [0, 1])
         self.assertEqual(
-            [rel.layout.pred_witness_columns[0].pred_condition_key for rel in program.branch_relations],
+            [
+                rel.layout.pred_witness_columns[0].pred_condition_key
+                for rel in program.branch_relations
+            ],
             ["c0.c0:user:name", "c1.c0:user:status"],
         )
 

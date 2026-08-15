@@ -53,6 +53,15 @@ def vars(*names: str) -> _VarsContext:
     Use as a context manager: `with vars("u", "tag") as (u, tag): ...`.
     Calling `vars()` with no names returns a factory inside the context, so
     `with vars() as V: u, tag = V("u", "tag")` is also supported.
+
+    Args:
+        *names: Optional unique non-empty variable display names.
+
+    Returns:
+        A context manager yielding named logic variables or a variable factory.
+
+    Raises:
+        SDKDSLError: If a name is empty or duplicated.
     """
 
     return _VarsContext(*names)

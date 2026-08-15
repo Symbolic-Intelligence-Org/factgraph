@@ -96,7 +96,15 @@ It is not responsible for:
     `added_fields`. Destructive delete/update/migrate planning is deliberately
     outside this module's first slices.
 - `derivation_runtime.py`
-  - `evaluate_derivation_plans(...)`, `accept_derivation_candidate_set(...)`, `accept_derivation_candidate_sets(...)`
+  - `evaluate_derivation_plans(...)` returns canonical read-only
+    `DerivationOutput` values. The separately named legacy materialization
+    wrappers remain compatibility surface: single-item acceptance uses a
+    private Store-owned accept-time enrichment seam while preserving separate
+    compiler-output and trusted business-rule provenance; direct `Store.accept`
+    remains identity-strict. Batch acceptance delegates to `Store.accept_many`,
+    rejects `dry_run=True`, and rejects one `identity_override` applied to
+    multiple outputs.
+  - `accept_derivation_candidate_set(...)`, `accept_derivation_candidate_sets(...)`
 - `derivation_check_runtime.py`
   - `check_derivation_binding(...)`: verifies a complete or partial binding against a single compiled derivation plan; native/souffle/problog/pyreason are handled through representability-gated final-result matching.
 - `diagnose_runtime.py`

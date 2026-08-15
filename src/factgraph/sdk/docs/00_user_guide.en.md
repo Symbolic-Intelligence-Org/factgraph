@@ -1,11 +1,18 @@
-# FactPy SDK User Guide
+# FactGraph SDK User Guide
 
 - Applicable scope: `src/factgraph/sdk`
-- Last updated: 2026-08-01
+- Last updated: 2026-08-15
 
 The end-to-end tour of `factgraph.sdk` for new users. Reading this doc plus
 running the snippets is enough to use the SDK confidently for typical
 workloads.
+
+> **Current product path.** Sections 5–6 below retain the live/legacy
+> `fg.eval.evaluate(...)` surface for compatibility. New Rule/Policy/Function
+> work should start with the
+> [complete Product V2 workflow](../../../../docs/quickstart/product_workflow_v2.md),
+> which covers typed Query, Scenario, target-pinned execution profiles,
+> structured Result/Explain data and detached replay.
 
 For exhaustive API listings see
 [`04_api_surface.en.md`](04_api_surface.en.md). For counterfactual
@@ -650,7 +657,11 @@ For PyReason, prefer canonical `iteration_count`, `derived_bound`,
 `head_bound`, `case_bounds`, `fixed_timesteps`, and `valid_time_boundaries`
 remain compatibility surfaces. `atom_bounds` keys use application atom ids such
 as `<rule_id>:atom_<index>` and are for application `Rule` inputs. For full
-examples, see `docs/official/kernel/quickstart/semantics.md`.
+legacy configuration examples, see
+[`docs/quickstart/engines_and_configs.md`](../../../../docs/quickstart/engines_and_configs.md).
+For new Product V2 code, use target-pinned execution profiles from the
+[complete Product V2 workflow](../../../../docs/quickstart/product_workflow_v2.md)
+instead of passing arbitrary engine config to a Rule or Policy.
 
 ### Semantic annotations
 
@@ -679,6 +690,12 @@ Failed explanations use `Explanation(status="failed")` with
 There is no public `.eval.why_not(...)` or `fg.what_if.*`
 candidate-universe shell in T5.
 
+For the distinct, replacement-only Scenario path, start from a resolved Query:
+`fg.query(...).bind(...).select(...).what_if(scenario).run()`. It returns a
+detached `ScenarioRunV0` with `.diff()`, `.verify()`, and side-specific
+`.explain(...)`; it is not a general What-if shell or an `EvaluateResult`.
+See [`06_what_if_and_proof.en.md`](06_what_if_and_proof.en.md).
+
 For native or Souffle passed rows, `row.explain().evidence` is a row-level Form
 1 `EvidenceGraph`: a root conclusion, selected-branch premises, assertion
 seeds, and `supports` edges. For ProbLog passed rows, it is a row-level
@@ -688,9 +705,10 @@ row/result audit context; `run_id` stays on the `EvaluateResult` envelope.
 Read `row.explain().repr` for deterministic multi-line text walked from that
 graph. Unsupported and invalid request explanations return `None` for `repr`.
 Treat PyReason row-level graphs, aggregate contributor envelopes, failed-graph
-trees, and match witness output as future evidence tracks. The full DTO chain
-and boundaries are documented in the official
-[evidence quickstart](../../../../docs/official/kernel/quickstart/evidence.md).
+trees, and match witness output as future evidence tracks. The full legacy DTO
+chain and current Product V2 structured Result/Explain/replay boundaries are
+documented in
+[Evaluation and evidence](../../../../docs/quickstart/evaluate_and_evidence.md).
 
 ---
 
@@ -1036,7 +1054,8 @@ for the post-Phase-2 `fg.rules.*` and `fg.inferences.*` namespace shape.
 - **[`04_api_surface.en.md`](04_api_surface.en.md)** — full API
   reference with every method signature
 - **[`06_what_if_and_proof.en.md`](06_what_if_and_proof.en.md)** —
-  end-to-end tutorial of all nine what-if and proof methods
+  V1 Query/Scenario What-if, detached Explain/replay boundaries, and the
+  bounded legacy captured ScenarioRun path
 - **[`07_walker_and_advanced.en.md`](07_walker_and_advanced.en.md)** —
   walker views, recorder lifecycle, raw DTO construction, optional
   domain helpers, engine adapter registration
