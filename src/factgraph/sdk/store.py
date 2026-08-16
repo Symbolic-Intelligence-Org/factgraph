@@ -2639,6 +2639,14 @@ class SDKStore:
         values are pure configuration; passing ``None`` or an empty iterable
         disables filtering (zero-behavior-change default). See
         ``factgraph/core/store/premise_filter.py``.
+
+        A successful call, including an equivalent configuration assignment,
+        makes an in-flight compiled EvaluationQuery execution stale if it
+        sampled the preceding policy state. It also makes live-row
+        ``close()``/``explain()`` on a result from that earlier execution stale.
+        The compiled DTO remains reusable for a later execution, which samples
+        the current policy generation. This is a private freshness guard only: it is
+        neither Store snapshot isolation nor premise-filtered Query support.
         """
         try:
             self._store.set_premise_exclusions(exclusions)
@@ -2667,6 +2675,14 @@ class SDKStore:
         paths outside evaluation stay unfiltered. Predicate, key and values are
         pure configuration; passing ``None`` or an empty iterable disables
         per-predicate filtering. See ``factgraph/core/store/premise_filter.py``.
+
+        A successful call, including an equivalent configuration assignment,
+        makes an in-flight compiled EvaluationQuery execution stale if it
+        sampled the preceding policy state. It also makes live-row
+        ``close()``/``explain()`` on a result from that earlier execution stale.
+        The compiled DTO remains reusable for a later execution, which samples
+        the current policy generation. This is a private freshness guard only: it is
+        neither Store snapshot isolation nor premise-filtered Query support.
         """
         try:
             self._store.set_premise_allowances(allowances)
@@ -2696,6 +2712,14 @@ class SDKStore:
         values on another). Read/query paths outside evaluation stay unfiltered.
         Passing ``None`` or an empty iterable disables per-predicate blocking.
         See ``factgraph/core/store/premise_filter.py``.
+
+        A successful call, including an equivalent configuration assignment,
+        makes an in-flight compiled EvaluationQuery execution stale if it
+        sampled the preceding policy state. It also makes live-row
+        ``close()``/``explain()`` on a result from that earlier execution stale.
+        The compiled DTO remains reusable for a later execution, which samples
+        the current policy generation. This is a private freshness guard only: it is
+        neither Store snapshot isolation nor premise-filtered Query support.
         """
         try:
             self._store.set_premise_blocks(blocks)
@@ -4159,6 +4183,7 @@ class SDKStore:
         raw_engine: Any,
         raw_config: Any,
         source_target: Any | None = None,
+        expected_premise_policy_revision: int | None = None,
     ) -> EvaluateResult:
         if len(args) != 1:
             raise SDKStoreError(
@@ -4218,6 +4243,16 @@ class SDKStore:
             )
 
         compiled_query = args[0]
+        if expected_premise_policy_revision is None:
+            expected_premise_policy_revision = self._store._premise_policy_revision
+        elif (
+            type(expected_premise_policy_revision) is not int
+            or expected_premise_policy_revision < 0
+        ):
+            raise SDKStoreError(
+                "compiled EvaluationQuery execution requires its expected premise policy revision"
+            )
+        assert isinstance(expected_premise_policy_revision, int)
         self._assert_evaluation_query_artifact_current(compiled_query)
         if compiled_query.schema_digest != self._application_schema_index.schema_digest:
             raise SDKStoreError(
@@ -4239,6 +4274,8 @@ class SDKStore:
                 "evaluate(compiled_query) does not yet support premise-filtered execution"
             )
 
+        if self._store._premise_policy_revision != expected_premise_policy_revision:
+            raise SDKStoreError("FactGraph premise policy changed during EvaluationQuery execution")
         view_snapshot_digest = self._view_snapshot_digest(query_typed_values=True)
         try:
             compiled_plan, _traces = _materialize_adapter_derivation_plan(
@@ -4276,7 +4313,11 @@ class SDKStore:
                     else "ScenarioFieldSubstitutionV0"
                 )
                 raise SDKStoreError(f"{scenario_name} rejected: {exc.code}") from exc
-            self._assert_evaluation_query_execution_current(compiled_query, view_snapshot_digest)
+            self._assert_evaluation_query_execution_current(
+                compiled_query,
+                view_snapshot_digest,
+                expected_premise_policy_revision,
+            )
             self._assert_scenario_effective_snapshot_current(
                 resolved_scenario,
                 compiled_query=compiled_query,
@@ -4288,7 +4329,11 @@ class SDKStore:
                 store=self._store,
                 effective_relation=resolved_scenario.baseline_relation,
             )
-            self._assert_evaluation_query_execution_current(compiled_query, view_snapshot_digest)
+            self._assert_evaluation_query_execution_current(
+                compiled_query,
+                view_snapshot_digest,
+                expected_premise_policy_revision,
+            )
             self._assert_scenario_effective_snapshot_current(
                 resolved_scenario,
                 compiled_query=compiled_query,
@@ -4299,7 +4344,11 @@ class SDKStore:
                 store=self._store,
                 effective_relation=resolved_scenario.effective_relation,
             )
-            self._assert_evaluation_query_execution_current(compiled_query, view_snapshot_digest)
+            self._assert_evaluation_query_execution_current(
+                compiled_query,
+                view_snapshot_digest,
+                expected_premise_policy_revision,
+            )
             self._assert_scenario_effective_snapshot_current(
                 resolved_scenario,
                 compiled_query=compiled_query,
@@ -4317,6 +4366,7 @@ class SDKStore:
                     head=compiled_query.projection_head,
                 ),
                 evaluation_query=compiled_query,
+                expected_premise_policy_revision=expected_premise_policy_revision,
                 view_snapshot_digest_override=view_snapshot_digest,
                 attach_run_anchor=False,
                 collect_support_artifacts=False,
@@ -4333,6 +4383,7 @@ class SDKStore:
                     head=compiled_query.projection_head,
                 ),
                 evaluation_query=compiled_query,
+                expected_premise_policy_revision=expected_premise_policy_revision,
                 view_snapshot_digest_override=resolved_scenario.resolution.effective_relation_digest,
                 attach_run_anchor=False,
                 collect_support_artifacts=False,
@@ -4342,7 +4393,11 @@ class SDKStore:
                 result,
                 scenario=replace(resolved_scenario.resolution, result_diff=result_diff),
             )
-            self._assert_evaluation_query_execution_current(compiled_query, view_snapshot_digest)
+            self._assert_evaluation_query_execution_current(
+                compiled_query,
+                view_snapshot_digest,
+                expected_premise_policy_revision,
+            )
             return result
         if capture == "run_bundle_v0":
             outputs, effective_relation = _evaluate_derivation_plans_with_native_relation_capture(
@@ -4355,7 +4410,11 @@ class SDKStore:
                 store=self._store,
                 registry=None,
             )
-        self._assert_evaluation_query_execution_current(compiled_query, view_snapshot_digest)
+        self._assert_evaluation_query_execution_current(
+            compiled_query,
+            view_snapshot_digest,
+            expected_premise_policy_revision,
+        )
 
         result = self._derivation_outputs_to_evaluate_result(
             outputs,
@@ -4372,9 +4431,14 @@ class SDKStore:
                 evaluation_query_source_target=(
                     None if source_target is None else source_target.target.run_target
                 ),
+            expected_premise_policy_revision=expected_premise_policy_revision,
             view_snapshot_digest_override=view_snapshot_digest,
         )
-        self._assert_evaluation_query_execution_current(compiled_query, view_snapshot_digest)
+        self._assert_evaluation_query_execution_current(
+            compiled_query,
+            view_snapshot_digest,
+            expected_premise_policy_revision,
+        )
         if source_target is not None:
             try:
                 assert_targeted_evaluation_query_current(source_target)
@@ -4383,6 +4447,8 @@ class SDKStore:
                     "targeted compiled Query changed during execution"
                 ) from exc
         if expectations:
+            # `expectations` is populated only from a targeted wrapper above.
+            assert source_target is not None
             try:
                 result = replace(
                     result,
@@ -4395,7 +4461,11 @@ class SDKStore:
                 )
             except EvaluationExpectationError as exc:
                 raise SDKStoreError(f"compiled Query expectation failed: {exc}", code=exc.code) from exc
-            self._assert_evaluation_query_execution_current(compiled_query, view_snapshot_digest)
+            self._assert_evaluation_query_execution_current(
+                compiled_query,
+                view_snapshot_digest,
+                expected_premise_policy_revision,
+            )
             try:
                 assert_targeted_evaluation_query_current(source_target)
             except ValueError as exc:
@@ -4417,7 +4487,17 @@ class SDKStore:
                 result = replace(result, run_bundle=bundle)
             except (TypeError, ValueError) as exc:
                 raise SDKStoreError(f"failed to capture EvaluationRun bundle: {exc}") from exc
-            self._assert_evaluation_query_execution_current(compiled_query, view_snapshot_digest)
+            self._assert_evaluation_query_execution_current(
+                compiled_query,
+                view_snapshot_digest,
+                expected_premise_policy_revision,
+            )
+        if source_target is not None:
+            self._assert_evaluation_query_execution_current(
+                compiled_query,
+                view_snapshot_digest,
+                expected_premise_policy_revision,
+            )
         return result
 
     def _evaluate_targeted_compiled_evaluation_query_input(
@@ -4433,6 +4513,7 @@ class SDKStore:
                 "evaluate(targeted_compiled_query) accepts exactly one TargetedCompiledEvaluationQueryV0"
             )
         targeted = args[0]
+        expected_premise_policy_revision = self._store._premise_policy_revision
         try:
             assert_targeted_evaluation_query_current(targeted)
         except ValueError as exc:
@@ -4445,6 +4526,7 @@ class SDKStore:
             raw_engine=raw_engine,
             raw_config=raw_config,
             source_target=targeted,
+            expected_premise_policy_revision=expected_premise_policy_revision,
         )
 
     def _capture_targeted_evaluation_query_run(
@@ -4474,6 +4556,7 @@ class SDKStore:
             raise SDKStoreError(
                 "eval.capture_query(...) requires TargetedCompiledEvaluationQueryV0"
             )
+        expected_premise_policy_revision = self._store._premise_policy_revision
         try:
             assert_targeted_evaluation_query_current(targeted)
         except ValueError as exc:
@@ -4501,10 +4584,12 @@ class SDKStore:
             raw_engine=None,
             raw_config=None,
             source_target=capture_wrapper,
+            expected_premise_policy_revision=expected_premise_policy_revision,
         )
         self._assert_evaluation_query_execution_current(
             targeted.compiled_query,
             view_snapshot_digest,
+            expected_premise_policy_revision,
         )
         try:
             assert_targeted_evaluation_query_current(targeted)
@@ -4515,13 +4600,19 @@ class SDKStore:
         if result.run_bundle is None:
             raise SDKStoreError("targeted Query capture did not produce an EvaluationRun bundle")
         try:
-            return build_captured_evaluation_query_run_v0(
+            captured = build_captured_evaluation_query_run_v0(
                 bundle=result.run_bundle,
                 targeted_query_wrapper_digest=targeted.wrapper_digest,
                 expectations=targeted.expectations,
             )
         except (TypeError, ValueError) as exc:
             raise SDKStoreError(f"failed to capture targeted Query run: {exc}") from exc
+        self._assert_evaluation_query_execution_current(
+            targeted.compiled_query,
+            view_snapshot_digest,
+            expected_premise_policy_revision,
+        )
+        return captured
 
     def _run_scenario(self, *args: Any, **kwargs: Any) -> ScenarioRunV0:
         """Capture a bounded ScenarioRun without changing legacy ``scenario=``.
@@ -4539,6 +4630,7 @@ class SDKStore:
             unknown = ", ".join(sorted(kwargs))
             raise SDKStoreError(f"unknown eval.run_scenario(...) keyword(s): {unknown}")
         raw_query, scenario = args
+        expected_premise_policy_revision = self._store._premise_policy_revision
         source_target = None
         if isinstance(raw_query, TargetedCompiledEvaluationQueryV0):
             try:
@@ -4574,6 +4666,8 @@ class SDKStore:
         if self._evaluation_query_has_premise_filters():
             raise SDKStoreError("eval.run_scenario(...) does not support premise-filtered execution")
 
+        if self._store._premise_policy_revision != expected_premise_policy_revision:
+            raise SDKStoreError("FactGraph premise policy changed during EvaluationQuery execution")
         base_view_digest = self._view_snapshot_digest(query_typed_values=True)
         try:
             compiled_plan, _traces = _materialize_adapter_derivation_plan(
@@ -4609,6 +4703,7 @@ class SDKStore:
         self._assert_scenario_run_query_current(
             compiled_query,
             base_view_digest,
+            expected_premise_policy_revision,
             targeted=raw_query if isinstance(raw_query, TargetedCompiledEvaluationQueryV0) else None,
         )
         self._assert_scenario_effective_snapshot_current(
@@ -4627,6 +4722,7 @@ class SDKStore:
         self._assert_scenario_run_query_current(
             compiled_query,
             base_view_digest,
+            expected_premise_policy_revision,
             targeted=raw_query if isinstance(raw_query, TargetedCompiledEvaluationQueryV0) else None,
         )
         self._assert_scenario_effective_snapshot_current(
@@ -4644,6 +4740,7 @@ class SDKStore:
         self._assert_scenario_run_query_current(
             compiled_query,
             base_view_digest,
+            expected_premise_policy_revision,
             targeted=raw_query if isinstance(raw_query, TargetedCompiledEvaluationQueryV0) else None,
         )
         self._assert_scenario_effective_snapshot_current(
@@ -4664,6 +4761,7 @@ class SDKStore:
             ),
             "evaluation_query": compiled_query,
             "evaluation_query_source_target": source_target,
+            "expected_premise_policy_revision": expected_premise_policy_revision,
             "attach_run_anchor": True,
             "collect_support_artifacts": False,
         }
@@ -4731,6 +4829,7 @@ class SDKStore:
         self._assert_scenario_run_query_current(
             compiled_query,
             base_view_digest,
+            expected_premise_policy_revision,
             targeted=raw_query if isinstance(raw_query, TargetedCompiledEvaluationQueryV0) else None,
         )
         return run
@@ -4761,10 +4860,15 @@ class SDKStore:
         self,
         compiled_query: CompiledEvaluationQueryV0,
         digest: str,
+        expected_premise_policy_revision: int,
         *,
         targeted: TargetedCompiledEvaluationQueryV0 | None,
     ) -> None:
-        self._assert_evaluation_query_execution_current(compiled_query, digest)
+        self._assert_evaluation_query_execution_current(
+            compiled_query,
+            digest,
+            expected_premise_policy_revision,
+        )
         if targeted is not None:
             try:
                 assert_targeted_evaluation_query_current(targeted)
@@ -4772,6 +4876,11 @@ class SDKStore:
                 raise SDKStoreError(
                     "targeted compiled Query changed during ScenarioRun execution"
                 ) from exc
+            self._assert_evaluation_query_execution_current(
+                compiled_query,
+                digest,
+                expected_premise_policy_revision,
+            )
 
     @staticmethod
     def _assert_scenario_effective_snapshot_current(
@@ -4811,9 +4920,34 @@ class SDKStore:
         except ValueError as exc:
             raise SDKStoreError("compiled EvaluationQuery failed its execution-time integrity check") from exc
 
-    def _assert_evaluation_query_execution_current(self, query: CompiledEvaluationQueryV0, digest: str) -> None:
+    def _assert_evaluation_query_execution_current(
+        self,
+        query: CompiledEvaluationQueryV0,
+        digest: str,
+        expected_premise_policy_revision: int,
+    ) -> None:
+        """Fail closed when a compiled Query's sampled execution state changed.
+
+        Args:
+            query: The compiled Query whose private integrity seal is rechecked.
+            digest: Expected typed-view digest captured for this execution.
+            expected_premise_policy_revision: Internal Store generation sampled
+                at the Query entry.
+
+        Raises:
+            SDKStoreError: If the Query seal, premise-policy state, or typed
+                view no longer matches the sampled execution inputs.
+
+        Notes:
+            The generation is an in-process ABA guard only. It is not a Store
+            snapshot and is not serialized into Query results, anchors, bundles,
+            or digests.
+        """
         self._assert_evaluation_query_artifact_current(query)
-        if self._evaluation_query_has_premise_filters():
+        if (
+            self._evaluation_query_has_premise_filters()
+            or self._store._premise_policy_revision != expected_premise_policy_revision
+        ):
             raise SDKStoreError("FactGraph premise policy changed during EvaluationQuery execution")
         if self._view_snapshot_digest(query_typed_values=True) != digest:
             raise SDKStoreError("FactGraph view changed during EvaluationQuery execution")
@@ -4927,12 +5061,17 @@ class SDKStore:
         lowering_rules_by_id: Mapping[str, ApplicationRule] | None = None,
         evaluation_query: CompiledEvaluationQueryV0 | None = None,
         evaluation_query_source_target: Any | None = None,
+        expected_premise_policy_revision: int | None = None,
         view_snapshot_digest_override: str | None = None,
         attach_run_anchor: bool = True,
         collect_support_artifacts: bool = True,
     ) -> EvaluateResult:
         run_id = new_run_id()
         if evaluation_query is None:
+            if expected_premise_policy_revision is not None:
+                raise SDKStoreError(
+                    "premise policy revision is reserved for compiled EvaluationQuery results"
+                )
             if view_snapshot_digest_override is not None:
                 raise SDKStoreError(
                     "view snapshot override is reserved for compiled EvaluationQuery results"
@@ -4948,6 +5087,14 @@ class SDKStore:
             claim_kind: ClaimKind = "fact_triple"
             binding_types = None
         else:
+            if (
+                type(expected_premise_policy_revision) is not int
+                or expected_premise_policy_revision < 0
+            ):
+                raise SDKStoreError(
+                    "compiled EvaluationQuery result requires its expected premise policy revision"
+                )
+            assert isinstance(expected_premise_policy_revision, int)
             if view_snapshot_digest_override is None:
                 raise SDKStoreError("compiled EvaluationQuery result requires its evaluated view digest")
             expr_digest = f"sha256:{evaluation_query.query_digest}"
@@ -5039,13 +5186,16 @@ class SDKStore:
             )
             row_close_builder = self._close_evaluate_row
             if evaluation_query is not None:
+                assert isinstance(expected_premise_policy_revision, int)
                 row_close_builder = self._evaluation_query_row_close_builder(
                     evaluation_query,
                     view_snapshot_digest,
+                    expected_premise_policy_revision,
                 )
                 row_graph_builder = self._evaluation_query_row_graph_builder(
                     evaluation_query,
                     view_snapshot_digest,
+                    expected_premise_policy_revision,
                     row_graph_builder,
                 )
             result = EvaluateResult(
@@ -5084,11 +5234,20 @@ class SDKStore:
         self,
         compiled_query: CompiledEvaluationQueryV0,
         view_snapshot_digest: str,
+        expected_premise_policy_revision: int,
     ):
         def _builder(row: Any, result: EvaluateResult) -> ApplicationRule:
-            self._assert_evaluation_query_live_current(compiled_query, view_snapshot_digest)
+            self._assert_evaluation_query_live_current(
+                compiled_query,
+                view_snapshot_digest,
+                expected_premise_policy_revision,
+            )
             closed = self._close_evaluate_row(row, result)
-            self._assert_evaluation_query_live_current(compiled_query, view_snapshot_digest)
+            self._assert_evaluation_query_live_current(
+                compiled_query,
+                view_snapshot_digest,
+                expected_premise_policy_revision,
+            )
             return closed
 
         return _builder
@@ -5097,14 +5256,23 @@ class SDKStore:
         self,
         compiled_query: CompiledEvaluationQueryV0,
         view_snapshot_digest: str,
+        expected_premise_policy_revision: int,
         delegate: Any,
     ):
         graph_builder = delegate or _build_minimal_row_evidence_graph
 
         def _builder(row: Any, result: EvaluateResult, metadata: Mapping[str, Any]) -> EvidenceGraph:
-            self._assert_evaluation_query_live_current(compiled_query, view_snapshot_digest)
+            self._assert_evaluation_query_live_current(
+                compiled_query,
+                view_snapshot_digest,
+                expected_premise_policy_revision,
+            )
             graph = graph_builder(row, result, metadata)
-            self._assert_evaluation_query_live_current(compiled_query, view_snapshot_digest)
+            self._assert_evaluation_query_live_current(
+                compiled_query,
+                view_snapshot_digest,
+                expected_premise_policy_revision,
+            )
             if not any(getattr(path, "status", None) == "holds" for path in graph.paths):
                 raise ValueError("EvaluationQuery explanation has no holding evidence path")
             return graph
@@ -5115,12 +5283,33 @@ class SDKStore:
         self,
         compiled_query: CompiledEvaluationQueryV0,
         view_snapshot_digest: str,
+        expected_premise_policy_revision: int,
     ) -> None:
+        """Fail closed before or after a live Query row is closed or explained.
+
+        Args:
+            compiled_query: The Query that produced the live row.
+            view_snapshot_digest: Typed-view digest sampled by that Query run.
+            expected_premise_policy_revision: Internal Store generation sampled
+                by that same run.
+
+        Raises:
+            ValueError: If the Query seal, policy state, or typed view is stale.
+
+        Notes:
+            This is a live-state guard only: it may fail closed for a stale live
+            row before or after graph construction. It is not a Store snapshot,
+            replay, or verification claim and does not make Explain
+            snapshot-backed or otherwise newly available.
+        """
         try:
             _assert_compiled_evaluation_query_current(compiled_query)
         except ValueError as exc:
             raise ValueError("compiled EvaluationQuery failed its live integrity check") from exc
-        if self._evaluation_query_has_premise_filters():
+        if (
+            self._evaluation_query_has_premise_filters()
+            or self._store._premise_policy_revision != expected_premise_policy_revision
+        ):
             raise ValueError("EvaluationQuery result premise policy is stale")
         self._assert_evaluation_query_view_current(view_snapshot_digest)
 

@@ -40,6 +40,7 @@ from factgraph.application.schema_runtime import (
 )
 from factgraph.core.evidence.write_protocol import set_field
 from factgraph.core.rules.where_ast import PredAtom, Var
+from factgraph.core.store.premise_filter import MetaExclusion
 from factgraph.sdk import Entity, Field, Identity, SDKStore
 from factgraph.sdk.errors import SDKStoreError
 
@@ -285,6 +286,92 @@ class CapturedEvaluationQueryRunV0Tests(unittest.TestCase):
             query = query.expect_contains(f"{index}-{oversized_id}", age=22)
         with self.assertRaisesRegex(SDKStoreError, "maximum encoded size"):
             query.capture()
+
+    def test_targeted_evaluate_and_capture_reject_a_restored_premise_policy(self) -> None:
+        exclusion = MetaExclusion("provenance_class", frozenset({"untrusted"}))
+        import factgraph.sdk.store as store_module
+
+        ordinary = SDKStore([Person])
+        _seed(ordinary, "alice", 22)
+        targeted = self._builder(ordinary).compile()
+        original_evaluate = store_module.evaluate_derivation_plans
+
+        def restore_policy_after_evaluate(*args, **kwargs):
+            outputs = original_evaluate(*args, **kwargs)
+            ordinary.set_premise_exclusions(exclusion)
+            ordinary.set_premise_exclusions(None)
+            return outputs
+
+        with patch(
+            "factgraph.sdk.store.evaluate_derivation_plans",
+            side_effect=restore_policy_after_evaluate,
+        ), self.assertRaisesRegex(SDKStoreError, "premise policy changed"):
+            ordinary.eval.evaluate(targeted)
+
+        preflight = SDKStore([Person])
+        _seed(preflight, "alice", 22)
+        targeted = self._builder(preflight).compile()
+        original_target_check = store_module.assert_targeted_evaluation_query_current
+        target_check_calls = 0
+
+        def restore_policy_after_first_target_check(value):
+            nonlocal target_check_calls
+            original_target_check(value)
+            target_check_calls += 1
+            if target_check_calls == 1:
+                preflight.set_premise_exclusions(exclusion)
+                preflight.set_premise_exclusions(None)
+
+        with patch(
+            "factgraph.sdk.store.assert_targeted_evaluation_query_current",
+            side_effect=restore_policy_after_first_target_check,
+        ), patch("factgraph.sdk.store.evaluate_derivation_plans") as evaluator, self.assertRaisesRegex(
+            SDKStoreError,
+            "premise policy changed",
+        ):
+            preflight.eval.evaluate(targeted)
+        evaluator.assert_not_called()
+
+        captured = SDKStore([Person])
+        _seed(captured, "alice", 22)
+        original_capture = store_module.build_captured_evaluation_query_run_v0
+
+        def restore_policy_after_targeted_capture(*args, **kwargs):
+            run = original_capture(*args, **kwargs)
+            captured.set_premise_exclusions(exclusion)
+            captured.set_premise_exclusions(None)
+            return run
+
+        with patch(
+            "factgraph.sdk.store.build_captured_evaluation_query_run_v0",
+            side_effect=restore_policy_after_targeted_capture,
+        ), self.assertRaisesRegex(SDKStoreError, "premise policy changed"):
+            self._builder(captured).capture()
+
+    def test_targeted_evaluate_rechecks_after_final_target_integrity_check(self) -> None:
+        graph = SDKStore([Person])
+        _seed(graph, "alice", 22)
+        targeted = self._builder(graph).compile()
+        exclusion = MetaExclusion("provenance_class", frozenset({"untrusted"}))
+        import factgraph.sdk.store as store_module
+
+        original_target_check = store_module.assert_targeted_evaluation_query_current
+        target_check_calls = 0
+
+        def restore_policy_after_final_target_check(value):
+            nonlocal target_check_calls
+            original_target_check(value)
+            target_check_calls += 1
+            if target_check_calls == 3:
+                graph.set_premise_exclusions(exclusion)
+                graph.set_premise_exclusions(None)
+
+        with patch(
+            "factgraph.sdk.store.assert_targeted_evaluation_query_current",
+            side_effect=restore_policy_after_final_target_check,
+        ), self.assertRaisesRegex(SDKStoreError, "premise policy changed"):
+            graph.eval.evaluate(targeted)
+        self.assertEqual(target_check_calls, 3)
 
 
 if __name__ == "__main__":

@@ -797,6 +797,84 @@ class EvaluationQueryNativeEvaluateTests(unittest.TestCase):
             row.close()
         self.assertEqual(row.explain().status, "unsupported")
 
+    def test_premise_policy_aba_aborts_normal_and_run_bundle_execution(self) -> None:
+        exclusion = MetaExclusion("provenance_class", frozenset({"untrusted"}))
+        import factgraph.sdk.store as store_module
+
+        normal = SDKStore([Person])
+        _seed_person(normal, "alice", age=22, score=9)
+        compiled, _bundle = _compiled_person_query(normal)
+        original_evaluate = store_module.evaluate_derivation_plans
+
+        def restore_policy_after_normal_evaluate(*args, **kwargs):
+            candidates = original_evaluate(*args, **kwargs)
+            normal.set_premise_exclusions(exclusion)
+            normal.set_premise_exclusions(None)
+            return candidates
+
+        with patch(
+            "factgraph.sdk.store.evaluate_derivation_plans",
+            side_effect=restore_policy_after_normal_evaluate,
+        ), self.assertRaisesRegex(SDKStoreError, "premise policy changed"):
+            normal.eval.evaluate(compiled)
+
+        captured = SDKStore([Person])
+        _seed_person(captured, "alice", age=22, score=9)
+        compiled, _bundle = _compiled_person_query(captured)
+        original_bundle = store_module._build_evaluation_run_bundle_v0
+
+        def restore_policy_after_bundle_capture(*args, **kwargs):
+            bundle = original_bundle(*args, **kwargs)
+            captured.set_premise_exclusions(exclusion)
+            captured.set_premise_exclusions(None)
+            return bundle
+
+        with patch(
+            "factgraph.sdk.store._build_evaluation_run_bundle_v0",
+            side_effect=restore_policy_after_bundle_capture,
+        ), self.assertRaisesRegex(SDKStoreError, "premise policy changed"):
+            captured.eval.evaluate(compiled, capture="run_bundle_v0")
+
+    def test_premise_policy_entry_pin_rejects_preflight_aba_before_engine(self) -> None:
+        graph = SDKStore([Person])
+        _seed_person(graph, "alice", age=22, score=9)
+        compiled, _bundle = _compiled_person_query(graph)
+        exclusion = MetaExclusion("provenance_class", frozenset({"untrusted"}))
+        original = graph._assert_evaluation_query_artifact_current
+
+        def restore_policy_after_artifact_check(query):
+            original(query)
+            graph.set_premise_exclusions(exclusion)
+            graph.set_premise_exclusions(None)
+
+        with patch.object(
+            graph,
+            "_assert_evaluation_query_artifact_current",
+            side_effect=restore_policy_after_artifact_check,
+        ), patch("factgraph.sdk.store.evaluate_derivation_plans") as evaluator, self.assertRaisesRegex(
+            SDKStoreError,
+            "premise policy changed",
+        ):
+            graph.eval.evaluate(compiled)
+        evaluator.assert_not_called()
+
+    def test_premise_policy_aba_after_result_blocks_close_and_explain(self) -> None:
+        exclusion = MetaExclusion("provenance_class", frozenset({"untrusted"}))
+        graph = SDKStore([Person])
+        _seed_person(graph, "alice", age=22, score=9)
+        compiled, _bundle = _compiled_person_query(graph)
+        row = graph.eval.evaluate(compiled)[0]
+
+        graph.set_premise_exclusions(exclusion)
+        graph.set_premise_exclusions(None)
+
+        with self.assertRaisesRegex(ValueError, "premise policy is stale"):
+            row.close()
+        explanation = row.explain()
+        self.assertEqual(explanation.status, "unsupported")
+        self.assertEqual(explanation.errors[0].code, "GRAPH_VALIDATION_FAILED")
+        self.assertIn("premise policy is stale", explanation.errors[0].message)
+
     def test_query_explain_rejects_graph_without_holding_path(self) -> None:
         graph = SDKStore([Person])
         _seed_person(graph, "alice", age=22, score=9)
@@ -1232,6 +1310,28 @@ class EvaluationQueryScenarioFieldSubstitutionTests(unittest.TestCase):
         ), self.assertRaisesRegex(SDKStoreError, "view changed"):
             graph.eval.evaluate(compiled, scenario=self._scenario(value=35))
         self.assertEqual(call_count, 1)
+
+    def test_legacy_scenario_rejects_a_restored_premise_policy(self) -> None:
+        graph = SDKStore([Person])
+        _seed_person(graph, "alice", age=22, score=9)
+        compiled, _bundle = _compiled_person_query(graph, employee_id="alice")
+        exclusion = MetaExclusion("provenance_class", frozenset({"untrusted"}))
+        import factgraph.sdk.store as store_module
+
+        original = store_module._evaluate_derivation_plans_with_native_effective_relation
+
+        def restore_policy_after_baseline(*args, **kwargs):
+            outputs = original(*args, **kwargs)
+            graph.set_premise_exclusions(exclusion)
+            graph.set_premise_exclusions(None)
+            return outputs
+
+        with patch(
+            "factgraph.sdk.store._evaluate_derivation_plans_with_native_effective_relation",
+            side_effect=restore_policy_after_baseline,
+        ) as evaluator, self.assertRaisesRegex(SDKStoreError, "premise policy changed"):
+            graph.eval.evaluate(compiled, scenario=self._scenario(value=35))
+        self.assertEqual(evaluator.call_count, 1)
 
     def test_scenario_set_applies_all_members_atomically_with_two_evaluations(self) -> None:
         graph = SDKStore([Person])

@@ -30,6 +30,7 @@ from factgraph.application.protocol import (
 )
 from factgraph.core.evidence.write_protocol import set_field
 from factgraph.core.rules.where_ast import PredAtom, Var
+from factgraph.core.store.premise_filter import MetaExclusion
 from factgraph.sdk import Entity, Field, Identity, SDKStore
 from factgraph.sdk.errors import SDKStoreError
 from factgraph.application.schema_runtime import (
@@ -277,6 +278,87 @@ class ScenarioRunV0Tests(unittest.TestCase):
             query.what_if(_scenario("alice", "age", 35, "alice-age")).run()
 
         self.assertEqual(evaluator.call_count, 1)
+
+    def test_run_scenario_rejects_a_restored_premise_policy(self) -> None:
+        graph = SDKStore([Person])
+        _seed(graph, "alice", age=22, score=9)
+        query = (
+            graph.query(_bundle(graph))
+            .bind(_address("target", "person"), EntityRef("Person", {"employee_id": "alice"}))
+            .select("age", _address("target", "age"))
+        )
+        exclusion = MetaExclusion("provenance_class", frozenset({"untrusted"}))
+        import factgraph.sdk.store as store_module
+
+        original = store_module.build_scenario_run_v0
+
+        def restore_policy_after_run_build(*args, **kwargs):
+            run = original(*args, **kwargs)
+            graph.set_premise_exclusions(exclusion)
+            graph.set_premise_exclusions(None)
+            return run
+
+        with patch(
+            "factgraph.sdk.store.build_scenario_run_v0",
+            side_effect=restore_policy_after_run_build,
+        ), self.assertRaisesRegex(SDKStoreError, "premise policy changed"):
+            query.what_if(_scenario("alice", "age", 35, "alice-age")).run()
+
+    def test_run_scenario_entry_pin_rejects_preflight_aba_before_capture(self) -> None:
+        graph = SDKStore([Person])
+        _seed(graph, "alice", age=22, score=9)
+        query = (
+            graph.query(_bundle(graph))
+            .bind(_address("target", "person"), EntityRef("Person", {"employee_id": "alice"}))
+            .select("age", _address("target", "age"))
+        )
+        exclusion = MetaExclusion("provenance_class", frozenset({"untrusted"}))
+        original = graph._assert_evaluation_query_artifact_current
+
+        def restore_policy_after_artifact_check(compiled_query):
+            original(compiled_query)
+            graph.set_premise_exclusions(exclusion)
+            graph.set_premise_exclusions(None)
+
+        with patch.object(
+            graph,
+            "_assert_evaluation_query_artifact_current",
+            side_effect=restore_policy_after_artifact_check,
+        ), patch(
+            "factgraph.sdk.store._evaluate_derivation_plans_with_native_effective_relation_capture"
+        ) as evaluator, self.assertRaisesRegex(SDKStoreError, "premise policy changed"):
+            query.what_if(_scenario("alice", "age", 35, "alice-age")).run()
+        evaluator.assert_not_called()
+
+    def test_targeted_run_scenario_rechecks_after_final_target_integrity_check(self) -> None:
+        graph = SDKStore([Person])
+        _seed(graph, "alice", age=22, score=9)
+        targeted = (
+            graph.query(_bundle(graph))
+            .bind(_address("target", "person"), EntityRef("Person", {"employee_id": "alice"}))
+            .select("age", _address("target", "age"))
+            .compile()
+        )
+        exclusion = MetaExclusion("provenance_class", frozenset({"untrusted"}))
+        import factgraph.sdk.store as store_module
+
+        original_target_check = store_module.assert_targeted_evaluation_query_current
+        target_check_calls = 0
+
+        def restore_policy_after_final_target_check(value):
+            nonlocal target_check_calls
+            original_target_check(value)
+            target_check_calls += 1
+            if target_check_calls == 5:
+                graph.set_premise_exclusions(exclusion)
+                graph.set_premise_exclusions(None)
+
+        with patch(
+            "factgraph.sdk.store.assert_targeted_evaluation_query_current",
+            side_effect=restore_policy_after_final_target_check,
+        ), self.assertRaisesRegex(SDKStoreError, "premise policy changed"):
+            graph.eval.run_scenario(targeted, _scenario("alice", "age", 35, "alice-age"))
+        self.assertEqual(target_check_calls, 5)
 
     def test_atomic_set_same_value_and_zero_result_remain_explicit(self) -> None:
         graph = SDKStore([Person])

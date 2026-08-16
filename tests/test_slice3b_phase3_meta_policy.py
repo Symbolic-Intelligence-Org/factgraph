@@ -443,9 +443,55 @@ class PremiseEligibilityClosureTests(unittest.TestCase):
         )
         for setter, value, current in attempts:
             with self.subTest(setter=setter.__name__):
+                before_revision = store._premise_policy_revision
                 with self.assertRaisesRegex(ValueError, "not declared premise_eligible"):
                     setter(value)
                 self.assertEqual(current(), ())
+                self.assertEqual(store._premise_policy_revision, before_revision)
+
+    def test_premise_setters_advance_only_the_private_revision_after_success(self) -> None:
+        schema_ir = compile_schema_from_classes([_MetaPolicyEntity])
+        store = Store(schema_ir)
+
+        self.assertFalse(hasattr(store, "premise_policy_revision"))
+        self.assertEqual(store._premise_policy_revision, 0)
+        preconfigured = Store(
+            schema_ir,
+            premise_exclusions=MetaExclusion("provenance_class", frozenset({"blocked"})),
+        )
+        self.assertEqual(preconfigured._premise_policy_revision, 0)
+
+        configurations = (
+            (
+                store.set_premise_exclusions,
+                MetaExclusion("provenance_class", frozenset({"blocked"})),
+            ),
+            (
+                store.set_premise_allowances,
+                PredicatePremiseAllowance(
+                    "_MetaPolicyEntity:exists",
+                    "origin_binding",
+                    frozenset({"trusted"}),
+                ),
+            ),
+            (
+                store.set_premise_blocks,
+                PredicatePremiseBlock(
+                    "_MetaPolicyEntity:exists",
+                    "provenance_class",
+                    frozenset({"blocked"}),
+                ),
+            ),
+        )
+        for setter, value in configurations:
+            with self.subTest(setter=setter.__name__):
+                before = store._premise_policy_revision
+                setter(value)
+                self.assertEqual(store._premise_policy_revision, before + 1)
+                setter(value)
+                self.assertEqual(store._premise_policy_revision, before + 2)
+                setter(None)
+                self.assertEqual(store._premise_policy_revision, before + 3)
 
     def test_explicit_declaration_opens_and_can_tighten_builtin(self) -> None:
         open_schema = compile_schema_from_classes(

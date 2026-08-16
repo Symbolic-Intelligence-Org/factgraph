@@ -104,6 +104,9 @@ class Store:
             self._premise_allowances,
             self._premise_blocks,
         )
+        # Internal, process-local generation marker for compiled Query ABA
+        # freshness. It is not a snapshot, serialized field, or public API.
+        self._premise_policy_revision = 0
         self._engine_overrides: dict[str, EngineEvaluatorFn] = {}
         self._artifact_sidecar = artifact_sidecar
         self._support_artifacts: dict[str, ProofReceipt] = {}
@@ -140,10 +143,21 @@ class Store:
         to every rule evaluation (all engine modes, proof-frame recheck, and
         the derivation check). Read/query paths outside evaluation stay
         unfiltered. Passing ``None`` or an empty iterable disables filtering.
+
+        A successful assignment, including an equivalent configuration,
+        advances an internal process-local generation only after normalization
+        and schema validation succeed; a failed setter leaves it unchanged.
+        That generation makes an in-flight compiled EvaluationQuery execution
+        that sampled the preceding policy state, and live-row
+        ``close()``/``explain()`` on a result from such an earlier execution,
+        fail closed. It is not public API or serialized state, does not provide a
+        Store snapshot or isolation guarantee, and does not enable
+        premise-filtered compiled Query execution.
         """
         normalized = normalize_premise_exclusions(exclusions)
         validate_premise_configuration(self.schema_ir, exclusions=normalized)
         self._premise_exclusions = normalized
+        self._premise_policy_revision += 1
 
     @property
     def premise_allowances(self) -> tuple[PredicatePremiseAllowance, ...]:
@@ -164,10 +178,21 @@ class Store:
         assertion excluded by either is invisible), so the global exclusion
         floor is never lifted. Passing ``None`` or an empty iterable disables
         per-predicate filtering.
+
+        A successful assignment, including an equivalent configuration,
+        advances an internal process-local generation only after normalization
+        and schema validation succeed; a failed setter leaves it unchanged.
+        That generation makes an in-flight compiled EvaluationQuery execution
+        that sampled the preceding policy state, and live-row
+        ``close()``/``explain()`` on a result from such an earlier execution,
+        fail closed. It is not public API or serialized state, does not provide a
+        Store snapshot or isolation guarantee, and does not enable
+        premise-filtered compiled Query execution.
         """
         normalized = normalize_premise_allowances(allowances)
         validate_premise_configuration(self.schema_ir, allowances=normalized)
         self._premise_allowances = normalized
+        self._premise_policy_revision += 1
 
     @property
     def premise_blocks(self) -> tuple[PredicatePremiseBlock, ...]:
@@ -187,10 +212,21 @@ class Store:
         is OR-combined with ``premise_exclusions`` and ``premise_allowances``
         (an assertion excluded by any is invisible). Passing ``None`` or an
         empty iterable disables per-predicate blocking.
+
+        A successful assignment, including an equivalent configuration,
+        advances an internal process-local generation only after normalization
+        and schema validation succeed; a failed setter leaves it unchanged.
+        That generation makes an in-flight compiled EvaluationQuery execution
+        that sampled the preceding policy state, and live-row
+        ``close()``/``explain()`` on a result from such an earlier execution,
+        fail closed. It is not public API or serialized state, does not provide a
+        Store snapshot or isolation guarantee, and does not enable
+        premise-filtered compiled Query execution.
         """
         normalized = normalize_premise_blocks(blocks)
         validate_premise_configuration(self.schema_ir, blocks=normalized)
         self._premise_blocks = normalized
+        self._premise_policy_revision += 1
 
     def _remember_support_artifact(
         self,
