@@ -1,6 +1,6 @@
 # Task Blueprint: FactGraph Q20/Q21 canonical release reconciliation
 
-- Status: scoped
+- Status: implementing
 - Created: 2026-08-16
 - Last Updated: 2026-08-16
 - Authority: private-only scoped task blueprint. Under the user's 2026-08-16
@@ -543,8 +543,16 @@ before implementation.
 
 ## 10. Outcome / Deviations
 
-Not started. This section remains empty until an authorized implementation
-phase completes private reconciliation, projection verification, and the
-corresponding evidence review. A local branch, a candidate wheel, a public PR,
-and a published release must be recorded as distinct outcomes if and when they
-occur.
+Implementation is in progress. The first scoped private-only reconciliation
+step landed locally as `52c18383`: it adds the graph-free R3d
+`build_captured_receipt_evidence_v0(...)` path, its nested-sealed DTOs,
+application-only documentation, and preservation/adversarial tests while
+retaining the existing `evaluation_run_bundle_evidence(...)->EvidenceGraph`
+playback contract. Independent review and focused checks are recorded in the
+paired audit.
+
+This is neither a completed three-way reconciliation nor projection evidence.
+The remaining private matrix rows, all dual-input composition/wheel work, and
+every public review/release/Meander gate remain open. A local feature commit, a
+projection candidate, a wheel, a public PR, and a published artifact must be
+recorded as distinct outcomes if and when they occur.
