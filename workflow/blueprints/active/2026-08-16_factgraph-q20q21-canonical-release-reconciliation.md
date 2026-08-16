@@ -1,12 +1,16 @@
 # Task Blueprint: FactGraph Q20/Q21 canonical release reconciliation
 
-- Status: draft
+- Status: scoped
 - Created: 2026-08-16
 - Last Updated: 2026-08-16
-- Authority: task blueprint. This draft constrains a possible private-source
-  reconciliation and release-candidate preparation; it does not authorize code
-  transfer, a status transition, a public push/PR, merge, tag, artifact
-  publication, or Meander consumption.
+- Authority: private-only scoped task blueprint. Under the user's 2026-08-16
+  autonomous, feature-branch-only authorization, this scope permits only a
+  separate private `features/...-source-reconcile-...` branch and §8.3–4's
+  private runtime/protocol/core/SDK/test/docstring reconciliation. It does not
+  authorize public projection/composition, façade/export selection, CI/package/
+  changelog/docs patches, wheel building, a public-release status claim beyond
+  this private scope, public push/PR, merge, tag, artifact publication, or Meander
+  consumption.
 - Inputs:
   - [Q20/Q21 release-surface audit](../../audit/active/2026-08-16_factgraph-q20q21-release-surface-vs-shipped.md), recorded at private audit commit
     `2458e79a55062be862fb2aec0ea447ac6614b03e`.
@@ -262,7 +266,7 @@ separate scope amendment.
 The two paths use stable, fixed names and return types. Existing private
 `evaluation_run_bundle_evidence(bundle, *, row_capture_digest) -> EvidenceGraph`
 remains unchanged for its existing captured-run and Scenario consumers. A new,
-additive builder, provisionally named
+additive builder is fixed as
 `build_captured_receipt_evidence_v0(bundle, *, row_capture_digest) ->
 CapturedReceiptEvidenceV0`, lives in a dedicated receipt runtime module if and
 only if the reconciled source genuinely supports it. Aliasing, replacing the
@@ -358,11 +362,13 @@ that remote CI has run. If its exact pytest invocation requires it, the same
 public-owned patch adds pytest to the public dev test setup; it does not import
 private package metadata.
 
-Ruff and the selected tests are hard gates. Mypy and coverage currently have
-advisory configuration in the candidate workflow; neither may be described as
-a release blocker unless the implementation changes configuration so that it
-actually blocks. Regardless of advisory status, new/changed modules receive a
-scoped type check and its result is recorded honestly.
+Ruff must cover every changed approved Q20-core/R3d source path and every
+selected runtime/protocol/SDK/core test path; Ruff and the selected tests are
+hard gates. Mypy and coverage currently have advisory configuration in the
+candidate workflow; neither may be described as a release blocker unless the
+implementation changes configuration so that it actually blocks. Regardless of
+advisory status, new/changed modules receive a scoped type check and its result
+is recorded honestly.
 
 Build only a wheel from the sanitized staging tree. In a new environment,
 install that wheel without a source-tree import path, run a bounded Q20/R3d
@@ -471,6 +477,12 @@ treated as allocated merely because it appears in a draft package file.
 
 ## 8. Implementation Plan
 
+This scoped private phase authorizes only steps 3–4 below. The public
+projection/composition, public façade/export selection, CI/package/changelog/
+docs patches, wheel/version/PR, and all remote or Meander actions in steps 5–7
+remain separate future gates. No public façade export delta is approved in this
+private scope.
+
 1. **Draft review, then independent preflight:** after this draft review,
    create a distinct `features/...-preflight-...` branch. Reread the private
    baseline, public baseline, candidate diff, projection script, allowlist,
@@ -478,14 +490,13 @@ treated as allocated merely because it appears in a draft package file.
    path/import/test matrix and a required standalone preflight; no runtime file
    is changed before shape conflicts, public/private classes, and public-surface
    ownership are resolved.
-2. **Blueprint amendment and scoped anchor:** return to this blueprint branch
-   to apply all required preflight findings: private-preserving delta
-   extraction; fixed old-graph/new-R3d names and types; R3e/F4C deferral;
-   b92-based façade overlay/public-owned patch; dual-input composition; hard-deny,
-   marker-safe staging; and the `BL-1` documentation decision. Independently
-   review the amendment, then obtain the required `draft → scoped`
-   authorization. Only after that authorization may a separate private
-   `features/...-source-reconcile-...` implementation branch be created.
+2. **Blueprint amendment and scoped anchor:** the required preflight findings
+   are now recorded: private-preserving delta extraction; fixed old-graph/
+   new-R3d names and types; R3e/F4C deferral; b92-based façade overlay/public-
+   owned patch; dual-input composition; hard-deny, marker-safe staging; and the
+   `BL-1` documentation decision. Independent review and the user's private
+   feature-branch authorization permit a separate private
+   `features/...-source-reconcile-...` implementation branch only.
 3. **Private canonical implementation:** reconstruct approved runtime,
    protocol, core/SDK bridge, and test changes on a private feature branch.
    Maintain explicit failure-closed behavior and keep R3c, R3d, R3e, and F4C

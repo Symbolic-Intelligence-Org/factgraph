@@ -11,7 +11,8 @@
 | 2026-08-16 | draft | Default-deny docs/example boundary recorded | Candidate worktree module docs and runnable example/test are uncommitted and link an excluded `examples/` path. They are not source-transfer or public-projection input in this slice. |
 | 2026-08-16 | draft | R3d/R3c/F4 boundary recorded | R3d remains a strict capture-only receipt DTO, R3c verification remains non-replay, and R3e/F4C receive no completed-public-capability claim from this draft. |
 | 2026-08-16 | draft | Independent review amendments | P1 review findings require a distinct preflight branch before any implementation branch and an explicit preflight choice for public CI/package metadata ownership. |
-| 2026-08-16 | draft | Independent preflight incorporated | Preflight `ad96da6d` classified all 50 candidate paths, found the old-graph/new-R3d name collision, unsafe one-input projection/staging behavior, façade closure drift, and inherited public-doc link baseline. This blueprint remains draft pending its required gates. |
+| 2026-08-16 | draft | Independent preflight incorporated | Preflight `ad96da6d` classified all 50 candidate paths, found the old-graph/new-R3d name collision, unsafe one-input projection/staging behavior, façade closure drift, and inherited public-doc link baseline. |
+| 2026-08-16 | scoped | Private-only canonical-reconciliation scope frozen | Independent review of Step 4.4's amendment against preflight `ad96da6d` confirms PF-R1–PF-R5 and PF-Rec1–PF-Rec2 are covered. Under the user's existing autonomous feature-branch authorization, this permits only a new private `features/...-source-reconcile-...` branch and §8.3–4 reconciliation. Candidate `6d7628cd` remains comparison input only; no cherry-pick/history transplant. Public projection/composition, public façade/export selection, CI/package/changelog/docs patch, wheel/version/PR/push/merge/tag/upload, and Meander adoption remain unauthorized future gates. `evaluation_run_bundle_evidence(...)->EvidenceGraph` remains fixed; only `build_captured_receipt_evidence_v0(...)->CapturedReceiptEvidenceV0` may be introduced, with R3e/F4C deferred. |
 
 ## Decision Notes
 
@@ -19,10 +20,11 @@
 
 The adopted architecture principle and release-surface audit require private
 HNSM to be the development source of truth. `6d7628cd` is treated as reviewed
-comparison input, not as a source of canonical Git history. Any future carried
+comparison input, not as a source of canonical Git history. Any carried
 behavior must be reconstructed and verified on a private feature branch rooted
 at `c01dccae`, with a three-way path matrix against public `b92d6bf5` and the
-candidate. This is a draft constraint; it has not yet authorized implementation.
+candidate. The scoped authorization is private-only and does not authorize a
+public projection or release action.
 
 ### D-2 — Q20/Q21 module docs and examples are default-denied
 
@@ -89,7 +91,7 @@ R3e/F4C coordinate/overlay/manifest paths are deferred from this slice.
 
 The current helper accepts broad caller-supplied staging paths before `rm -rf`;
 the preflight found that `/tmp`, home-derived, sibling, and unmarked paths are
-not adequately rejected. The later scoped slice must first establish a
+not adequately rejected. The later projection phase must first establish a
 tool-owned scratch root, `mktemp` issuance, marker/`realpath` containment, and
 hard denial of private paths even if an allowlist is widened. Its tests use
 sentinels/mocks rather than destructive broad-path experiments. The inherited
@@ -105,19 +107,20 @@ This prevents a mixed-worktree or changed-current-checkout input from being
 misreported as an earlier reviewed coordinate. Wheel evidence records those
 resolved input digests alongside its own SHA-256 and manifests.
 
-### Open items before `scoped`
+### Remaining implementation and later-gate constraints
 
-- Complete the required standalone preflight after rereading the exact private,
-  public, and candidate sources and all projection/release files.
-- Independently review the preflight amendment and record its final decision
-  against `ad96da6d`.
-- Resolve every carried-path import/export closure in the three-way matrix,
-  preserving private Function/navigation/Policy/Scenario behavior.
-- Specify the minimal kernel/test private manifest, b92 façade export overlay,
-  marker-safe composition helper, hard-deny list, and exact public-diff set.
+- Resolve the row-level import/export closure before every carried change, and
+  preserve private Function/navigation/Policy/Scenario behavior with its named
+  preservation cohort.
+- Implement the fixed R3d builder only with its graph-free/Explanation-free
+  negative tests, then run the exact private Q20-core/R3d and preservation
+  cohorts plus Ruff on every changed approved source and selected test path.
+- Treat the minimal kernel/test manifest, b92 façade export overlay,
+  composition helper, hard-deny list, exact public diff, and installed-wheel
+  import closure as later projection gates; no public export delta is selected
+  by this private scope.
 - Scope the public `BL-1` curated-doc repair separately, or retain its
   non-link-clean status explicitly; do not hide it.
-- Reconfirm the public workflow, staging-wheel, version/changelog, and public
-  `features/...` PR mechanics against the exact then-current refs.
-- Obtain explicit authorization for the preflight amendment and later for
-  `draft → scoped`; no code implementation is authorized by this draft.
+- Reconfirm public workflow, staging-wheel, version/changelog, and public
+  `features/...` PR mechanics against the exact then-current refs before any
+  public projection or review action.
