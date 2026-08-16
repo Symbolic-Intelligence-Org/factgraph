@@ -1,6 +1,6 @@
 # Task Blueprint: FactGraph Q20/Q21 canonical release reconciliation
 
-- Status: implementing
+- Status: implemented
 - Created: 2026-08-16
 - Last Updated: 2026-08-16
 - Authority: private-only scoped task blueprint. Under the user's 2026-08-16
@@ -438,42 +438,48 @@ treated as allocated merely because it appears in a draft package file.
 
 ## 7. Acceptance
 
-- [ ] A complete three-way reconciliation matrix covers every tracked path in
-  `b92d6bf5..6d7628cd`, plus the explicitly omitted dirty docs/examples.
-- [ ] Every carried behavior is implemented and reviewed on a private feature
-  branch rooted at `c01dccae`; no public-candidate commit is cherry-picked.
-- [ ] R3a/R3c/R3d terminology is tested and documented with the availability,
-  freshness, seal, and fail-closed boundaries in §4.3 and §6.
-- [ ] Existing `evaluation_run_bundle_evidence(...)->EvidenceGraph` playback,
+This lifecycle closes only the explicitly authorized private source phase in
+§8.3–4. Projection, wheel, public review, and release work are transferred to a
+future separately scoped gate; their unchecked state is therefore not a failed
+claim of this private implementation.
+
+### 7.1 Private source phase — complete
+
+- [x] The independent three-way matrix covers every tracked path in
+  `b92d6bf5..6d7628cd`, plus the explicitly omitted dirty docs/examples, and
+  classifies non-carried rows as private-richer, shape-conflicting, or deferred.
+- [x] Every carried behavior is implemented and reviewed on a private
+  `features/...` branch rooted at `c01dccae`; no public-candidate commit was
+  cherry-picked or merged.
+- [x] R3a/R3c/R3d terminology remains separated by availability, freshness,
+  seal, and fail-closed boundaries; R3e/F4C and typed-ordering residuals remain
+  deferred rather than implied by this closure.
+- [x] Existing `evaluation_run_bundle_evidence(...)->EvidenceGraph` playback,
   captured-run Explain, and Scenario Explain remain type-stable and passing;
-  any R3d builder has a different fixed name/type and its DTO is rejected by
-  generic graph/render/Explanation consumers.
-- [ ] R3e/F4C coordinate, overlay, and manifest paths are absent from the
-  public wheel, all public façade exports, public CI cohort, SDK/Product/
-  Meander/Agent/MCP claims, and the Q20/R3d capability statement.
-- [ ] Private module docs/docstrings are updated only after actual code
-  behavior is established; the candidate's dirty docs/examples are neither
-  staged nor projected by this slice.
-- [ ] The reviewed dual-input composition creates only tool-owned marked
-  scratch paths, passes normalized allowlist/hard-deny and sentinel path-safety
-  tests, and produces exact private/public manifests, ref-resolved input blob
-  digests, and public diff paths.
-- [ ] Public CI/package metadata use the b92-based, enumerated public-owned
-  surface patch. Public application/protocol/SDK façades are b92 plus exact
-  approved exports, with installed-wheel import-closure and forbidden-export
-  tests; no private façade is copied or merged.
-- [ ] All composed public Markdown passes the forbidden-link scan. Until the
-  inherited `BL-1` link is fixed in a separately reviewed curated-doc patch,
-  no link-clean or final release-candidate claim is made.
-- [ ] The private and projected Q20/Q21 test cohorts, applicable preservation
-  tests, Ruff, scoped mypy, format/diff checks, and wheel smoke test pass with
-  recorded commands/results.
-- [ ] A sanitized wheel is built from the projection, installed in a clean
-  environment, inspected, and recorded with source/manifest/wheel digests.
-- [ ] Version, changelog, public branch, remote CI, tag, and publish evidence
-  are reported in their correct gate row; none is claimed before it happens.
-- [ ] No Meander adapter/HTTP/Agent/MCP/UI work, public release action, or
-  mutation of protected dirty worktrees occurs.
+  the additive R3d builder has a different fixed name/type and its DTO is
+  rejected by generic graph/render/Explanation consumers.
+- [x] The private R3d runtime and M2 freshness guard have no new public façade,
+  SDK/Product/Meander/Agent/MCP export, protocol wire, anchor, bundle, or digest
+  field, and do not claim replay, verification, authenticity, proof parity,
+  source, admission, governance, or business truth.
+- [x] Private module docs/docstrings describe only landed behavior; the
+  candidate's dirty docs/examples were neither staged nor projected.
+- [x] Final local acceptance passed the exact 137-test combined preservation
+  cohort and the 42-test Product cohort, Ruff lint, `py_compile`, scoped mypy
+  for the changed/new bounded modules, and `git diff --check`.
+- [x] No Meander adapter/HTTP/Agent/MCP/UI work, public release action, or
+  mutation of the protected primary worktree occurred in this phase.
+
+### 7.2 Future projection/release gates — deliberately deferred
+
+- [ ] Compose the private kernel/test fragment with b92 public-owned surfaces
+  through the separately hardened projection path and record exact manifests.
+- [ ] Select and test an explicit b92-based public façade/CI/package patch,
+  resolve `BL-1`, and run installed-wheel import/forbidden-export checks.
+- [ ] Build and inspect a sanitized wheel and record source, manifest, and
+  artifact digests.
+- [ ] Obtain separate authorization for any version/changelog proposal, public
+  branch push/PR, remote CI, merge, tag, publication, or release adoption.
 
 ## 8. Implementation Plan
 
@@ -561,8 +567,8 @@ before implementation.
 
 ## 10. Outcome / Deviations
 
-Implementation is in progress. The first scoped private-only reconciliation
-step landed locally as `52c18383`: it adds the graph-free R3d
+The authorized private source-reconciliation phase is implemented. The first
+carried unit landed locally as `52c18383`: it adds the graph-free R3d
 `build_captured_receipt_evidence_v0(...)` path, its nested-sealed DTOs,
 application-only documentation, and preservation/adversarial tests while
 retaining the existing `evaluation_run_bundle_evidence(...)->EvidenceGraph`
@@ -578,8 +584,23 @@ and closed a final targeted-integrity-check window. This does not make a new
 public capability, alter a protocol or capture seal, or change the
 release/Meander state.
 
-This is neither a completed three-way reconciliation nor projection evidence.
-The remaining private matrix rows, all dual-input composition/wheel work, and
-every public review/release/Meander gate remain open. A local feature commit, a
-projection candidate, a wheel, a public PR, and a published artifact must be
-recorded as distinct outcomes if and when they occur.
+The remaining candidate rows were intentionally not turned into more private
+implementation slices: the private baseline already has richer orchestration,
+or the residual changes would alter canonical ordering, R3c verification, or
+deferred R3e/F4C capability boundaries. They are recorded as deferred rather
+than incomplete requirements for Agent development.
+
+Final closure verification reran the exact 137-test M2/R3d/old-graph/
+verification/native-relation/Product/Scenario cohort and a 42-test Product
+cohort; both passed. Ruff lint and `py_compile` passed on all changed Python
+paths, scoped mypy passed for the bounded changed/new modules, and
+`git diff --check c01dccae..HEAD` passed. The selected legacy SDK/test files
+retain their previously recorded whole-file Ruff-format and SDK-mypy baseline
+debt; no unrelated formatting or typing churn was accepted.
+
+This feature branch is now a stable private development input for the next
+Meander/Agent phase under the user's feature-branch dependency authorization.
+It is not a public projection, installed release artifact, or publication
+claim. Dual-input composition, sanitized wheel evidence, public review, and
+all remote/release actions remain distinct future gates and require their own
+scope or authorization.
