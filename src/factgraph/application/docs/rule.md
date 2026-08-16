@@ -543,9 +543,32 @@ Callers that need a current-runtime semantic check may independently pair it wit
 `verify_evaluation_run_bundle(...)`; the playback operation does not depend on or
 consume that verification record.
 
-F4C then projects that unchanged, detached engine evidence onto the authored
-Policy topology. It is deliberately a separate readonly view rather than a new
-`Explanation` field or a replacement for the engine's `EvidenceGraph`:
+R3d is a separate, application-internal capture-only seam:
+
+The executable private usage and boundary coverage live in
+`tests/application/test_evaluation_run_receipt_evidence_runtime.py`; it creates
+a real captured bundle and invokes `build_captured_receipt_evidence_v0(...)`
+through its internal module path. It is not a Product or SDK example.
+
+The builder first completely validates, canonically encodes, freshly decodes,
+and revalidates `EvaluationRunBundleV0`, then resolves exactly one selector.
+It returns a sealed native condition/predicate/assertion-id inventory only and
+fails closed for malformed, stale, absent, ambiguous, foreign, or zero-row
+input. It neither calls the existing F4B3 `evaluation_run_bundle_evidence(...)`
+graph playback, an evaluator, nor F4B2 verification; it never imports Policy
+lineage or constructs an `EvidenceGraph`/`Explanation`. The required complete
+bundle validation still validates sealed bundle components, but R3d does not
+use or project Policy/Rule lineage to derive its inventory. Its fixed
+`authenticity="unverified"`, verification `"not_performed"`, and
+`proof_parity="not_claimed"` are not truth, source/admission/governance,
+authorization, proof, replay, or negative-result claims. `CapturedReceiptEvidenceV0`
+has no codec and is not exported from application/protocol roots or any SDK,
+Product, Meander, Agent, or MCP surface.
+
+Separately, the existing F4C graph path—not R3d—projects the unchanged F4B3
+detached `EvidenceGraph` onto the authored Policy topology. It is deliberately
+a separate readonly view rather than a new `Explanation` field or a replacement
+for the engine's `EvidenceGraph`:
 
 ```python
 from factgraph.application import project_policy_explanation_v0

@@ -1,7 +1,8 @@
 # Application Protocol — V0 EvaluateResult and V1 GoalPlan / Run Surface
 
-- Scope: `src/factgraph/application/protocol/evaluate_result.py` + `explanation_render.py`
-- Last updated: 2026-08-13
+- Scope: `src/factgraph/application/protocol/evaluate_result.py`,
+  `explanation_render.py`, and the private R3d receipt-inventory DTOs
+- Last updated: 2026-08-16
 - Audience: SDK layer maintainers, adapter writers, and test authors
 
 This document covers the V0 evaluate-result / explain slice and the separate
@@ -25,6 +26,21 @@ overview doc at `src/factgraph/application/docs/01_overview_en.md`.
 `explanation_render.py` owns:
 
 - `walk_evidence(graph, ...)` — deterministic text rendering over `EvidenceGraph(paths=...)`
+
+`captured_receipt_evidence.py` owns an application-internal R3d trio:
+`CapturedReceiptConditionV0`, `CapturedReceiptBranchV0`, and
+`CapturedReceiptEvidenceV0`.  They are immutable nested-sealed inventory
+records for one selected native receipt branch only.  Their approved builder
+first takes a fully validated canonical bundle snapshot, then selects a row;
+the DTOs themselves have no codec or Store/ledger/cache/sidecar/registry/
+evaluator behavior.  They carry no values, source metadata, certainty,
+Policy/Rule attribution, verdict, `EvidenceGraph`, or `Explanation`.  Their
+seals are integrity checks, not authenticity, source/admission/governance,
+authorization, business truth, proof parity, verification, or replay.  Fixed
+`unverified`, `not_performed`, and `not_claimed` labels are availability
+boundaries, not falsehood.  This private detail is deliberately not imported
+by `factgraph.application` or `factgraph.application.protocol`, and is not a
+Product, SDK, Meander, Agent, or MCP contract.
 
 ---
 
