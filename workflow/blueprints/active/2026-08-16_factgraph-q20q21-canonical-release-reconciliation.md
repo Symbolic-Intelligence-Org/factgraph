@@ -569,11 +569,14 @@ retaining the existing `evaluation_run_bundle_evidence(...)->EvidenceGraph`
 playback contract. Independent review and focused checks are recorded in the
 paired audit.
 
-The next approved private implementation unit is not yet implemented: the
-bounded M2 internal premise-policy revision freshness guard in §8.3. It is
-limited to the current core/SDK execution guards and their private tests; it
-does not make a new public capability, alter a protocol or capture seal, or
-change the release/Meander state.
+The bounded M2 internal premise-policy revision freshness guard in §8.3 landed
+locally as `07bbcca1`. It is limited to current core/SDK execution guards and
+private tests: successful validated premise-policy changes advance an internal
+generation so a set-and-restore ABA change fails closed for the scoped
+compiled-Query and live-row boundaries. Independent adversarial review found
+and closed a final targeted-integrity-check window. This does not make a new
+public capability, alter a protocol or capture seal, or change the
+release/Meander state.
 
 This is neither a completed three-way reconciliation nor projection evidence.
 The remaining private matrix rows, all dual-input composition/wheel work, and
