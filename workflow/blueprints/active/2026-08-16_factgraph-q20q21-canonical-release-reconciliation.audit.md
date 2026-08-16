@@ -12,8 +12,9 @@
 | 2026-08-16 | draft | R3d/R3c/F4 boundary recorded | R3d remains a strict capture-only receipt DTO, R3c verification remains non-replay, and R3e/F4C receive no completed-public-capability claim from this draft. |
 | 2026-08-16 | draft | Independent review amendments | P1 review findings require a distinct preflight branch before any implementation branch and an explicit preflight choice for public CI/package metadata ownership. |
 | 2026-08-16 | draft | Independent preflight incorporated | Preflight `ad96da6d` classified all 50 candidate paths, found the old-graph/new-R3d name collision, unsafe one-input projection/staging behavior, façade closure drift, and inherited public-doc link baseline. |
-| 2026-08-16 | scoped | Private-only canonical-reconciliation scope frozen | Independent review of Step 4.4's amendment against preflight `ad96da6d` confirms PF-R1–PF-R5 and PF-Rec1–PF-Rec2 are covered. Under the user's existing autonomous feature-branch authorization, this permits only a new private `features/...-source-reconcile-...` branch and §8.3–4 reconciliation. Candidate `6d7628cd` remains comparison input only; no cherry-pick/history transplant. Public projection/composition, public façade/export selection, CI/package/changelog/docs patch, wheel/version/PR/push/merge/tag/upload, and Meander adoption remain unauthorized future gates. `evaluation_run_bundle_evidence(...)->EvidenceGraph` remains fixed; only `build_captured_receipt_evidence_v0(...)->CapturedReceiptEvidenceV0` may be introduced, with R3e/F4C deferred. |
+| 2026-08-16 | scoped | Private-only canonical-reconciliation scope frozen | Independent review of Step 4.4's amendment against preflight `ad96da6d` confirms PF-R1–PF-R5 and PF-Rec1–PF-Rec2 are covered. Under the user's existing autonomous feature-branch authorization, this permits only a new private `features/...-source-reconcile-...` branch and §8.3–4 reconciliation. Candidate `6d7628cd` remains comparison input only; no cherry-pick/history transplant. Public projection/composition, public façade/export selection, CI/package/changelog/docs patch, wheel/version/PR/push/merge/tag/upload, and Meander adoption remain unauthorized future gates. `evaluation_run_bundle_evidence(...)->EvidenceGraph` remains fixed; only `build_captured_receipt_evidence_v0(...)->CapturedReceiptEvidenceV0` may be introduced as the additive R3d entry, with R3e/F4C deferred. A later explicitly recorded non-exported core/SDK M2 freshness hardening remains within §8.3–4 but creates no competing application/protocol entry. |
 | 2026-08-16 | implementing | Additive private R3d capture landed | Local commit `52c18383` adds only the dedicated private receipt DTO/runtime/test/docs seam. It reconstructs the behavior from private source and comparison evidence without candidate history transfer; old `evaluation_run_bundle_evidence(...)->EvidenceGraph`, root façades, SDK, Product, Meander, Agent, MCP, projection, release, and R3e/F4C paths remain untouched. Independent review was CLEAR; focused compatibility/R3d tests, Ruff, scoped mypy, format, and diff checks passed. |
+| 2026-08-16 | implementing | M2 premise-policy freshness pin precisely scoped; not implemented | Independent read-only comparison of candidate `6d7628cd` against private `9810b2d2` found richer native effective-relation/capture orchestration variants in private source; the candidate's typed canonical-ordering residual is separately deferred, and its query/bundle files remain too divergent for transfer. The remaining bounded M2 delta is an internal monotonic premise-policy revision for compiled-Query freshness only: `src/factgraph/core/store/runtime.py`, `src/factgraph/sdk/store.py`, and direct private tests. It must cover ordinary direct `eval.evaluate(compiled)`, targeted ordinary `eval.evaluate(targeted)`, `capture="run_bundle_v0"`, legacy `scenario=`, targeted capture, ScenarioRun, and live row `close()`/`explain()`; successful exclusion/allowance/block setters advance the revision after current validation, failed setters do not. No public property/export, premise-filtered Query support, application protocol/anchor/bundle/digest change, replay/verification/EvidenceGraph/authenticity/source/admission/governance claim, Product/Meander/Agent/MCP use, CI/package/projection/release action, or candidate history/file transplant is authorized or claimed. |
 
 ## Decision Notes
 
@@ -107,6 +108,35 @@ to the recorded Git ref and expected blob digest before the helper reads it.
 This prevents a mixed-worktree or changed-current-checkout input from being
 misreported as an earlier reviewed coordinate. Wheel evidence records those
 resolved input digests alongside its own SHA-256 and manifests.
+
+### D-9 — Premise-policy revision is an internal freshness guard, not a new Query capability
+
+Preflight classifies `core/store/runtime.py` and `sdk/store.py` as the linked
+M2 Store-freshness/live-execution bridge (`S2`/`S6`). The private implementation
+already rejects non-empty premise-filtered compiled Query execution, but its
+current guards check only whether non-empty premise filters are present at each
+check boundary. A policy changed during execution and restored before the final
+check can therefore evade that specific freshness boundary.
+
+The approved next private unit may add a monotonic internal revision that is
+captured once and compared at every existing compiled-Query execution and live
+row boundary. It must increment only after a successful existing setter
+validation, including an equivalent-value restore, and must not increment when
+normalization or configuration validation fails. It is intentionally absent
+from public Store/SDK properties and exports, serialized protocol shapes, run
+anchors, bundles, and digests. It neither admits premise-filtered Query
+execution nor provides snapshot isolation, replay, verification, Explain or
+EvidenceGraph availability, proof parity, authenticity, or source/admission/
+governance truth.
+
+Candidate `6d7628cd` demonstrates the behavioral rationale only. Its old
+runtime property and divergent SDK bridge are not a transplant source: private
+implementation must preserve current Store validation and current
+Function/navigation/Policy/Scenario/expectation paths. Before any code change,
+the direct tests must cover ordinary direct `eval.evaluate(compiled)`, targeted
+ordinary `eval.evaluate(targeted)`, capture, legacy Scenario, targeted capture,
+ScenarioRun, and stale live-row `close()`/`explain()` paths, plus all successful
+setters and a failed setter that leaves the revision unchanged.
 
 ### Remaining implementation and later-gate constraints
 

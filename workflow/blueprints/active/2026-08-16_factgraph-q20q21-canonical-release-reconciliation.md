@@ -501,6 +501,24 @@ private scope.
    protocol, core/SDK bridge, and test changes on a private feature branch.
    Maintain explicit failure-closed behavior and keep R3c, R3d, R3e, and F4C
    claims separate.
+   - **M2 internal premise-policy freshness pin:** the next bounded private
+     hardening may reconstruct only a monotonic, non-serialized
+     compiled-Query premise-policy revision guard in
+     `core/store/runtime.py` and `sdk/store.py`, with direct private tests.
+     Capture one expected revision for every compiled-Query execution and
+     recheck it at ordinary direct `eval.evaluate(compiled)`, targeted ordinary
+     `eval.evaluate(targeted)`, `capture="run_bundle_v0"`, legacy
+     `scenario=`, targeted-capture, ScenarioRun, row `close()`, and row
+     `explain()` boundaries. Each successful premise exclusion, allowance, or
+     block setter advances the internal revision only after normalization and
+     current configuration validation; a failed setter does not advance it.
+     This is a fail-closed in-process freshness guard, not a Store snapshot or
+     transaction-isolation feature. It introduces no public property or export,
+     no premise-filtered compiled-Query support, and no protocol, anchor,
+     bundle, digest, replay, verification, EvidenceGraph, authenticity,
+     source/admission/governance, Product, Meander, Agent, MCP, or release
+     capability claim. Candidate `6d7628cd` is behavior reference only: its
+     divergent core/SDK files must not be transplanted wholesale.
 4. **Private verification and documentation:** run focused and preservation
    suites, static checks, and adversarial boundary tests. Update private
    module docs/docstrings with actual availability; do not copy the candidate
@@ -550,6 +568,12 @@ application-only documentation, and preservation/adversarial tests while
 retaining the existing `evaluation_run_bundle_evidence(...)->EvidenceGraph`
 playback contract. Independent review and focused checks are recorded in the
 paired audit.
+
+The next approved private implementation unit is not yet implemented: the
+bounded M2 internal premise-policy revision freshness guard in §8.3. It is
+limited to the current core/SDK execution guards and their private tests; it
+does not make a new public capability, alter a protocol or capture seal, or
+change the release/Meander state.
 
 This is neither a completed three-way reconciliation nor projection evidence.
 The remaining private matrix rows, all dual-input composition/wheel work, and
