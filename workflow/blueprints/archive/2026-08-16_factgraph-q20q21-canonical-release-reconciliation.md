@@ -1,6 +1,6 @@
 # Task Blueprint: FactGraph Q20/Q21 canonical release reconciliation
 
-- Status: implemented
+- Status: archived
 - Created: 2026-08-16
 - Last Updated: 2026-08-16
 - Authority: private-only scoped task blueprint. Under the user's 2026-08-16
