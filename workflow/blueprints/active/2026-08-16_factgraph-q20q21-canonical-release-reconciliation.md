@@ -10,6 +10,9 @@
 - Inputs:
   - [Q20/Q21 release-surface audit](../../audit/active/2026-08-16_factgraph-q20q21-release-surface-vs-shipped.md), recorded at private audit commit
     `2458e79a55062be862fb2aec0ea447ac6614b03e`.
+  - [Independent reconciliation preflight](../../audit/active/2026-08-16_factgraph-q20q21-canonical-release-reconciliation-preflight.md),
+    recorded at `ad96da6d`. Its required findings are incorporated below; it
+    does not itself authorize implementation or a release action.
   - Private HNSM canonical baseline
     `c01dccae5c524d667dd4414201be3961312076df`.
   - Public FactGraph baseline
@@ -76,21 +79,26 @@ without pretending that any publication or Meander integration has occurred.
 1. Reconcile the reviewed Q20/Q21 behavior through a three-way comparison of
    private `c01dccae`, public `b92d6bf5`, and candidate `6d7628cd`, with the
    private feature branch becoming the only development source for any carried
-   behavior.
+   behavior. This is private-preserving behavioral delta extraction, not a
+   candidate import: existing Function, navigation, Policy, Scenario, and
+   Product-facing behavior remain explicit preservation obligations.
 2. Build a file-by-file source-reconciliation matrix that identifies required
    runtime/protocol/test changes, their import/export closure, their intended
    private owner, their public projection class, and their proof obligation.
-3. Preserve the strict R3d split: a sealed
-   `CapturedReceiptEvidenceV0` is a capture-only application protocol DTO;
-   generic `EvidenceGraph` construction/playback remains a private, separately
-   classified seam and is not promoted by R3d.
+3. Preserve two fixed, non-overloaded contracts: existing
+   `evaluation_run_bundle_evidence(...)->EvidenceGraph` playback remains
+   available to its current private consumers, while an additive, uniquely
+   named R3d builder can return only a sealed
+   `CapturedReceiptEvidenceV0` capture-only DTO. Neither name, output, or
+   import path may stand in for the other.
 4. Keep current Q20/Q21 module docs, runnable examples, and example tests
    default-denied from the public projection unless a later, explicit
    documentation slice scopes a curated, link-clean public corpus.
-5. Make the sanitized projection verifiable: exact allowlist manifest, no
-   excluded-path links, public-source import closure, Q20/Q21 test cohort,
-   hard lint/test gates, wheel build from the projection, and a clean installed
-   wheel smoke test.
+5. Make the sanitized projection verifiable: a safe dual-input composition
+   helper, exact kernel/test manifest, b92 public-owned surface plus an
+   explicit approved public patch, hard deny/link/import-export closure,
+   Q20-core/R3d-only public test cohort, wheel build from the projection, and
+   a clean installed-wheel smoke test.
 6. Define honest version, public feature-PR, remote-CI, tag, and publish gates
    so that a local projection candidate is never described as a release.
 
@@ -122,22 +130,27 @@ without pretending that any publication or Meander integration has occurred.
 
 | Coordinate | Role in this task | What it does **not** establish |
 | --- | --- | --- |
-| Private `c01dccae` | Development-source baseline from which a new private feature branch must be derived. | That it already contains the candidate's Q20/Q21 implementation. |
+| Private `c01dccae` | Development-source baseline from which a new private feature branch must be derived. It already has a richer, divergent implementation across most candidate paths. | That every candidate delta is compatible, or that the private façade is a public release façade. |
 | Public `b92d6bf5` | Existing public `main` baseline against which any future public feature branch is reviewed. | A base for private development or proof that every private path is publishable. |
 | Candidate `6d7628cd` | Independently developed comparison input: 50 tracked code/test/CI/package paths differ from `b92d6bf5`. | Canonical history, a release tag, an artifact, a clean public worktree, or a permission to publish. |
 
-`b92d6bf5` is not an ancestor of private `c01dccae`. The implementation phase
-must therefore reconstruct and verify behavior on the private branch rather
-than assume that a commit-level transplant is meaningful. The matrix required
-by §5.1 is the auditable bridge between these unrelated coordinates.
+`b92d6bf5` is not an ancestor of private `c01dccae`. The preflight matrix has
+50 tracked candidate rows: six are private-absent, one is candidate-identical,
+four equal public `b92`, and thirty-nine are divergent private counterparts.
+The implementation phase must therefore reconstruct and verify a behavioral
+delta on the private branch rather than assume that a commit-level transplant
+is meaningful. The matrix required by §5.1 is the auditable bridge between
+these unrelated coordinates.
 
-### 4.2 Default-deny documentation and source surface
+### 4.2 Dual-input public surface and inherited documentation baseline
 
 The architecture principle requires a private-source, default-deny projection.
-The sync runbook additionally keeps `src/factgraph/**/docs/**` and
-`src/factgraph/**/*.md` on the private surface for future publishes. The
-candidate's uncommitted module docs link to an excluded `examples/` path, and
-the projection script correctly fails that hybrid shape.
+The sync runbook keeps `src/factgraph/**/docs/**` and
+`src/factgraph/**/*.md` on the private surface and defines root package/CI/
+changelog files as public-owned. The current projection allowlist contradicts
+that ownership and already fails on an existing private module-doc link to an
+excluded `examples/` path. The candidate's uncommitted module docs exhibit the
+same invalid hybrid shape.
 
 The runbook's operational use of public `factgraph/main` as the release-surface
 base and the architecture principle's private development-source authority are
@@ -145,12 +158,20 @@ different roles, not permission to reverse source direction. Preflight must
 confirm the exact public-branch mechanics against both documents; it must not
 turn the public baseline or candidate into the private development source.
 
-This draft chooses the conservative Q20/Q21 treatment: do not carry those new
-module docs, runnable examples, or example tests into the public projection.
-Existing public-baseline documentation is not silently rewritten or removed by
-this slice. If a future public documentation corpus is desired, it requires a
-separate blueprint with its own allowlist, link/import/smoke checks, and public
-reader contract.
+This draft chooses the conservative Q20/Q21 treatment: the private source
+contributes only explicit kernel-code and curated-test paths; a composed public
+tree inherits root/CI/package/changelog/docs from `b92d6bf5`, then receives at
+most an approved, enumerated public `features/...` patch. No private module
+docs, runnable examples, or example tests are carried. Existing public-baseline
+documentation is not silently rewritten or removed by this slice.
+
+There is an inherited public-doc contradiction that prevents a blanket
+"link-clean" claim: `b92d6bf5`'s `docs/quickstart/rules.md:455` links to
+excluded/nonexistent `examples/rule_structure_demo.ipynb`. Before a composed
+tree is called link-clean or release-candidate-ready, a separately reviewed
+public-owned curated-doc patch must repair it. A temporary baseline record may
+retain it only as `BL-1`, while explicitly prohibiting a link-clean or final
+release-candidate claim. Broad ignores are forbidden.
 
 ### 4.3 Availability vocabulary that must remain intact
 
@@ -175,9 +196,16 @@ governance, or business-truth credential.
 
 - Q20/Q21 source must first exist and pass review on a private canonical
   feature branch.
-- The default-deny allowlist needs an intentional file manifest and an import
-  closure review; adding a broad directory pattern is not an acceptable
-  shortcut.
+- The default-deny composition helper needs a safe `mktemp`/marker/realpath
+  cleanup boundary, normalized allowlist validation, a hard-deny path set, and
+  an import/export closure review; adding a broad directory pattern or caller-
+  supplied cleanup path is not an acceptable shortcut.
+- The existing `EvidenceGraph` playback entry and strict R3d receipt builder
+  have a same-name/return-type collision that must be resolved additively.
+- Public application, protocol, and SDK façades must be rebuilt from b92 plus
+  an approved export allowlist, not copied from the richer private façade.
+- The inherited `BL-1` public-doc link must be repaired or openly retained as
+  a non-link-clean baseline before a final projection candidate is claimed.
 - The existing public CI Q20/Q21 cohort is useful candidate evidence but does
   not validate a private-source projection, an installed wheel, a public PR,
   or remote CI.
@@ -192,15 +220,18 @@ governance, or business-truth credential.
 ### 5.1 Three-way private-source reconciliation
 
 The implementation branch starts at private `c01dccae`, not at public
-`b92d6bf5` and not at candidate `6d7628cd`. Before code is ported, create a
-reconciliation matrix with one row per candidate path (including changed,
-added, and intentionally omitted paths). Each row must record:
+`b92d6bf5` and not at candidate `6d7628cd`. It extracts individually reviewed
+behavioral deltas without replacing a divergent private file wholesale. Before
+code is ported, create a reconciliation matrix with one row per candidate path
+(including changed, added, and intentionally omitted paths). Each row must
+record:
 
 1. the path and behavior at private `c01dccae`;
 2. the path and behavior at public `b92d6bf5`;
 3. the candidate delta at `6d7628cd`;
 4. whether it is required private runtime/protocol code, required private test,
-   public-projection candidate, private-only support, or rejected;
+   public-projection candidate, private-only support, deferred private seam,
+   or rejected;
 5. direct imports, exports, dynamic registrations, and test entrypoints needed
    for closure; and
 6. the exact acceptance test(s) and invariant(s) that justify carrying it.
@@ -218,69 +249,97 @@ The expected categories include, but are not pre-approved merely by name:
 
 The matrix must reveal shape conflicts rather than overwrite them. Private code
 may be reimplemented from the reviewed behavioral contract, but not copied as a
-blind commit transplant. A candidate-only helper that cannot be justified by a
-private owner, import closure, and focused acceptance proof is excluded or
-opened as a separate scope amendment.
+blind commit transplant. Every carried row runs its Q20-core proof alongside
+the affected private Function, navigation, Policy (including compare/weighted
+choice), Scenario, expectation, and Product preservation cohort. Candidate
+R3e/F4C coordinate, overlay, and manifest rows are explicitly deferred from
+this slice. A candidate-only helper that cannot be justified by a private owner,
+import closure, and focused acceptance proof is excluded or opened as a
+separate scope amendment.
 
-### 5.2 R3d strict DTO boundary and private playback seam
+### 5.2 Fixed R3d receipt boundary and existing graph-playback seam
 
-The public FactGraph source may expose the strict application-protocol DTO
-shape only to the extent the reconciled source genuinely exports it:
+The two paths use stable, fixed names and return types. Existing private
+`evaluation_run_bundle_evidence(bundle, *, row_capture_digest) -> EvidenceGraph`
+remains unchanged for its existing captured-run and Scenario consumers. A new,
+additive builder, provisionally named
+`build_captured_receipt_evidence_v0(bundle, *, row_capture_digest) ->
+CapturedReceiptEvidenceV0`, lives in a dedicated receipt runtime module if and
+only if the reconciled source genuinely supports it. Aliasing, replacing the
+old name, or choosing output type from input is forbidden.
+
+The new strict DTO path is limited as follows:
 
 - `CapturedReceiptConditionV0`, `CapturedReceiptBranchV0`, and
   `CapturedReceiptEvidenceV0` remain immutable, nested-sealed data shapes.
 - The application builder selects one receipt-backed captured row only after
   full bundle validation and a fresh canonical decode; malformed, absent,
-  ambiguous, or zero-row selection fails closed.
+  ambiguous, stale, foreign, or zero-row selection fails closed.
 - The DTO and its local validation do not read or write Store, ledger, cache,
   sidecar, registry, or evaluator. A runtime builder's snapshot discipline must
   be tested separately from DTO construction.
 - R3d carries no values/source metadata/certainty payload, generic graph,
   verdict, Rule/Policy occurrence attribution, or authorization result. Its
   fixed availability labels remain explicit.
-
-An `EvidenceGraph` builder, detached playback adapter, or Policy overlay that
-internally consumes this DTO is a private implementation seam unless and until
-another blueprint establishes its public contract. It must not be exported as
-the R3d API, smuggled through the SDK/Product/Meander/Agent/MCP surface, or
-documented as proof parity. Tests must prove the boundary in both directions:
-the R3d module does not construct a generic graph, and any private adapter is
-not mistaken for a public receipt DTO.
+- The R3d module does not import or construct an `EvidenceGraph`,
+  `Explanation`, Policy conclusion/lineage, replay result, or verification
+  result. Its DTO is rejected by generic graph, renderer, codec, and
+  Explanation consumers. It is not exported by the SDK/Product/Meander/Agent/
+  MCP surface.
+- Existing graph playback, `explain_captured_evaluation_query_run_v0`,
+  `explain_scenario_run_v0`, and their current private regressions remain
+  available and must pass. They are not R3d behavior merely because they read
+  related captured data.
 
 R3c remains separate: verification may execute at most the declared isolated
 captured-input check and returns its own record. It does not replay the original
-run. R3e/F4C work is not broadened by this reconciliation; any retained
-candidate code must state its exact, smaller availability rather than inherit
-an EvidenceGraph/Explanation/Policy conclusion claim from a nearby name.
+run. R3e/F4C coordinate, overlay, and manifest paths are deferred rather than
+retained in this slice: they may not enter `factgraph.application.__all__`, the
+public wheel, SDK/Product/Meander/Agent/MCP claims, or the public CI cohort.
 
 ### 5.3 Sanitized projection and import closure
 
-After private reconciliation is locally verified, derive a staging tree from
-that private feature source using the default-deny projection mechanism. The
-allowlist change must be a reviewed, explicit file list for public kernel code
-and tests only. It must not add a broad `src/factgraph/**` or test glob solely
-to make a missing import pass.
+After private reconciliation is locally verified, derive a staging tree through
+a dual-input default-deny composition. The private feature ref contributes only
+a reviewed manifest of kernel-code and curated-test files. Public-owned
+root/CI/package/changelog/docs come from `b92d6bf5` unchanged, then receive at
+most one explicitly reviewed public `features/...` surface patch. The selected
+ownership mechanism is the public-patch route; this blueprint does not amend
+the runbook to project public-owned files from HNSM.
 
-The sync runbook currently classifies `.github/`, `pyproject.toml`, and
-`CHANGELOG.md` as public-repository-owned surface files rather than projection
-inputs. Preflight must choose and record one of two mechanisms before this
-blueprint can be scoped: either a separately approved runbook amendment makes
-specific surface files reviewed projection inputs, or a public
-`features/...` branch reconstructs an explicitly enumerated surface patch
-against `b92d6bf5`. This draft selects neither mechanism. In either case, a
-future public diff may touch only approved projected kernel/test paths plus the
-enumerated public-owned surface files; it may not rewrite existing public docs.
+The public patch may modify only named public-owned files, initially
+`.github/workflows/factgraph-tests.yml` and, only if required for that exact
+workflow, public `pyproject.toml` dev test dependencies. It must not copy
+private `0.2.0rc1`, allocate a release version, change `CHANGELOG.md`, or
+rewrite public docs. The public application/protocol/SDK façade files are
+special public-composition inputs: construct them from their b92 versions plus
+an exact approved public-export allowlist. Never copy or merge a private façade
+wholesale.
 
 The projection evidence must include all of the following:
 
-1. the generated manifest exactly matches the reviewed allowlist;
-2. denylist paths are absent, including workflow/audit material, HNSM-only
-   packages, private tools, examples, samples, and generated outputs;
-3. projected Markdown does not link to excluded paths, especially `examples/`;
-4. static import/export review finds no runtime dependency on a private path;
-5. installed-wheel smoke tests import the projected `factgraph` package rather
-   than a source checkout or `PYTHONPATH` shadow; and
-6. wheel contents contain only the declared public package/material and no
+1. the composition helper creates its own staging and manifest under a dedicated
+   scratch root with `mktemp`, marker verification, `realpath` containment, and
+   no caller-controlled broad cleanup; sentinel/mock tests reject `/`, `/tmp`,
+   home/repo/sibling/parent paths, symlink escapes, and unmarked directories;
+2. every allowlist entry is a normalized ordinary relative path, and a hard-deny
+   set rejects `workflow/`, `examples/`, `tutorials/`, `scripts/`,
+   `tests/examples/`, private packages, audit/memory, tools, and build/cache
+   output even if they are accidentally allowlisted;
+3. the generated private and public manifests exactly match their reviewed
+   inputs, every listed input blob resolves to the recorded private/public ref
+   and expected object digest before it is copied, and final public diff paths
+   equal the approved set;
+4. the entire composed public Markdown corpus is scanned for excluded/private
+   links. `BL-1` must be repaired by a curated-doc patch before link-clean is
+   claimed; it may never be hidden by a broad ignore;
+5. static import/export review finds no runtime dependency on a private path;
+   exact `__all__` positive and forbidden-export tests cover all three façades;
+6. installed-wheel smoke tests import the projected `factgraph` package rather
+   than a source checkout or `PYTHONPATH` shadow, including positive imports of
+   the three façades and forbidden imports of private Scenario/V1/V2/F4C paths;
+   and
+7. wheel contents contain only the declared public package/material and no
    private documentation, examples, workflow records, Meander code, or local
    build output.
 
@@ -290,13 +349,14 @@ implementation truth, but that does not make them public projection input.
 
 ### 5.4 CI, wheel, and release-candidate evidence
 
-The private branch must execute the reconciled focused cohorts before any
-projection. The projected source must independently run its public test
-cohort. If the preflight chooses a public-workflow surface patch, that workflow
-must name the Q20/Q21 cohort explicitly and run on a pull request to public
-`main`; a local workflow file does not establish that remote CI has run. If it
-does not choose that patch, this blueprint cannot claim that the existing
-public workflow covers the reconciled capability.
+The private branch must execute the reconciled focused and preservation cohorts
+before any projection. The projected source must independently run its public
+test cohort. The selected b92-based public-workflow patch must name only the
+approved Q20-core/R3d cohort—never deferred R3e/F4C overlay/manifest tests—and
+run on a pull request to public `main`; a local workflow file does not establish
+that remote CI has run. If its exact pytest invocation requires it, the same
+public-owned patch adds pytest to the public dev test setup; it does not import
+private package metadata.
 
 Ruff and the selected tests are hard gates. Mypy and coverage currently have
 advisory configuration in the candidate workflow; neither may be described as
@@ -305,11 +365,14 @@ actually blocks. Regardless of advisory status, new/changed modules receive a
 scoped type check and its result is recorded honestly.
 
 Build only a wheel from the sanitized staging tree. In a new environment,
-install that wheel without a source-tree import path, run a bounded Q20/Q21
+install that wheel without a source-tree import path, run a bounded Q20/R3d
 smoke that exercises only actually exposed public API, inspect package contents,
-and record the wheel filename, exact SHA-256 digest, source ref, projection
-manifest digest, interpreter/dependency coordinates, and test results. Do not
-create or upload an sdist in this release line.
+and record the wheel filename, exact SHA-256 digest, private source ref,
+private/public manifest digests, the ref-resolved input blob digests,
+public-base and public-patch refs, interpreter/dependency coordinates, and test
+results. Do not create or upload an sdist in this release line. `scripts/release.sh` is not this evidence: it
+targets private `origin`/`master`, uses editable installation and a legacy test
+set, and may create release-related refs even in a dry-run path.
 
 ### 5.5 Ordered version, PR, and publication gates
 
@@ -349,14 +412,20 @@ treated as allocated merely because it appears in a draft package file.
   live result, provenance record, or authorization outcome.
 - **R3d/evidence separation:** `CapturedReceiptEvidenceV0` is not an
   `EvidenceGraph`, `Explanation`, Policy conclusion, logical proof, or proof
-  parity result. Private graph/playback work never becomes public by import,
-  naming, or documentation adjacency.
-- **R3e/F4C restraint:** a coordinate, manifest, or overlay must declare only
-  what its reviewed code actually supplies. It must not be marketed as an
-  already-complete R3e/F4C, Explain, EvidenceGraph, or Policy capability.
+  parity result. The existing `evaluation_run_bundle_evidence` graph builder
+  stays type-stable; an additive R3d builder stays graph-free. Private graph/
+  playback work never becomes public by import, naming, or documentation
+  adjacency.
+- **R3e/F4C restraint:** coordinate, manifest, and overlay paths are deferred
+  in this slice. They must not enter the public wheel, public façade exports,
+  public CI cohort, or capability claims.
 - **Projection restraint:** Q20/Q21 module docs/examples/example tests stay
-  private in this slice. Allowlist changes are explicit and minimal; a passing
-  source tree must also have a passing import/link/wheel closure.
+  private in this slice. Public staging is dual-input; private code/tests and
+  b92 public-owned surfaces never substitute for one another. The composition
+  helper owns a marker-checked scratch directory, hard-denies private paths,
+  and validates exact manifests. A passing source tree must also have a passing
+  composed import/link/wheel closure. `BL-1` prevents a link-clean claim until
+  a separate curated-doc repair lands.
 - **Release restraint:** all commits remain on feature branches. No push,
   merge, tag, release, upload, or Meander runtime dependency occurs without
   the separately named user authorization in §5.5.
@@ -369,20 +438,27 @@ treated as allocated merely because it appears in a draft package file.
   branch rooted at `c01dccae`; no public-candidate commit is cherry-picked.
 - [ ] R3a/R3c/R3d terminology is tested and documented with the availability,
   freshness, seal, and fail-closed boundaries in §4.3 and §6.
-- [ ] R3d exports only its strict receipt DTO boundary; tests prevent generic
-  `EvidenceGraph`/`Explanation`/Policy conclusions and unintended SDK/Product/
-  Meander/Agent/MCP exposure.
-- [ ] Any retained R3e/F4C-adjacent code has an explicit narrow availability
-  statement and no stronger public capability claim.
+- [ ] Existing `evaluation_run_bundle_evidence(...)->EvidenceGraph` playback,
+  captured-run Explain, and Scenario Explain remain type-stable and passing;
+  any R3d builder has a different fixed name/type and its DTO is rejected by
+  generic graph/render/Explanation consumers.
+- [ ] R3e/F4C coordinate, overlay, and manifest paths are absent from the
+  public wheel, all public façade exports, public CI cohort, SDK/Product/
+  Meander/Agent/MCP claims, and the Q20/R3d capability statement.
 - [ ] Private module docs/docstrings are updated only after actual code
   behavior is established; the candidate's dirty docs/examples are neither
   staged nor projected by this slice.
-- [ ] The reviewed default-deny allowlist and projection manifest pass deny,
-  link, and import/export closure checks.
-- [ ] Preflight explicitly resolves whether public CI/package metadata are
-  reviewed projection inputs or an enumerated public-owned surface patch; the
-  public diff is limited to that recorded set plus approved kernel/test paths
-  and does not rewrite existing public docs.
+- [ ] The reviewed dual-input composition creates only tool-owned marked
+  scratch paths, passes normalized allowlist/hard-deny and sentinel path-safety
+  tests, and produces exact private/public manifests, ref-resolved input blob
+  digests, and public diff paths.
+- [ ] Public CI/package metadata use the b92-based, enumerated public-owned
+  surface patch. Public application/protocol/SDK façades are b92 plus exact
+  approved exports, with installed-wheel import-closure and forbidden-export
+  tests; no private façade is copied or merged.
+- [ ] All composed public Markdown passes the forbidden-link scan. Until the
+  inherited `BL-1` link is fixed in a separately reviewed curated-doc patch,
+  no link-clean or final release-candidate claim is made.
 - [ ] The private and projected Q20/Q21 test cohorts, applicable preservation
   tests, Ruff, scoped mypy, format/diff checks, and wheel smoke test pass with
   recorded commands/results.
@@ -403,9 +479,11 @@ treated as allocated merely because it appears in a draft package file.
    is changed before shape conflicts, public/private classes, and public-surface
    ownership are resolved.
 2. **Blueprint amendment and scoped anchor:** return to this blueprint branch
-   to apply all required preflight findings, explicitly list the minimal public
-   file set, the CI/package-metadata mechanism, and the R3d private-playback
-   boundary. Self-check, then obtain the required `draft → scoped`
+   to apply all required preflight findings: private-preserving delta
+   extraction; fixed old-graph/new-R3d names and types; R3e/F4C deferral;
+   b92-based façade overlay/public-owned patch; dual-input composition; hard-deny,
+   marker-safe staging; and the `BL-1` documentation decision. Independently
+   review the amendment, then obtain the required `draft → scoped`
    authorization. Only after that authorization may a separate private
    `features/...-source-reconcile-...` implementation branch be created.
 3. **Private canonical implementation:** reconstruct approved runtime,
@@ -416,11 +494,13 @@ treated as allocated merely because it appears in a draft package file.
    suites, static checks, and adversarial boundary tests. Update private
    module docs/docstrings with actual availability; do not copy the candidate
    example/doc material into public scope.
-5. **Projection reconciliation:** update the default-deny allowlist only for
-   the approved kernel/test import closure. Apply public CI/package metadata
-   only through the preflight-selected mechanism and exact public-owned surface
-   list. Generate a staging manifest, run deny/link/import checks, execute
-   projected tests, and build/install/inspect the sanitized wheel.
+5. **Projection reconciliation:** first implement and test the marker-safe,
+   hard-deny composition helper. Update the private manifest only for approved
+   kernel/test import closure. Compose b92 public-owned surfaces plus the exact
+   public patch only after resolving every source blob from its recorded ref;
+   construct the three public façades from b92 plus approved exports, generate
+   both manifests, run deny/link/import/forbidden-export checks, execute
+   projected Q20-core/R3d tests, and build/install/inspect the sanitized wheel.
 6. **Release-candidate report:** record exact private ref, public-base ref,
    matrix result, projection manifest, wheel digest, local checks, outstanding
    advisory checks, and the proposed new version. Stop for explicit user
