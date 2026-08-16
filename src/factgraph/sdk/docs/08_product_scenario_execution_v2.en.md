@@ -264,7 +264,10 @@ V0/V1 expectations, and V1 evidence scopes are rejected on this terminal.
 
 `.run()` intentionally continues to return the raw, sealed `EvaluationRunV2`:
 it is the durable replay carrier and existing low-level integrations can retain
-it unchanged.  Product/UI/Agent code can open the thin read facade explicitly:
+it unchanged. Product code can open the thin read facade explicitly. FactGraph
+does not yet provide an Agent, Meander, or MCP adapter, route, or wire contract
+for its detached projection; a future external integration must define and
+adapt its own boundary:
 
 ```python
 from factgraph.sdk import outcome_from_run_v2
@@ -277,6 +280,11 @@ candidate = outcome.candidate_effective  # `None` when no candidate was planned
 # The caller deliberately names a row; there is no first-row convenience.
 explain_data = outcome.explain(effective.rows[0])
 # Passing effective.rows[0].to_explain_target() is equivalent.
+
+# Stable business/API projection. Narrative remains display-only.
+explain_wire = explain_data.to_dict()
+canonical_bytes = explain_data.to_canonical_bytes()
+projection_digest = explain_data.content_digest
 
 replay_report = outcome.replay()
 ```
@@ -298,6 +306,17 @@ implicit truth value, `close()` method, ordinal Explain target, or synthesized
 negative proof. `outcome.explain(...)` accepts only a caller-selected V2 row
 view or its explicit target; ProbLog Explain stays data-first and reports an
 unavailable EvidenceGraph rather than manufacturing one.
+
+The Explain projection always includes
+`$schema="factgraph.product_explanation"`, `schema_version=2`, and the exact
+`source_protocol`. Its evidence section keeps `state`, `reason_code`,
+`proof_parity`, and an optional sanitized `graph` together. Product code must
+first dispatch `source_protocol`, then treat only
+`native_detached_recomputed`, `portable_native_inner_not_parity`, and
+`problog_trace_captured` as graph-bearing states; it must not infer a negative
+result from a null graph and must not parse `narrate()` / `render_text()` output. The
+projection digest hashes only the canonical read bytes; it is not a run seal,
+signature, source-authenticity claim, or access grant.
 
 ## Compatibility boundary
 
@@ -324,3 +343,9 @@ through real Native/Soufflé/ProbLog, inspects structured Function Explain data,
 and verifies replay does not call Python. It asserts the explicit current boundaries: Native and
 Soufflé have `unsupported` V2 probability frames and a V2 EvidenceGraph is
 reported unavailable when it was not captured rather than reconstructed.
+
+For the focused structured-consumption boundary, run
+[`examples/10_structured_explanation_contract.ipynb`](../../../../examples/10_structured_explanation_contract.ipynb).
+It shows the same versioned `to_dict()` envelope with a captured V1 Native
+EvidenceGraph and with a Product V2 typed graph-unavailable reason, then builds
+a UI decision solely from structured availability rather than narration.

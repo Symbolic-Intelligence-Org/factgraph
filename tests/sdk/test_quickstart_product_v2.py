@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from hashlib import sha256
+import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
@@ -124,6 +126,26 @@ class ProductV2QuickstartTests(unittest.TestCase):
         call = next(item for item in function_view.calls if item.inputs[0].value == 35)
         self.assertEqual(call.output.value, 3)
         self.assertIsNone(explanation.evidence.graph)
+
+        wire = explanation.to_dict()
+        canonical = explanation.to_canonical_bytes()
+        self.assertEqual(wire["$schema"], "factgraph.product_explanation")
+        self.assertEqual(wire["schema_version"], 2)
+        self.assertEqual(wire["source_protocol"], "evaluation_run_v2")
+        self.assertEqual(json.loads(canonical), wire)
+        self.assertEqual(
+            explanation.content_digest,
+            f"sha256:{sha256(canonical).hexdigest()}",
+        )
+        evidence = wire["evidence"]
+        self.assertIsInstance(evidence, dict)
+        assert isinstance(evidence, dict)
+        self.assertEqual(evidence["state"], "not_available")
+        self.assertEqual(
+            evidence["reason_code"],
+            "NATIVE_V2_DETACHED_EVIDENCE_GRAPH_NOT_IMPLEMENTED",
+        )
+        self.assertIsNone(evidence["graph"])
         self.assertEqual(outcome.replay().status, "matched")
 
 

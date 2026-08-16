@@ -13,10 +13,22 @@ becomes a fabricated native ``EvidenceGraph``.
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass, field as dc_field
+from dataclasses import dataclass, field as dc_field, fields
+from hashlib import sha256
+import json
 import math
-from types import MappingProxyType
-from typing import Any, Literal, TypeAlias
+from types import MappingProxyType, UnionType
+from typing import (
+    Any,
+    Literal,
+    NoReturn,
+    TypeAlias,
+    Union,
+    cast,
+    get_args,
+    get_origin,
+    get_type_hints,
+)
 
 from .evaluation_run_v1_runtime import (
     EvaluationRunExplanationV1,
@@ -46,26 +58,43 @@ from .explain.evidence_tree import (
 from .product_result_views_v2 import (
     AssetDescriptorCaptureViewV2,
     CaptureStateViewV2,
+    ChoiceArmViewV2,
     ChoiceCaptureViewV2,
+    ChoiceSelectionKeyViewV2,
+    ChoiceTopologyViewV2,
     EvaluationRunV2ExplainTarget,
     EvaluationRunV2ResultView,
     EvaluationRunV2RowView,
+    ExecutionAttachmentViewV2,
     ExecutionProfileViewV2,
     ExecutionViewV2,
+    FunctionAssetViewV2,
+    FunctionCallViewV2,
     FunctionCaptureViewV2,
+    FunctionInputBindingViewV2,
+    FunctionOccurrenceViewV2,
+    FunctionPortViewV2,
     ProductRunSideV2,
     ProductViewErrorV2,
+    ProbabilityMaterializationEntryViewV2,
     ProbabilityMaterializationViewV2,
+    ResultValueViewV2,
     ResultViewV2,
     RowViewV2,
     ScenarioCaptureViewV2,
+    ScenarioFactSemanticsViewV2,
+    ScenarioFactViewV2,
+    ScenarioOperationEvidenceViewV2,
+    ScenarioOperationMetadataViewV2,
+    ScenarioProvenanceReferenceViewV2,
+    ScenarioWorldCaptureViewV2,
     result_view_v2_from_evaluation_run_v2,
     result_view_v2_from_run,
 )
 from .protocol.certainty import Certainty
 from .protocol.evaluation_run_v1 import EvaluationRunV1, ExplainTargetV1
 from .protocol.evaluation_run_v2 import EvaluationRunV2
-from .protocol.goal_plan_v1 import GoalPlanV1
+from .protocol.goal_plan_v1 import GoalPlanV1, GoalTechnicalAssessmentV1
 from .protocol.policy import (
     PolicyCompareStructureNodeV0,
     PolicyFieldNavigation,
@@ -131,6 +160,15 @@ _ORIGIN_ROLES = frozenset(
 )
 _MAX_SAFE_VALUE_DEPTH = 12
 _MAX_SAFE_VALUE_ITEMS = 128
+_PRODUCT_EXPLANATION_SCHEMA = "factgraph.product_explanation"
+_PRODUCT_EXPLANATION_SCHEMA_VERSION = 2
+_PRODUCT_EXPLANATION_ENVELOPE_KEYS = frozenset({"$schema", "schema_version", "source_protocol"})
+
+# Dynamic ``object`` values have already passed the bounded product-data
+# sanitizer above. The canonical projection refuses, rather than truncates,
+# a larger or deeper value so its digest never hides omitted material.
+_MAX_PRODUCT_EXPLANATION_DYNAMIC_DEPTH = _MAX_SAFE_VALUE_DEPTH
+_MAX_PRODUCT_EXPLANATION_DYNAMIC_ITEMS = _MAX_SAFE_VALUE_ITEMS
 
 
 @dataclass(frozen=True, repr=False)
@@ -544,6 +582,65 @@ class EvaluationExplanationDataV2:
     def render_text(self) -> str:
         return render_evaluation_explanation_text_v2(self)
 
+    def to_dict(self) -> dict[str, object]:
+        """Return this sealed-read facade as a detached JSON projection.
+
+        Returns:
+            A newly allocated, versioned JSON-safe dictionary for this exact
+            Explain data facade.
+
+        Raises:
+            ProductViewErrorV2: If this already-created sealed-read facade has
+                malformed or unsupported projection data; the conversion fails
+                closed rather than serializing a partial value.
+
+        Notes:
+            This performs no Store, ledger, cache, sidecar, registry, or
+            evaluator I/O; it neither verifies nor replays the run. It does
+            not establish authenticity, freshness, proof parity, source,
+            admission, or governance conclusions.
+        """
+
+        return _product_explanation_to_dict_v2(self)
+
+    def to_canonical_bytes(self) -> bytes:
+        """Return this sealed-read facade as canonical UTF-8 JSON bytes.
+
+        Returns:
+            Deterministic UTF-8 bytes for the same versioned projection as
+            :meth:`to_dict`.
+
+        Raises:
+            ProductViewErrorV2: If this already-created sealed-read facade
+                cannot be represented as the closed canonical JSON shape.
+
+        Notes:
+            This is pure local formatting: it reads or writes no Store, ledger,
+            cache, sidecar, registry, or evaluator, and performs no replay or
+            verification.
+        """
+
+        return _product_explanation_canonical_bytes_v2(self)
+
+    @property
+    def content_digest(self) -> str:
+        """Return the SHA-256 identity of :meth:`to_canonical_bytes`.
+
+        Returns:
+            A ``sha256:<hex>`` digest of exactly this facade's canonical bytes.
+
+        Raises:
+            ProductViewErrorV2: If this already-created sealed-read facade
+                cannot be projected to canonical bytes.
+
+        Notes:
+            This pure local digest reads or writes no Store, ledger, cache,
+            sidecar, registry, or evaluator. It is not a seal, authenticity,
+            freshness, proof-parity, source, admission, or governance claim.
+        """
+
+        return _product_explanation_content_digest_v2(self)
+
     def __repr__(self) -> str:
         return (
             "EvaluationExplanationDataV2("
@@ -628,6 +725,65 @@ class EvaluationRunV2ExplanationDataV2:
     def render_text(self) -> str:
         return render_evaluation_run_v2_explanation_text_v2(self)
 
+    def to_dict(self) -> dict[str, object]:
+        """Return this sealed-read facade as a detached JSON projection.
+
+        Returns:
+            A newly allocated, versioned JSON-safe dictionary for this exact
+            Explain data facade.
+
+        Raises:
+            ProductViewErrorV2: If this already-created sealed-read facade has
+                malformed or unsupported projection data; the conversion fails
+                closed rather than serializing a partial value.
+
+        Notes:
+            This performs no Store, ledger, cache, sidecar, registry, or
+            evaluator I/O; it neither verifies nor replays the run. It does
+            not establish authenticity, freshness, proof parity, source,
+            admission, or governance conclusions.
+        """
+
+        return _product_explanation_to_dict_v2(self)
+
+    def to_canonical_bytes(self) -> bytes:
+        """Return this sealed-read facade as canonical UTF-8 JSON bytes.
+
+        Returns:
+            Deterministic UTF-8 bytes for the same versioned projection as
+            :meth:`to_dict`.
+
+        Raises:
+            ProductViewErrorV2: If this already-created sealed-read facade
+                cannot be represented as the closed canonical JSON shape.
+
+        Notes:
+            This is pure local formatting: it reads or writes no Store, ledger,
+            cache, sidecar, registry, or evaluator, and performs no replay or
+            verification.
+        """
+
+        return _product_explanation_canonical_bytes_v2(self)
+
+    @property
+    def content_digest(self) -> str:
+        """Return the SHA-256 identity of :meth:`to_canonical_bytes`.
+
+        Returns:
+            A ``sha256:<hex>`` digest of exactly this facade's canonical bytes.
+
+        Raises:
+            ProductViewErrorV2: If this already-created sealed-read facade
+                cannot be projected to canonical bytes.
+
+        Notes:
+            This pure local digest reads or writes no Store, ledger, cache,
+            sidecar, registry, or evaluator. It is not a seal, authenticity,
+            freshness, proof-parity, source, admission, or governance claim.
+        """
+
+        return _product_explanation_content_digest_v2(self)
+
     def __repr__(self) -> str:
         return (
             "EvaluationRunV2ExplanationDataV2("
@@ -636,6 +792,378 @@ class EvaluationRunV2ExplanationDataV2:
             f"target_observation_digest={self.identity.target_observation_digest!r}, "
             f"evidence={self.evidence.state!r})"
         )
+
+
+_ProductExplanationDataV2: TypeAlias = (
+    EvaluationExplanationDataV2 | EvaluationRunV2ExplanationDataV2
+)
+
+# This is deliberately an identity-based closed schema rather than a module,
+# name, or dataclass predicate. The two facade annotations are the authority
+# for the reachable DTO closure; rich values in ``object`` fields are JSON-only.
+_PRODUCT_EXPLANATION_WIRE_DATACLASS_TYPES: frozenset[type[object]] = frozenset(
+    {
+        AssetDescriptorCaptureViewV2,
+        CaptureStateViewV2,
+        CertaintyViewV2,
+        ChoiceArmViewV2,
+        ChoiceCaptureViewV2,
+        ChoiceSelectionKeyViewV2,
+        ChoiceTopologyViewV2,
+        ComparisonPresentationViewV2,
+        EvaluationExplanationDataV2,
+        EvaluationRunV2ExplanationDataV2,
+        EvaluationRunV2ExplanationIdentityViewV2,
+        EvaluationRunV2OutcomePresentationViewV2,
+        EvaluationRunV2QueryDescriptorViewV2,
+        EvaluationRunV2RowView,
+        EvidenceAtomViewV2,
+        EvidenceGraphViewV2,
+        EvidenceJoinViewV2,
+        EvidencePolicyConditionViewV2,
+        EvidenceRuleViewV2,
+        EvidenceSourceViewV2,
+        EvidenceSupportViewV2,
+        EvidenceTimelineViewV2,
+        EvidenceTreeViewV2,
+        ExecutionAttachmentViewV2,
+        ExecutionProfileViewV2,
+        ExecutionViewV2,
+        ExplainBoundaryViewV2,
+        ExplanationIdentityViewV2,
+        FunctionAssetViewV2,
+        FunctionCallViewV2,
+        FunctionCaptureViewV2,
+        FunctionInputBindingViewV2,
+        FunctionOccurrenceViewV2,
+        FunctionPortViewV2,
+        GoalTechnicalAssessmentV1,
+        OpaqueProvenanceDescriptorV2,
+        OutcomePresentationViewV2,
+        PolicyOperandViewV2,
+        PolicyPresentationViewV2,
+        PolicyProjectionNodeViewV2,
+        PolicyTopologyNodeViewV2,
+        ProbabilityMaterializationEntryViewV2,
+        ProbabilityMaterializationViewV2,
+        QueryDescriptorViewV2,
+        ResultValueViewV2,
+        RowViewV2,
+        ScenarioCaptureViewV2,
+        ScenarioFactSemanticsViewV2,
+        ScenarioFactViewV2,
+        ScenarioOperationEvidenceViewV2,
+        ScenarioOperationMetadataViewV2,
+        ScenarioOperationViewV2,
+        ScenarioPresentationViewV2,
+        ScenarioProvenanceReferenceViewV2,
+        ScenarioWorldCaptureViewV2,
+    }
+)
+
+
+def _product_explanation_static_wire_hints_v2(
+    value_type: type[object],
+) -> Mapping[str, object]:
+    """Resolve a shipped closed DTO annotation once during module import.
+
+    A malformed shipped DTO is an installation/programming error, not a value
+    that a read facade may partially serialize. Runtime conversion only reads
+    the immutable map built below and never evaluates a selected value type.
+    """
+
+    try:
+        return MappingProxyType(get_type_hints(value_type))
+    except (NameError, TypeError) as exc:  # pragma: no cover - static contract guard.
+        raise RuntimeError(
+            "Product Explain closed wire DTO annotations could not be resolved"
+        ) from exc
+
+
+_PRODUCT_EXPLANATION_WIRE_DATACLASS_HINTS: Mapping[type[object], Mapping[str, object]] = (
+    MappingProxyType(
+        {
+            value_type: _product_explanation_static_wire_hints_v2(value_type)
+            for value_type in _PRODUCT_EXPLANATION_WIRE_DATACLASS_TYPES
+        }
+    )
+)
+del _product_explanation_static_wire_hints_v2
+
+
+def _product_explanation_to_dict_v2(data: _ProductExplanationDataV2) -> dict[str, object]:
+    data_type = type(data)
+    # Do not use a ``dict[type, ...]`` lookup here.  A forged value can have a
+    # metaclass whose ``__hash__`` executes code; the public serializer must
+    # reject such a facade through identity comparisons alone.
+    if data_type is EvaluationExplanationDataV2:
+        expected_protocol = "evaluation_run_v1"
+    elif data_type is EvaluationRunV2ExplanationDataV2:
+        expected_protocol = "evaluation_run_v2"
+    else:
+        _product_explanation_serialization_error("requires an exact supported facade")
+    source_protocol = data.source_protocol
+    if type(source_protocol) is not str or source_protocol != expected_protocol:
+        _product_explanation_serialization_error("has an invalid source protocol")
+    payload = _product_explanation_wire_value_v2(data, expected=data_type)
+    if type(payload) is not dict:  # pragma: no cover - closed DTO guard above.
+        _product_explanation_serialization_error("did not produce an object")
+    if _PRODUCT_EXPLANATION_ENVELOPE_KEYS.intersection(payload):
+        _product_explanation_serialization_error("attempted to overwrite an envelope field")
+    return {
+        "$schema": _PRODUCT_EXPLANATION_SCHEMA,
+        "schema_version": _PRODUCT_EXPLANATION_SCHEMA_VERSION,
+        "source_protocol": source_protocol,
+        **payload,
+    }
+
+
+def _product_explanation_canonical_bytes_v2(data: _ProductExplanationDataV2) -> bytes:
+    try:
+        return json.dumps(
+            _product_explanation_to_dict_v2(data),
+            allow_nan=False,
+            ensure_ascii=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        ).encode("utf-8")
+    except ProductViewErrorV2:
+        raise
+    except (TypeError, ValueError) as exc:  # defensive around stdlib JSON boundaries.
+        raise ProductViewErrorV2(
+            "Product Explain projection is not canonical JSON",
+            code="PRODUCT_EXPLAIN_V2_SERIALIZATION_INVALID",
+        ) from exc
+
+
+def _product_explanation_content_digest_v2(data: _ProductExplanationDataV2) -> str:
+    return f"sha256:{sha256(_product_explanation_canonical_bytes_v2(data)).hexdigest()}"
+
+
+def _product_explanation_wire_value_v2(value: object, *, expected: object) -> object:
+    if expected is Any or expected is object:
+        return _product_explanation_dynamic_wire_value_v2(value)
+
+    origin = get_origin(expected)
+    arguments = get_args(expected)
+    if origin in {Union, UnionType}:
+        for candidate in arguments:
+            try:
+                return _product_explanation_wire_value_v2(value, expected=candidate)
+            except ProductViewErrorV2:
+                continue
+        _product_explanation_serialization_error("value does not match its declared union")
+    if origin is Literal:
+        return _product_explanation_literal_wire_value_v2(value, arguments)
+    if origin is tuple:
+        if type(value) is not tuple:
+            _product_explanation_serialization_error("tuple field is malformed")
+        if len(arguments) == 2 and arguments[1] is Ellipsis:
+            item_type = arguments[0]
+            return [_product_explanation_wire_value_v2(item, expected=item_type) for item in value]
+        if len(value) != len(arguments):
+            _product_explanation_serialization_error("fixed tuple field has the wrong length")
+        return [
+            _product_explanation_wire_value_v2(item, expected=item_type)
+            for item, item_type in zip(value, arguments, strict=True)
+        ]
+    if origin is Mapping:
+        key_type, item_type = arguments
+        if key_type is not str:
+            _product_explanation_serialization_error("mapping keys must be strings")
+        mapping_value = _product_explanation_exact_mapping_v2(value)
+        return {
+            key: _product_explanation_wire_value_v2(mapping_value[key], expected=item_type)
+            for key in _product_explanation_sorted_mapping_keys_v2(mapping_value)
+        }
+    if expected is type(None):
+        if value is not None:
+            _product_explanation_serialization_error("null field is malformed")
+        return None
+    if expected is bool:
+        if type(value) is not bool:
+            _product_explanation_serialization_error("Boolean field is malformed")
+        return value
+    if expected is int:
+        if type(value) is not int:
+            _product_explanation_serialization_error("integer field is malformed")
+        return value
+    if expected is float:
+        if type(value) is not float or not math.isfinite(value):
+            _product_explanation_serialization_error("float field is malformed")
+        return value
+    if expected is str:
+        return _product_explanation_json_string_v2(value)
+    if isinstance(expected, type):
+        if expected not in _PRODUCT_EXPLANATION_WIRE_DATACLASS_TYPES:
+            _product_explanation_serialization_error("field type is outside the canonical schema")
+        if type(value) is not expected:
+            _product_explanation_serialization_error("structured field has the wrong DTO type")
+        return _product_explanation_dataclass_wire_v2(value, expected=expected)
+    _product_explanation_serialization_error("field type is outside the canonical schema")
+
+
+def _product_explanation_literal_wire_value_v2(
+    value: object, arguments: tuple[object, ...]
+) -> object:
+    for candidate in arguments:
+        # Exact built-in scalar identity protects the equality comparison from
+        # a hostile ``__eq__`` implementation on a value subclass.
+        if type(value) is type(candidate) and value == candidate:
+            return _product_explanation_json_scalar_v2(value)
+    _product_explanation_serialization_error("value is outside its declared literal set")
+
+
+def _product_explanation_json_scalar_v2(value: object) -> object:
+    if value is None:
+        return None
+    value_type = type(value)
+    if value_type is str:
+        return _product_explanation_json_string_v2(value)
+    if value_type is bool or value_type is int:
+        return value
+    if type(value) is float:
+        if not math.isfinite(value):
+            _product_explanation_serialization_error("value contains a non-finite float")
+        return value
+    _product_explanation_serialization_error("value is not an exact JSON scalar")
+
+
+def _product_explanation_json_string_v2(value: object) -> str:
+    """Return one exact, UTF-8-encodable JSON string or fail closed."""
+
+    if type(value) is not str:
+        _product_explanation_serialization_error("string field is malformed")
+    try:
+        value.encode("utf-8")
+    except UnicodeEncodeError as exc:
+        raise ProductViewErrorV2(
+            "Product Explain projection contains a non-UTF-8 string",
+            code="PRODUCT_EXPLAIN_V2_SERIALIZATION_INVALID",
+        ) from exc
+    return value
+
+
+def _product_explanation_dynamic_wire_value_v2(
+    value: object,
+    *,
+    depth: int = 0,
+    active_container_ids: set[int] | None = None,
+) -> object:
+    if depth > _MAX_PRODUCT_EXPLANATION_DYNAMIC_DEPTH:
+        _product_explanation_serialization_error("value exceeds the dynamic depth limit")
+    if value is None:
+        return value
+    value_type = type(value)
+    if value_type is str:
+        return _product_explanation_json_string_v2(value)
+    if value_type is bool or value_type is int:
+        return value
+    if type(value) is float:
+        if not math.isfinite(value):
+            _product_explanation_serialization_error("value contains a non-finite float")
+        return value
+
+    active_ids = set() if active_container_ids is None else active_container_ids
+    if type(value) is tuple or type(value) is list:
+        if len(value) > _MAX_PRODUCT_EXPLANATION_DYNAMIC_ITEMS:
+            _product_explanation_serialization_error("value exceeds the dynamic item limit")
+        container_id = id(value)
+        if container_id in active_ids:
+            _product_explanation_serialization_error("value contains a cycle")
+        active_ids.add(container_id)
+        try:
+            return [
+                _product_explanation_dynamic_wire_value_v2(
+                    item, depth=depth + 1, active_container_ids=active_ids
+                )
+                for item in value
+            ]
+        finally:
+            active_ids.remove(container_id)
+
+    if type(value) is dict or type(value) is MappingProxyType:
+        mapping_value = _product_explanation_exact_mapping_v2(value)
+        if len(mapping_value) > _MAX_PRODUCT_EXPLANATION_DYNAMIC_ITEMS:
+            _product_explanation_serialization_error("value exceeds the dynamic item limit")
+        container_id = id(value)
+        if container_id in active_ids:
+            _product_explanation_serialization_error("value contains a cycle")
+        active_ids.add(container_id)
+        try:
+            return {
+                key: _product_explanation_dynamic_wire_value_v2(
+                    mapping_value[key], depth=depth + 1, active_container_ids=active_ids
+                )
+                for key in _product_explanation_sorted_mapping_keys_v2(mapping_value)
+            }
+        finally:
+            active_ids.remove(container_id)
+
+    _product_explanation_serialization_error("value contains an unsupported rich object")
+
+
+def _product_explanation_exact_mapping_v2(value: object) -> dict[str, object]:
+    """Snapshot an exact safe mapping before canonical traversal.
+
+    ``_safe_value`` stores legitimate product values in ``MappingProxyType``.
+    A proxy can nevertheless wrap a hostile or unbounded mapping when a
+    frozen facade is mutated in-process. Read no more than one item beyond the
+    closed limit, validate each key before it reaches a normal ``dict``, and
+    turn any mapping-protocol failure into the public typed error.
+    """
+
+    value_type = type(value)
+    if value_type is not dict and value_type is not MappingProxyType:
+        _product_explanation_serialization_error("mapping field is malformed")
+
+    typed_snapshot: dict[str, object] = {}
+    mapping_value = cast(Mapping[object, object], value)
+    try:
+        for item_count, key in enumerate(mapping_value):
+            if item_count >= _MAX_PRODUCT_EXPLANATION_DYNAMIC_ITEMS:
+                _product_explanation_serialization_error("mapping exceeds the item limit")
+            if type(key) is not str:
+                _product_explanation_serialization_error("mapping keys must be exact strings")
+            safe_key = _product_explanation_json_string_v2(key)
+            if safe_key in typed_snapshot:
+                _product_explanation_serialization_error("mapping contains a duplicate key")
+            typed_snapshot[safe_key] = mapping_value[key]
+    except ProductViewErrorV2:
+        raise
+    except Exception as exc:
+        raise ProductViewErrorV2(
+            "Product Explain projection contains an unreadable mapping",
+            code="PRODUCT_EXPLAIN_V2_SERIALIZATION_INVALID",
+        ) from exc
+    return typed_snapshot
+
+
+def _product_explanation_sorted_mapping_keys_v2(value: Mapping[str, object]) -> tuple[str, ...]:
+    return tuple(sorted(value))
+
+
+def _product_explanation_dataclass_wire_v2(
+    value: object, *, expected: type[object]
+) -> dict[str, object]:
+    if expected not in _PRODUCT_EXPLANATION_WIRE_DATACLASS_TYPES or type(value) is not expected:
+        _product_explanation_serialization_error("value contains an unsupported dataclass")
+    hints = _PRODUCT_EXPLANATION_WIRE_DATACLASS_HINTS[expected]
+    wire: dict[str, object] = {}
+    for item in fields(cast(Any, value)):
+        if item.name not in hints:  # pragma: no cover - closed DTO definition guard.
+            _product_explanation_serialization_error("DTO field is missing a canonical annotation")
+        wire[item.name] = _product_explanation_wire_value_v2(
+            getattr(value, item.name), expected=hints[item.name]
+        )
+    return wire
+
+
+def _product_explanation_serialization_error(message: str) -> NoReturn:
+    raise ProductViewErrorV2(
+        f"Product Explain projection {message}",
+        code="PRODUCT_EXPLAIN_V2_SERIALIZATION_INVALID",
+    )
 
 
 def evaluation_explanation_data_v2_from_run(

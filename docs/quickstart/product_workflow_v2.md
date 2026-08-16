@@ -249,6 +249,38 @@ effective = outcome.effective
 row = effective.rows[0]              # the caller explicitly chooses a row
 explanation = outcome.explain(row)    # no implicit first-row Explain
 
+# Canonical business/API projection.
+explain_wire = explanation.to_dict()
+canonical_bytes = explanation.to_canonical_bytes()
+projection_digest = explanation.content_digest
+
+assert explain_wire["$schema"] == "factgraph.product_explanation"
+assert explain_wire["schema_version"] == 2
+assert explain_wire["source_protocol"] == "evaluation_run_v2"
+
+# Dispatch the source protocol before reading protocol-specific sections.
+if explain_wire["source_protocol"] == "evaluation_run_v1":
+    protocol_section = explain_wire["execution"]
+elif explain_wire["source_protocol"] == "evaluation_run_v2":
+    protocol_section = explain_wire["profile"]
+else:
+    raise ValueError("unsupported Product Explain source protocol")
+assert isinstance(protocol_section, dict)
+
+# Availability is data. A null graph is never interpreted on its own.
+evidence = explain_wire["evidence"]
+graph_bearing_states = {
+    "native_detached_recomputed",
+    "portable_native_inner_not_parity",
+    "problog_trace_captured",
+}
+if evidence["state"] in graph_bearing_states:
+    graph = evidence["graph"]
+    assert graph is not None
+else:
+    assert evidence["graph"] is None
+    print(evidence["reason_code"])
+
 print(explanation.render_text())      # display-only prose
 
 function_view = explanation.functions.occurrences[0]
@@ -263,7 +295,12 @@ assert function_view.callable_capture == "not_captured"
 Structured Result/Explain contains sealed identities, selected observations,
 Scenario facts and provenance lanes, execution/profile state, assets,
 `WeightedChoice` topology when present, and Product Function definition/call
-materializations. Business code should parse these DTOs, not `render_text()`.
+materializations. `to_dict()` returns a detached JSON-safe projection;
+`to_canonical_bytes()` is its deterministic compact UTF-8 JSON encoding.
+`content_digest` is SHA-256 over exactly those bytes. It is useful for
+read-model equality and caching, but is not a run seal, signature, source
+attestation or authorization grant. Business code should parse the structured
+projection, not `render_text()` or `narrate()`.
 
 Function materializes the complete upstream Rule occurrence relation before
 the final Query binding/filter. Its call inventory can therefore contain calls
@@ -272,8 +309,18 @@ ordinal position.
 
 Current Product V2 Function/ProbLog Explain does not fabricate an
 `EvidenceGraph`. When no graph was captured, `explanation.evidence.graph` is
-`None` with a typed unavailable reason. This is different from legacy/V1
-native Explain paths that can produce a real graph.
+`None` with a typed unavailable reason. The only graph-bearing states are
+`native_detached_recomputed`, `portable_native_inner_not_parity`, and
+`problog_trace_captured`; always inspect `evidence.state` and
+`evidence.reason_code`, and do not treat `graph is None` as a failed logical
+conclusion or negative proof. This is different from a sealed V1 Native
+detached Explain path that can expose a sanitized graph.
+
+The focused executable companion
+[`examples/10_structured_explanation_contract.ipynb`](../../examples/10_structured_explanation_contract.ipynb)
+shows both availability branches and verifies the canonical bytes/digest
+relationship. The complete workflow notebook remains
+[`examples/09_product_scenario_execution_v2.ipynb`](../../examples/09_product_scenario_execution_v2.ipynb).
 
 ## 8. Detached replay
 

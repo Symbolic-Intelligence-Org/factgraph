@@ -7,12 +7,17 @@ the presentation data available.
 
 from __future__ import annotations
 
-from dataclasses import replace
+from collections.abc import Mapping
+from dataclasses import dataclass, fields, is_dataclass, replace
+from hashlib import sha256
 import json
+from types import MappingProxyType
+from typing import get_args, get_origin
 import unittest
 from unittest.mock import patch
 
 from factgraph.application import build_schema_index, encode_entity_ref
+import factgraph.application.product_explanation_data_v2 as product_explanation_data_v2
 from factgraph.application.evaluation_run_v1_runtime import (
     capture_evaluation_replay_payload_v1,
     capture_evaluation_replay_world_v1,
@@ -28,6 +33,9 @@ from factgraph.application.explain.evidence_tree import (
     Source,
 )
 from factgraph.application.product_explanation_data_v2 import (
+    EvaluationExplanationDataV2,
+    PolicyOperandViewV2,
+    PolicyTopologyNodeViewV2,
     evidence_graph_view_v2_from_graph,
     evaluation_explanation_data_v2_from_evaluation_run_v2,
     evaluation_explanation_data_v2_from_run,
@@ -88,6 +96,8 @@ from factgraph.application.protocol.scenario_v2 import (
     FactSemanticsV2,
     ScenarioDisplayV2,
 )
+from factgraph.core.evidence.write_protocol import set_field
+from factgraph.core.rules.where_ast import PredAtom, Var
 from factgraph.core.store._support import ProjectedFact
 from factgraph.sdk import (
     AssetMeta,
@@ -97,11 +107,36 @@ from factgraph.sdk import (
     SDKStore,
     WeightedChoiceArmV1,
     WeightedChoiceTopologyV1,
+    native_deterministic_profile_v1,
 )
 
 
 def _token(character: str) -> str:
     return f"sha256:{character * 64}"
+
+
+def _facade_wire_dataclass_closure() -> frozenset[type[object]]:
+    """Derive the closed wire DTO set from the two public facade annotations."""
+
+    discovered: set[type[object]] = set()
+
+    def visit(annotation: object) -> None:
+        origin = get_origin(annotation)
+        if origin is not None:
+            for argument in get_args(annotation):
+                visit(argument)
+            return
+        if not isinstance(annotation, type) or not is_dataclass(annotation):
+            return
+        if annotation in discovered:
+            return
+        discovered.add(annotation)
+        for field_type in product_explanation_data_v2.get_type_hints(annotation).values():
+            visit(field_type)
+
+    visit(product_explanation_data_v2.EvaluationExplanationDataV2)
+    visit(product_explanation_data_v2.EvaluationRunV2ExplanationDataV2)
+    return frozenset(discovered)
 
 
 class Person(Entity):
@@ -224,6 +259,39 @@ def _run(*, effective_age: int | None = 22) -> EvaluationRunV1:
             age=effective_age,
         ),
     )
+
+
+def _native_policy_run_v1_with_explain() -> EvaluationRunV1:
+    graph = SDKStore([Person])
+    alice = graph.entities.create(Person, employee_id="alice")
+    set_field(graph.ledger, "person:age", alice, [("int", 22)])
+    person, age = Var("$person"), Var("$age")
+    rule = graph.build_rule(
+        id="person_values",
+        version="1",
+        meta=AssetMeta(name="Person values"),
+        when=(
+            PredAtom("Person:exists", [person]),
+            PredAtom("person:age", [person, age]),
+        ),
+        ports={"person": person, "age": age},
+        semantic_ports={"person": Person, "age": Person.age},
+    )
+    draft = graph.policy_builder(
+        id="adult_people",
+        version="1",
+        meta=AssetMeta(name="Adult people"),
+    )
+    people = draft.use(rule, as_="people")
+    target = draft.build(draft.all(people, people.age > 12))
+    outcome = (
+        graph.query(target)
+        .bind(people.person, EntityRef("Person", {"employee_id": "alice"}))
+        .select("age", people.age)
+        .plan(profile=native_deterministic_profile_v1())
+        .run()
+    )
+    return outcome.run
 
 
 def _world_v2(*, side: str, synthetic: bool, probability: str = "0.7") -> EffectiveWorldV2:
@@ -361,6 +429,73 @@ def _run_v2(*, probability: str = "0.7") -> EvaluationRunV2:
 
 
 class ProductViewsV2Tests(unittest.TestCase):
+    def test_canonical_projection_closed_type_registry_matches_facade_annotations(self) -> None:
+        derived = _facade_wire_dataclass_closure()
+        self.assertEqual(len(derived), 55)
+        self.assertEqual(
+            product_explanation_data_v2._PRODUCT_EXPLANATION_WIRE_DATACLASS_TYPES,
+            derived,
+        )
+        self.assertEqual(
+            set(product_explanation_data_v2._PRODUCT_EXPLANATION_WIRE_DATACLASS_HINTS),
+            set(derived),
+        )
+
+    def test_v1_graph_available_explain_has_canonical_json_read_projection(self) -> None:
+        run = _native_policy_run_v1_with_explain()
+        result = result_view_v2_from_run(run, side="effective")
+        data = evaluation_explanation_data_v2_from_run(
+            run, target=result.rows[0].to_explain_target()
+        )
+
+        self.assertEqual(data.evidence.state, "native_detached_recomputed")
+        self.assertIsNotNone(data.evidence.graph)
+        wire = data.to_dict()
+        canonical = data.to_canonical_bytes()
+        self.assertEqual(wire["$schema"], "factgraph.product_explanation")
+        self.assertEqual(wire["schema_version"], 2)
+        self.assertEqual(wire["source_protocol"], "evaluation_run_v1")
+        self.assertEqual(
+            set(wire),
+            {
+                "$schema",
+                "schema_version",
+                "source_protocol",
+                "identity",
+                "query_descriptor",
+                "outcome",
+                "execution",
+                "policy",
+                "scenario",
+                "evidence",
+                "comparison",
+                "boundaries",
+            },
+        )
+        self.assertEqual(json.loads(canonical), wire)
+        self.assertEqual(data.content_digest, f"sha256:{sha256(canonical).hexdigest()}")
+        evidence = wire["evidence"]
+        assert isinstance(evidence, dict)
+        self.assertEqual(evidence["state"], "native_detached_recomputed")
+        self.assertIsInstance(evidence["graph"], dict)
+        self.assertEqual(data.to_canonical_bytes(), canonical)
+        digest = data.content_digest
+        self.assertEqual(data.content_digest, digest)
+        evidence["state"] = "tampered"
+        fresh_evidence = data.to_dict()["evidence"]
+        assert isinstance(fresh_evidence, dict)
+        self.assertEqual(fresh_evidence["state"], "native_detached_recomputed")
+        self.assertEqual(data.content_digest, digest)
+
+        portable = replace(
+            data,
+            evidence=replace(data.evidence, state="portable_native_inner_not_parity"),
+        )
+        portable_evidence = portable.to_dict()["evidence"]
+        assert isinstance(portable_evidence, dict)
+        self.assertEqual(portable_evidence["state"], "portable_native_inner_not_parity")
+        self.assertIsInstance(portable_evidence["graph"], dict)
+
     def test_explicit_row_and_summary_targets_keep_v0_live_methods_out(self) -> None:
         view = result_view_v2_from_run(_run(), side="effective")
 
@@ -390,6 +525,13 @@ class ProductViewsV2Tests(unittest.TestCase):
         self.assertEqual(view.v2_probability_observation.state, "not_captured")
         self.assertEqual(data.policy.asset_descriptor.state, "not_captured")
         self.assertIn("no negative proof", render_evaluation_explanation_text_v2(data))
+        summary_wire = data.to_dict()
+        summary_outcome = summary_wire["outcome"]
+        summary_evidence = summary_wire["evidence"]
+        assert isinstance(summary_outcome, dict)
+        assert isinstance(summary_evidence, dict)
+        self.assertEqual(summary_outcome["negative_proof"], "not_claimed")
+        self.assertIsNone(summary_evidence["graph"])
 
     def test_v2_problog_result_view_keeps_row_identity_probability_and_captured_lanes(self) -> None:
         run = _run_v2()
@@ -497,6 +639,34 @@ class ProductViewsV2Tests(unittest.TestCase):
             run.effective.engine_frames[0].probability_materialization.materialization_digest,
         )
         self.assertIn("no evidence graph", render_evaluation_run_v2_explanation_text_v2(data))
+
+        wire = data.to_dict()
+        canonical = data.to_canonical_bytes()
+        self.assertEqual(wire["$schema"], "factgraph.product_explanation")
+        self.assertEqual(wire["schema_version"], 2)
+        self.assertEqual(wire["source_protocol"], "evaluation_run_v2")
+        self.assertEqual(json.loads(canonical), wire)
+        self.assertEqual(data.content_digest, f"sha256:{sha256(canonical).hexdigest()}")
+        evidence = wire["evidence"]
+        assert isinstance(evidence, dict)
+        self.assertEqual(evidence["state"], "not_available")
+        self.assertEqual(evidence["reason_code"], "PROBLOG_V2_EVIDENCE_GRAPH_NOT_CAPTURED")
+        self.assertIsNone(evidence["graph"])
+        self.assertIsInstance(wire["probability_materialization"], dict)
+        self.assertIsInstance(wire["scenario"], dict)
+        self.assertIsInstance(wire["choice"], dict)
+        self.assertIsInstance(wire["functions"], dict)
+
+        with patch(
+            "factgraph.application.goal_plan_v2_runtime.choice_capture_from_evaluation_run_v2",
+            return_value=_choice_topology_v2(),
+        ):
+            changed_run = _run_v2(probability="0.8")
+            changed_view = result_view_v2_from_evaluation_run_v2(changed_run, side="effective")
+            changed = evaluation_explanation_data_v2_from_evaluation_run_v2(
+                changed_run, target=changed_view.rows[0].to_explain_target()
+            )
+        self.assertNotEqual(changed.content_digest, data.content_digest)
 
         spliced = replace(view.rows[0].to_explain_target(), run_digest=_token("9"))
         with patch(
@@ -616,3 +786,312 @@ class ProductViewsV2Tests(unittest.TestCase):
                 {"source": "document", "locator": {"kind": "opaque", "opaque_ref": "line:3"}}
             )
         )
+
+    def test_canonical_projection_rejects_an_injected_foreign_dataclass(self) -> None:
+        @dataclass(frozen=True)
+        class ForeignPayload:
+            secret: str
+
+        run = _run_v2()
+        with patch(
+            "factgraph.application.goal_plan_v2_runtime.choice_capture_from_evaluation_run_v2",
+            return_value=_choice_topology_v2(),
+        ):
+            view = result_view_v2_from_evaluation_run_v2(run, side="effective")
+            data = evaluation_explanation_data_v2_from_evaluation_run_v2(
+                run, target=view.rows[0].to_explain_target()
+            )
+        hostile = replace(data, query_descriptor=ForeignPayload("must-not-serialize"))  # type: ignore[arg-type]
+
+        with self.assertRaises(ProductViewErrorV2) as caught:
+            hostile.to_dict()
+        self.assertEqual(caught.exception.code, "PRODUCT_EXPLAIN_V2_SERIALIZATION_INVALID")
+
+        hostile_mapping = replace(
+            data,
+            query_descriptor={"secret": "must-not-serialize"},  # type: ignore[arg-type]
+        )
+        with self.assertRaises(ProductViewErrorV2) as caught:
+            hostile_mapping.to_dict()
+        self.assertEqual(caught.exception.code, "PRODUCT_EXPLAIN_V2_SERIALIZATION_INVALID")
+
+    def test_canonical_projection_rejects_module_spoofed_dataclass_without_hint_evaluation(
+        self,
+    ) -> None:
+        @dataclass(frozen=True)
+        class ForgedPayload:
+            secret: str
+
+        ForgedPayload.__module__ = "factgraph.application.product_explanation_data_v2"
+        ForgedPayload.__annotations__["secret"] = "_product_explanation_test_probe()"
+        probe_calls: list[str] = []
+
+        def probe() -> type[str]:
+            probe_calls.append("called")
+            return str
+
+        run = _native_policy_run_v1_with_explain()
+        view = result_view_v2_from_run(run, side="effective")
+        data = evaluation_explanation_data_v2_from_run(run, target=view.rows[0].to_explain_target())
+        hostile = replace(
+            data,
+            policy=replace(
+                data.policy,
+                topology=(
+                    PolicyTopologyNodeViewV2(
+                        node_id="injected-literal",
+                        kind="literal",
+                        child_node_ids=(),
+                        left=PolicyOperandViewV2(
+                            kind="literal", value=ForgedPayload("must-not-serialize")
+                        ),
+                    ),
+                ),
+            ),
+        )
+
+        with patch(
+            "factgraph.application.product_explanation_data_v2._product_explanation_test_probe",
+            probe,
+            create=True,
+        ):
+            with self.assertRaises(ProductViewErrorV2) as caught:
+                hostile.to_dict()
+        self.assertEqual(caught.exception.code, "PRODUCT_EXPLAIN_V2_SERIALIZATION_INVALID")
+        self.assertEqual(probe_calls, [])
+
+    def test_canonical_projection_rejects_hostile_or_unbounded_dynamic_values(self) -> None:
+        run = _native_policy_run_v1_with_explain()
+        view = result_view_v2_from_run(run, side="effective")
+        data = evaluation_explanation_data_v2_from_run(run, target=view.rows[0].to_explain_target())
+
+        cyclic_list: list[object] = []
+        cyclic_list.append(cyclic_list)
+        cyclic_mapping: dict[str, object] = {}
+        cyclic_mapping["self"] = cyclic_mapping
+        deep_value: object = "leaf"
+        for _ in range(13):
+            deep_value = [deep_value]
+        oversize_value = list(range(129))
+
+        class ListSubclass(list[object]):
+            pass
+
+        for label, value in (
+            ("cyclic-list", cyclic_list),
+            ("cyclic-mapping", cyclic_mapping),
+            ("too-deep", deep_value),
+            ("too-many-items", oversize_value),
+            ("list-subclass", ListSubclass([1])),
+        ):
+            with self.subTest(label=label):
+                hostile = replace(
+                    data,
+                    policy=replace(
+                        data.policy,
+                        topology=(
+                            PolicyTopologyNodeViewV2(
+                                node_id=f"injected-{label}",
+                                kind="literal",
+                                child_node_ids=(),
+                                left=PolicyOperandViewV2(kind="literal", value=value),
+                            ),
+                        ),
+                    ),
+                )
+                with self.assertRaises(ProductViewErrorV2) as caught:
+                    hostile.to_dict()
+                self.assertEqual(caught.exception.code, "PRODUCT_EXPLAIN_V2_SERIALIZATION_INVALID")
+
+    def test_canonical_projection_snapshots_legitimate_mapping_proxies_and_rejects_hostile_ones(
+        self,
+    ) -> None:
+        run = _native_policy_run_v1_with_explain()
+        view = result_view_v2_from_run(run, side="effective")
+        data = evaluation_explanation_data_v2_from_run(run, target=view.rows[0].to_explain_target())
+
+        def with_dynamic_value(value: object):
+            return replace(
+                data,
+                policy=replace(
+                    data.policy,
+                    topology=(
+                        PolicyTopologyNodeViewV2(
+                            node_id="injected-mapping-value",
+                            kind="literal",
+                            child_node_ids=(),
+                            left=PolicyOperandViewV2(kind="literal", value=value),
+                        ),
+                    ),
+                ),
+            )
+
+        normal = with_dynamic_value(MappingProxyType({"safe": [1, "two"]}))
+        normal_wire = normal.to_dict()
+        normal_policy = normal_wire["policy"]
+        assert isinstance(normal_policy, dict)
+        normal_topology = normal_policy["topology"]
+        assert isinstance(normal_topology, list)
+        normal_left = normal_topology[0]["left"]
+        assert isinstance(normal_left, dict)
+        self.assertEqual(normal_left["value"], {"safe": [1, "two"]})
+
+        class HostileDict(dict[str, object]):
+            def __iter__(self):
+                raise RuntimeError("hostile mapping must not leak its exception")
+
+        proxy = MappingProxyType(HostileDict({"secret": "must-not-serialize"}))
+        declared_data = evaluation_explanation_data_v2_from_run(
+            run, target=view.rows[0].to_explain_target()
+        )
+        for label, hostile in (
+            ("dynamic", with_dynamic_value(proxy)),
+            ("declared", declared_data),
+        ):
+            with self.subTest(label=label):
+                if label == "declared":
+                    assert hostile.evidence.graph is not None
+                    object.__setattr__(hostile.evidence.graph, "metadata", proxy)
+                for operation, invoke in (
+                    ("dict", lambda: hostile.to_dict()),
+                    ("bytes", lambda: hostile.to_canonical_bytes()),
+                    ("digest", lambda: hostile.content_digest),
+                ):
+                    with self.subTest(operation=operation):
+                        with self.assertRaises(ProductViewErrorV2) as caught:
+                            invoke()
+                        self.assertEqual(
+                            caught.exception.code,
+                            "PRODUCT_EXPLAIN_V2_SERIALIZATION_INVALID",
+                        )
+
+        class CountMapping(Mapping[str, object]):
+            def __init__(self) -> None:
+                self.iteration_count = 0
+                self.lookup_count = 0
+
+            def __iter__(self):
+                for index in range(1_000):
+                    self.iteration_count += 1
+                    yield f"key_{index}"
+
+            def __len__(self) -> int:
+                return 1_000
+
+            def __getitem__(self, key: str) -> object:
+                self.lookup_count += 1
+                return key
+
+        for label in ("dynamic", "declared"):
+            with self.subTest(label=f"bounded-{label}"):
+                source = CountMapping()
+                bounded_proxy = MappingProxyType(source)
+                if label == "dynamic":
+                    bounded = with_dynamic_value(bounded_proxy)
+                else:
+                    bounded = evaluation_explanation_data_v2_from_run(
+                        run, target=view.rows[0].to_explain_target()
+                    )
+                    assert bounded.evidence.graph is not None
+                    object.__setattr__(bounded.evidence.graph, "metadata", bounded_proxy)
+                with self.assertRaises(ProductViewErrorV2) as caught:
+                    bounded.to_dict()
+                self.assertEqual(caught.exception.code, "PRODUCT_EXPLAIN_V2_SERIALIZATION_INVALID")
+                self.assertLessEqual(source.iteration_count, 129)
+                self.assertLessEqual(source.lookup_count, 128)
+
+    def test_canonical_projection_rejects_rich_type_hashes_without_executing_them(self) -> None:
+        probe_calls: list[str] = []
+
+        class ProbeMeta(type):
+            def __hash__(cls) -> int:
+                probe_calls.append("hash")
+                return 1
+
+        class ProbeValue(metaclass=ProbeMeta):
+            pass
+
+        class HostileFacade(EvaluationExplanationDataV2, metaclass=ProbeMeta):
+            pass
+
+        run = _native_policy_run_v1_with_explain()
+        view = result_view_v2_from_run(run, side="effective")
+        data = evaluation_explanation_data_v2_from_run(run, target=view.rows[0].to_explain_target())
+        hostile_value = replace(
+            data,
+            policy=replace(
+                data.policy,
+                topology=(
+                    PolicyTopologyNodeViewV2(
+                        node_id="injected-hash-probe",
+                        kind="literal",
+                        child_node_ids=(),
+                        left=PolicyOperandViewV2(kind="literal", value=ProbeValue()),
+                    ),
+                ),
+            ),
+        )
+
+        probe_calls.clear()
+        with self.assertRaises(ProductViewErrorV2) as caught:
+            hostile_value.to_dict()
+        self.assertEqual(caught.exception.code, "PRODUCT_EXPLAIN_V2_SERIALIZATION_INVALID")
+        self.assertEqual(probe_calls, [])
+
+        hostile_facade = HostileFacade(*(getattr(data, item.name) for item in fields(data)))
+        probe_calls.clear()
+        with self.assertRaises(ProductViewErrorV2) as caught:
+            hostile_facade.to_dict()
+        self.assertEqual(caught.exception.code, "PRODUCT_EXPLAIN_V2_SERIALIZATION_INVALID")
+        self.assertEqual(probe_calls, [])
+
+    def test_canonical_projection_rejects_non_utf8_dynamic_strings_across_public_operations(
+        self,
+    ) -> None:
+        run = _native_policy_run_v1_with_explain()
+        view = result_view_v2_from_run(run, side="effective")
+        data = evaluation_explanation_data_v2_from_run(run, target=view.rows[0].to_explain_target())
+        hostile = replace(
+            data,
+            policy=replace(
+                data.policy,
+                topology=(
+                    PolicyTopologyNodeViewV2(
+                        node_id="injected-non-utf8",
+                        kind="literal",
+                        child_node_ids=(),
+                        left=PolicyOperandViewV2(kind="literal", value="\ud800"),
+                    ),
+                ),
+            ),
+        )
+
+        for operation, invoke in (
+            ("dict", lambda: hostile.to_dict()),
+            ("bytes", lambda: hostile.to_canonical_bytes()),
+            ("digest", lambda: hostile.content_digest),
+        ):
+            with self.subTest(operation=operation):
+                with self.assertRaises(ProductViewErrorV2) as caught:
+                    invoke()
+                self.assertEqual(caught.exception.code, "PRODUCT_EXPLAIN_V2_SERIALIZATION_INVALID")
+
+    def test_canonical_projection_rejects_literal_with_hostile_equality(self) -> None:
+        class EqualityProbe:
+            def __eq__(self, other: object) -> bool:
+                raise AssertionError("literal comparison must not call value.__eq__")
+
+        run = _native_policy_run_v1_with_explain()
+        view = result_view_v2_from_run(run, side="effective")
+        data = evaluation_explanation_data_v2_from_run(run, target=view.rows[0].to_explain_target())
+        hostile = replace(
+            data,
+            outcome=replace(
+                data.outcome,
+                logical_conclusion=EqualityProbe(),  # type: ignore[arg-type]
+            ),
+        )
+
+        with self.assertRaises(ProductViewErrorV2) as caught:
+            hostile.to_dict()
+        self.assertEqual(caught.exception.code, "PRODUCT_EXPLAIN_V2_SERIALIZATION_INVALID")

@@ -17,10 +17,15 @@ the legacy pages remain useful when maintaining `fg.eval.evaluate(...)` code.
 4. [Load and save](load_and_save.md) — use in-memory, attached, or durable
    workspaces.
 
-The runnable companion is
-[`examples/09_product_scenario_execution_v2.ipynb`](../../examples/09_product_scenario_execution_v2.ipynb).
-It executes the real public SDK, Native, Soufflé and ProbLog rather than using
-mock output.
+The runnable companions are:
+
+- [`examples/09_product_scenario_execution_v2.ipynb`](../../examples/09_product_scenario_execution_v2.ipynb)
+  for the complete authoring, Scenario, execution and replay journey; and
+- [`examples/10_structured_explanation_contract.ipynb`](../../examples/10_structured_explanation_contract.ipynb)
+  for the canonical business/UI Explain projection, including one real
+  EvidenceGraph-present path and one explicitly unavailable path.
+
+Both execute the real public SDK and engines rather than using mock output.
 
 ## Reference chapters
 
@@ -51,7 +56,9 @@ mock output.
   engine kwargs dictionary.
 - **Product outcome** — named baseline/effective/candidate ResultViews,
   row-explicit structured Explain data and detached replay over one sealed
-  `EvaluationRunV2`.
+  `EvaluationRunV2`. Explain exposes JSON-safe `to_dict()`, canonical bytes
+  and a read-projection digest; business code branches on the structured
+  evidence `state` and `reason_code`, never on rendered prose.
 
 ## Compatibility boundary
 

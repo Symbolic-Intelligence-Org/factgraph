@@ -135,9 +135,11 @@ class ProductEvaluationOutcomeV2:
                 cross-run, cross-side, stale, or unsupported.
 
         Notes:
-            ``render_text()`` / ``narrate()`` are presentation helpers; product
-            code should parse the structured fields. No EvidenceGraph is
-            fabricated when the run did not capture one.
+            ``to_dict()`` is the detached JSON-safe business projection;
+            ``to_canonical_bytes()`` and ``content_digest`` provide its stable
+            read identity. ``render_text()`` / ``narrate()`` are presentation
+            helpers only. No EvidenceGraph is fabricated when the run did not
+            capture one.
         """
 
         if isinstance(target, EvaluationRunV2RowView):

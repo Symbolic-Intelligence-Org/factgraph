@@ -31,6 +31,10 @@ candidate = outcome.candidate_effective  # None unless independently planned
 row = effective.rows[0]       # caller explicitly selects the observation
 data = outcome.explain(row)   # no implicit first row
 replay = outcome.replay()
+
+wire = data.to_dict()
+canonical_bytes = data.to_canonical_bytes()
+projection_digest = data.content_digest
 ```
 
 The facade deliberately has no Boolean coercion, implicit `first()`, live-row
@@ -39,7 +43,9 @@ identity/observation digests, engine frames, completeness and point probability
 when present.
 
 `EvaluationRunV2ExplanationDataV2` is machine-readable business data. Its
-independent sections include:
+`to_dict()` projection always carries
+`$schema="factgraph.product_explanation"`, `schema_version=2`, and
+`source_protocol="evaluation_run_v2"`. Its independent sections include:
 
 - run/query/row identity and selected observation;
 - execution profile, engine frames and probability materialization;
@@ -48,8 +54,58 @@ independent sections include:
 - Product Function definition pins and typed per-side calls; and
 - evidence availability plus explicit proof/source/authority boundaries.
 
+`to_dict()` returns only detached JSON-safe dict/list/scalar values.
+`to_canonical_bytes()` serializes that projection deterministically, while
+`content_digest` is SHA-256 over those exact bytes. This digest identifies the
+read projection only: it is not the run seal, authentication, source authority
+or an access-control decision.
+
 `data.render_text()` / `data.narrate()` are lossy presentation helpers. Do not
-parse their prose in business code.
+parse their prose in business code and do not include rendered text in a
+machine cache key.
+
+### EvidenceGraph availability is a closed business state
+
+Always dispatch the source protocol before its protocol-specific sections, then
+branch on the closed structured evidence state:
+
+```python
+if wire["source_protocol"] == "evaluation_run_v1":
+    protocol_section = wire["execution"]
+elif wire["source_protocol"] == "evaluation_run_v2":
+    protocol_section = wire["profile"]
+else:
+    raise ValueError("unsupported Product Explain source protocol")
+assert isinstance(protocol_section, dict)
+
+evidence = wire["evidence"]
+graph_bearing_states = {
+    "native_detached_recomputed",
+    "portable_native_inner_not_parity",
+    "problog_trace_captured",
+}
+
+if evidence["state"] in graph_bearing_states:
+    graph = evidence["graph"]       # sanitized structured EvidenceGraph view
+    assert graph is not None
+else:
+    assert evidence["graph"] is None
+    reason = evidence["reason_code"]
+    proof_parity = evidence["proof_parity"]
+```
+
+Do not infer `false`, negative proof, or an engine failure merely because
+`graph` is null. `native_detached_recomputed`,
+`portable_native_inner_not_parity`, and `problog_trace_captured` are the only
+graph-bearing states; all other states are reason-bearing and graphless.
+`state`, `reason_code`, `proof_parity`, and `graph` form one availability
+contract.
+
+The same wire schema also adapts a sealed V1 Native detached Explain through
+`EvaluationExplanationDataV2`. That variant retains
+`source_protocol="evaluation_run_v1"` and may carry a real sanitized graph;
+it is not rewritten to look like a V2 run. Consumers must dispatch on
+`source_protocol` before reading protocol-specific sections.
 
 ### Product Function Explain
 
@@ -81,8 +137,11 @@ provider/Function. `matched` is a replay observation, not artifact
 authentication, source authority or a causal explanation.
 
 See [`product_workflow_v2.md`](product_workflow_v2.md) for the complete
-authoring-to-replay path. The remainder of this chapter documents the legacy
-live `EvaluateResult` / `Explanation` API.
+authoring-to-replay path. The executed
+[`examples/10_structured_explanation_contract.ipynb`](../../examples/10_structured_explanation_contract.ipynb)
+demonstrates both graph-present and graph-unavailable structured branches.
+The remainder of this chapter documents the legacy live `EvaluateResult` /
+`Explanation` API.
 
 ## 1. `fg.eval.evaluate` — running a rule
 
@@ -681,6 +740,9 @@ fg.audit.diff_proof_frames(...) -> ... # compare two recorded proof outcomes
 raw_run = fg.query(product_target).plan(profile=profile, scenario=scenario).run()
 outcome = outcome_from_run_v2(raw_run)
 data = outcome.explain(outcome.effective.rows[0])
+wire = data.to_dict()
+canonical_bytes = data.to_canonical_bytes()
+projection_digest = data.content_digest
 report = outcome.replay()
 ```
 

@@ -121,6 +121,23 @@ class ProductFunctionV2Tests(unittest.TestCase):
         self.assertEqual(explanation.functions.occurrences[0].calls[0].output.value, 3)
         self.assertIn("Function materialization: captured", explanation.render_text())
         self.assertIsNone(explanation.evidence.graph)
+        wire = explanation.to_dict()
+        function_wire = wire["functions"]
+        assert isinstance(function_wire, dict)
+        materialization_capture = function_wire["materialization_capture"]
+        assert isinstance(materialization_capture, dict)
+        self.assertEqual(materialization_capture["state"], "captured")
+        occurrences = function_wire["occurrences"]
+        assert isinstance(occurrences, list)
+        occurrence = occurrences[0]
+        assert isinstance(occurrence, dict)
+        calls_wire = occurrence["calls"]
+        assert isinstance(calls_wire, list)
+        call = calls_wire[0]
+        assert isinstance(call, dict)
+        output = call["output"]
+        assert isinstance(output, dict)
+        self.assertEqual(output["value"], 3)
         self.assertEqual(replay_evaluation_run_v2(run).status, "matched")
         self.assertEqual(calls, [27, 35], "detached replay must not invoke the callable")
 

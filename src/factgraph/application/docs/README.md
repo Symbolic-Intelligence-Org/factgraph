@@ -47,9 +47,10 @@ compatibility.
     worlds, portable selected-row parity, and explicit detached native-inner
     EvidenceGraph/Policy-overlay Explain.
 - `src/factgraph/application/docs/product_result_explain_v2.md`
-  - Immutable product read views over a sealed V1 run: explicit row/summary
-    targets, structured Explain data, pure renderers, V1 `not_captured`
-    compatibility states, and sanitized evidence/provenance display boundary.
+  - Immutable Product read views over sealed V1 and V2 runs: explicit
+    row/summary targets, structured Explain data, pure renderers, detached
+    versioned `to_dict()` / canonical bytes / read-projection digest, V1/V2
+    availability boundaries, and sanitized evidence/provenance display.
 - `src/factgraph/application/explain/docs/README.md`
   - Paths-model evidence tree types (`EvidenceGraph`, `EvidenceTree`,
     `EvidenceRule`, `EvidenceAtom`, `Certainty`, `AtomForm`, `Verdict`) and

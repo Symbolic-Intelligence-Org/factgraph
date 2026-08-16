@@ -2,8 +2,9 @@
 
 - Scope: `src/factgraph/application/product_result_views_v2.py` and
   `src/factgraph/application/product_explanation_data_v2.py`
-- Audience: product/UI/Agent integration code that needs immutable presentation
-  data from a sealed FactGraph evaluation run
+- Audience: Product Python integration code that needs immutable presentation
+  data from a sealed FactGraph evaluation run; this is not an Agent, Meander,
+  or MCP API
 
 ## Purpose
 
@@ -26,8 +27,14 @@ result = result_view_v2_from_run(run, side="effective")
 row_target = result.rows[0].to_explain_target()  # caller selected this row
 data = evaluation_explanation_data_v2_from_run(run, target=row_target)
 
-# UI/Agent consumes data.identity/data.policy/data.scenario/data.evidence.
-# Rendered text is display-only.
+# Product code opens the facade and obtains a detached JSON-safe projection.
+# FactGraph does not establish an Agent, Meander, or MCP adapter, route, or
+# wire contract here; any future external integration must adapt this shape
+# under its own contract.
+wire = data.to_dict()
+canonical = data.to_canonical_bytes()
+projection_digest = data.content_digest
+# Rendered text is display-only and is not part of the digest.
 text = data.render_text()
 ```
 
@@ -105,6 +112,74 @@ data = evaluation_explanation_data_v2_from_evaluation_run_v2(
 `data.render_text()` are pure, lossy display helpers. Product code must not
 parse their prose.
 
+## Canonical read projection
+
+Both `EvaluationExplanationDataV2` and
+`EvaluationRunV2ExplanationDataV2` expose the same serialization operations:
+
+```python
+wire = data.to_dict()
+canonical = data.to_canonical_bytes()
+assert wire["$schema"] == "factgraph.product_explanation"
+assert wire["schema_version"] == 2
+if wire["source_protocol"] == "evaluation_run_v1":
+    protocol_section = wire["execution"]
+elif wire["source_protocol"] == "evaluation_run_v2":
+    protocol_section = wire["profile"]
+else:
+    raise ValueError("unsupported Product Explain source protocol")
+assert isinstance(protocol_section, dict)
+assert data.content_digest.startswith("sha256:")
+```
+
+`to_dict()` returns newly detached ordinary dictionaries, arrays and JSON
+scalar values. It never returns dataclasses, tuples or mapping proxies. It
+rejects malformed, cyclic, unbounded, or non-UTF-8 dynamic values with the
+typed serialization error rather than emitting a partial projection. It never
+invokes a Store, source resolver, evaluator, replay, Function callable or
+renderer. `to_canonical_bytes()` uses strict UTF-8 JSON with sorted keys,
+compact separators and non-finite floats disabled. `content_digest` is the
+SHA-256 token of exactly those bytes and is deliberately not embedded in the
+wire it hashes.
+
+Adding or changing a top-level wire field requires an explicit schema-version
+decision and an update to the canonical digest fixture; consumers must not
+silently reinterpret an old version under the same projection identity.
+
+The digest identifies the Product *read projection only*. It is not the sealed
+run digest, a signature, source authentication, admission decision, access
+grant or user authorization. Consumers that persist the projection should
+store its schema/version, source protocol, bytes and digest alongside the
+authoritative run/record reference rather than substituting one identity for
+the other.
+
+Evidence availability remains an ordinary required structured section:
+
+```python
+evidence = wire["evidence"]
+graph_bearing_states = {
+    "native_detached_recomputed",
+    "portable_native_inner_not_parity",
+    "problog_trace_captured",
+}
+if evidence["state"] in graph_bearing_states:
+    graph = evidence["graph"]
+    assert graph is not None
+    render_graph(graph)
+else:
+    assert evidence["graph"] is None
+    render_availability(evidence["state"], evidence["reason_code"])
+```
+
+Business code must inspect `state` and `reason_code`; only the three listed
+states are graph-bearing. `graph is None` alone is not a conclusion, an empty
+proof or a negative result.
+
+The set above is the closed projection schema, not a claim that every engine
+currently emits every graph-bearing state. This slice executes a V1 Native
+graph-present example and a V2 graph-unavailable example; it does not claim a
+V2 ProbLog graph capture, R3e coordinate capture, or F4C attribution support.
+
 ## V1 compatibility capture markers
 
 The V1 adapter never guesses V2-only information. V2 semantic-model,
@@ -145,3 +220,11 @@ An *explicitly supplied* closed provenance descriptor may be displayed as an
 closed `ProvenanceRefV1` wire/attribute shape and has no import-time dependency
 on that protocol. It carries opaque ids/locators/digests only — not raw source
 content, ACLs, tenant data, credentials, or admission decisions.
+
+## Runnable structured-consumption example
+
+[`examples/10_structured_explanation_contract.ipynb`](../../../../examples/10_structured_explanation_contract.ipynb)
+runs one sealed V1 Native path with a sanitized EvidenceGraph and one Product
+V2 Native observation with a typed unavailable reason. It validates canonical
+bytes/digests and shows a UI branch that consumes only structured state while
+keeping narration display-only.

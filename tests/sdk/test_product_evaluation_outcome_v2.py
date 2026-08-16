@@ -78,6 +78,13 @@ class ProductEvaluationOutcomeV2Tests(unittest.TestCase):
         )
         self.assertEqual(data_from_row.outcome.logical_conclusion, "not_claimed")
         self.assertEqual(data_from_row.evidence.state, "not_available")
+        wire = data_from_row.to_dict()
+        self.assertEqual(wire["$schema"], "factgraph.product_explanation")
+        self.assertEqual(wire["source_protocol"], "evaluation_run_v2")
+        evidence = wire["evidence"]
+        assert isinstance(evidence, dict)
+        self.assertEqual(evidence["state"], "not_available")
+        self.assertTrue(data_from_row.content_digest.startswith("sha256:"))
         self.assertEqual(outcome.replay().status, "matched")
 
     def test_facade_rejects_boolean_and_implicit_or_foreign_explain_requests(self) -> None:

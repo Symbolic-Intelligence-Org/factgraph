@@ -96,6 +96,16 @@ immutable logical variant comparison, not a mutable Policy patch or causal
 claim. The notebook is self-contained and each executable cell asserts its
 observed contract.
 
+## Structured Explanation consumption contract
+
+[`10_structured_explanation_contract.ipynb`](10_structured_explanation_contract.ipynb)
+is the focused business-consumption companion to the complete Product V2
+workflow. It executes the same Rule/Policy through a sealed V1 Native Explain
+with a sanitized EvidenceGraph and a Product V2 Native observation whose graph
+is explicitly unavailable. It demonstrates the versioned JSON-safe
+`to_dict()` projection, canonical bytes and projection digest, typed evidence
+availability, and `narrate()` / `render_text()` as display-only helpers.
+
 ## Canonical script
 
 ```bash
