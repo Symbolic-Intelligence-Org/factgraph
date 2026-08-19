@@ -842,7 +842,7 @@ def test_scenario_program_patch_is_output_only_and_the_only_normalized_field() -
         assert_sealed_evaluation_result_matches_request_v1(changed_result, request)
 
 
-def test_structured_explain_target_is_explicitly_request_bound() -> None:
+def test_structured_explain_requires_native_context_before_target_binding() -> None:
     run, schema = _run(explain=True)
     request = _request_for_run(run, schema, explain="structured_display")
     result = SealedEvaluationResultV1(
@@ -850,7 +850,8 @@ def test_structured_explain_target_is_explicitly_request_bound() -> None:
         request.asset_bundle.bundle_digest,
         run,
     )
-    assert_sealed_evaluation_result_matches_request_v1(result, request)
+    with pytest.raises(ProtocolShapeError, match="native display context"):
+        assert_sealed_evaluation_result_matches_request_v1(result, request)
 
     hidden = replace(run, explain_target=None)
     hidden_result = SealedEvaluationResultV1(
@@ -858,7 +859,7 @@ def test_structured_explain_target_is_explicitly_request_bound() -> None:
         request.asset_bundle.bundle_digest,
         hidden,
     )
-    with pytest.raises(ProtocolShapeError, match="Structured Explain"):
+    with pytest.raises(ProtocolShapeError, match="native display context"):
         assert_sealed_evaluation_result_matches_request_v1(hidden_result, request)
 
 

@@ -2566,8 +2566,18 @@ def assert_sealed_evaluation_result_matches_request_v1(
     if decoded.capture.explain == "not_captured":
         if run.explain_target is not None:
             raise _fail("Run emitted Explain target when capture was not requested")
-    elif run.explain_target is None:
-        raise _fail("Structured Explain capture requires an explicit Run target")
+    else:
+        program = _sealed_program_root(run)
+        if program["primary_native_explain_context"] is None:
+            raise _fail("Structured Explain capture requires sealed native display context")
+        summary = run.effective.canonical_result.summary_anchor
+        expected_target = ExplainTargetV1(
+            "effective",
+            "summary",
+            summary.summary_anchor_digest,
+        )
+        if run.explain_target != expected_target:
+            raise _fail("Structured Explain capture requires the primary effective summary target")
     if decoded.capture.comparison == "not_requested":
         if result.comparison is not None or result.scenario_diff is not None:
             raise _fail("Result emitted an unrequested comparison projection")

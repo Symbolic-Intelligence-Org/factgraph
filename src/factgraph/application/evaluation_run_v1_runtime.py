@@ -2906,12 +2906,12 @@ def decode_evaluation_replay_program_v1(
 def _decode_program_for_sealed_request(
     components: DecodedSealedEvaluationRequestV1,
 ) -> DecodedEvaluationReplayProgramV1:
-    """Decode the minimal C2 program only after every captured input pin.
+    """Decode the closed C2 program only after every captured input pin.
 
     This helper is owned by the same module as ``_decode_program_record``;
-    no protocol or adapter module imports an underscore decoder. Wider
-    candidate, Scenario, Provider and native-Explain cells are added only by
-    extending this closed root together with their runtime gates.
+    no protocol or adapter module imports an underscore decoder. Candidate,
+    Scenario, Provider and native-Explain cells stay inside this closed root
+    and their typed runtime gates.
     """
 
     root = components.program_envelope.compiled_program
@@ -2937,17 +2937,6 @@ def _decode_program_for_sealed_request(
             "sealed evaluation program type is invalid",
             code="EVALUATION_RUN_V1_PROGRAM_SHAPE_INVALID",
         )
-    for name in (
-        "primary_policy_structure",
-        "candidate_policy_structure",
-        "primary_native_explain_context",
-        "candidate_native_explain_context",
-    ):
-        if root[name] is not None:
-            raise EvaluationRunRuntimeErrorV1(
-                f"minimal sealed evaluation does not admit {name}",
-                code="EVALUATION_RUN_V1_PROGRAM_CAPABILITY_REJECTED",
-            )
     if root["scenario_patch"] is not None:
         raise EvaluationRunRuntimeErrorV1(
             "sealed request program cannot carry a resolved Scenario patch",
@@ -2978,9 +2967,96 @@ def _decode_program_for_sealed_request(
             query_digest=components.candidate_plan.query_digest,
             target_digest=components.candidate_plan.target.target_digest,
         )
+    primary_policy_structure = (
+        None
+        if root["primary_policy_structure"] is None
+        else _authored_policy_structure_from_wire(root["primary_policy_structure"])
+    )
+    if root["candidate_policy_structure"] is None:
+        candidate_policy_structure = None
+    else:
+        if candidate is None:
+            raise EvaluationRunRuntimeErrorV1(
+                "sealed program has an undeclared candidate policy structure",
+                code="EVALUATION_RUN_V1_PROGRAM_PIN_MISMATCH",
+            )
+        candidate_policy_structure = _authored_policy_structure_from_wire(
+            root["candidate_policy_structure"]
+        )
+    primary_native_explain_context = (
+        None
+        if root["primary_native_explain_context"] is None
+        else _native_explain_context_from_wire(
+            root["primary_native_explain_context"],
+            compiled_plan=primary,
+            schema_pin=components.schema.schema_digest,
+            address_space_digest=components.asset_bundle.address_space_digest,
+            expected_query_digest=components.goal_plan.query_digest,
+            expected_target_digest=(
+                None
+                if components.goal_plan.target.kind == "relation_provider"
+                else components.goal_plan.target.target_digest
+            ),
+        )
+    )
+    if root["candidate_native_explain_context"] is None:
+        candidate_native_explain_context = None
+    else:
+        if candidate is None or components.candidate_plan is None:
+            raise EvaluationRunRuntimeErrorV1(
+                "sealed program has an undeclared candidate native Explain context",
+                code="EVALUATION_RUN_V1_PROGRAM_PIN_MISMATCH",
+            )
+        candidate_native_explain_context = _native_explain_context_from_wire(
+            root["candidate_native_explain_context"],
+            compiled_plan=candidate,
+            schema_pin=components.schema.schema_digest,
+            address_space_digest=None,
+            expected_query_digest=components.candidate_plan.query_digest,
+            expected_target_digest=components.candidate_plan.target.target_digest,
+        )
+    if primary_native_explain_context is not None and (
+        primary_policy_structure is None
+        or primary_native_explain_context.run_target.policy_structure != primary_policy_structure
+    ):
+        raise EvaluationRunRuntimeErrorV1(
+            "primary native Explain context and captured structure disagree",
+            code="EVALUATION_RUN_V1_PROGRAM_PIN_MISMATCH",
+        )
+    if candidate_native_explain_context is not None and (
+        candidate_policy_structure is None
+        or candidate_native_explain_context.run_target.policy_structure
+        != candidate_policy_structure
+    ):
+        raise EvaluationRunRuntimeErrorV1(
+            "candidate native Explain context and captured structure disagree",
+            code="EVALUATION_RUN_V1_PROGRAM_PIN_MISMATCH",
+        )
+    if (
+        primary_native_explain_context is not None
+        and components.goal_plan.target.kind == "relation_provider"
+    ):
+        if components.provider_capture is None:
+            raise EvaluationRunRuntimeErrorV1(
+                "provider composite Explain context requires one captured Provider",
+                code="EVALUATION_RUN_V1_PROGRAM_PIN_MISMATCH",
+            )
+        expected_composite = _provider_composite_target_digest(
+            base_target_digest=primary_native_explain_context.run_target.target_digest,
+            provider_digest=components.provider_capture.request.provider_digest,
+        )
+        if components.goal_plan.target.target_digest != expected_composite:
+            raise EvaluationRunRuntimeErrorV1(
+                "provider composite Explain target is mismatched",
+                code="EVALUATION_RUN_V1_PROGRAM_PIN_MISMATCH",
+            )
     return DecodedEvaluationReplayProgramV1(
         primary=primary,
         candidate=candidate,
+        primary_policy_structure=primary_policy_structure,
+        candidate_policy_structure=candidate_policy_structure,
+        primary_native_explain_context=primary_native_explain_context,
+        candidate_native_explain_context=candidate_native_explain_context,
         primary_compiled_plan_digest=_compiled_plan_digest(primary),
         candidate_compiled_plan_digest=(
             None if candidate is None else _compiled_plan_digest(candidate)
@@ -2988,12 +3064,16 @@ def _decode_program_for_sealed_request(
     )
 
 
-def _assert_minimal_sealed_capability(
+def _assert_sealed_capture_capability(
     components: DecodedSealedEvaluationRequestV1,
+    decoded_program: DecodedEvaluationReplayProgramV1,
 ) -> None:
-    if components.capture.explain != "not_captured":
+    if (
+        components.capture.explain == "structured_display"
+        and decoded_program.primary_native_explain_context is None
+    ):
         raise EvaluationRunRuntimeErrorV1(
-            "requested capture capability is not implemented by this runtime cell",
+            "structured display requires a sealed primary native Explain context",
             code="EVALUATION_RUN_V1_PROGRAM_CAPABILITY_REJECTED",
         )
 
@@ -3006,6 +3086,7 @@ def _captured_assessment(
     is_effective: bool,
     parity: str,
     capability: str,
+    explain: str,
 ) -> GoalTechnicalAssessmentV1:
     statuses = tuple(item.status for item in result.expectation_outcomes)
     if not statuses:
@@ -3041,7 +3122,7 @@ def _captured_assessment(
         parity=parity,  # type: ignore[arg-type]
         completeness=result.completeness,
         expectation=expectation,  # type: ignore[arg-type]
-        explain="not_requested",
+        explain=explain,  # type: ignore[arg-type]
         # This FactGraph axis means the complete in-memory Run can be
         # deterministically replayed from its sealed payload. Product-level
         # historical replay remains display_only until C3 retains the exact
@@ -3063,6 +3144,7 @@ def _evaluate_captured_side(
     schema_ir: dict[str, Any],
     execution_relation: Mapping[str, Sequence[ProjectedFact]],
     world_relation: Mapping[str, Sequence[ProjectedFact]],
+    explain: str,
 ) -> EvaluationRunSideV1:
     try:
         observations = _observe_profile(
@@ -3140,6 +3222,7 @@ def _evaluate_captured_side(
             is_effective=name != "baseline",
             parity=parity,
             capability=capability,
+            explain=explain,
         ),
     )
 
@@ -3154,7 +3237,6 @@ def evaluate_captured_goal_v1(
             "components must be exact DecodedSealedEvaluationRequestV1",
             code="EVALUATION_RUN_V1_CAPTURE_INPUT_INVALID",
         )
-    _assert_minimal_sealed_capability(components)
     schema_ir = components.schema.schema
     try:
         schema_index = build_schema_index(schema_ir)
@@ -3189,6 +3271,7 @@ def evaluate_captured_goal_v1(
     # Semantic compiled-body decode is deliberately after schema, relation,
     # base-view and admission reconstruction.
     decoded_program = _decode_program_for_sealed_request(components)
+    _assert_sealed_capture_capability(components, decoded_program)
     primary = decoded_program.primary
     provider_receipts: tuple[ProviderReceiptRefV1, ...] = ()
     runtime_baseline_relation = input_baseline_relation
@@ -3326,6 +3409,9 @@ def evaluate_captured_goal_v1(
         schema_ir=schema_ir,
         execution_relation=primary_baseline_relation,
         world_relation=run_baseline_relation,
+        explain=(
+            "available" if components.capture.explain == "structured_display" else "not_requested"
+        ),
     )
     effective_side = _evaluate_captured_side(
         name="effective",
@@ -3336,6 +3422,9 @@ def evaluate_captured_goal_v1(
         schema_ir=schema_ir,
         execution_relation=primary_effective_relation,
         world_relation=effective_relation,
+        explain=(
+            "available" if components.capture.explain == "structured_display" else "not_requested"
+        ),
     )
     candidate_side: EvaluationRunSideV1 | None = None
     if components.candidate_plan is not None:
@@ -3353,6 +3442,12 @@ def evaluate_captured_goal_v1(
             schema_ir=schema_ir,
             execution_relation=candidate_relation,
             world_relation=effective_relation,
+            explain=(
+                "available"
+                if components.capture.explain == "structured_display"
+                and decoded_program.candidate_native_explain_context is not None
+                else "not_requested"
+            ),
         )
     sides = (baseline_side, effective_side, candidate_side)
     if any(
@@ -3371,6 +3466,28 @@ def evaluate_captured_goal_v1(
         primary_compiled_plan=primary,
         candidate_plan=components.candidate_plan,
         candidate_compiled_plan=decoded_program.candidate,
+        primary_policy_structure=decoded_program.primary_policy_structure,
+        candidate_policy_structure=decoded_program.candidate_policy_structure,
+        primary_run_target=(
+            None
+            if decoded_program.primary_native_explain_context is None
+            else decoded_program.primary_native_explain_context.run_target
+        ),
+        candidate_run_target=(
+            None
+            if decoded_program.candidate_native_explain_context is None
+            else decoded_program.candidate_native_explain_context.run_target
+        ),
+        primary_lowering_plan=(
+            None
+            if decoded_program.primary_native_explain_context is None
+            else decoded_program.primary_native_explain_context.lowering_plan
+        ),
+        candidate_lowering_plan=(
+            None
+            if decoded_program.candidate_native_explain_context is None
+            else decoded_program.candidate_native_explain_context.lowering_plan
+        ),
         baseline_world=run_baseline,
         effective_world=effective,
         scenario_operations=(
@@ -3386,6 +3503,15 @@ def evaluate_captured_goal_v1(
         effective=effective_side,
         candidate_plan=components.candidate_plan,
         candidate_effective=candidate_side,
+        explain_target=(
+            None
+            if components.capture.explain == "not_captured"
+            else ExplainTargetV1(
+                "effective",
+                "summary",
+                effective_side.canonical_result.summary_anchor.summary_anchor_digest,
+            )
+        ),
     )
     _assert_run_current(run)
     return run
