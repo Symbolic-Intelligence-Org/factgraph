@@ -2306,6 +2306,47 @@ def _assert_provider_result_binding(
             raise _fail("Run baseline does not contain the captured Provider materialization")
 
 
+def _assert_program_result_binding(
+    *,
+    request_program_bytes: bytes,
+    run_program_bytes: bytes,
+    scenario_present: bool,
+) -> None:
+    request_row = _load_json_object(
+        request_program_bytes,
+        label="request EvaluationReplayProgramEnvelopeV1",
+    )
+    run_row = _load_json_object(
+        run_program_bytes,
+        label="run EvaluationReplayProgramEnvelopeV1",
+    )
+    request_program = request_row.get("compiled_program")
+    run_program = run_row.get("compiled_program")
+    if (
+        type(request_program) is not dict
+        or type(run_program) is not dict
+        or "scenario_patch" not in request_program
+        or "scenario_patch" not in run_program
+    ):
+        raise _fail("Evaluation program must expose an exact scenario_patch field")
+    if request_program["scenario_patch"] is not None:
+        raise _fail("Sealed request program cannot carry a resolved Scenario patch")
+    if scenario_present:
+        if run_program["scenario_patch"] is None:
+            raise _fail("Scenario-pinned Run must retain its resolved Scenario patch")
+    elif run_program["scenario_patch"] is not None:
+        raise _fail("Run without Scenario cannot carry a resolved Scenario patch")
+
+    normalized_program = dict(run_program)
+    normalized_program["scenario_patch"] = None
+    normalized_run = dict(run_row)
+    normalized_run["compiled_program"] = normalized_program
+    if normalized_run != request_row:
+        raise _fail(
+            "EvaluationRunV1 program differs from request beyond the resolved Scenario patch"
+        )
+
+
 def assert_sealed_evaluation_result_matches_request_v1(
     result: SealedEvaluationResultV1,
     request: SealedEvaluationRequestV1,
@@ -2334,9 +2375,13 @@ def assert_sealed_evaluation_result_matches_request_v1(
         or run.replay_payload.schema_digest != decoded.schema.schema_digest
         or run.replay_payload.schema_bytes != decoded.schema.schema_bytes
         or run.replay_payload.address_space_digest != decoded.asset_bundle.address_space_digest
-        or run.replay_payload.compiled_program_bytes != request.program_envelope_bytes
     ):
         raise _fail("EvaluationRunV1 does not match decoded request components")
+    _assert_program_result_binding(
+        request_program_bytes=request.program_envelope_bytes,
+        run_program_bytes=run.replay_payload.compiled_program_bytes,
+        scenario_present=decoded.scenario is not None,
+    )
     run_baseline = run.replay_payload.world("baseline")
     if decoded.provider_capture is None:
         if run.replay_payload.provider_receipts:

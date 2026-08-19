@@ -91,6 +91,16 @@ def _named_token(value: str) -> str:
     return f"sha256:{sha256(value.encode('utf-8')).hexdigest()}"
 
 
+def _canonical(value: object) -> bytes:
+    return json.dumps(
+        value,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+        allow_nan=False,
+    ).encode("utf-8")
+
+
 def _domain_token(domain: str, payload: object) -> str:
     raw = json.dumps(
         {"format": domain, "payload": payload},
@@ -222,7 +232,15 @@ def _program(
         target_digest=plan.target.target_digest,
         execution_profile_digest=profile.profile_digest,
         compiler_digest=profile.compiler_digest,
-        compiled_program={"$type": "CompiledDerivationPlanV1", "body": []},
+        compiled_program={
+            "$type": "CompiledDerivationPlanV1",
+            "body": [],
+            "scenario_patch": (
+                None
+                if plan.scenario_request_digest is None
+                else {"$type": "ResolvedScenarioPatchFixtureV1", "operations": []}
+            ),
+        },
         candidate_plan_digest=None if candidate_plan is None else candidate_plan.plan_digest,
         candidate_query_digest=None if candidate_plan is None else candidate_plan.query_digest,
         candidate_target_digest=(
@@ -434,12 +452,17 @@ def _request_for_run(
     )
     if scenario is not None and scenario.spec_digest != plan.scenario_request_digest:
         raise AssertionError("fixture Scenario does not match run Plan")
+    program_row = json.loads(run.replay_payload.compiled_program_bytes)
+    compiled_program = program_row["compiled_program"]
+    assert type(compiled_program) is dict
+    compiled_program["scenario_patch"] = None
+    request_program_bytes = _canonical(program_row)
     return SealedEvaluationRequestV1(
         asset_bundle=bundle,
         goal_plan_bytes=goal_plan_v1_bytes(plan),
         execution_profile_bytes=evaluation_execution_profile_v1_bytes(run.execution_profile),
         schema_bytes=evaluation_schema_capture_v1_bytes(schema),
-        program_envelope_bytes=run.replay_payload.compiled_program_bytes,
+        program_envelope_bytes=request_program_bytes,
         baseline_world_bytes=evaluation_replay_world_v1_bytes(
             run.replay_payload.world("baseline") if request_baseline is None else request_baseline
         ),
@@ -635,6 +658,71 @@ def test_typed_scenario_diff_roundtrip_and_request_binding() -> None:
     assert rebuilt.scenario_diff is not None
     assert rebuilt.scenario_diff.scenario_operations == (operation,)
     assert_sealed_evaluation_result_matches_request_v1(rebuilt, request)
+
+
+def test_scenario_program_patch_is_output_only_and_the_only_normalized_field() -> None:
+    scenario = ScenarioSpecV1((ScenarioWithoutRelationV1("premise", "Person.age"),))
+    run, schema = _run(scenario=scenario, baseline_age=1, effective_age=2)
+    operation = ResolvedScenarioOperationV1(
+        kind="without_relation",
+        entity_ref=None,
+        entity_type=None,
+        predicate_id="Person.age",
+        field=None,
+        premise_ids=("premise",),
+    )
+    diff = _scenario_diff(run, operation)
+    request = _request_for_run(run, schema, comparison="baseline_vs_effective")
+    result = SealedEvaluationResultV1(
+        request.request_digest,
+        request.asset_bundle.bundle_digest,
+        run,
+        scenario_diff=diff,
+    )
+    assert request.program_envelope_bytes != run.replay_payload.compiled_program_bytes
+    assert_sealed_evaluation_result_matches_request_v1(result, request)
+
+    pre_resolved_request = replace(
+        request,
+        program_envelope_bytes=run.replay_payload.compiled_program_bytes,
+    )
+    pre_resolved_result = replace(
+        result,
+        request_digest=pre_resolved_request.request_digest,
+    )
+    with pytest.raises(ProtocolShapeError, match="cannot carry a resolved Scenario patch"):
+        assert_sealed_evaluation_result_matches_request_v1(
+            pre_resolved_result,
+            pre_resolved_request,
+        )
+
+    missing_patch_payload = replace(
+        run.replay_payload,
+        compiled_program_bytes=request.program_envelope_bytes,
+    )
+    missing_patch_run = replace(run, replay_payload=missing_patch_payload)
+    missing_patch_result = replace(
+        result,
+        run=missing_patch_run,
+        scenario_diff=_scenario_diff(missing_patch_run, operation),
+    )
+    with pytest.raises(ProtocolShapeError, match="must retain its resolved Scenario patch"):
+        assert_sealed_evaluation_result_matches_request_v1(missing_patch_result, request)
+
+    changed_row = json.loads(run.replay_payload.compiled_program_bytes)
+    changed_row["compiled_program"]["body"] = ["changed"]
+    changed_payload = replace(
+        run.replay_payload,
+        compiled_program_bytes=_canonical(changed_row),
+    )
+    changed_run = replace(run, replay_payload=changed_payload)
+    changed_result = replace(
+        result,
+        run=changed_run,
+        scenario_diff=_scenario_diff(changed_run, operation),
+    )
+    with pytest.raises(ProtocolShapeError, match="beyond the resolved Scenario patch"):
+        assert_sealed_evaluation_result_matches_request_v1(changed_result, request)
 
 
 def test_structured_explain_target_is_explicitly_request_bound() -> None:
