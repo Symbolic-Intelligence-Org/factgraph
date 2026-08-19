@@ -1011,6 +1011,82 @@ def evaluation_replay_world_v1_from_bytes(raw: bytes) -> EvaluationReplayWorldV1
 
 
 @dataclass(frozen=True)
+class EvaluationWorldInputPinsV1:
+    """Immutable resolver inputs for the captured pre-provider baseline."""
+
+    base_view_digest: str
+    admissibility_digest: str
+    pins_digest: str = field(init=False)
+
+    def __post_init__(self) -> None:
+        _token(
+            self.base_view_digest,
+            label="EvaluationWorldInputPinsV1.base_view_digest",
+        )
+        _token(
+            self.admissibility_digest,
+            label="EvaluationWorldInputPinsV1.admissibility_digest",
+        )
+        object.__setattr__(
+            self,
+            "pins_digest",
+            _domain_token(
+                "sealed_evaluation_world_input_pins_v1",
+                {
+                    "base_view_digest": self.base_view_digest,
+                    "admissibility_digest": self.admissibility_digest,
+                },
+            ),
+        )
+
+
+def _current_world_input_pins(
+    pins: EvaluationWorldInputPinsV1,
+) -> EvaluationWorldInputPinsV1:
+    if type(pins) is not EvaluationWorldInputPinsV1:
+        raise _fail("World input pins must be exact EvaluationWorldInputPinsV1")
+    current = _construct(
+        "EvaluationWorldInputPinsV1",
+        lambda: EvaluationWorldInputPinsV1(
+            pins.base_view_digest,
+            pins.admissibility_digest,
+        ),
+    )
+    if current.pins_digest != pins.pins_digest:
+        raise _fail("EvaluationWorldInputPinsV1 pins_digest is stale")
+    return current
+
+
+def _world_input_pins_to_wire(
+    pins: EvaluationWorldInputPinsV1,
+) -> dict[str, object]:
+    pins = _current_world_input_pins(pins)
+    return {
+        "base_view_digest": pins.base_view_digest,
+        "admissibility_digest": pins.admissibility_digest,
+        "pins_digest": pins.pins_digest,
+    }
+
+
+def _world_input_pins_from_wire(value: object) -> EvaluationWorldInputPinsV1:
+    row = _exact_object(
+        value,
+        frozenset({"base_view_digest", "admissibility_digest", "pins_digest"}),
+        label="EvaluationWorldInputPinsV1",
+    )
+    result = _construct(
+        "EvaluationWorldInputPinsV1",
+        lambda: EvaluationWorldInputPinsV1(
+            row["base_view_digest"],
+            row["admissibility_digest"],
+        ),
+    )
+    if row["pins_digest"] != result.pins_digest:
+        raise _fail("EvaluationWorldInputPinsV1 pins_digest mismatch")
+    return result
+
+
+@dataclass(frozen=True)
 class EvaluationAssetPinV1:
     """One neutral immutable asset identity used by the sealed evaluation."""
 
@@ -1821,6 +1897,7 @@ class SealedEvaluationRequestV1:
     schema_bytes: bytes
     program_envelope_bytes: bytes
     baseline_world_bytes: bytes
+    world_input_pins: EvaluationWorldInputPinsV1
     scenario_bytes: bytes | None
     provider_capture_bytes: bytes | None
     capture: EvaluationCaptureProfileV1
@@ -1829,8 +1906,10 @@ class SealedEvaluationRequestV1:
     def __post_init__(self) -> None:
         asset_bundle = _current_asset_bundle(self.asset_bundle)
         capture = _current_capture_profile(self.capture)
+        world_input_pins = _current_world_input_pins(self.world_input_pins)
         object.__setattr__(self, "asset_bundle", asset_bundle)
         object.__setattr__(self, "capture", capture)
+        object.__setattr__(self, "world_input_pins", world_input_pins)
         required_components = (
             ("goal_plan_bytes", self.goal_plan_bytes),
             ("execution_profile_bytes", self.execution_profile_bytes),
@@ -1890,6 +1969,7 @@ def _request_digest_payload(request: SealedEvaluationRequestV1) -> dict[str, obj
         "schema_bytes_b64u": _b64u(request.schema_bytes),
         "program_envelope_bytes_b64u": _b64u(request.program_envelope_bytes),
         "baseline_world_bytes_b64u": _b64u(request.baseline_world_bytes),
+        "world_input_pins": _world_input_pins_to_wire(request.world_input_pins),
         "scenario_bytes_b64u": (
             None if request.scenario_bytes is None else _b64u(request.scenario_bytes)
         ),
@@ -1940,6 +2020,7 @@ def sealed_evaluation_request_v1_from_bytes(raw: bytes) -> SealedEvaluationReque
                 "schema_bytes_b64u",
                 "program_envelope_bytes_b64u",
                 "baseline_world_bytes_b64u",
+                "world_input_pins",
                 "scenario_bytes_b64u",
                 "provider_capture_bytes_b64u",
                 "capture",
@@ -1979,6 +2060,7 @@ def sealed_evaluation_request_v1_from_bytes(raw: bytes) -> SealedEvaluationReque
                 data["baseline_world_bytes_b64u"],
                 label="baseline_world_bytes_b64u",
             ),
+            world_input_pins=_world_input_pins_from_wire(data["world_input_pins"]),
             scenario_bytes=optional_component("scenario_bytes_b64u"),
             provider_capture_bytes=optional_component("provider_capture_bytes_b64u"),
             capture=_capture_profile_from_wire(data["capture"]),
@@ -2005,6 +2087,7 @@ def assert_sealed_evaluation_request_current_v1(
         schema_bytes=request.schema_bytes,
         program_envelope_bytes=request.program_envelope_bytes,
         baseline_world_bytes=request.baseline_world_bytes,
+        world_input_pins=request.world_input_pins,
         scenario_bytes=request.scenario_bytes,
         provider_capture_bytes=request.provider_capture_bytes,
         capture=request.capture,
@@ -2024,6 +2107,7 @@ class DecodedSealedEvaluationRequestV1:
     schema: EvaluationSchemaCaptureV1
     program_envelope: EvaluationReplayProgramEnvelopeV1
     baseline_world: EvaluationReplayWorldV1
+    world_input_pins: EvaluationWorldInputPinsV1
     scenario: ScenarioSpecV1 | None
     provider_capture: EvaluationProviderCaptureV1 | None
     capture: EvaluationCaptureProfileV1
@@ -2041,6 +2125,11 @@ class DecodedSealedEvaluationRequestV1:
                 "program_envelope",
             ),
             (self.baseline_world, EvaluationReplayWorldV1, "baseline_world"),
+            (
+                self.world_input_pins,
+                EvaluationWorldInputPinsV1,
+                "world_input_pins",
+            ),
             (self.capture, EvaluationCaptureProfileV1, "capture"),
         )
         for value, expected, name in exact_fields:
@@ -2066,6 +2155,8 @@ def _assert_world_schema(
         raise _fail("Sealed request accepts only a baseline replay world")
     if not world.relations:
         raise _fail("Sealed request requires an explicit non-empty dependency inventory")
+    if world.closure_target_digests:
+        raise _fail("Sealed request baseline closure inventory must be empty")
     schema_row = schema.schema
     specs: dict[str, tuple[str, ...]] = {}
     for raw in schema_row["predicates"]:  # schema validator owns this shape
@@ -2254,6 +2345,7 @@ def decode_sealed_evaluation_request_v1(
         schema=schema,
         program_envelope=envelope,
         baseline_world=world,
+        world_input_pins=request.world_input_pins,
         scenario=scenario,
         provider_capture=provider,
         capture=request.capture,
@@ -2272,6 +2364,7 @@ __all__ = [
     "EvaluationCaptureProfileV1",
     "EvaluationProviderCaptureV1",
     "EvaluationSchemaCaptureV1",
+    "EvaluationWorldInputPinsV1",
     "SealedEvaluationRequestV1",
     "assert_sealed_evaluation_request_current_v1",
     "decode_sealed_evaluation_request_v1",

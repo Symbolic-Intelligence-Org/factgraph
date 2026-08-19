@@ -53,6 +53,7 @@ from factgraph.application.protocol.sealed_evaluation_v1 import (
     EvaluationCaptureProfileV1,
     EvaluationProviderCaptureV1,
     EvaluationSchemaCaptureV1,
+    EvaluationWorldInputPinsV1,
     SealedEvaluationRequestV1,
     decode_sealed_evaluation_request_v1,
     evaluation_execution_profile_v1_bytes,
@@ -200,6 +201,13 @@ def _world(*, side: str = "baseline", empty: bool = False) -> EvaluationReplayWo
     )
 
 
+def _world_input_pins() -> EvaluationWorldInputPinsV1:
+    return EvaluationWorldInputPinsV1(
+        base_view_digest=_token("4"),
+        admissibility_digest=_token("5"),
+    )
+
+
 def _request(
     *,
     plan: GoalPlanV1 | None = None,
@@ -276,6 +284,7 @@ def _request(
         schema_bytes=evaluation_schema_capture_v1_bytes(schema),
         program_envelope_bytes=program.to_bytes(),
         baseline_world_bytes=evaluation_replay_world_v1_bytes(_world() if world is None else world),
+        world_input_pins=_world_input_pins(),
         scenario_bytes=None if scenario is None else scenario_spec_v1_bytes(scenario),
         provider_capture_bytes=(
             None if provider is None else evaluation_provider_capture_v1_bytes(provider)
@@ -322,6 +331,42 @@ def test_valid_request_and_every_named_component_round_trip_canonically() -> Non
         )
         == request.baseline_world_bytes
     )
+    assert decoded.world_input_pins == request.world_input_pins
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        lambda row: row.pop("base_view_digest"),
+        lambda row: row.__setitem__("unknown", _token("9")),
+        lambda row: row.__setitem__("base_view_digest", None),
+        lambda row: row.__setitem__("admissibility_digest", "not-a-digest"),
+        lambda row: row.__setitem__("pins_digest", _token("9")),
+    ],
+)
+def test_world_input_pins_are_exact_typed_and_digest_bound(mutation) -> None:
+    row = _outer_wire(_request())
+    pins = row["world_input_pins"]
+    assert type(pins) is dict
+    mutation(pins)
+    with pytest.raises(ProtocolShapeError):
+        sealed_evaluation_request_v1_from_bytes(_canonical(row))
+
+    request = _request()
+    with pytest.raises(ProtocolShapeError, match="exact EvaluationWorldInputPinsV1"):
+        replace(request, world_input_pins={})  # type: ignore[arg-type]
+
+
+def test_world_input_pins_are_covered_by_request_digest() -> None:
+    request = _request()
+    changed = replace(
+        request,
+        world_input_pins=EvaluationWorldInputPinsV1(
+            _token("6"),
+            request.world_input_pins.admissibility_digest,
+        ),
+    )
+    assert changed.request_digest != request.request_digest
 
 
 def test_goal_plan_codec_round_trips_all_five_expectation_arms() -> None:
@@ -479,6 +524,19 @@ def test_world_codec_rejects_effective_and_empty_world_at_request_cross_pin_gate
         decode_sealed_evaluation_request_v1(_request(world=_world(side="effective")))
     with pytest.raises(ProtocolShapeError, match="dependency inventory"):
         decode_sealed_evaluation_request_v1(_request(world=_world(empty=True)))
+
+
+def test_request_baseline_rejects_post_scenario_closure_inventory() -> None:
+    baseline = _world()
+    world = EvaluationReplayWorldV1(
+        "baseline",
+        baseline.semantic_world_digest,
+        baseline.resolution_evidence_digest,
+        (_token("9"),),
+        baseline.relations,
+    )
+    with pytest.raises(ProtocolShapeError, match="closure inventory must be empty"):
+        decode_sealed_evaluation_request_v1(_request(world=world))
 
 
 def test_world_codec_rejects_duplicate_witness_identity_across_relations() -> None:
@@ -775,6 +833,7 @@ def test_outer_component_bytes_are_not_mapping_or_live_object_fallbacks() -> Non
             schema_bytes=request.schema_bytes,
             program_envelope_bytes=request.program_envelope_bytes,
             baseline_world_bytes=request.baseline_world_bytes,
+            world_input_pins=request.world_input_pins,
             scenario_bytes=None,
             provider_capture_bytes=None,
             capture=request.capture,

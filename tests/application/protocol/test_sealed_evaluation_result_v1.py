@@ -72,6 +72,7 @@ from factgraph.application.protocol.sealed_evaluation_v1 import (
     EvaluationCaptureProfileV1,
     EvaluationProviderCaptureV1,
     EvaluationSchemaCaptureV1,
+    EvaluationWorldInputPinsV1,
     SealedEvaluationRequestV1,
     evaluation_execution_profile_v1_bytes,
     evaluation_provider_capture_v1_bytes,
@@ -442,6 +443,7 @@ def _request_for_run(
         baseline_world_bytes=evaluation_replay_world_v1_bytes(
             run.replay_payload.world("baseline") if request_baseline is None else request_baseline
         ),
+        world_input_pins=EvaluationWorldInputPinsV1(_token("4"), _token("5")),
         scenario_bytes=None if scenario is None else scenario_spec_v1_bytes(scenario),
         provider_capture_bytes=(
             None if provider is None else evaluation_provider_capture_v1_bytes(provider)
