@@ -26,10 +26,10 @@ from __future__ import annotations
 
 import base64
 import binascii
-from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, field, replace
 import json
 import math
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass, field, replace
 from typing import Any, Literal
 
 from factgraph.core.protocol.digests import sha256_hex, sha256_token
@@ -51,14 +51,6 @@ from factgraph.core.schema.schema_ir import (
 )
 from factgraph.core.store._support import ProjectedFact
 
-from .portable_evaluation_runtime import (
-    PortableEngineEvaluationV1,
-    PortableEngineObservationFrameV1,
-    PortableEvaluationError,
-    execute_native_deterministic_v1,
-    observe_portable_deterministic_v1,
-    portable_dependency_predicate_ids_v1,
-)
 from .explain.evidence_tree import (
     EvidenceAtom,
     EvidenceGraph,
@@ -69,6 +61,14 @@ from .explain.evidence_tree import (
 )
 from .explain.prober import probe_native
 from .policy_explanation_runtime import project_policy_evidence_v1
+from .portable_evaluation_runtime import (
+    PortableEngineEvaluationV1,
+    PortableEngineObservationFrameV1,
+    PortableEvaluationError,
+    execute_native_deterministic_v1,
+    observe_portable_deterministic_v1,
+    portable_dependency_predicate_ids_v1,
+)
 from .protocol.common import ProtocolShapeError
 from .protocol.derivation import CompiledDerivationPlan, CompiledHeadCall
 from .protocol.evaluation_run import EvaluationRunRulePinV0, EvaluationRunTargetV0
@@ -95,6 +95,7 @@ from .protocol.goal_plan_v1 import (
     GoalResultRowV1,
     GoalResultV1,
     GoalRowExpectationV1,
+    GoalTechnicalAssessmentV1,
     GoalValueV1,
     SetEqualsExpectationV1,
 )
@@ -122,21 +123,27 @@ from .protocol.rule_expr_lowering import (
     RuleExprOccurrenceBinding,
     RuleExprPolicyCondition,
     RuleExprPortBinding,
+    _materialize_native_derivation_plan,
     _RuleExprQueryHeadLink,
     _RuleExprQueryNavigationLookup,
     _RuleExprQueryValueBinding,
-    _materialize_native_derivation_plan,
     probe_seed_vars_by_head_port,
 )
 from .protocol.scenario_v1 import (
     ExactLocalClosureTargetV1,
     ResolvedScenarioOperationV1,
+    ScenarioSpecV1,
     ScenarioValueV1,
 )
 from .protocol.schema_runtime import FieldPath
+from .protocol.sealed_evaluation_v1 import DecodedSealedEvaluationRequestV1
 from .protocol.semantic_address import SemanticPortAddress
+from .scenario_v1_runtime import (
+    ScenarioResolutionErrorV1,
+    effective_world_to_relation_v1,
+    resolve_scenario_v1,
+)
 from .schema_runtime import build_schema_index
-
 
 _PROGRAM_TYPE = "FactGraphEvaluationProgramV1"
 _PROGRAM_RECORD_TYPE = "FactGraphCompiledDerivationPlanV1"
@@ -1489,10 +1496,10 @@ def _atoms_from_wire(value: object, *, label: str) -> tuple[object, ...]:
     try:
         raw = _decode_structural(value)
         if not isinstance(raw, list):
-            raise ValueError("atom body is not a list")
+            raise TypeError("atom body is not a list")
         parsed = parse_where_ir_to_ast(raw)
         if not isinstance(parsed, AndExpr):
-            raise ValueError("atom body is not one conjunction")
+            raise TypeError("atom body is not one conjunction")
         atoms = tuple(parsed.atoms)
         if _canonical_json_bytes(
             _atoms_to_wire(atoms, label=label), label=label
@@ -2879,6 +2886,319 @@ def decode_evaluation_replay_program_v1(
             None if candidate is None else _compiled_plan_digest(candidate)
         ),
     )
+
+
+def _decode_program_for_sealed_request(
+    components: DecodedSealedEvaluationRequestV1,
+) -> CompiledDerivationPlan:
+    """Decode the minimal C2 program only after every captured input pin.
+
+    This helper is owned by the same module as ``_decode_program_record``;
+    no protocol or adapter module imports an underscore decoder. Wider
+    candidate, Scenario, Provider and native-Explain cells are added only by
+    extending this closed root together with their runtime gates.
+    """
+
+    root = components.program_envelope.compiled_program
+    expected_keys = frozenset(
+        {
+            "$type",
+            "primary",
+            "candidate",
+            "primary_policy_structure",
+            "candidate_policy_structure",
+            "primary_native_explain_context",
+            "candidate_native_explain_context",
+            "scenario_patch",
+        }
+    )
+    if not isinstance(root, Mapping) or set(root) != expected_keys:
+        raise EvaluationRunRuntimeErrorV1(
+            "sealed evaluation program has unsupported or missing fields",
+            code="EVALUATION_RUN_V1_PROGRAM_SHAPE_INVALID",
+        )
+    if root["$type"] != _PROGRAM_TYPE:
+        raise EvaluationRunRuntimeErrorV1(
+            "sealed evaluation program type is invalid",
+            code="EVALUATION_RUN_V1_PROGRAM_SHAPE_INVALID",
+        )
+    for name in (
+        "candidate",
+        "primary_policy_structure",
+        "candidate_policy_structure",
+        "primary_native_explain_context",
+        "candidate_native_explain_context",
+    ):
+        if root[name] is not None:
+            raise EvaluationRunRuntimeErrorV1(
+                f"minimal sealed evaluation does not admit {name}",
+                code="EVALUATION_RUN_V1_PROGRAM_CAPABILITY_REJECTED",
+            )
+    if root["scenario_patch"] is not None:
+        raise EvaluationRunRuntimeErrorV1(
+            "sealed request program cannot carry a resolved Scenario patch",
+            code="EVALUATION_RUN_V1_PROGRAM_PIN_MISMATCH",
+        )
+    return _decode_program_record(
+        root["primary"],
+        plan_digest=components.goal_plan.plan_digest,
+        query_digest=components.goal_plan.query_digest,
+        target_digest=components.goal_plan.target.target_digest,
+    )
+
+
+def _assert_minimal_sealed_capability(
+    components: DecodedSealedEvaluationRequestV1,
+) -> None:
+    if components.candidate_plan is not None:
+        raise EvaluationRunRuntimeErrorV1(
+            "candidate sealed evaluation is not implemented by this runtime cell",
+            code="EVALUATION_RUN_V1_PROGRAM_CAPABILITY_REJECTED",
+        )
+    if components.provider_capture is not None:
+        raise EvaluationRunRuntimeErrorV1(
+            "Provider sealed evaluation is not implemented by this runtime cell",
+            code="EVALUATION_RUN_V1_PROGRAM_CAPABILITY_REJECTED",
+        )
+    if components.scenario is not None:
+        raise EvaluationRunRuntimeErrorV1(
+            "Scenario sealed evaluation is not implemented by this runtime cell",
+            code="EVALUATION_RUN_V1_PROGRAM_CAPABILITY_REJECTED",
+        )
+    if components.execution_profile.kind != "native_deterministic_v1":
+        raise EvaluationRunRuntimeErrorV1(
+            "portable sealed evaluation is not implemented by this runtime cell",
+            code="EVALUATION_RUN_V1_PROGRAM_CAPABILITY_REJECTED",
+        )
+    if components.goal_plan.result_mode != "rows":
+        raise EvaluationRunRuntimeErrorV1(
+            "non-row sealed evaluation is not implemented by this runtime cell",
+            code="EVALUATION_RUN_V1_PROGRAM_CAPABILITY_REJECTED",
+        )
+    if (
+        components.capture.explain != "not_captured"
+        or components.capture.comparison != "not_requested"
+    ):
+        raise EvaluationRunRuntimeErrorV1(
+            "requested capture capability is not implemented by this runtime cell",
+            code="EVALUATION_RUN_V1_PROGRAM_CAPABILITY_REJECTED",
+        )
+
+
+def _captured_assessment(
+    *,
+    plan: GoalPlanV1,
+    result: GoalResultV1,
+) -> GoalTechnicalAssessmentV1:
+    statuses = tuple(item.status for item in result.expectation_outcomes)
+    if not statuses:
+        expectation: str = "not_requested"
+    elif "unsupported" in statuses:
+        expectation = "unsupported"
+    elif "underdetermined" in statuses:
+        expectation = "underdetermined"
+    elif "not_satisfied" in statuses:
+        expectation = "not_satisfied"
+    else:
+        expectation = "satisfied"
+    return GoalTechnicalAssessmentV1(
+        plan_digest=plan.plan_digest,
+        result_digest=result.result_digest,
+        scenario_resolution="not_requested",
+        execution="succeeded",
+        parity="not_requested",
+        completeness=result.completeness,
+        expectation=expectation,  # type: ignore[arg-type]
+        explain="not_requested",
+        # This FactGraph axis means the complete in-memory Run can be
+        # deterministically replayed from its sealed payload. Product-level
+        # historical replay remains display_only until C3 retains the exact
+        # artifact and pins; this field makes no retention claim.
+        replay="available",
+        contract_validity="valid",
+        exact_local_closure="not_requested",
+        capability="supported",
+    )
+
+
+def _evaluate_captured_side(
+    *,
+    name: Literal["baseline", "effective"],
+    world: EvaluationReplayWorldV1,
+    plan: GoalPlanV1,
+    profile: EvaluationExecutionProfileV1,
+    compiled_plan: CompiledDerivationPlan,
+    schema_ir: dict[str, Any],
+    relation: Mapping[str, Sequence[ProjectedFact]],
+) -> EvaluationRunSideV1:
+    try:
+        observations = _observe_profile(
+            profile=profile,
+            compiled_plan=compiled_plan,
+            schema_ir=schema_ir,
+            relation=relation,
+        )
+    except (PortableEvaluationError, ValueError) as exc:
+        raise EvaluationRunRuntimeErrorV1(
+            "captured evaluation engine execution failed",
+            code="EVALUATION_RUN_V1_REPLAY_EXECUTION_FAILED",
+        ) from exc
+    frames: list[EvaluationEngineResultV1] = []
+    for observed in observations:
+        if observed.status == "succeeded":
+            assert observed.evaluation is not None
+            result = _goal_result_from_engine_output(
+                plan=plan,
+                output=observed.evaluation,
+                closure_target_digests=world.closure_target_digests,
+                relation=relation,
+                schema_ir=schema_ir,
+            )
+            frames.append(EvaluationEngineResultV1(observed.engine, result))
+        else:
+            assert observed.diagnostic is not None
+            frames.append(
+                EvaluationEngineResultV1(
+                    engine=observed.engine,
+                    result=None,
+                    status=observed.status,
+                    diagnostic_code=observed.diagnostic.code,
+                    diagnostic_detail_digest=observed.diagnostic.detail_digest,
+                )
+            )
+    if tuple(frame.engine for frame in frames) != tuple(pin.engine for pin in profile.engines):
+        raise EvaluationRunRuntimeErrorV1(
+            "captured evaluation engine inventory differs from profile",
+            code="EVALUATION_RUN_V1_REPLAY_ENGINE_INVENTORY_MISMATCH",
+        )
+    canonical = frames[0].result
+    if canonical is None:
+        raise EvaluationRunRuntimeErrorV1(
+            "captured Native canonical engine did not produce a result",
+            code="EVALUATION_RUN_V1_REPLAY_CANONICAL_ENGINE_UNAVAILABLE",
+        )
+    return EvaluationRunSideV1(
+        name=name,
+        plan_digest=plan.plan_digest,
+        world_side=name,
+        world_capture_digest=world.world_capture_digest,
+        canonical_result=canonical,
+        engine_results=tuple(frames),
+        assessment=_captured_assessment(plan=plan, result=canonical),
+    )
+
+
+def evaluate_captured_goal_v1(
+    components: DecodedSealedEvaluationRequestV1,
+) -> EvaluationRunV1:
+    """Evaluate one already-decoded, finite C2 request without live state."""
+
+    if type(components) is not DecodedSealedEvaluationRequestV1:
+        raise EvaluationRunRuntimeErrorV1(
+            "components must be exact DecodedSealedEvaluationRequestV1",
+            code="EVALUATION_RUN_V1_CAPTURE_INPUT_INVALID",
+        )
+    _assert_minimal_sealed_capability(components)
+    schema_ir = components.schema.schema
+    try:
+        schema_index = build_schema_index(schema_ir)
+        request_relation = _world_relation(components.baseline_world, schema_ir)
+        resolved = resolve_scenario_v1(
+            ScenarioSpecV1(()),
+            schema_index=schema_index,
+            baseline_relation=request_relation,
+            base_view_digest=components.world_input_pins.base_view_digest,
+            admissibility_digest=components.world_input_pins.admissibility_digest,
+        )
+    except (ProtocolShapeError, ScenarioResolutionErrorV1, ValueError) as exc:
+        raise EvaluationRunRuntimeErrorV1(
+            "captured baseline could not be reconstructed",
+            code="EVALUATION_RUN_V1_RELATION_SCHEMA_MISMATCH",
+        ) from exc
+    fresh_baseline_relation = effective_world_to_relation_v1(resolved.baseline_world)
+    fresh_baseline = capture_evaluation_replay_world_v1(
+        side="baseline",
+        schema_ir=schema_ir,
+        semantic_world_digest=resolved.baseline_world.world_digest,
+        resolution_evidence_digest=resolved.resolution_evidence_digest,
+        closure_target_digests=(),
+        relations=fresh_baseline_relation,
+    )
+    if fresh_baseline != components.baseline_world:
+        raise EvaluationRunRuntimeErrorV1(
+            "captured baseline does not match fresh resolver reconstruction",
+            code="EVALUATION_RUN_V1_PIN_INVALID",
+        )
+
+    # Semantic compiled-body decode is deliberately after schema, relation,
+    # base-view and admission reconstruction.
+    primary = _decode_program_for_sealed_request(components)
+    try:
+        dependency_ids = portable_dependency_predicate_ids_v1(primary, schema_ir=schema_ir)
+    except PortableEvaluationError as exc:
+        raise EvaluationRunRuntimeErrorV1(
+            "sealed program is outside the deterministic profile",
+            code="EVALUATION_RUN_V1_PROGRAM_CAPABILITY_REJECTED",
+        ) from exc
+    if tuple(sorted(fresh_baseline_relation)) != dependency_ids:
+        raise EvaluationRunRuntimeErrorV1(
+            "captured baseline inventory differs from sealed program dependencies",
+            code="EVALUATION_RUN_V1_REPLAY_RELATION_INCOMPLETE",
+        )
+
+    effective_relation = effective_world_to_relation_v1(resolved.effective_world)
+    effective = capture_evaluation_replay_world_v1(
+        side="effective",
+        schema_ir=schema_ir,
+        semantic_world_digest=resolved.effective_world.world_digest,
+        resolution_evidence_digest=resolved.resolution_evidence_digest,
+        closure_target_digests=(),
+        relations=effective_relation,
+    )
+    baseline_side = _evaluate_captured_side(
+        name="baseline",
+        world=fresh_baseline,
+        plan=components.goal_plan,
+        profile=components.execution_profile,
+        compiled_plan=primary,
+        schema_ir=schema_ir,
+        relation=fresh_baseline_relation,
+    )
+    effective_side = _evaluate_captured_side(
+        name="effective",
+        world=effective,
+        plan=components.goal_plan,
+        profile=components.execution_profile,
+        compiled_plan=primary,
+        schema_ir=schema_ir,
+        relation=effective_relation,
+    )
+    if any(
+        len(side.canonical_result.rows) > components.capture.row_limit
+        for side in (baseline_side, effective_side)
+    ):
+        raise EvaluationRunRuntimeErrorV1(
+            "captured result exceeds the sealed row limit",
+            code="EVALUATION_RUN_V1_PROGRAM_LIMIT_EXCEEDED",
+        )
+    payload = capture_evaluation_replay_payload_v1(
+        schema_ir=schema_ir,
+        address_space_digest=components.asset_bundle.address_space_digest,
+        plan=components.goal_plan,
+        execution_profile=components.execution_profile,
+        primary_compiled_plan=primary,
+        baseline_world=fresh_baseline,
+        effective_world=effective,
+    )
+    run = EvaluationRunV1(
+        plan=components.goal_plan,
+        execution_profile=components.execution_profile,
+        replay_payload=payload,
+        baseline=baseline_side,
+        effective=effective_side,
+    )
+    _assert_run_current(run)
+    return run
 
 
 @dataclass(frozen=True)
@@ -4795,6 +5115,7 @@ __all__ = [
     "compare_policy_variants_v1",
     "decode_evaluation_replay_program_v1",
     "diff_scenario_run_v1",
+    "evaluate_captured_goal_v1",
     "explain_evaluation_run_v1",
     "replay_evaluation_run_v1",
 ]
