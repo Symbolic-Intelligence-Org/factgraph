@@ -136,12 +136,27 @@ from .protocol.scenario_v1 import (
     ScenarioValueV1,
 )
 from .protocol.schema_runtime import FieldPath
-from .protocol.sealed_evaluation_v1 import DecodedSealedEvaluationRequestV1
+from .protocol.sealed_evaluation_result_v1 import (
+    EvaluationComparisonV1,
+    EvaluationScenarioDiffV1,
+    SealedEvaluationResultV1,
+    assert_sealed_evaluation_result_matches_request_v1,
+)
+from .protocol.sealed_evaluation_v1 import (
+    DecodedSealedEvaluationRequestV1,
+    SealedEvaluationRequestV1,
+    decode_sealed_evaluation_request_v1,
+)
 from .protocol.semantic_address import SemanticPortAddress
+from .relation_provider_v1_runtime import (
+    ProviderRelationMaterializationError,
+    merge_provider_materialization_v1,
+)
 from .scenario_v1_runtime import (
     ScenarioResolutionErrorV1,
     effective_world_to_relation_v1,
     resolve_scenario_v1,
+    scenario_dependency_predicate_ids_v1,
 )
 from .schema_runtime import build_schema_index
 
@@ -2890,7 +2905,7 @@ def decode_evaluation_replay_program_v1(
 
 def _decode_program_for_sealed_request(
     components: DecodedSealedEvaluationRequestV1,
-) -> CompiledDerivationPlan:
+) -> DecodedEvaluationReplayProgramV1:
     """Decode the minimal C2 program only after every captured input pin.
 
     This helper is owned by the same module as ``_decode_program_record``;
@@ -2923,7 +2938,6 @@ def _decode_program_for_sealed_request(
             code="EVALUATION_RUN_V1_PROGRAM_SHAPE_INVALID",
         )
     for name in (
-        "candidate",
         "primary_policy_structure",
         "candidate_policy_structure",
         "primary_native_explain_context",
@@ -2939,46 +2953,45 @@ def _decode_program_for_sealed_request(
             "sealed request program cannot carry a resolved Scenario patch",
             code="EVALUATION_RUN_V1_PROGRAM_PIN_MISMATCH",
         )
-    return _decode_program_record(
+    primary = _decode_program_record(
         root["primary"],
         plan_digest=components.goal_plan.plan_digest,
         query_digest=components.goal_plan.query_digest,
         target_digest=components.goal_plan.target.target_digest,
+    )
+    candidate: CompiledDerivationPlan | None = None
+    if components.candidate_plan is None:
+        if root["candidate"] is not None:
+            raise EvaluationRunRuntimeErrorV1(
+                "sealed program has an undeclared candidate",
+                code="EVALUATION_RUN_V1_PROGRAM_PIN_MISMATCH",
+            )
+    else:
+        if root["candidate"] is None:
+            raise EvaluationRunRuntimeErrorV1(
+                "sealed program omits the declared candidate",
+                code="EVALUATION_RUN_V1_PROGRAM_PIN_MISMATCH",
+            )
+        candidate = _decode_program_record(
+            root["candidate"],
+            plan_digest=components.candidate_plan.plan_digest,
+            query_digest=components.candidate_plan.query_digest,
+            target_digest=components.candidate_plan.target.target_digest,
+        )
+    return DecodedEvaluationReplayProgramV1(
+        primary=primary,
+        candidate=candidate,
+        primary_compiled_plan_digest=_compiled_plan_digest(primary),
+        candidate_compiled_plan_digest=(
+            None if candidate is None else _compiled_plan_digest(candidate)
+        ),
     )
 
 
 def _assert_minimal_sealed_capability(
     components: DecodedSealedEvaluationRequestV1,
 ) -> None:
-    if components.candidate_plan is not None:
-        raise EvaluationRunRuntimeErrorV1(
-            "candidate sealed evaluation is not implemented by this runtime cell",
-            code="EVALUATION_RUN_V1_PROGRAM_CAPABILITY_REJECTED",
-        )
-    if components.provider_capture is not None:
-        raise EvaluationRunRuntimeErrorV1(
-            "Provider sealed evaluation is not implemented by this runtime cell",
-            code="EVALUATION_RUN_V1_PROGRAM_CAPABILITY_REJECTED",
-        )
-    if components.scenario is not None:
-        raise EvaluationRunRuntimeErrorV1(
-            "Scenario sealed evaluation is not implemented by this runtime cell",
-            code="EVALUATION_RUN_V1_PROGRAM_CAPABILITY_REJECTED",
-        )
-    if components.execution_profile.kind != "native_deterministic_v1":
-        raise EvaluationRunRuntimeErrorV1(
-            "portable sealed evaluation is not implemented by this runtime cell",
-            code="EVALUATION_RUN_V1_PROGRAM_CAPABILITY_REJECTED",
-        )
-    if components.goal_plan.result_mode != "rows":
-        raise EvaluationRunRuntimeErrorV1(
-            "non-row sealed evaluation is not implemented by this runtime cell",
-            code="EVALUATION_RUN_V1_PROGRAM_CAPABILITY_REJECTED",
-        )
-    if (
-        components.capture.explain != "not_captured"
-        or components.capture.comparison != "not_requested"
-    ):
+    if components.capture.explain != "not_captured":
         raise EvaluationRunRuntimeErrorV1(
             "requested capture capability is not implemented by this runtime cell",
             code="EVALUATION_RUN_V1_PROGRAM_CAPABILITY_REJECTED",
@@ -2989,6 +3002,10 @@ def _captured_assessment(
     *,
     plan: GoalPlanV1,
     result: GoalResultV1,
+    world: EvaluationReplayWorldV1,
+    is_effective: bool,
+    parity: str,
+    capability: str,
 ) -> GoalTechnicalAssessmentV1:
     statuses = tuple(item.status for item in result.expectation_outcomes)
     if not statuses:
@@ -3001,12 +3018,27 @@ def _captured_assessment(
         expectation = "not_satisfied"
     else:
         expectation = "satisfied"
+    absence_expectations = tuple(
+        item for item in plan.expectations if isinstance(item, ExactLocalAbsenceExpectationV1)
+    )
+    if not absence_expectations:
+        exact_local_closure: str = "not_requested"
+    elif not is_effective:
+        exact_local_closure = "required"
+    elif all(
+        item.closure_target_digest in world.closure_target_digests for item in absence_expectations
+    ):
+        exact_local_closure = "resolved"
+    else:
+        exact_local_closure = "unresolved"
     return GoalTechnicalAssessmentV1(
         plan_digest=plan.plan_digest,
         result_digest=result.result_digest,
-        scenario_resolution="not_requested",
+        scenario_resolution=(
+            "resolved" if plan.scenario_request_digest is not None else "not_requested"
+        ),
         execution="succeeded",
-        parity="not_requested",
+        parity=parity,  # type: ignore[arg-type]
         completeness=result.completeness,
         expectation=expectation,  # type: ignore[arg-type]
         explain="not_requested",
@@ -3016,27 +3048,28 @@ def _captured_assessment(
         # artifact and pins; this field makes no retention claim.
         replay="available",
         contract_validity="valid",
-        exact_local_closure="not_requested",
-        capability="supported",
+        exact_local_closure=exact_local_closure,  # type: ignore[arg-type]
+        capability=capability,  # type: ignore[arg-type]
     )
 
 
 def _evaluate_captured_side(
     *,
-    name: Literal["baseline", "effective"],
+    name: Literal["baseline", "effective", "candidate_effective"],
     world: EvaluationReplayWorldV1,
     plan: GoalPlanV1,
     profile: EvaluationExecutionProfileV1,
     compiled_plan: CompiledDerivationPlan,
     schema_ir: dict[str, Any],
-    relation: Mapping[str, Sequence[ProjectedFact]],
+    execution_relation: Mapping[str, Sequence[ProjectedFact]],
+    world_relation: Mapping[str, Sequence[ProjectedFact]],
 ) -> EvaluationRunSideV1:
     try:
         observations = _observe_profile(
             profile=profile,
             compiled_plan=compiled_plan,
             schema_ir=schema_ir,
-            relation=relation,
+            relation=execution_relation,
         )
     except (PortableEvaluationError, ValueError) as exc:
         raise EvaluationRunRuntimeErrorV1(
@@ -3051,7 +3084,7 @@ def _evaluate_captured_side(
                 plan=plan,
                 output=observed.evaluation,
                 closure_target_digests=world.closure_target_digests,
-                relation=relation,
+                relation=world_relation,
                 schema_ir=schema_ir,
             )
             frames.append(EvaluationEngineResultV1(observed.engine, result))
@@ -3077,14 +3110,37 @@ def _evaluate_captured_side(
             "captured Native canonical engine did not produce a result",
             code="EVALUATION_RUN_V1_REPLAY_CANONICAL_ENGINE_UNAVAILABLE",
         )
+    if profile.kind == "native_deterministic_v1":
+        parity = "not_requested"
+        capability = "supported"
+    elif any(frame.status == "failed" for frame in frames):
+        parity = "unresolved"
+        capability = "unresolved"
+    elif any(frame.status == "unsupported" for frame in frames):
+        parity = "unsupported"
+        capability = "unresolved"
+    else:
+        parity = (
+            "equivalent"
+            if len({frame.semantic_row_set_digest for frame in frames}) == 1
+            else "different"
+        )
+        capability = "supported"
     return EvaluationRunSideV1(
         name=name,
         plan_digest=plan.plan_digest,
-        world_side=name,
+        world_side="baseline" if name == "baseline" else "effective",
         world_capture_digest=world.world_capture_digest,
         canonical_result=canonical,
         engine_results=tuple(frames),
-        assessment=_captured_assessment(plan=plan, result=canonical),
+        assessment=_captured_assessment(
+            plan=plan,
+            result=canonical,
+            world=world,
+            is_effective=name != "baseline",
+            parity=parity,
+            capability=capability,
+        ),
     )
 
 
@@ -3103,7 +3159,7 @@ def evaluate_captured_goal_v1(
     try:
         schema_index = build_schema_index(schema_ir)
         request_relation = _world_relation(components.baseline_world, schema_ir)
-        resolved = resolve_scenario_v1(
+        input_resolution = resolve_scenario_v1(
             ScenarioSpecV1(()),
             schema_index=schema_index,
             baseline_relation=request_relation,
@@ -3115,16 +3171,16 @@ def evaluate_captured_goal_v1(
             "captured baseline could not be reconstructed",
             code="EVALUATION_RUN_V1_RELATION_SCHEMA_MISMATCH",
         ) from exc
-    fresh_baseline_relation = effective_world_to_relation_v1(resolved.baseline_world)
-    fresh_baseline = capture_evaluation_replay_world_v1(
+    input_baseline_relation = effective_world_to_relation_v1(input_resolution.baseline_world)
+    input_baseline = capture_evaluation_replay_world_v1(
         side="baseline",
         schema_ir=schema_ir,
-        semantic_world_digest=resolved.baseline_world.world_digest,
-        resolution_evidence_digest=resolved.resolution_evidence_digest,
+        semantic_world_digest=input_resolution.baseline_world.world_digest,
+        resolution_evidence_digest=input_resolution.resolution_evidence_digest,
         closure_target_digests=(),
-        relations=fresh_baseline_relation,
+        relations=input_baseline_relation,
     )
-    if fresh_baseline != components.baseline_world:
+    if input_baseline != components.baseline_world:
         raise EvaluationRunRuntimeErrorV1(
             "captured baseline does not match fresh resolver reconstruction",
             code="EVALUATION_RUN_V1_PIN_INVALID",
@@ -3132,37 +3188,144 @@ def evaluate_captured_goal_v1(
 
     # Semantic compiled-body decode is deliberately after schema, relation,
     # base-view and admission reconstruction.
-    primary = _decode_program_for_sealed_request(components)
+    decoded_program = _decode_program_for_sealed_request(components)
+    primary = decoded_program.primary
+    provider_receipts: tuple[ProviderReceiptRefV1, ...] = ()
+    runtime_baseline_relation = input_baseline_relation
+    runtime_admissibility_digest = components.world_input_pins.admissibility_digest
+    if components.provider_capture is not None:
+        provider = components.provider_capture
+        try:
+            runtime_baseline_relation = merge_provider_materialization_v1(
+                input_baseline_relation,
+                request=provider.request,
+                materialization=provider.materialization,
+                schema_ir=schema_ir,
+            )
+        except ProviderRelationMaterializationError as exc:
+            raise EvaluationRunRuntimeErrorV1(
+                "captured Provider materialization cannot replace the sealed relation",
+                code="EVALUATION_RUN_V1_PROGRAM_CAPABILITY_REJECTED",
+            ) from exc
+        runtime_admissibility_digest = _token(
+            "sealed_evaluation_post_merge_admissibility_v1",
+            (
+                components.world_input_pins.admissibility_digest,
+                components.goal_plan.evidence_scope_digest,
+                components.baseline_world.world_capture_digest,
+                provider.materialization.materialization_digest,
+            ),
+        )
+        provider_receipts = (provider.materialization.to_receipt_ref_v1(),)
     try:
-        dependency_ids = portable_dependency_predicate_ids_v1(primary, schema_ir=schema_ir)
-    except PortableEvaluationError as exc:
+        runtime_input_resolution = (
+            input_resolution
+            if components.provider_capture is None
+            else resolve_scenario_v1(
+                ScenarioSpecV1(()),
+                schema_index=schema_index,
+                baseline_relation=runtime_baseline_relation,
+                base_view_digest=components.world_input_pins.base_view_digest,
+                admissibility_digest=runtime_admissibility_digest,
+            )
+        )
+    except (ProtocolShapeError, ScenarioResolutionErrorV1, ValueError) as exc:
+        raise EvaluationRunRuntimeErrorV1(
+            "post-Provider baseline could not be reconstructed",
+            code="EVALUATION_RUN_V1_RELATION_SCHEMA_MISMATCH",
+        ) from exc
+    run_baseline_relation = effective_world_to_relation_v1(runtime_input_resolution.baseline_world)
+    run_baseline = capture_evaluation_replay_world_v1(
+        side="baseline",
+        schema_ir=schema_ir,
+        semantic_world_digest=runtime_input_resolution.baseline_world.world_digest,
+        resolution_evidence_digest=runtime_input_resolution.resolution_evidence_digest,
+        closure_target_digests=(),
+        relations=run_baseline_relation,
+    )
+    try:
+        primary_dependency_ids = portable_dependency_predicate_ids_v1(
+            primary,
+            schema_ir=schema_ir,
+        )
+        scenario_dependency_ids = (
+            ()
+            if components.scenario is None
+            else scenario_dependency_predicate_ids_v1(
+                components.scenario,
+                schema_index=schema_index,
+                admitted_relation=run_baseline_relation,
+            )
+        )
+        candidate_dependency_ids = (
+            ()
+            if decoded_program.candidate is None
+            else portable_dependency_predicate_ids_v1(
+                decoded_program.candidate,
+                schema_ir=schema_ir,
+            )
+        )
+    except (PortableEvaluationError, ScenarioResolutionErrorV1) as exc:
         raise EvaluationRunRuntimeErrorV1(
             "sealed program is outside the deterministic profile",
             code="EVALUATION_RUN_V1_PROGRAM_CAPABILITY_REJECTED",
         ) from exc
-    if tuple(sorted(fresh_baseline_relation)) != dependency_ids:
+    dependency_ids = tuple(
+        sorted(
+            set(primary_dependency_ids)
+            | set(candidate_dependency_ids)
+            | set(scenario_dependency_ids)
+        )
+    )
+    if tuple(sorted(run_baseline_relation)) != dependency_ids:
         raise EvaluationRunRuntimeErrorV1(
             "captured baseline inventory differs from sealed program dependencies",
             code="EVALUATION_RUN_V1_REPLAY_RELATION_INCOMPLETE",
         )
 
+    try:
+        resolved = (
+            runtime_input_resolution
+            if components.scenario is None
+            else resolve_scenario_v1(
+                components.scenario,
+                schema_index=schema_index,
+                baseline_relation=run_baseline_relation,
+                base_view_digest=components.world_input_pins.base_view_digest,
+                admissibility_digest=runtime_admissibility_digest,
+            )
+        )
+    except (ProtocolShapeError, ScenarioResolutionErrorV1, ValueError) as exc:
+        raise EvaluationRunRuntimeErrorV1(
+            "sealed Scenario could not be resolved",
+            code="EVALUATION_RUN_V1_PROGRAM_CAPABILITY_REJECTED",
+        ) from exc
     effective_relation = effective_world_to_relation_v1(resolved.effective_world)
     effective = capture_evaluation_replay_world_v1(
         side="effective",
         schema_ir=schema_ir,
         semantic_world_digest=resolved.effective_world.world_digest,
         resolution_evidence_digest=resolved.resolution_evidence_digest,
-        closure_target_digests=(),
+        closure_target_digests=tuple(
+            target.target_digest for target in resolved.effective_world.closure.targets
+        ),
         relations=effective_relation,
     )
+    primary_baseline_relation = {
+        predicate_id: run_baseline_relation[predicate_id] for predicate_id in primary_dependency_ids
+    }
+    primary_effective_relation = {
+        predicate_id: effective_relation[predicate_id] for predicate_id in primary_dependency_ids
+    }
     baseline_side = _evaluate_captured_side(
         name="baseline",
-        world=fresh_baseline,
+        world=run_baseline,
         plan=components.goal_plan,
         profile=components.execution_profile,
         compiled_plan=primary,
         schema_ir=schema_ir,
-        relation=fresh_baseline_relation,
+        execution_relation=primary_baseline_relation,
+        world_relation=run_baseline_relation,
     )
     effective_side = _evaluate_captured_side(
         name="effective",
@@ -3171,11 +3334,30 @@ def evaluate_captured_goal_v1(
         profile=components.execution_profile,
         compiled_plan=primary,
         schema_ir=schema_ir,
-        relation=effective_relation,
+        execution_relation=primary_effective_relation,
+        world_relation=effective_relation,
     )
+    candidate_side: EvaluationRunSideV1 | None = None
+    if components.candidate_plan is not None:
+        assert decoded_program.candidate is not None
+        candidate_relation = {
+            predicate_id: effective_relation[predicate_id]
+            for predicate_id in candidate_dependency_ids
+        }
+        candidate_side = _evaluate_captured_side(
+            name="candidate_effective",
+            world=effective,
+            plan=components.candidate_plan,
+            profile=components.execution_profile,
+            compiled_plan=decoded_program.candidate,
+            schema_ir=schema_ir,
+            execution_relation=candidate_relation,
+            world_relation=effective_relation,
+        )
+    sides = (baseline_side, effective_side, candidate_side)
     if any(
-        len(side.canonical_result.rows) > components.capture.row_limit
-        for side in (baseline_side, effective_side)
+        side is not None and len(side.canonical_result.rows) > components.capture.row_limit
+        for side in sides
     ):
         raise EvaluationRunRuntimeErrorV1(
             "captured result exceeds the sealed row limit",
@@ -3187,8 +3369,14 @@ def evaluate_captured_goal_v1(
         plan=components.goal_plan,
         execution_profile=components.execution_profile,
         primary_compiled_plan=primary,
-        baseline_world=fresh_baseline,
+        candidate_plan=components.candidate_plan,
+        candidate_compiled_plan=decoded_program.candidate,
+        baseline_world=run_baseline,
         effective_world=effective,
+        scenario_operations=(
+            None if components.scenario is None else resolved.effective_world.operations
+        ),
+        provider_receipts=provider_receipts,
     )
     run = EvaluationRunV1(
         plan=components.goal_plan,
@@ -3196,6 +3384,8 @@ def evaluate_captured_goal_v1(
         replay_payload=payload,
         baseline=baseline_side,
         effective=effective_side,
+        candidate_plan=components.candidate_plan,
+        candidate_effective=candidate_side,
     )
     _assert_run_current(run)
     return run
@@ -5100,6 +5290,108 @@ def diff_scenario_run_v1(run: EvaluationRunV1) -> ScenarioDiffV1:
     )
 
 
+def _project_evaluation_comparison_v1(
+    value: PolicyVariantComparisonV1,
+) -> EvaluationComparisonV1:
+    """Losslessly close one runtime comparison into its protocol DTO."""
+
+    result = EvaluationComparisonV1(
+        primary_plan_digest=value.primary_plan_digest,
+        candidate_plan_digest=value.candidate_plan_digest,
+        effective_world_capture_digest=value.effective_world_capture_digest,
+        primary_target_digest=value.primary_target_digest,
+        candidate_target_digest=value.candidate_target_digest,
+        primary_compiled_plan_digest=value.primary_compiled_plan_digest,
+        candidate_compiled_plan_digest=value.candidate_compiled_plan_digest,
+        compiled_body_equal=value.compiled_body_equal,
+        compiled_head_equal=value.compiled_head_equal,
+        primary_policy_structure_digest=value.primary_policy_structure_digest,
+        candidate_policy_structure_digest=value.candidate_policy_structure_digest,
+        authored_structure_relation=value.authored_structure_relation,
+        shared_semantic_row_digests=value.shared_semantic_row_digests,
+        primary_only_semantic_row_digests=value.primary_only_semantic_row_digests,
+        candidate_only_semantic_row_digests=value.candidate_only_semantic_row_digests,
+        result_relation=value.result_relation,
+        structural_basis=value.structural_basis,
+        causal_attribution=value.causal_attribution,
+    )
+    if result.comparison_digest != value.comparison_digest:
+        raise EvaluationRunRuntimeErrorV1(
+            "comparison protocol projection changed the runtime observation",
+            code="EVALUATION_RUN_V1_COMPARISON_INVALID",
+        )
+    return result
+
+
+def _project_evaluation_scenario_diff_v1(
+    value: ScenarioDiffV1,
+) -> EvaluationScenarioDiffV1:
+    """Losslessly close one runtime Scenario observation into its protocol DTO."""
+
+    result = EvaluationScenarioDiffV1(
+        run_digest=value.run_digest,
+        plan_digest=value.plan_digest,
+        scenario_request_digest=value.scenario_request_digest,
+        baseline_world_capture_digest=value.baseline_world_capture_digest,
+        effective_world_capture_digest=value.effective_world_capture_digest,
+        baseline_semantic_world_digest=value.baseline_semantic_world_digest,
+        effective_semantic_world_digest=value.effective_semantic_world_digest,
+        baseline_relation_snapshot_digest=value.baseline_relation_snapshot_digest,
+        effective_relation_snapshot_digest=value.effective_relation_snapshot_digest,
+        baseline_resolution_evidence_digest=value.baseline_resolution_evidence_digest,
+        effective_resolution_evidence_digest=value.effective_resolution_evidence_digest,
+        baseline_closure_target_digests=value.baseline_closure_target_digests,
+        effective_closure_target_digests=value.effective_closure_target_digests,
+        input_difference_axes=value.input_difference_axes,
+        scenario_operations=value.scenario_operations,
+        scenario_patch_capture=value.scenario_patch_capture,
+        scenario_patch_application=value.scenario_patch_application,
+        scenario_patch_digest=value.scenario_patch_digest,
+        scenario_operation_digests=value.scenario_operation_digests,
+        shared_semantic_row_digests=value.shared_semantic_row_digests,
+        baseline_only_semantic_row_digests=value.baseline_only_semantic_row_digests,
+        effective_only_semantic_row_digests=value.effective_only_semantic_row_digests,
+        result_relation=value.result_relation,
+        evidence_relation=value.evidence_relation,
+        causal_attribution=value.causal_attribution,
+    )
+    if result.diff_digest != value.diff_digest:
+        raise EvaluationRunRuntimeErrorV1(
+            "Scenario diff protocol projection changed the runtime observation",
+            code="EVALUATION_RUN_V1_SCENARIO_DIFF_INVALID",
+        )
+    return result
+
+
+def evaluate_sealed_evaluation_request_v1(
+    request: SealedEvaluationRequestV1,
+) -> SealedEvaluationResultV1:
+    """Evaluate one exact sealed request and derive only selected observations."""
+
+    if type(request) is not SealedEvaluationRequestV1:
+        raise EvaluationRunRuntimeErrorV1(
+            "request must be exact SealedEvaluationRequestV1",
+            code="EVALUATION_RUN_V1_CAPTURE_INPUT_INVALID",
+        )
+    components = decode_sealed_evaluation_request_v1(request)
+    run = evaluate_captured_goal_v1(components)
+    comparison: EvaluationComparisonV1 | None = None
+    scenario_diff: EvaluationScenarioDiffV1 | None = None
+    if components.capture.comparison == "published_candidate":
+        comparison = _project_evaluation_comparison_v1(compare_policy_variants_v1(run))
+    elif components.capture.comparison == "baseline_vs_effective":
+        scenario_diff = _project_evaluation_scenario_diff_v1(diff_scenario_run_v1(run))
+    result = SealedEvaluationResultV1(
+        request_digest=request.request_digest,
+        asset_bundle_digest=request.asset_bundle.bundle_digest,
+        run=run,
+        comparison=comparison,
+        scenario_diff=scenario_diff,
+    )
+    assert_sealed_evaluation_result_matches_request_v1(result, request)
+    return result
+
+
 __all__ = [
     "DecodedEvaluationReplayProgramV1",
     "EvaluationRunExplanationV1",
@@ -5116,6 +5408,7 @@ __all__ = [
     "decode_evaluation_replay_program_v1",
     "diff_scenario_run_v1",
     "evaluate_captured_goal_v1",
+    "evaluate_sealed_evaluation_request_v1",
     "explain_evaluation_run_v1",
     "replay_evaluation_run_v1",
 ]

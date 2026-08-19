@@ -112,6 +112,66 @@ def _domain_token(domain: str, payload: object) -> str:
     return f"sha256:{sha256(raw).hexdigest()}"
 
 
+def _compiled_plan_wire(derivation_id: str) -> dict[str, object]:
+    return {
+        "$type": "FactGraphCompiledDerivationPlanV1",
+        "derivation_id": derivation_id,
+        "version": "1",
+        "body_ir": [["pred", "Person.age", ["$person", "$age"]]],
+        "heads": [
+            {
+                "target_pred_id": "__factgraph_projection__v1_age",
+                "head_var_names": ["$age"],
+            }
+        ],
+    }
+
+
+def _program_record(
+    plan: GoalPlanV1,
+    *,
+    derivation_id: str,
+) -> dict[str, object]:
+    compiled = _compiled_plan_wire(derivation_id)
+    return {
+        "$type": "FactGraphEvaluationProgramRecordV1",
+        "plan_digest": plan.plan_digest,
+        "query_digest": plan.query_digest,
+        "target_digest": plan.target.target_digest,
+        "compiled_plan_digest": _domain_token(
+            "evaluation_run_v1_compiled_plan",
+            compiled,
+        ),
+        "compiled_plan": compiled,
+    }
+
+
+def _resolved_operation_wire(
+    operation: ResolvedScenarioOperationV1,
+) -> dict[str, object]:
+    return {
+        "kind": operation.kind,
+        "entity_ref": operation.entity_ref,
+        "entity_type": operation.entity_type,
+        "predicate_id": operation.predicate_id,
+        "field": (
+            None
+            if operation.field is None
+            else {
+                "entity_type": operation.field.entity_type,
+                "field_name": operation.field.field_name,
+            }
+        ),
+        "assertion_id": operation.assertion_id,
+        "values": [{"tag": item.tag, "value": item.value} for item in operation.values],
+        "premise_ids": list(operation.premise_ids),
+        "origin_refs": list(operation.origin_refs),
+        "masked_witness_ids": list(operation.masked_witness_ids),
+        "synthetic_witness_ids": list(operation.synthetic_witness_ids),
+        "operation_digest": operation.operation_digest,
+    }
+
+
 def _schema_bytes() -> bytes:
     return canonicalize_schema_ir_jcs(
         {
@@ -223,7 +283,31 @@ def _program(
     profile: EvaluationExecutionProfileV1,
     schema: EvaluationSchemaCaptureV1,
     candidate_plan: GoalPlanV1 | None,
+    scenario_operation: ResolvedScenarioOperationV1 | None = None,
 ) -> EvaluationReplayProgramEnvelopeV1:
+    if plan.scenario_request_digest is None:
+        scenario_operation = None
+    elif scenario_operation is None:
+        scenario_operation = ResolvedScenarioOperationV1(
+            kind="without_relation",
+            entity_ref=None,
+            entity_type=None,
+            predicate_id="Person.age",
+            field=None,
+            premise_ids=("premise",),
+        )
+    scenario_patch = (
+        None
+        if scenario_operation is None
+        else {
+            "$type": "FactGraphScenarioPatchV1",
+            "operations": [_resolved_operation_wire(scenario_operation)],
+            "patch_digest": _domain_token(
+                "evaluation_run_v1_scenario_patch",
+                [scenario_operation.operation_digest],
+            ),
+        }
+    )
     return EvaluationReplayProgramEnvelopeV1(
         schema_digest=schema.schema_digest,
         address_space_digest=_token("3"),
@@ -233,13 +317,18 @@ def _program(
         execution_profile_digest=profile.profile_digest,
         compiler_digest=profile.compiler_digest,
         compiled_program={
-            "$type": "CompiledDerivationPlanV1",
-            "body": [],
-            "scenario_patch": (
+            "$type": "FactGraphEvaluationProgramV1",
+            "primary": _program_record(plan, derivation_id="fixture-primary"),
+            "candidate": (
                 None
-                if plan.scenario_request_digest is None
-                else {"$type": "ResolvedScenarioPatchFixtureV1", "operations": []}
+                if candidate_plan is None
+                else _program_record(candidate_plan, derivation_id="fixture-candidate")
             ),
+            "primary_policy_structure": None,
+            "candidate_policy_structure": None,
+            "primary_native_explain_context": None,
+            "candidate_native_explain_context": None,
+            "scenario_patch": scenario_patch,
         },
         candidate_plan_digest=None if candidate_plan is None else candidate_plan.plan_digest,
         candidate_query_digest=None if candidate_plan is None else candidate_plan.query_digest,
@@ -321,6 +410,7 @@ def _run(
     outcomes: tuple[GoalExpectationOutcomeV1, ...] = (),
     explain: bool = False,
     provider_receipts: tuple[ProviderReceiptRefV1, ...] = (),
+    scenario_operation: ResolvedScenarioOperationV1 | None = None,
 ) -> tuple[EvaluationRunV1, EvaluationSchemaCaptureV1]:
     profile = _profile()
     plan = _plan(
@@ -345,6 +435,7 @@ def _run(
         profile=profile,
         schema=schema,
         candidate_plan=candidate_plan,
+        scenario_operation=scenario_operation,
     )
     payload = EvaluationReplayPayloadV1(
         schema.schema_digest,
@@ -479,16 +570,24 @@ def _comparison(run: EvaluationRunV1) -> EvaluationComparisonV1:
     assert run.candidate_plan is not None and run.candidate_effective is not None
     primary = {item.semantic_row_digest for item in run.effective.canonical_result.rows}
     candidate = {item.semantic_row_digest for item in run.candidate_effective.canonical_result.rows}
+    program = json.loads(run.replay_payload.compiled_program_bytes)["compiled_program"]
+    primary_program = program["primary"]
+    candidate_program = program["candidate"]
     return EvaluationComparisonV1(
         primary_plan_digest=run.plan.plan_digest,
         candidate_plan_digest=run.candidate_plan.plan_digest,
         effective_world_capture_digest=run.replay_payload.world("effective").world_capture_digest,
         primary_target_digest=run.plan.target.target_digest,
         candidate_target_digest=run.candidate_plan.target.target_digest,
-        primary_compiled_plan_digest=_token("7"),
-        candidate_compiled_plan_digest=_token("8"),
-        compiled_body_equal=False,
-        compiled_head_equal=True,
+        primary_compiled_plan_digest=primary_program["compiled_plan_digest"],
+        candidate_compiled_plan_digest=candidate_program["compiled_plan_digest"],
+        compiled_body_equal=(
+            primary_program["compiled_plan"]["body_ir"]
+            == candidate_program["compiled_plan"]["body_ir"]
+        ),
+        compiled_head_equal=(
+            primary_program["compiled_plan"]["heads"] == candidate_program["compiled_plan"]["heads"]
+        ),
         primary_policy_structure_digest=None,
         candidate_policy_structure_digest=None,
         authored_structure_relation="not_captured",
@@ -701,19 +800,37 @@ def test_scenario_program_patch_is_output_only_and_the_only_normalized_field() -
         compiled_program_bytes=request.program_envelope_bytes,
     )
     missing_patch_run = replace(run, replay_payload=missing_patch_payload)
-    missing_patch_result = replace(
-        result,
-        run=missing_patch_run,
-        scenario_diff=_scenario_diff(missing_patch_run, operation),
-    )
-    with pytest.raises(ProtocolShapeError, match="must retain its resolved Scenario patch"):
-        assert_sealed_evaluation_result_matches_request_v1(missing_patch_result, request)
+    with pytest.raises(ProtocolShapeError, match="sealed Scenario patch"):
+        replace(
+            result,
+            run=missing_patch_run,
+            scenario_diff=_scenario_diff(missing_patch_run, operation),
+        )
 
     changed_row = json.loads(run.replay_payload.compiled_program_bytes)
-    changed_row["compiled_program"]["body"] = ["changed"]
+    changed_program = changed_row["compiled_program"]
+    changed_primary = changed_program["primary"]
+    changed_primary["compiled_plan"]["body_ir"] = [["pred", "Person.age", ["$person", "$changed"]]]
+    changed_primary["compiled_plan_digest"] = _domain_token(
+        "evaluation_run_v1_compiled_plan",
+        changed_primary["compiled_plan"],
+    )
+    changed_envelope = EvaluationReplayProgramEnvelopeV1(
+        schema_digest=run.replay_payload.program_envelope.schema_digest,
+        address_space_digest=run.replay_payload.program_envelope.address_space_digest,
+        plan_digest=run.replay_payload.program_envelope.plan_digest,
+        query_digest=run.replay_payload.program_envelope.query_digest,
+        target_digest=run.replay_payload.program_envelope.target_digest,
+        execution_profile_digest=(run.replay_payload.program_envelope.execution_profile_digest),
+        compiler_digest=run.replay_payload.program_envelope.compiler_digest,
+        compiled_program=changed_program,
+        candidate_plan_digest=run.replay_payload.program_envelope.candidate_plan_digest,
+        candidate_query_digest=run.replay_payload.program_envelope.candidate_query_digest,
+        candidate_target_digest=run.replay_payload.program_envelope.candidate_target_digest,
+    )
     changed_payload = replace(
         run.replay_payload,
-        compiled_program_bytes=_canonical(changed_row),
+        compiled_program_bytes=changed_envelope.to_bytes(),
     )
     changed_run = replace(run, replay_payload=changed_payload)
     changed_result = replace(
@@ -917,12 +1034,10 @@ def test_nested_exact_keys_depth_and_terminal_limit_ordering() -> None:
         sealed_evaluation_result_v1_from_bytes(at_terminal_ceiling + b" ")
 
 
-def test_projection_component_ceiling_applies_standalone_and_when_embedded() -> None:
+def test_projection_component_ceiling_and_sealed_patch_limit_apply_before_embedding() -> None:
     with pytest.raises(ProtocolShapeError, match="within its limit"):
         evaluation_comparison_v1_from_bytes(b"x" * (MAX_SEALED_EVALUATION_COMPONENT_BYTES_V1 + 1))
 
-    scenario = ScenarioSpecV1((ScenarioWithoutRelationV1("premise", "Person.age"),))
-    scenario_run, _ = _run(scenario=scenario, baseline_age=1, effective_age=2)
     oversized_operation = ResolvedScenarioOperationV1(
         kind="without_relation",
         entity_ref=None,
@@ -932,6 +1047,8 @@ def test_projection_component_ceiling_applies_standalone_and_when_embedded() -> 
         premise_ids=("premise",),
         origin_refs=("x" * MAX_SEALED_EVALUATION_COMPONENT_BYTES_V1,),
     )
+    scenario = ScenarioSpecV1((ScenarioWithoutRelationV1("premise", "Person.age"),))
+    scenario_run, _ = _run(scenario=scenario, baseline_age=1, effective_age=2)
     oversized_diff = _scenario_diff(scenario_run, oversized_operation)
     with pytest.raises(ProtocolShapeError, match="4 MiB component"):
         evaluation_scenario_diff_v1_bytes(oversized_diff)
@@ -940,12 +1057,19 @@ def test_projection_component_ceiling_applies_standalone_and_when_embedded() -> 
             b"x" * (MAX_SEALED_EVALUATION_COMPONENT_BYTES_V1 + 1)
         )
 
-    with pytest.raises(ProtocolShapeError, match="4 MiB component"):
+    with pytest.raises(ProtocolShapeError, match="sealed Scenario patch"):
         SealedEvaluationResultV1(
             _token("1"),
             _token("2"),
             scenario_run,
             scenario_diff=oversized_diff,
+        )
+    with pytest.raises(ProtocolShapeError, match="size limit"):
+        _run(
+            scenario=scenario,
+            baseline_age=1,
+            effective_age=2,
+            scenario_operation=oversized_operation,
         )
 
 

@@ -65,6 +65,11 @@ _RUN_TYPE = "FactGraphEvaluationRunV1"
 _COMPARISON_TYPE = "FactGraphEvaluationComparisonV1"
 _SCENARIO_DIFF_TYPE = "FactGraphEvaluationScenarioDiffV1"
 _RESULT_TYPE = "FactGraphSealedEvaluationResultV1"
+_PROGRAM_TYPE = "FactGraphEvaluationProgramV1"
+_PROGRAM_RECORD_TYPE = "FactGraphEvaluationProgramRecordV1"
+_COMPILED_PLAN_TYPE = "FactGraphCompiledDerivationPlanV1"
+_POLICY_STRUCTURE_TYPE = "FactGraphAuthoredPolicyStructureV1"
+_SCENARIO_PATCH_TYPE = "FactGraphScenarioPatchV1"
 _SHA256_TOKEN_RE = re.compile(r"sha256:[0-9a-f]{64}\Z")
 _BARE_SHA256_RE = re.compile(r"[0-9a-f]{64}\Z")
 
@@ -2034,6 +2039,118 @@ def _semantic_row_set(side: EvaluationRunSideV1) -> set[str]:
     return {item.semantic_row_digest for item in side.canonical_result.rows}
 
 
+def _sealed_program_root(run: EvaluationRunV1) -> dict[str, object]:
+    envelope = _load_json_object(
+        run.replay_payload.compiled_program_bytes,
+        label="EvaluationRunV1 program envelope",
+        max_bytes=MAX_SEALED_EVALUATION_COMPONENT_BYTES_V1,
+    )
+    raw_program = envelope.get("compiled_program")
+    return _exact_object(
+        raw_program,
+        frozenset(
+            {
+                "$type",
+                "primary",
+                "candidate",
+                "primary_policy_structure",
+                "candidate_policy_structure",
+                "primary_native_explain_context",
+                "candidate_native_explain_context",
+                "scenario_patch",
+            }
+        ),
+        label="EvaluationRunV1 compiled program",
+    )
+
+
+def _sealed_program_record(
+    value: object,
+    *,
+    label: str,
+    plan_digest: str,
+    query_digest: str,
+    target_digest: str,
+) -> tuple[str, dict[str, object]]:
+    row = _exact_object(
+        value,
+        frozenset(
+            {
+                "$type",
+                "plan_digest",
+                "query_digest",
+                "target_digest",
+                "compiled_plan_digest",
+                "compiled_plan",
+            }
+        ),
+        label=label,
+    )
+    if row["$type"] != _PROGRAM_RECORD_TYPE or (
+        row["plan_digest"],
+        row["query_digest"],
+        row["target_digest"],
+    ) != (plan_digest, query_digest, target_digest):
+        raise _fail(f"{label} does not match Run pins")
+    compiled_digest = _token(row["compiled_plan_digest"], label=f"{label}.compiled_plan_digest")
+    compiled = _exact_object(
+        row["compiled_plan"],
+        frozenset({"$type", "derivation_id", "version", "body_ir", "heads"}),
+        label=f"{label}.compiled_plan",
+    )
+    if compiled["$type"] != _COMPILED_PLAN_TYPE:
+        raise _fail(f"{label} compiled-plan type is invalid")
+    return compiled_digest, compiled
+
+
+def _policy_structure_digest(value: object, *, label: str) -> str | None:
+    if value is None:
+        return None
+    row = _exact_object(
+        value,
+        frozenset({"$type", "root_node_id", "structure_digest", "nodes"}),
+        label=label,
+    )
+    if row["$type"] != _POLICY_STRUCTURE_TYPE:
+        raise _fail(f"{label} type is invalid")
+    return _bare_digest(row["structure_digest"], label=f"{label}.structure_digest")
+
+
+def _scenario_patch_projection_wire(
+    operations: tuple[ResolvedScenarioOperationV1, ...],
+    *,
+    patch_digest: str,
+) -> dict[str, object]:
+    return {
+        "$type": _SCENARIO_PATCH_TYPE,
+        "operations": [
+            {
+                "kind": item.kind,
+                "entity_ref": item.entity_ref,
+                "entity_type": item.entity_type,
+                "predicate_id": item.predicate_id,
+                "field": (
+                    None
+                    if item.field is None
+                    else {
+                        "entity_type": item.field.entity_type,
+                        "field_name": item.field.field_name,
+                    }
+                ),
+                "assertion_id": item.assertion_id,
+                "values": [{"tag": value.tag, "value": value.value} for value in item.values],
+                "premise_ids": list(item.premise_ids),
+                "origin_refs": list(item.origin_refs),
+                "masked_witness_ids": list(item.masked_witness_ids),
+                "synthetic_witness_ids": list(item.synthetic_witness_ids),
+                "operation_digest": item.operation_digest,
+            }
+            for item in operations
+        ],
+        "patch_digest": patch_digest,
+    }
+
+
 def _assert_comparison_matches_run(
     comparison: EvaluationComparisonV1,
     run: EvaluationRunV1,
@@ -2059,6 +2176,42 @@ def _assert_comparison_matches_run(
         != tuple(sorted(candidate_rows - primary_rows))
     ):
         raise _fail("EvaluationComparisonV1 does not match sealed result rows")
+    program = _sealed_program_root(run)
+    if program["$type"] != _PROGRAM_TYPE:
+        raise _fail("EvaluationRunV1 compiled-program type is invalid")
+    primary_digest, primary_compiled = _sealed_program_record(
+        program["primary"],
+        label="EvaluationRunV1 primary program",
+        plan_digest=run.plan.plan_digest,
+        query_digest=run.plan.query_digest,
+        target_digest=run.plan.target.target_digest,
+    )
+    candidate_digest, candidate_compiled = _sealed_program_record(
+        program["candidate"],
+        label="EvaluationRunV1 candidate program",
+        plan_digest=run.candidate_plan.plan_digest,
+        query_digest=run.candidate_plan.query_digest,
+        target_digest=run.candidate_plan.target.target_digest,
+    )
+    expected_primary_structure = _policy_structure_digest(
+        program["primary_policy_structure"],
+        label="EvaluationRunV1 primary policy structure",
+    )
+    expected_candidate_structure = _policy_structure_digest(
+        program["candidate_policy_structure"],
+        label="EvaluationRunV1 candidate policy structure",
+    )
+    if (
+        comparison.primary_compiled_plan_digest != primary_digest
+        or comparison.candidate_compiled_plan_digest != candidate_digest
+        or comparison.compiled_body_equal
+        != (primary_compiled["body_ir"] == candidate_compiled["body_ir"])
+        or comparison.compiled_head_equal
+        != (primary_compiled["heads"] == candidate_compiled["heads"])
+        or comparison.primary_policy_structure_digest != expected_primary_structure
+        or comparison.candidate_policy_structure_digest != expected_candidate_structure
+    ):
+        raise _fail("EvaluationComparisonV1 does not match sealed program observations")
 
 
 def _assert_scenario_diff_matches_run(
@@ -2093,6 +2246,15 @@ def _assert_scenario_diff_matches_run(
         or diff.effective_only_semantic_row_digests != tuple(sorted(effective_rows - baseline_rows))
     ):
         raise _fail("EvaluationScenarioDiffV1 does not match sealed result rows")
+    program = _sealed_program_root(run)
+    if program["$type"] != _PROGRAM_TYPE or diff.scenario_operations is None:
+        raise _fail("EvaluationScenarioDiffV1 requires one captured sealed Scenario patch")
+    expected_patch = _scenario_patch_projection_wire(
+        diff.scenario_operations,
+        patch_digest=diff.scenario_patch_digest or "",
+    )
+    if program["scenario_patch"] != expected_patch:
+        raise _fail("EvaluationScenarioDiffV1 does not match the sealed Scenario patch")
 
 
 def _sealed_result_payload(
