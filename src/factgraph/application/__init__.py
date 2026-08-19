@@ -224,6 +224,8 @@ from .evaluation_run_v1_runtime import (
     compare_policy_variants_v1,
     decode_evaluation_replay_program_v1,
     diff_scenario_run_v1,
+    evaluate_captured_goal_v1,
+    evaluate_sealed_evaluation_request_v1,
     explain_evaluation_run_v1,
     replay_evaluation_run_v1,
 )
@@ -469,6 +471,8 @@ __all__ = [
     "compare_policy_variants_v1",
     "decode_evaluation_replay_program_v1",
     "diff_scenario_run_v1",
+    "evaluate_captured_goal_v1",
+    "evaluate_sealed_evaluation_request_v1",
     "explain_evaluation_run_v1",
     "replay_evaluation_run_v1",
     # Q20 product read facade.  These are immutable views over sealed runs;
