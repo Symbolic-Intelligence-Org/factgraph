@@ -38,6 +38,7 @@ from .protocol.evaluation_query import (
 from .protocol.evaluation_run import EvaluationRunTargetV0
 from .protocol.policy import (
     Policy,
+    PolicyError,
     PolicyOccurrence,
     PolicyV2Only,
     policy_contains_weighted_choice,
@@ -144,6 +145,8 @@ def resolve_evaluation_query_target(
             compiled = compile_policy(policy, address_space=space, schema_index=schema_index)
         except EvaluationQueryTargetError:
             raise
+        except PolicyError as exc:
+            raise _error(str(exc), exc.code) from exc
         except (SemanticPortResolutionError, ValueError) as exc:
             raise _error(
                 "resolved Rule target is no longer current", "QUERY_RULE_TARGET_STALE"
@@ -188,6 +191,8 @@ def resolve_evaluation_query_target(
             )
         except EvaluationQueryTargetError:
             raise
+        except PolicyError as exc:
+            raise _error(str(exc), exc.code) from exc
         except (SemanticPortResolutionError, ValueError) as exc:
             raise _error(
                 "Policy target could not be resolved", "QUERY_POLICY_TARGET_INVALID"

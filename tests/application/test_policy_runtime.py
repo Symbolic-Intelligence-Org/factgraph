@@ -10,6 +10,7 @@ from factgraph.application import (
     build_resolved_rule,
     build_schema_index,
     compile_policy,
+    encode_entity_ref,
     manage_rule_occurrence,
 )
 from factgraph.application.protocol import (
@@ -25,6 +26,7 @@ from factgraph.application.protocol import (
     PolicyNodeLineage,
     PolicyOccurrence,
     PolicyUnify,
+    EntityRef,
     SemanticPortAddress,
     SemanticRulePort,
     FieldPath,
@@ -61,6 +63,7 @@ class ComparisonTypes(Entity):
     count: int = Field()
     label: str = Field()
     ratio: float = Field()
+    active: bool = Field()
 
 
 def _index(*, unrelated: bool = False):
@@ -103,11 +106,12 @@ def _comparison_types_bundle():
     index = build_schema_index(
         compile_schema_from_classes([ComparisonTypes], generated_at="2026-08-13T00:00:00Z")
     )
-    item, count, label, ratio = (
+    item, count, label, ratio, active = (
         Var("$item"),
         Var("$count"),
         Var("$label"),
         Var("$ratio"),
+        Var("$active"),
     )
     return index, build_resolved_rule(
         id="comparison_types",
@@ -117,12 +121,16 @@ def _comparison_types_bundle():
             PredAtom("comparison_types:count", [item, count]),
             PredAtom("comparison_types:label", [item, label]),
             PredAtom("comparison_types:ratio", [item, ratio]),
+            PredAtom("comparison_types:active", [item, active]),
         ),
         ports={
             "item": SemanticRulePort(item, entity_identity("ComparisonTypes")),
             "count": SemanticRulePort(count, field_endpoint("ComparisonTypes", "count")),
             "label": SemanticRulePort(label, field_endpoint("ComparisonTypes", "label")),
             "ratio": SemanticRulePort(ratio, field_endpoint("ComparisonTypes", "ratio")),
+            "active": SemanticRulePort(
+                active, field_endpoint("ComparisonTypes", "active")
+            ),
         },
         schema_index=index,
     )
@@ -482,6 +490,15 @@ class PolicyComparisonCompileTests(unittest.TestCase):
         with self.assertRaises(PolicyError) as domain_ctx:
             PolicyLiteral("float64", 12)  # type: ignore[arg-type]
         self.assertEqual(domain_ctx.exception.code, "INVALID_POLICY_LITERAL")
+        self.assertEqual(PolicyLiteral("string", "gold").value, "gold")
+        self.assertIs(PolicyLiteral("bool", True).value, True)
+        with self.assertRaises(PolicyError):
+            PolicyLiteral("string", True)  # type: ignore[arg-type]
+        with self.assertRaises(PolicyError):
+            PolicyLiteral("bool", 1)  # type: ignore[arg-type]
+        with self.assertRaises(PolicyError) as entity_ref_ctx:
+            PolicyLiteral("entity_ref", "idref_v1:Person:not-a-canonical-digest")
+        self.assertEqual(entity_ref_ctx.exception.code, "INVALID_POLICY_LITERAL")
         with self.assertRaises(PolicyError) as source_ctx:
             PolicyCompare.gt(PolicyLiteral("int", 1), PolicyLiteral("int", 2))
         self.assertEqual(source_ctx.exception.code, "INVALID_POLICY_COMPARE")
@@ -517,6 +534,26 @@ class PolicyComparisonCompileTests(unittest.TestCase):
         )
         self.assertEqual(first.policy_digest, same.policy_digest)
         self.assertEqual(first.policy_structure, same.policy_structure)
+        self.assertEqual(
+            first.policy_digest,
+            "bc735da76871869bef325c6f23e01202920145b99ac078d0cbf98847ad91ff2c",
+        )
+        self.assertEqual(
+            first.policy_structure.structure_digest,
+            "a088bb29b9bbb0928b33b1aa34ec59b538111756feb8a6ca9b1cbe9f872d20cb",
+        )
+        self.assertEqual(
+            PolicyCompare.gt(
+                _address("left", "age"), PolicyLiteral("int", 12)
+            ).node_id,
+            "pn:9459f1a5ebec5a1bcad00f65ea182c8124cdef7a8116c9f0c22b64816d44e00d",
+        )
+        self.assertEqual(
+            PolicyCompare.gt(
+                _address("left", "age"), PolicyLiteral("time", 12)
+            ).node_id,
+            "pn:2a64f5fe73ffd9c8395eb5c491bb8afb0fdb1bab6525d5b562026c514cd7b894",
+        )
         self.assertNotEqual(first.policy_digest, changed.policy_digest)
         self.assertNotEqual(first.policy_structure.structure_digest, changed.policy_structure.structure_digest)
         compare_refs = next(
@@ -527,6 +564,100 @@ class PolicyComparisonCompileTests(unittest.TestCase):
         self.assertEqual({getattr(ref, "role", None) for ref in compare_refs}, {"compare"})
         condition = first._policy_conditions[0]
         self.assertEqual(condition.atom, CmpAtom("gt", condition.atom.lhs, Const(12)))
+
+    def test_string_bool_and_entity_ref_equality_literals_compile(self) -> None:
+        index, bundle = _comparison_types_bundle()
+        space = _space(bundle, "item")
+        string_compare = PolicyCompare.eq(
+            _address("item", "label"), PolicyLiteral("string", "gold")
+        )
+        bool_compare = PolicyCompare.ne(
+            _address("item", "active"), PolicyLiteral("bool", False)
+        )
+        compiled = compile_policy(
+            Policy(
+                "literal-equality",
+                PolicyAll((_occ("item"), string_compare, bool_compare)),
+            ),
+            address_space=space,
+            schema_index=index,
+        )
+        atoms = tuple(condition.atom for condition in compiled._policy_conditions)
+        self.assertTrue(any(atom == CmpAtom("eq", atom.lhs, Const("gold")) for atom in atoms))
+        self.assertTrue(any(atom == CmpAtom("ne", atom.lhs, Const(False)) for atom in atoms))
+
+        person_index = _index(unrelated=True)
+        person_bundle = _person_bundle(schema_index=person_index)
+        alice = encode_entity_ref(
+            EntityRef("Person", {"employee_id": "alice"}), index=person_index
+        )
+        entity_compiled = compile_policy(
+            Policy(
+                "specific-person",
+                PolicyAll(
+                    (
+                        _occ("person"),
+                        PolicyCompare.eq(
+                            _address("person"),
+                            PolicyLiteral("entity_ref", alice),
+                        ),
+                    )
+                ),
+            ),
+            address_space=_space(person_bundle, "person"),
+            schema_index=person_index,
+        )
+        self.assertEqual(entity_compiled._policy_conditions[0].atom.rhs, Const(alice))
+
+        unrelated_ref = encode_entity_ref(
+            EntityRef("Unrelated", {"code": "x"}), index=person_index
+        )
+        with self.assertRaises(PolicyError) as mismatch:
+            compile_policy(
+                Policy(
+                    "wrong-entity-type",
+                    PolicyAll(
+                        (
+                            _occ("person"),
+                            PolicyCompare.eq(
+                                _address("person"),
+                                PolicyLiteral("entity_ref", unrelated_ref),
+                            ),
+                        )
+                    ),
+                ),
+                address_space=_space(person_bundle, "person"),
+                schema_index=person_index,
+            )
+        self.assertEqual(mismatch.exception.code, "INCOMPATIBLE_POLICY_ENTITY_REF_TYPE")
+
+    def test_new_literal_domains_keep_ordering_and_float_closed(self) -> None:
+        index, bundle = _comparison_types_bundle()
+        space = _space(bundle, "item")
+        for port, literal in (
+            ("label", PolicyLiteral("string", "gold")),
+            ("active", PolicyLiteral("bool", True)),
+        ):
+            with self.subTest(port=port):
+                with self.assertRaises(PolicyError) as ordering:
+                    compile_policy(
+                        Policy(
+                            f"bad-{port}-ordering",
+                            PolicyAll(
+                                (
+                                    _occ("item"),
+                                    PolicyCompare.gt(_address("item", port), literal),
+                                )
+                            ),
+                        ),
+                        address_space=space,
+                        schema_index=index,
+                    )
+                self.assertEqual(
+                    ordering.exception.code, "UNSUPPORTED_POLICY_COMPARE_ORDERING"
+                )
+        with self.assertRaises(PolicyError):
+            PolicyLiteral("float64", 1.0)  # type: ignore[arg-type]
 
     def test_literal_requires_matching_domain_and_preserves_branch_totality(self) -> None:
         bundle = _person_bundle()

@@ -26,7 +26,7 @@ from factgraph.application.protocol.policy import (
     PolicyOccurrence,
     PolicyUnify,
 )
-from factgraph.application.protocol.schema_runtime import FieldPath
+from factgraph.application.protocol.schema_runtime import EntityRef, FieldPath
 from factgraph.application.protocol.semantic_address import SemanticPortAddress
 from factgraph.application.protocol.semantic_port import (
     EntityIdentityEndpoint,
@@ -35,7 +35,9 @@ from factgraph.application.protocol.semantic_port import (
 )
 from factgraph.application.schema_runtime import (
     SchemaResolutionError,
+    encode_entity_ref,
     field_value_type,
+    materialize_identity,
 )
 from factgraph.application.semantic_address_runtime import (
     ManagedRuleOccurrence,
@@ -269,6 +271,7 @@ class PolicyEntityPortHandle(PolicyPortHandle):
     """One entity-identity port that may navigate to an owned scalar field."""
 
     __slots__ = ("entity_type", "_schema_index")
+    __hash__ = _PolicyHandle.__hash__
 
     def __init__(
         self,
@@ -280,6 +283,47 @@ class PolicyEntityPortHandle(PolicyPortHandle):
         super().__init__(owner, address)
         self.entity_type = entity_type
         self._schema_index = schema_index
+
+    def __eq__(self, other: object) -> Any:
+        return self._compare_entity_literal("eq", other)
+
+    def __ne__(self, other: object) -> Any:
+        return self._compare_entity_literal("ne", other)
+
+    def _compare_entity_literal(
+        self, op: Literal["eq", "ne"], other: object
+    ) -> PolicyConstraintHandle:
+        if not isinstance(other, EntityRef):
+            raise PolicyAuthoringError(
+                "entity ports require draft.same(left, right) or comparison with EntityRef",
+                code="POLICY_ENTITY_COMPARISON_UNSUPPORTED",
+            )
+        if other.entity_type != self.entity_type:
+            raise PolicyAuthoringError(
+                "Policy entity literal type must match the entity port type",
+                code="POLICY_ENTITY_LITERAL_TYPE_MISMATCH",
+            )
+        try:
+            identity = materialize_identity(
+                self.entity_type,
+                other.identity,
+                index=self._schema_index,
+            )
+            encoded = encode_entity_ref(
+                EntityRef(self.entity_type, identity),
+                index=self._schema_index,
+            )
+            literal = PolicyLiteral("entity_ref", encoded)
+            return PolicyConstraintHandle(
+                self._owner,
+                PolicyCompare(op, self.address, literal),
+            )
+        except (PolicyError, SchemaResolutionError, TypeError, ValueError) as exc:
+            code = getattr(exc, "code", "POLICY_ENTITY_LITERAL_INVALID")
+            raise PolicyAuthoringError(
+                f"Policy entity literal is invalid: {exc}",
+                code=code,
+            ) from exc
 
     def field(self, name: str) -> "PolicyFieldHandle":
         """Navigate an entity port to one single scalar field.
@@ -365,6 +409,11 @@ class _PolicyScalarHandle(PolicyPortHandle):
         return self._compare("le", other)
 
     def _compare(self, op: _CompareOp, other: object) -> PolicyConstraintHandle:
+        if op in {"gt", "ge", "lt", "le"} and self.scalar_domain not in {"int", "time"}:
+            raise PolicyAuthoringError(
+                f"Policy ordering is not supported for {self.scalar_domain}",
+                code="POLICY_ORDERING_DOMAIN_UNSUPPORTED",
+            )
         if isinstance(other, _PolicyScalarHandle):
             self._require_same_draft(other, label="Policy comparison")
             operand: PolicyComparisonOperand = other._operand
@@ -381,20 +430,29 @@ class _PolicyScalarHandle(PolicyPortHandle):
                 )
             operand = other
         else:
-            if self.scalar_domain not in {"int", "time"}:
+            if self.scalar_domain not in {"int", "time", "string", "bool"}:
                 raise PolicyAuthoringError(
                     f"Policy literals are not supported for {self.scalar_domain}",
                     code="POLICY_LITERAL_DOMAIN_UNSUPPORTED",
                 )
-            if isinstance(other, bool) or not isinstance(other, int):
+            expected_type = {
+                "int": int,
+                "time": int,
+                "string": str,
+                "bool": bool,
+            }[self.scalar_domain]
+            if type(other) is not expected_type:
                 raise PolicyAuthoringError(
-                    f"Policy literal for {self.scalar_domain} must be a signed int64",
+                    f"Policy literal does not match {self.scalar_domain}",
                     code="POLICY_LITERAL_TYPE_MISMATCH",
                 )
             try:
                 operand = PolicyLiteral(
-                    cast(Literal["int", "time"], self.scalar_domain),
-                    other,
+                    cast(
+                        Literal["int", "time", "string", "bool", "entity_ref"],
+                        self.scalar_domain,
+                    ),
+                    cast(int | str | bool, other),
                 )
             except (PolicyError, TypeError, ValueError) as exc:
                 raise PolicyAuthoringError(

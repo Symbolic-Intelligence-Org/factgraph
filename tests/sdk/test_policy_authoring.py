@@ -23,6 +23,7 @@ from factgraph.sdk import (
     ExplainTargetV1,
     Field,
     Identity,
+    PolicyAuthoringError,
     SDKStore,
     portable_deterministic_profile_v1,
 )
@@ -33,11 +34,21 @@ class Person(Entity):
     employee_id: str = Identity()
     age: int = Field()
     score: int = Field()
+    label: str = Field()
+    active: bool = Field()
+    ratio: float = Field()
 
 
 def _bundle(graph: SDKStore):
     index = build_schema_index(graph.schema_ir)
-    person, age, score = Var("$person"), Var("$age"), Var("$score")
+    person, age, score, label, active, ratio = (
+        Var("$person"),
+        Var("$age"),
+        Var("$score"),
+        Var("$label"),
+        Var("$active"),
+        Var("$ratio"),
+    )
     return build_resolved_rule(
         id="person_values",
         version="1",
@@ -45,11 +56,17 @@ def _bundle(graph: SDKStore):
             PredAtom("Person:exists", [person]),
             PredAtom("person:age", [person, age]),
             PredAtom("person:score", [person, score]),
+            PredAtom("person:label", [person, label]),
+            PredAtom("person:active", [person, active]),
+            PredAtom("person:ratio", [person, ratio]),
         ),
         ports={
             "person": SemanticRulePort(person, entity_identity("Person")),
             "age": SemanticRulePort(age, field_endpoint("Person", "age")),
             "score": SemanticRulePort(score, field_endpoint("Person", "score")),
+            "label": SemanticRulePort(label, field_endpoint("Person", "label")),
+            "active": SemanticRulePort(active, field_endpoint("Person", "active")),
+            "ratio": SemanticRulePort(ratio, field_endpoint("Person", "ratio")),
         },
         schema_index=index,
     )
@@ -67,7 +84,16 @@ def _identity_bundle(graph: SDKStore):
     )
 
 
-def _seed(graph: SDKStore, employee_id: str, *, age: int, score: int) -> str:
+def _seed(
+    graph: SDKStore,
+    employee_id: str,
+    *,
+    age: int,
+    score: int,
+    label: str = "gold",
+    active: bool = True,
+    ratio: float = 1.5,
+) -> str:
     index = build_schema_index(graph.schema_ir)
     ref = resolve_selector(
         EntitySelector(entity_type="Person", identity={"employee_id": employee_id}),
@@ -88,10 +114,91 @@ def _seed(graph: SDKStore, employee_id: str, *, age: int, score: int) -> str:
     set_field(
         graph.ledger, field_predicate(index, "Person", "score").pred_id, encoded, [("int", score)]
     )
+    set_field(
+        graph.ledger,
+        field_predicate(index, "Person", "label").pred_id,
+        encoded,
+        [("string", label)],
+    )
+    set_field(
+        graph.ledger,
+        field_predicate(index, "Person", "active").pred_id,
+        encoded,
+        [("bool", active)],
+    )
+    set_field(
+        graph.ledger,
+        field_predicate(index, "Person", "ratio").pred_id,
+        encoded,
+        [("float64", ratio)],
+    )
     return encoded
 
 
 class PolicyAuthoringTests(unittest.TestCase):
+    def test_string_bool_and_entity_ref_equality_literals_author_naturally(self) -> None:
+        graph = SDKStore([Person])
+        alice = _seed(graph, "alice", age=22, score=7)
+        bob = _seed(
+            graph,
+            "bob",
+            age=19,
+            score=4,
+            label="silver",
+            active=False,
+        )
+        draft = graph.policy("literal-domains", version="1")
+        people = draft.use(_bundle(graph), as_="people")
+        expected_active = True
+        expected_inactive = False
+        target = draft.build(
+            draft.all(
+                people,
+                people.label == "gold",
+                people.label != "silver",
+                people.active == expected_active,
+                people.active != expected_inactive,
+                people.person == EntityRef(
+                    "Person",
+                    {"employee_id": "alice"},
+                    encoded_ref="idref_v1:Person:caller-value-is-not-authoritative",
+                ),
+                people.person != EntityRef("Person", {"employee_id": "bob"}),
+            )
+        )
+
+        compiled = graph.query(target).select("age", people.age).compile()
+        result = graph.eval.evaluate(compiled)
+        self.assertEqual([row.bindings["age"]["value"] for row in result], [22])
+        entity_literals = {
+            operand.value
+            for node in target.policy.when.children  # type: ignore[union-attr]
+            if hasattr(node, "left") and hasattr(node, "right")
+            for operand in (node.left, node.right)
+            if isinstance(operand, PolicyLiteral) and operand.scalar_domain == "entity_ref"
+        }
+        self.assertEqual(entity_literals, {alice, bob})
+
+    def test_new_equality_domains_keep_ordering_float_and_entity_port_compare_closed(self) -> None:
+        graph = SDKStore([Person])
+        draft = graph.policy("literal-domain-negative")
+        people = draft.use(_bundle(graph), as_="people")
+        expected_active = True
+        for operation in (
+            lambda: people.label > "gold",
+            lambda: people.active > expected_active,
+            lambda: people.label > PolicyLiteral("string", "gold"),
+        ):
+            with self.assertRaises(PolicyAuthoringError) as ordering:
+                operation()
+            self.assertEqual(ordering.exception.code, "POLICY_ORDERING_DOMAIN_UNSUPPORTED")
+        with self.assertRaises(PolicyAuthoringError) as floating:
+            _ = people.ratio == 1.0
+        self.assertEqual(floating.exception.code, "POLICY_LITERAL_DOMAIN_UNSUPPORTED")
+        with self.assertRaises(PolicyAuthoringError) as entity_ports:
+            _ = people.person == people.person
+        self.assertEqual(entity_ports.exception.code, "POLICY_ENTITY_COMPARISON_UNSUPPORTED")
+
     def test_literal_compare_handles_lower_to_existing_query_path(self) -> None:
         graph = SDKStore([Person])
         alice = _seed(graph, "alice", age=22, score=7)

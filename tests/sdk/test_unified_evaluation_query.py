@@ -46,7 +46,16 @@ from factgraph.application.schema_runtime import (
     resolve_selector,
 )
 from factgraph.core.evidence.write_protocol import set_field
-from factgraph.core.rules.where_ast import PredAtom, Var
+from factgraph.core.rules.where_ast import (
+    AggregateAtom,
+    AndExpr,
+    BuiltinAtom,
+    CmpAtom,
+    Const,
+    NotAtom,
+    PredAtom,
+    Var,
+)
 from factgraph.sdk import Entity, Field, Identity, SDKStore
 from factgraph.sdk.errors import SDKStoreError
 
@@ -61,7 +70,7 @@ def _address(alias: str, port: str) -> SemanticPortAddress:
     return SemanticPortAddress(alias, port)
 
 
-def _bundle(graph: SDKStore):
+def _bundle(graph: SDKStore, *, extra_atoms=()):
     index = build_schema_index(graph.schema_ir)
     person, age, score = Var("$person"), Var("$age"), Var("$score")
     return build_resolved_rule(
@@ -71,6 +80,7 @@ def _bundle(graph: SDKStore):
             PredAtom("Person:exists", [person]),
             PredAtom("person:age", [person, age]),
             PredAtom("person:score", [person, score]),
+            *extra_atoms,
         ),
         ports={
             "person": SemanticRulePort(person, entity_identity("Person")),
@@ -736,6 +746,28 @@ class UnifiedEvaluationQueryTests(unittest.TestCase):
             with self.assertRaisesRegex(SDKStoreError, "compilation rejected"):
                 builder.select("age", _address("target", "missing")).evaluate()
         evaluator.assert_not_called()
+
+    def test_query_target_preserves_managed_rule_capability_error(self) -> None:
+        graph = SDKStore([Person])
+        person, age = Var("$person"), Var("$age")
+        unsupported = (
+            NotAtom(AndExpr([PredAtom("person:blocked", [person])])),
+            BuiltinAtom("addc", [age, Const(1)]),
+            CmpAtom(
+                "eq",
+                age,
+                AggregateAtom("count", None, [PredAtom("Person:exists", [person])]),
+            ),
+        )
+        for atom in unsupported:
+            with self.subTest(atom=type(atom).__name__):
+                with self.assertRaises(SDKStoreError) as context:
+                    graph.query(_bundle(graph, extra_atoms=(atom,)))
+                self.assertEqual(
+                    context.exception.code,
+                    "UNSUPPORTED_MANAGED_RULE_CAPABILITY",
+                )
+                self.assertNotIn("no longer current", str(context.exception))
 
     def test_target_wrapper_integrity_is_checked_before_execution(self) -> None:
         graph = SDKStore([Person])

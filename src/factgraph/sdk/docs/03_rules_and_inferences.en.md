@@ -125,8 +125,13 @@ also explicit: use `draft.same(left.person, right.person)`, not `==`.
 Rich comparisons are a bounded convenience, not a dynamically typed formula
 language. Direct scalar ports and one-hop same-entity field navigation support
 `==`, `!=`, `>`, `>=`, `<`, and `<=`. Literal operands currently support only
-canonical signed-int64 `int` and `time` values, so `people.age > 12` is valid
-while strings, booleans, floats, UUIDs, bytes, `None`, entity references, and
+canonical `int`, `time`, `string`, and `bool` values for `==` / `!=`, while
+ordering remains limited to signed-int64 `int` and epoch-nanosecond `time`.
+Thus `people.age > 12`, `people.label == "gold"`, and
+`people.active != False` are valid. An entity identity port also supports
+`==` / `!=` with a typed `EntityRef`; its encoded value is recomputed from the
+trusted schema, while port-to-port identity remains `draft.same(...)`.
+Floats, UUIDs, bytes, `None`, ordering of non-int/time domains, and
 literal-vs-literal comparisons reject. There is intentionally no global
 `fg.compare(...)`: the handle provides the schema domain, Policy draft owner,
 and semantic address that make a comparison meaningful.
@@ -799,12 +804,14 @@ the Run anchor records whether its source was a direct Policy or a Rule lift.
 A direct Policy may itself contain the narrow application-level
 `PolicyCompare` constraint. Its operands are direct scalar
 `SemanticPortAddress` values, a structured `PolicyFieldNavigation` from an
-identity port to one scalar field, or a canonical `PolicyLiteral("int" |
-"time", value)` paired with one semantic scalar operand. That navigation is
-compiled and evidenced as Policy-owned lookup/compare conditions; it is not
-accepted by `.bind(...)` or `.select(...)`. The SDK draft façade is preferred
-for new caller code. See `src/factgraph/application/docs/rule.md` for the
-exact schema, branch-total, literal, and cross-engine limits.
+identity port to one scalar field, or a canonical `PolicyLiteral` paired with
+one semantic operand. Equality literals support `int`, `time`, `string`,
+`bool`, and an explicit `entity_ref` opposite a matching entity identity port;
+ordering remains `int`/`time` only. That Policy navigation is compiled and
+evidenced as Policy-owned lookup/compare conditions; it is not accepted by
+`.bind(...)` or `.select(...)`. The SDK draft façade is preferred for new
+caller code. See `src/factgraph/application/docs/rule.md` for the exact schema,
+branch-total, literal, and cross-engine limits.
 
 `builder.evaluate(scenario=...)` forwards either the existing narrow
 `ScenarioFieldSubstitutionV0(...)` operation or the atomic

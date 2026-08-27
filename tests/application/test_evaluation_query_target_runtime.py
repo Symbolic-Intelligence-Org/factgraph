@@ -17,13 +17,23 @@ from factgraph.application.protocol import (
     EvaluationQueryBinding,
     EvaluationQuerySelection,
     Policy,
+    PolicyError,
     PolicyOccurrence,
     SemanticPortAddress,
     SemanticRulePort,
     entity_identity,
     field_endpoint,
 )
-from factgraph.core.rules.where_ast import PredAtom, Var
+from factgraph.core.rules.where_ast import (
+    AggregateAtom,
+    AndExpr,
+    BuiltinAtom,
+    CmpAtom,
+    Const,
+    NotAtom,
+    PredAtom,
+    Var,
+)
 from factgraph.sdk import Entity, Field, Identity, compile_schema_from_classes
 
 
@@ -42,7 +52,7 @@ def _index():
     )
 
 
-def _bundle(index=None):
+def _bundle(index=None, *, extra_atoms=()):
     index = _index() if index is None else index
     person, age = Var("$person"), Var("$age")
     return build_resolved_rule(
@@ -51,6 +61,7 @@ def _bundle(index=None):
         when=(
             PredAtom("Person:exists", [person]),
             PredAtom("person:age", [person, age]),
+            *extra_atoms,
         ),
         ports={
             "person": SemanticRulePort(person, entity_identity("Person")),
@@ -61,6 +72,49 @@ def _bundle(index=None):
 
 
 class EvaluationQueryTargetRuntimeTests(unittest.TestCase):
+    def test_policy_admission_failure_is_not_misclassified_as_stale(self) -> None:
+        person, age = Var("$person"), Var("$age")
+        unsupported = (
+            NotAtom(AndExpr([PredAtom("person:blocked", [person])])),
+            BuiltinAtom("addc", [age, Const(1)]),
+            CmpAtom(
+                "eq",
+                age,
+                AggregateAtom("count", None, [PredAtom("Person:exists", [person])]),
+            ),
+        )
+        for atom in unsupported:
+            with self.subTest(atom=type(atom).__name__):
+                bundle = _bundle(extra_atoms=(atom,))
+                with self.assertRaises(EvaluationQueryTargetError) as context:
+                    resolve_evaluation_query_target(bundle, schema_index=_index())
+                self.assertEqual(
+                    context.exception.code,
+                    "UNSUPPORTED_MANAGED_RULE_CAPABILITY",
+                )
+                self.assertNotEqual(context.exception.code, "QUERY_RULE_TARGET_STALE")
+                self.assertIsInstance(context.exception.__cause__, PolicyError)
+
+    def test_direct_policy_preserves_managed_rule_admission_failure(self) -> None:
+        person = Var("$person")
+        bundle = _bundle(
+            extra_atoms=(
+                NotAtom(AndExpr([PredAtom("person:blocked", [person])])),
+            ),
+        )
+        space = SemanticAddressSpace((manage_rule_occurrence(bundle, "person"),))
+        with self.assertRaises(EvaluationQueryTargetError) as context:
+            resolve_evaluation_query_target(
+                Policy("people", PolicyOccurrence("person")),
+                address_space=space,
+                schema_index=_index(),
+            )
+        self.assertEqual(
+            context.exception.code,
+            "UNSUPPORTED_MANAGED_RULE_CAPABILITY",
+        )
+        self.assertIsInstance(context.exception.__cause__, PolicyError)
+
     def test_schema_mismatch_keeps_its_precise_target_error(self) -> None:
         expected_index, bundle = _index(), _bundle()
         mismatched_index = build_schema_index(

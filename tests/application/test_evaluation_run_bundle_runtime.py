@@ -236,8 +236,17 @@ class EvaluationRunBundleRuntimeTests(unittest.TestCase):
             )
 
     def test_bundle_wire_whitelists_canonical_policy_literal_only(self) -> None:
-        literal = PolicyLiteral("time", 123456789)
-        self.assertEqual(_unwire(_wire(literal)), literal)
+        for literal in (
+            PolicyLiteral("time", 123456789),
+            PolicyLiteral("string", "gold"),
+            PolicyLiteral("bool", True),
+            PolicyLiteral(
+                "entity_ref",
+                "idref_v1:Person:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            ),
+        ):
+            with self.subTest(domain=literal.scalar_domain):
+                self.assertEqual(_unwire(_wire(literal)), literal)
         with self.assertRaises(ProtocolShapeError):
             _unwire(
                 {

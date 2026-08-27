@@ -67,6 +67,12 @@ class TimedPerson(Entity):
     observed_at: datetime = Field()
 
 
+class LiteralDomainPerson(Entity):
+    employee_id: str = Identity()
+    label: str = Field()
+    active: bool = Field()
+
+
 def _compiled_query_and_relation(
     *, literal_threshold: int | None = None
 ) -> tuple[CompiledDerivationPlan, dict, dict[str, tuple[ProjectedFact, ...]]]:
@@ -257,6 +263,133 @@ def _compiled_time_literal_query_and_relation() -> tuple[
     projected = project_view_facts_with_witness(source.ledger, source.schema_ir)
     dependencies = (info.exists_predicate_id, observed_at_predicate.pred_id)
     relation = {predicate_id: tuple(projected[predicate_id]) for predicate_id in dependencies}
+    return plan, source.schema_ir, relation
+
+
+def _compiled_equality_literal_query_and_relation(
+    domain: str,
+    op: str,
+) -> tuple[CompiledDerivationPlan, dict, dict[str, tuple[ProjectedFact, ...]]]:
+    source = SDKStore([LiteralDomainPerson])
+    index = build_schema_index(source.schema_ir)
+    info = entity_info(index, "LiteralDomainPerson")
+    label_predicate = field_predicate(index, "LiteralDomainPerson", "label")
+    active_predicate = field_predicate(index, "LiteralDomainPerson", "active")
+    encoded_by_id: dict[str, str] = {}
+    for employee_id, label, active in (
+        ("alice", "gold", True),
+        ("bob", "silver", False),
+    ):
+        ref = resolve_selector(
+            EntitySelector(
+                entity_type="LiteralDomainPerson",
+                identity={"employee_id": employee_id},
+            ),
+            index=index,
+        )
+        encoded = ref.encoded_ref or ""
+        encoded_by_id[employee_id] = encoded
+        set_field(source.ledger, info.exists_predicate_id, encoded, [])
+        set_field(
+            source.ledger,
+            info.identity_predicates["employee_id"].pred_id,
+            encoded,
+            [("string", employee_id)],
+        )
+        set_field(
+            source.ledger,
+            label_predicate.pred_id,
+            encoded,
+            [("string", label)],
+        )
+        set_field(
+            source.ledger,
+            active_predicate.pred_id,
+            encoded,
+            [("bool", active)],
+        )
+
+    person, label, active = Var("$person"), Var("$label"), Var("$active")
+    rule = build_resolved_rule(
+        id="literal_domain_person_values",
+        version="1",
+        when=(
+            PredAtom(info.exists_predicate_id, [person]),
+            PredAtom(label_predicate.pred_id, [person, label]),
+            PredAtom(active_predicate.pred_id, [person, active]),
+        ),
+        ports={
+            "person": SemanticRulePort(person, entity_identity("LiteralDomainPerson")),
+            "label": SemanticRulePort(
+                label, field_endpoint("LiteralDomainPerson", "label")
+            ),
+            "active": SemanticRulePort(
+                active, field_endpoint("LiteralDomainPerson", "active")
+            ),
+        },
+        schema_index=index,
+    )
+    space = SemanticAddressSpace((manage_rule_occurrence(rule, "person"),))
+    operand_by_domain = {
+        "string": (
+            SemanticPortAddress("person", "label"),
+            PolicyLiteral("string", "gold"),
+        ),
+        "bool": (
+            SemanticPortAddress("person", "active"),
+            PolicyLiteral("bool", True),
+        ),
+        "entity_ref": (
+            SemanticPortAddress("person", "person"),
+            PolicyLiteral("entity_ref", encoded_by_id["alice"]),
+        ),
+    }
+    left, right = operand_by_domain[domain]
+    policy = compile_policy(
+        Policy(
+            f"portable-{domain}-{op}-literal",
+            PolicyAll(
+                (
+                    PolicyOccurrence("person"),
+                    PolicyCompare(op, left, right),  # type: ignore[arg-type]
+                )
+            ),
+        ),
+        address_space=space,
+        schema_index=index,
+    )
+    compiled = compile_evaluation_query(
+        EvaluationQuery(
+            policy.policy_digest,
+            (
+                EvaluationQuerySelection(
+                    "person", SemanticPortAddress("person", "person")
+                ),
+                EvaluationQuerySelection(
+                    "label", SemanticPortAddress("person", "label")
+                ),
+                EvaluationQuerySelection(
+                    "active", SemanticPortAddress("person", "active")
+                ),
+            ),
+        ),
+        compiled_policy=policy,
+        address_space=space,
+        schema_index=index,
+    )
+    plan, _traces = _materialize_adapter_derivation_plan(
+        compiled._lowering_plan,
+        engine="native",
+    )
+    projected = project_view_facts_with_witness(source.ledger, source.schema_ir)
+    dependencies = (
+        info.exists_predicate_id,
+        label_predicate.pred_id,
+        active_predicate.pred_id,
+    )
+    relation = {
+        predicate_id: tuple(projected[predicate_id]) for predicate_id in dependencies
+    }
     return plan, source.schema_ir, relation
 
 
@@ -719,6 +852,41 @@ class PortableEvaluationRuntimeTests(unittest.TestCase):
             result.executions[0].rows[0].terms[1],
             ("time", 1_700_000_000_000_000_000),
         )
+
+    def test_string_bool_and_entity_ref_literals_run_all_three_engines(self) -> None:
+        for domain in ("string", "bool", "entity_ref"):
+            for op, expected_label in (("eq", "gold"), ("ne", "silver")):
+                with self.subTest(domain=domain, op=op):
+                    plan, schema_ir, relation = (
+                        _compiled_equality_literal_query_and_relation(domain, op)
+                    )
+                    result = execute_portable_deterministic_v1(
+                        plan,
+                        schema_ir=schema_ir,
+                        effective_relations=relation,
+                    )
+                    self.assertEqual(
+                        tuple(item.engine for item in result.executions),
+                        ("native", "souffle", "problog"),
+                    )
+                    self.assertEqual(
+                        len(
+                            {
+                                item.selected_row_set_digest
+                                for item in result.executions
+                            }
+                        ),
+                        1,
+                    )
+                    expected = tuple(row.terms for row in result.executions[0].rows)
+                    self.assertEqual(len(expected), 1)
+                    self.assertEqual(expected[0][1], ("string", expected_label))
+                    self.assertTrue(
+                        all(
+                            tuple(row.terms for row in execution.rows) == expected
+                            for execution in result.executions
+                        )
+                    )
 
     def test_materialized_world_is_new_and_does_not_need_a_source_store(self) -> None:
         plan, schema_ir, relation = _compiled_query_and_relation()

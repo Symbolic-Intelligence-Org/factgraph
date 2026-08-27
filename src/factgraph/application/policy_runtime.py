@@ -58,6 +58,7 @@ from .protocol.semantic_port import EntityIdentityEndpoint, FieldEndpoint, Funct
 from .schema_runtime import (
     SchemaIndex,
     SchemaResolutionError,
+    entity_type_from_ref,
     field_predicate,
     field_value_type,
 )
@@ -80,12 +81,15 @@ class _ResolvedPolicyOperand:
     scalar_domain: str
     lookup_predicate_id: str | None = None
     literal: PolicyLiteral | None = None
+    entity_type: str | None = None
 
     def __post_init__(self) -> None:
         if (self.source_address is None) == (self.literal is None):
             raise ValueError("resolved Policy operand must be exactly one source or literal")
         if self.literal is not None and self.lookup_predicate_id is not None:
             raise ValueError("resolved Policy literal cannot require a field lookup")
+        if (self.scalar_domain == "entity_ref") != (self.entity_type is not None):
+            raise ValueError("resolved entity-reference operand must carry its entity type")
 
 
 @dataclass(frozen=True)
@@ -520,7 +524,30 @@ def _resolve_compare(
     right = _resolve_compare_operand(
         compare.right, address_space, schema_index, path=(*path, "right")
     )
-    if left.scalar_domain != right.scalar_domain:
+    if "entity_ref" in {left.scalar_domain, right.scalar_domain}:
+        if left.scalar_domain != "entity_ref" or right.scalar_domain != "entity_ref":
+            raise _error(
+                "Policy entity identity endpoints compare only with entity-ref literals",
+                "UNSUPPORTED_POLICY_COMPARE_ENDPOINT",
+                "policy_compile",
+                path,
+            )
+        if (left.literal is None) == (right.literal is None):
+            raise _error(
+                "Policy entity identity comparison requires exactly one entity-ref literal; use PolicyUnify for two ports",
+                "UNSUPPORTED_POLICY_COMPARE_ENDPOINT",
+                "policy_compile",
+                path,
+            )
+        if left.entity_type != right.entity_type:
+            raise _error(
+                "Policy entity-ref literal type must match its identity endpoint",
+                "INCOMPATIBLE_POLICY_ENTITY_REF_TYPE",
+                "policy_compile",
+                path,
+                {"left": left.entity_type, "right": right.entity_type},
+            )
+    elif left.scalar_domain != right.scalar_domain:
         raise _error(
             "Policy comparison operands must have the same scalar domain",
             "INCOMPATIBLE_POLICY_COMPARE_DOMAIN",
@@ -547,10 +574,22 @@ def _resolve_compare_operand(
     path: tuple[str, ...],
 ) -> _ResolvedPolicyOperand:
     if isinstance(operand, PolicyLiteral):
+        entity_type = None
+        if operand.scalar_domain == "entity_ref":
+            assert isinstance(operand.value, str)  # PolicyLiteral invariant.
+            entity_type = entity_type_from_ref(operand.value)
+            if entity_type is None:
+                raise _error(
+                    "Policy entity-ref literal is malformed",
+                    "INVALID_POLICY_ENTITY_REF_LITERAL",
+                    "policy_compile",
+                    path,
+                )
         return _ResolvedPolicyOperand(
             source_address=None,
             scalar_domain=operand.scalar_domain,
             literal=operand,
+            entity_type=entity_type,
         )
 
     if isinstance(operand, SemanticPortAddress):
@@ -564,6 +603,12 @@ def _resolve_compare_operand(
                 path,
                 {"semantic_address_code": exc.code},
             ) from exc
+        if isinstance(resolved.endpoint, EntityIdentityEndpoint):
+            return _ResolvedPolicyOperand(
+                source_address=operand,
+                scalar_domain="entity_ref",
+                entity_type=resolved.endpoint.entity_type,
+            )
         if isinstance(resolved.endpoint, FunctionValueEndpointV1):
             return _ResolvedPolicyOperand(
                 source_address=operand,

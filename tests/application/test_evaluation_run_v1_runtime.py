@@ -647,6 +647,53 @@ class EvaluationRunV1RuntimeTests(unittest.TestCase):
         wire = _authored_policy_structure_to_wire(structure)
         self.assertEqual(_authored_policy_structure_from_wire(wire), structure)
 
+        for literal in (
+            PolicyLiteral("string", "gold"),
+            PolicyLiteral("bool", True),
+            PolicyLiteral(
+                "entity_ref",
+                "idref_v1:Person:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            ),
+        ):
+            with self.subTest(domain=literal.scalar_domain):
+                domain_comparison = PolicyCompare.eq(
+                    SemanticPortAddress("left", "age"), literal
+                )
+                domain_root = PolicyAll((occurrence, domain_comparison))
+                domain_structure = PolicyStructureV0(
+                    domain_root.node_id,
+                    tuple(
+                        sorted(
+                            (
+                                PolicyStructureNodeV0(
+                                    occurrence.node_id,
+                                    "occurrence",
+                                    occurrence_alias="left",
+                                ),
+                                PolicyCompareStructureNodeV0(
+                                    domain_comparison.node_id,
+                                    domain_comparison.op,
+                                    domain_comparison.left,
+                                    domain_comparison.right,
+                                ),
+                                PolicyStructureNodeV0(
+                                    domain_root.node_id,
+                                    "all",
+                                    child_node_ids=tuple(
+                                        child.node_id for child in domain_root.children
+                                    ),
+                                ),
+                            ),
+                            key=lambda item: item.node_id,
+                        )
+                    ),
+                )
+                domain_wire = _authored_policy_structure_to_wire(domain_structure)
+                self.assertEqual(
+                    _authored_policy_structure_from_wire(domain_wire),
+                    domain_structure,
+                )
+
         malformed = deepcopy(wire)
         compare_wire = next(item for item in malformed["nodes"] if item["kind"] == "compare")
         compare_wire["right"] = {"kind": "literal", "scalar_domain": "int", "value": True}

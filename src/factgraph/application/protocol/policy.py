@@ -23,6 +23,9 @@ PolicyStage: TypeAlias = Literal[
 
 _WEIGHTED_CHOICE_ID_RE = re.compile(r"[A-Za-z][A-Za-z0-9_-]*\Z")
 _WEIGHTED_CHOICE_DECIMAL_RE = re.compile(r"(?:0|[1-9][0-9]*)(?:\.[0-9]+)?\Z")
+_POLICY_ENTITY_REF_RE = re.compile(
+    r"idref_v1:[A-Za-z][A-Za-z0-9_.-]{0,127}:[a-z2-7]{52}\Z"
+)
 _MAX_WEIGHTED_CHOICE_ID_CHARS = 128
 _MAX_WEIGHTED_CHOICE_KEY_PORTS = 8
 _MAX_WEIGHTED_CHOICE_ARMS = 32
@@ -184,31 +187,49 @@ class PolicyFieldNavigation:
 class PolicyLiteral:
     """One canonical scalar literal admissible in a managed Policy comparison.
 
-    The initial public envelope deliberately mirrors the only ordering domains
-    the native, Souffle, and ProbLog profile already share: signed-int64
-    ``int`` and epoch-nanosecond ``time``.  It is typed here rather than being
-    inferred from a Python value so a literal's Policy identity stays stable
-    before compiler admission resolves its peer endpoint.
+    Ordering remains limited to the domains the native, Souffle, and ProbLog
+    profile share: signed-int64 ``int`` and epoch-nanosecond ``time``.
+    Equality additionally admits canonical ``string``, ``bool``, and encoded
+    ``entity_ref`` values. It is typed here rather than inferred from a Python
+    value so a literal's Policy identity stays stable before compiler admission
+    resolves its peer endpoint.
     """
 
-    scalar_domain: Literal["int", "time"]
-    value: int
+    scalar_domain: Literal["int", "time", "string", "bool", "entity_ref"]
+    value: int | str | bool
 
     def __post_init__(self) -> None:
-        if self.scalar_domain not in {"int", "time"}:
+        if self.scalar_domain not in {"int", "time", "string", "bool", "entity_ref"}:
             raise _shape(
-                "PolicyLiteral.scalar_domain must be int or time", "INVALID_POLICY_LITERAL"
+                "PolicyLiteral.scalar_domain is unsupported", "INVALID_POLICY_LITERAL"
             )
+        expected_type = {
+            "int": int,
+            "time": int,
+            "string": str,
+            "bool": bool,
+            "entity_ref": str,
+        }[self.scalar_domain]
+        if type(self.value) is not expected_type:
+            raise _shape(
+                "PolicyLiteral.value does not match its domain",
+                "INVALID_POLICY_LITERAL",
+            )
+        if self.scalar_domain == "entity_ref":
+            assert isinstance(self.value, str)  # Exact-type check above.
+            if not _POLICY_ENTITY_REF_RE.fullmatch(self.value):
+                raise _shape(
+                    "PolicyLiteral entity_ref must be a canonical idref_v1 token",
+                    "INVALID_POLICY_LITERAL",
+                )
         try:
             normalized = claim_args_from_rest_terms([(self.scalar_domain, self.value)])[0][1]
         except (TypeError, ValueError) as exc:
             raise _shape(
-                "PolicyLiteral.value must be a signed int64 matching its scalar domain",
+                "PolicyLiteral.value is invalid for its domain",
                 "INVALID_POLICY_LITERAL",
             ) from exc
-        if not isinstance(normalized, int) or isinstance(
-            normalized, bool
-        ):  # pragma: no cover - tup_v1 invariant.
+        if type(normalized) is not expected_type or normalized != self.value:
             raise _shape("PolicyLiteral.value is not canonical", "INVALID_POLICY_LITERAL")
         object.__setattr__(self, "value", normalized)
 

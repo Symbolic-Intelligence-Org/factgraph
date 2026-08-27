@@ -76,6 +76,42 @@ authored topology for Explain. Exclusive probability is a separate
 `weighted_choice(...)`, never a weight on ordinary logical OR. A first-slice
 Policy cannot combine Product Function and `WeightedChoice` topology.
 
+### Policy topology capability matrix
+
+This is the current shipped boundary above Rule bodies. `any(...)` is logical
+disjunction inside one Policy and preserves alternative authored paths; it is
+not a standalone relational `UNION` operator and it does not imply exclusive
+or probabilistic choice.
+
+| Form | Shipped status | Boundary |
+|---|---|---|
+| Nested `all(...)` / `any(...)` | supported | Selected coordinates and Policy-owned constraints still have to be branch-total. |
+| `same(entity_port, entity_port)` | supported inside one owning `all(...)` subtree | A constraint spanning an `any(...)` arm where an endpoint is absent fails with `PARTIAL_BRANCH_CONSTRAINT`. |
+| Scalar port vs scalar port | `eq` / `ne` support matching single-scalar domains; ordering supports only `int` / `time` | String-port equality is valid. Ordering over string, bool or float remains rejected. |
+| Scalar port vs literal | `eq` / `ne` support canonical `int`, `time`, `string` and `bool`; ordering supports only `int` / `time` | Float64, UUID, bytes, `None` and implicit coercions remain rejected. |
+| Entity identity port vs `EntityRef` literal | `eq` / `ne` supported | The SDK recomputes the canonical reference from typed identity and the trusted schema; ordering is rejected, and entity-port-to-port identity still uses `same(...)`. |
+| Policy-owned one-hop entity field navigation | supported as a compare operand | One same-entity, single-scalar field only; no relationship or multi-hop traversal. |
+| Query-owned one-hop entity field navigation | supported only by `select` | It is not accepted by `bind` and does not change Policy identity. |
+| `WeightedChoice` | Product V2, ProbLog point profile only | It is distinct from ordinary `any(...)`; the first slice cannot coexist with Product Function topology. |
+| Product Function | Product V2 only | One Rule source occurrence per Function, no Function chaining, and output is select/compare-only rather than bindable. |
+
+Literal admission is operator-sensitive because equality does not require a
+portable ordering or collation. The implemented
+[Q22 literal-equality decision](../../workflow/design/decisions/active/2026-08-20_q22-policy-literal-equality-domain-decision.md)
+separates equality from ordering as follows.
+
+| Literal domain | `eq` / `ne` disposition | `gt` / `ge` / `lt` / `le` disposition | Rationale |
+|---|---|---|---|
+| `int` / `time` | supported | supported | Existing portable canonical envelope. |
+| `string` | supported | rejected | Equality is unambiguous; portable collation is not. |
+| `bool` | supported | rejected | Equality is meaningful; ordering is not part of the Policy contract. |
+| `entity_ref` | supported against one entity identity port | rejected | The reference is explicitly encoded from trusted-schema identity; `same()` and Query `bind()` remain distinct forms. |
+| `float64` | rejected | rejected | Float equality is intentionally excluded from logical identity; enabling it requires a separate engine-level semantic decision. |
+
+UUID and bytes literals remain outside Q22 and therefore remain rejected. The
+new equality rows retain their domain/value tag through replay, bundle and
+Product V2 views, and are covered by real Native/Souffle/ProbLog parity tests.
+
 ## 1. Rule + RuleExpr — the one-paragraph triangle
 
 A `Rule` is a *named query template*. It declares what facts must be present (`when`) and what variables it exposes (`ports`). It does not write anything to the ledger and does not run on its own.

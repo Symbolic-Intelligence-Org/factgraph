@@ -36,6 +36,7 @@ from factgraph.application.product_explanation_data_v2 import (
     EvaluationExplanationDataV2,
     PolicyOperandViewV2,
     PolicyTopologyNodeViewV2,
+    _policy_operand_v2,
     evidence_graph_view_v2_from_graph,
     evaluation_explanation_data_v2_from_evaluation_run_v2,
     evaluation_explanation_data_v2_from_run,
@@ -49,7 +50,12 @@ from factgraph.application.product_result_views_v2 import (
     result_view_v2_from_evaluation_run_v2,
     result_view_v2_from_run,
 )
-from factgraph.application.protocol import CompiledDerivationPlan, CompiledHeadCall, EntityRef
+from factgraph.application.protocol import (
+    CompiledDerivationPlan,
+    CompiledHeadCall,
+    EntityRef,
+    PolicyLiteral,
+)
 from factgraph.application.protocol.common import ProtocolShapeError
 from factgraph.application.protocol.evaluation_run_v1 import (
     EvaluationEnginePinV1,
@@ -495,6 +501,22 @@ class ProductViewsV2Tests(unittest.TestCase):
         assert isinstance(portable_evidence, dict)
         self.assertEqual(portable_evidence["state"], "portable_native_inner_not_parity")
         self.assertIsInstance(portable_evidence["graph"], dict)
+
+    def test_policy_literal_presentation_preserves_new_equality_domains(self) -> None:
+        values = (
+            PolicyLiteral("string", "gold"),
+            PolicyLiteral("bool", True),
+            PolicyLiteral(
+                "entity_ref",
+                "idref_v1:Person:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            ),
+        )
+        for literal in values:
+            with self.subTest(domain=literal.scalar_domain):
+                view = _policy_operand_v2(literal)
+                self.assertEqual(view.kind, "literal")
+                self.assertEqual(view.scalar_domain, literal.scalar_domain)
+                self.assertEqual(view.value, literal.value)
 
     def test_explicit_row_and_summary_targets_keep_v0_live_methods_out(self) -> None:
         view = result_view_v2_from_run(_run(), side="effective")
