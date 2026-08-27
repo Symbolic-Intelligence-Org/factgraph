@@ -72,4 +72,13 @@ All items in the original "Open before scoped" list have been resolved:
 
 ## Final Audit
 
-(To be filled at implemented phase.)
+### Superseded (2026-08-27)
+
+- Status: superseded
+- Successor:
+  [FactGraph repository canonicalization](../active/2026-08-27_factgraph-repository-canonicalization.md)
+- Reason: `hnsm-backend` was a rough shared-workflow superset, not a second
+  durable FactGraph product authority. Extracting shared workflow removes the
+  need for path projection, dual pushes, or a clean publication clone.
+- Historical commands remain rationale only and must not be executed for new
+  FactGraph work.

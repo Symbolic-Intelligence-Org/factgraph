@@ -1,8 +1,15 @@
 # Task Blueprint: factgraph Publish Projection Runbook
 
-- Status: draft
+- Status: superseded
 - Created: 2026-05-14
-- Last Updated: 2026-05-14
+- Last Updated: 2026-08-27
+- Superseded By:
+  - [FactGraph repository canonicalization](../active/2026-08-27_factgraph-repository-canonicalization.md)
+
+> Historical rationale only. The dual-repository projection topology and every
+> command below are superseded. Current FactGraph work uses one canonical
+> repository whose `origin` is `Symbolic-Intelligence-Org/factgraph`; shared
+> workflow moves to `symbolic-workflow`.
 - Related Modules:
   - `scripts/release.sh` (existing; not modified by this blueprint)
   - Projection tool (new; small wrapper around `git push factgraph`)
