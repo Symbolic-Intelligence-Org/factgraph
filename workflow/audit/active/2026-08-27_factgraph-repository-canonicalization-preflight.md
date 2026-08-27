@@ -157,3 +157,26 @@ No abandonment blocker was found. The migration can proceed after PF-R1 through
 PF-R5 are reflected in the scoped blueprint. The safe base is `26a88c`, the
 current C2 wheel remains unchanged, and all Meander repositories remain outside
 the write scope.
+
+## 6. Implementation Record
+
+- Recovery material was captured before repository mutation as a complete Git
+  bundle plus staged, unstaged, and untracked archives. The original staged
+  patch digest remained unchanged after the scoped Q22 commits.
+- The Q22 change was isolated from the mixed worktree and replayed onto
+  `26a88c`. The only content conflict was in
+  `tests/application/test_product_views_v2.py`; resolution retained both the
+  newer canonical-projection coverage and the Q22 literal-presentation case.
+- The reconciled branch passed the focused suite with `103 passed`, `14
+  skipped`, `1 deselected`, and `49 subtests`, plus `109 passed` in the sealed
+  evaluation suite. The deselected test depends on a ProbLog executable absent
+  from this machine. Ruff results matched the clean `26a88c` baseline exactly.
+- `/Users/zhenzhili/factgraph` was established as the canonical local checkout.
+  Its only remote is FactGraph `origin`; no legacy `hnsm-backend` remote is
+  present. Direct feature-branch publication was verified with `git push
+  --dry-run` and no remote mutation was performed.
+- The current repository guide now supersedes clean-clone projection. The old
+  dual-repository blueprint and audit were marked historical and moved from
+  active to archive.
+- The active Meander repository and its retained FactGraph wheel were not
+  modified.

@@ -1,6 +1,6 @@
 # Task Blueprint: FactGraph Repository Canonicalization
 
-- Status: implementing
+- Status: implemented
 - Created: 2026-08-27
 - Last Updated: 2026-08-27
 - Related Modules:
@@ -8,12 +8,12 @@
   - `src/factgraph/`
   - `workflow/`
 - Related Docs:
-  - [FactGraph dual-repository workflow](./2026-05-14_factgraph-dual-repo-workflow.md)
+  - [FactGraph dual-repository workflow (superseded)](../archive/2026-05-14_factgraph-dual-repo-workflow.md)
   - [FactGraph synchronization notes](../../factgraph_sync.md)
   - [Workflow governance](../../AGENTS.md)
   - [Repository canonicalization preflight](../../audit/active/2026-08-27_factgraph-repository-canonicalization-preflight.md)
 - Audit Log:
-  - [2026-08-27_factgraph-repository-canonicalization.audit.md](./2026-08-27_factgraph-repository-canonicalization.audit.md)
+  - [Repository canonicalization preflight](../../audit/active/2026-08-27_factgraph-repository-canonicalization-preflight.md)
 
 ## 1. Problem
 
@@ -143,24 +143,24 @@ remote identity.
 
 ## 7. Acceptance
 
-- [ ] Every pre-migration committed ref and dirty-worktree class has a recorded
+- [x] Every pre-migration committed ref and dirty-worktree class has a recorded
       preservation or disposition path.
-- [ ] Valuable local FactGraph code, tests, and docs are reconciled on top of the
+- [x] Valuable local FactGraph code, tests, and docs are reconciled on top of the
       selected current FactGraph lineage and pass focused verification.
-- [ ] The canonical local repository is named and located as the FactGraph
+- [x] The canonical local repository is named and located as the FactGraph
       project, not as `hnsm-backend` or `factgraph-new`.
-- [ ] `git remote get-url origin` resolves to
+- [x] `git remote get-url origin` resolves to
       `https://github.com/Symbolic-Intelligence-Org/factgraph.git`.
-- [ ] A normal feature branch has an explicit FactGraph upstream and a dry-run or
-      otherwise non-destructive check demonstrates that ordinary push targets the
-      matching FactGraph branch.
-- [ ] The legacy `hnsm-backend` remote is removed after migration verification;
+- [x] A normal feature branch has an explicit FactGraph push target, and a
+      dry-run or otherwise non-destructive check demonstrates that ordinary
+      push targets the matching FactGraph branch.
+- [x] The legacy `hnsm-backend` remote is absent from the canonical checkout;
       if temporarily retained during verification, it is clearly named as
       legacy and is never a default fetch/push authority.
-- [ ] No clean-clone projection step is required by current repository guidance.
-- [ ] Sacred branches and published remote history remain unchanged unless the
+- [x] No clean-clone projection step is required by current repository guidance.
+- [x] Sacred branches and published remote history remain unchanged unless the
       user separately authorizes a release operation.
-- [ ] The repository is ready for the subsequent shared workflow extraction
+- [x] The repository is ready for the subsequent shared workflow extraction
       blueprint.
 
 ## 8. Implementation Plan
@@ -196,11 +196,32 @@ remote identity.
 
 ## 10. Outcome / Deviations
 
-To be completed after implementation.
-
-- Final repository identity:
-- Preserved and reconciled work:
-- Legacy topology disposition:
-- Verification performed:
-- Deviations from this blueprint:
-- Archive note:
+- Final repository identity: `/Users/zhenzhili/factgraph` on
+  `codex/factgraph-canonical-2026-08-27`, with its only remote named `origin`
+  and resolving to `https://github.com/Symbolic-Intelligence-Org/factgraph.git`.
+- Preserved and reconciled work: the Q22 Policy literal equality slice was
+  committed as a bounded change, replayed onto FactGraph `26a88c`, and retained
+  as commit `4fb5f5cf`. The original mixed worktree remains intact, and complete
+  Git-bundle, staged-patch, unstaged-patch, and untracked-file recovery material
+  was recorded before migration.
+- Legacy topology disposition: the canonical checkout has no `hnsm-backend`
+  remote. The original dirty repository is retained temporarily for recovery
+  and later workflow extraction; it is not a product publication surface. The
+  dual-repository projection runbook is superseded and archived.
+- Verification performed: the merged focused suite passed with `103 passed`,
+  `14 skipped`, `1 deselected`, and `49 subtests`; the sealed evaluation suite
+  passed with `109 passed`. The deselected case requires the unavailable local
+  ProbLog engine and had already reported `PORTABLE_ENGINE_UNAVAILABLE` rather
+  than a semantic mismatch. Ruff reported the same 50 findings on the clean
+  `26a88c` base and on the reconciled branch, so the replay introduced no new
+  lint finding. An ordinary `git push --dry-run origin
+  HEAD:refs/heads/codex/factgraph-canonical-2026-08-27` targeted the FactGraph
+  GitHub repository successfully.
+- Deviations from this blueprint: instead of renaming the dirty working
+  directory in place, the preserved Git history was used to materialize a clean
+  canonical local checkout after the bounded replay. This avoids moving mixed,
+  still-unclassified workflow and local artifacts while preserving them in the
+  original worktree. The checkout is not a publication projection: it is now
+  the normal FactGraph project directory with the normal FactGraph `origin`.
+- Archive note: keep this record active through the first authorized remote
+  publication and the workflow-extraction handoff, then archive it.
