@@ -10,6 +10,8 @@
 | 2026-08-27 | preflight | Dirty-worktree preservation and lineage preflight completed | PF-R1 through PF-R5 require bounded Q22 replay onto `26a88c`, exact path scoping, workflow preservation, local-config exclusion, and no Meander artifact update. |
 | 2026-08-27 | scoped | User authorized FactGraph-first execution and preflight findings were folded into the blueprint | Meander and `meander-ilp` remain protected; recovery material precedes branch, remote, or filesystem changes. |
 | 2026-08-27 | preservation | Four-part recovery snapshot created and verified | Complete 526-ref Git bundle, staged binary patch, unstaged binary patch, and 119-file untracked archive stored under `/private/tmp/factgraph-canonicalization-20260827.tfykBb/`. |
+| 2026-08-27 | implementing | Q22 replayed onto canonical FactGraph feature base | Canonical branch now contains `26a88c` plus canonicalization docs and Q22. One test-file conflict preserved both the newer Product Explain projection coverage and Q22 literal-topology coverage. |
+| 2026-08-27 | verification | Canonical-base focused and sealed-evaluation suites passed | Q22/related suite: 103 passed, 14 skipped, 1 environment-capability deselection and 49 subtests; sealed-evaluation suite: 109 passed. The deselected test is independently diagnosed as missing `problog` (`PORTABLE_ENGINE_UNAVAILABLE`), with Native and Soufflé succeeding. Ruff reports the same 50 pre-existing findings on clean `26a88c` and the merged branch, so the replay added no lint finding. |
 
 ## Decision Notes
 
@@ -61,3 +63,13 @@
 - `untracked.tar.gz`: `sha256:f661353dc6c53048b303bfe967218082c1b92d589981a2807fc2ec9badebbca9`
 - `git bundle verify` reports complete history; the untracked archive contains
   119 paths. The snapshot is temporary safety material, not a repository input.
+
+### 2026-08-27: Canonical-base replay
+
+- Reconciliation branch base: `26a88c645dd388632b0d06405c636682d91cfff0`.
+- Canonicalization-doc replay: `6c4f4d9e`.
+- Q22 replay: `4fb5f5cf`.
+- The only content conflict was
+  `tests/application/test_product_views_v2.py`; the resolved file retains both
+  sides' independent tests and passed in the focused suite.
+- No Meander file, dependency, wheel, lock, directory, or Git state was changed.

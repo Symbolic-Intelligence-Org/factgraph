@@ -1,6 +1,6 @@
 # Task Blueprint: FactGraph Repository Canonicalization
 
-- Status: scoped
+- Status: implementing
 - Created: 2026-08-27
 - Last Updated: 2026-08-27
 - Related Modules:
