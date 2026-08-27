@@ -197,8 +197,9 @@ remote identity.
 ## 10. Outcome / Deviations
 
 - Final repository identity: `/Users/zhenzhili/factgraph` on
-  `codex/factgraph-canonical-2026-08-27`, with its only remote named `origin`
-  and resolving to `https://github.com/Symbolic-Intelligence-Org/factgraph.git`.
+  `features/factgraph-repository-canonicalization-2026-08-27`, with its only
+  remote named `origin` and resolving to
+  `https://github.com/Symbolic-Intelligence-Org/factgraph.git`.
 - Preserved and reconciled work: the Q22 Policy literal equality slice was
   committed as a bounded change, replayed onto FactGraph `26a88c`, and retained
   as commit `4fb5f5cf`. The original mixed worktree remains intact, and complete
@@ -215,8 +216,8 @@ remote identity.
   than a semantic mismatch. Ruff reported the same 50 findings on the clean
   `26a88c` base and on the reconciled branch, so the replay introduced no new
   lint finding. An ordinary `git push --dry-run origin
-  HEAD:refs/heads/codex/factgraph-canonical-2026-08-27` targeted the FactGraph
-  GitHub repository successfully.
+  HEAD:refs/heads/features/factgraph-repository-canonicalization-2026-08-27`
+  targeted the FactGraph GitHub repository successfully.
 - Deviations from this blueprint: instead of renaming the dirty working
   directory in place, the preserved Git history was used to materialize a clean
   canonical local checkout after the bounded replay. This avoids moving mixed,
