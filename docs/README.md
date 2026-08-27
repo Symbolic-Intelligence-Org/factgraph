@@ -19,5 +19,5 @@ New Python product code should begin with the
 - [Security](SECURITY.md) — secret handling and reporting guidance.
 
 Maintainer-facing implementation contracts live beside their modules under
-`src/factgraph/*/docs/`. Workflow blueprints, audits and design decisions live
-under `workflow/`; they are not substitutes for the current user docs above.
+`src/factgraph/*/docs/`. Cross-project coordination and internal workflow state
+are maintained outside this product repository.

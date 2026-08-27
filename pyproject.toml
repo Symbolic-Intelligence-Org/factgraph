@@ -38,7 +38,7 @@ warn_unused_configs = true
 
 [tool.coverage.run]
 branch = true
-source = ["src/factgraph", "src/service"]
+source = ["src/factgraph"]
 omit = ["*/tests/*"]
 
 [tool.coverage.report]

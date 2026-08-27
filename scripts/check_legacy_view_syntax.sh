@@ -14,10 +14,9 @@ fi
 # asserting rejection behavior.
 
 targets=(
-  "src/kernel/sdk/docs"
-  "src/service/docs"
-  "src/kernel/core/docs/04_service_layer.md"
-  "docs/api/openapi.yaml"
+  "src/factgraph/sdk/docs"
+  "src/factgraph/core/docs"
+  "docs/quickstart"
   "examples/05_sdk_assertion_views.ipynb"
 )
 

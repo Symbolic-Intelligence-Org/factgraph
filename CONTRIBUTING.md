@@ -1,15 +1,10 @@
 # Contributing
 
-FactPy Kernel uses a blueprint-driven workflow for non-trivial changes.
+This repository contains the FactGraph product package. Cross-project coordination
+and internal AI workflow state are maintained outside this repository.
 
-## Before You Change Code
-
-- Read [AGENTS.md](AGENTS.md) for the repository workflow.
-- For architecture-facing work, protocol changes, cross-module changes, features, or refactors, create or reuse an active blueprint under `docs/blueprints/active/`.
-- Keep implementation truth in module docs under `src/*/docs/`; references under `docs/references/` are supporting material, not current behavior.
-- Do not edit archived blueprints except for explicitly marked reconstructed archive work.
-
-Tiny typo fixes, comment-only edits, and clearly local test fixes may skip a blueprint.
+Keep implementation truth in the module docs under `src/factgraph/*/docs/`, and
+update public documentation and tests whenever behavior changes.
 
 ## Development Setup
 
@@ -18,36 +13,30 @@ python -m pip install --upgrade pip
 python -m pip install -e ".[dev]"
 ```
 
-## Test Baseline
+## Tests
 
-Run the kernel test suite from the repository root:
+Run the test suite from the repository root:
 
 ```bash
-PYTHONPATH=src python -m unittest discover -s src/kernel/tests -p "test_*.py"
+PYTHONPATH=src python -m pytest
 ```
-
-Current baseline: 709 tests, 1 skip.
 
 ## Quality Checks
 
 ```bash
-python -m ruff check src/kernel/application
-python -m ruff check src/kernel
-python -m mypy src/kernel
+python -m ruff check src/factgraph tests
+python -m mypy src/factgraph
 ```
-
-Only the narrow `kernel.application` ruff check is expected to be clean today. Broader kernel ruff and mypy output is tracked as audit/report input until follow-up cleanup work makes those checks blocking.
 
 ## Pull Request Expectations
 
-- Link the relevant active blueprint for non-trivial work.
 - Keep public behavior changes paired with module doc updates.
 - Include the commands you ran and any known gaps.
 - Keep commits scoped so doc, config, and production code changes can be reviewed independently.
 
 ## Releasing
 
-Releases follow a 3-layer model: `master` (dev) → `milestone/rc-vX.Y.Z-<date>`
+Releases follow a 3-layer model: the development branch → `milestone/rc-vX.Y.Z-<date>`
 (frozen anchor) → `release/X.Y.x` (clean projection) → `vX.Y.Z[-rc.N]` (tag).
 
 The full pipeline is encapsulated in `scripts/release.sh`:
@@ -66,7 +55,7 @@ Before running:
    `0.1.0rc1` for tag `v0.1.0-rc.1`).
 2. Move new entries from `## [Unreleased]` to a new versioned section in
    `CHANGELOG.md` with the release date.
-3. Commit those changes on `master` and ensure the tree is clean.
+3. Commit those changes on the development branch and ensure the tree is clean.
 4. Run the dry-run; if it passes, run live.
 
 The script enforces:
@@ -74,7 +63,7 @@ The script enforces:
 - Clean working tree.
 - Source ref exists; tag does not exist yet (locally or on origin).
 - Projection allowlist + deny patterns + bad-link checks all pass.
-- (Unless `--skip-verify`) `pip install -e .` + full kernel test suite pass on
+- (Unless `--skip-verify`) `pip install -e .` + the focused FactGraph test suite pass on
   the projected content.
 
 The release branch (`release/X.Y.x`) is created on first release of a minor

@@ -734,14 +734,6 @@ class MigrationCLIOutputTests(unittest.TestCase):
             self.assertEqual(payload["details"]["object_schema_digest"], digest)
 
 
-class ServiceRouteRemovalTests(unittest.TestCase):
-    def test_service_app_v1_drops_registry_routes(self) -> None:
-        from service.app_v1 import app
-
-        registry_routes = [r for r in app.routes if "/v1/registry" in getattr(r, "path", "")]
-        self.assertEqual(registry_routes, [])
-
-
 class ApplyLogReadbackTests(unittest.TestCase):
     """Step 4.7 P1-3 fix + R-1: verify load_authoring_apply_events covers
     all three legacy + canonical read paths.

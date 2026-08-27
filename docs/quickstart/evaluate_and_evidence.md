@@ -664,12 +664,12 @@ This chapter covers the shipped surface. Several user-facing capabilities are *d
 
 | Capability | Status | Where designed |
 |---|---|---|
-| `fg.diagnose(...)` SDK public surface | Internal application-layer logic shipped; SDK shell deferred | [`explanation-completion-roadmap.zh.md`](../../workflow/design/design-points/active/explanation-completion-roadmap.zh.md) §6.2 (D1) |
-| General zero-row why-not / negative proof | Deferred. V1 can project positive-row Policy topology as `holds` / `fails` / `not_reached`, while Product V2 summaries still make no negative-proof claim. | [`explanation-completion-roadmap.zh.md`](../../workflow/design/design-points/active/explanation-completion-roadmap.zh.md) §6.2 (D5) |
-| PyReason multi-timestep timeline evidence | Deferred — current PyReason `EvidenceGraph` is single-conclusion fallback | [`explanation-completion-roadmap.zh.md`](../../workflow/design/design-points/active/explanation-completion-roadmap.zh.md) §6.1 (D11) |
-| Attribution / salience decomposition | Deferred (D6 / D7) | [`explanation-completion-roadmap.zh.md`](../../workflow/design/design-points/active/explanation-completion-roadmap.zh.md) §6.3 |
-| Match witness `as_assertions() / witnesses() / to_view()` | Deferred — `fg.entities.match` returns snapshots only today | [`explanation-completion-roadmap.zh.md`](../../workflow/design/design-points/active/explanation-completion-roadmap.zh.md) §6.5 (D20) |
-| Desc auto-render in `Explanation` payloads | Shipped as `Explanation.repr` multi-line rendering for passed/failed explanations; deeper PyReason timeline rendering remains deferred | [`explanation-completion-roadmap.zh.md`](../../workflow/design/design-points/active/explanation-completion-roadmap.zh.md) §6.6 (D21) |
+| `fg.diagnose(...)` SDK public surface | Internal application-layer logic shipped; SDK shell deferred | Deferred |
+| General zero-row why-not / negative proof | Deferred. V1 can project positive-row Policy topology as `holds` / `fails` / `not_reached`, while Product V2 summaries still make no negative-proof claim. | Deferred |
+| PyReason multi-timestep timeline evidence | Deferred — current PyReason `EvidenceGraph` is single-conclusion fallback | Deferred |
+| Attribution / salience decomposition | Deferred (D6 / D7) | Deferred |
+| Match witness `as_assertions() / witnesses() / to_view()` | Deferred — `fg.entities.match` returns snapshots only today | Deferred |
+| Desc auto-render in `Explanation` payloads | Shipped as `Explanation.repr` multi-line rendering for passed/failed explanations; deeper PyReason timeline rendering remains deferred | Partially shipped |
 
 ## 8. Reference
 
@@ -755,4 +755,3 @@ report = outcome.replay()
 - [`data_model.md`](data_model.md) §2.2 — write-side uncertainty metadata that surfaces as `EvaluateRow.certainty`
 - [`three_layer_api.md`](three_layer_api.md) — assertion-level read APIs that
   `fg.audit.explain` / `conflicts` resolve against
-- [`explanation-completion-roadmap.zh.md`](../../workflow/design/design-points/active/explanation-completion-roadmap.zh.md) — the deferred capabilities listed in §7

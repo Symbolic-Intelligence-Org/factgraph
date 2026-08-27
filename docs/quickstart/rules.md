@@ -96,9 +96,8 @@ or probabilistic choice.
 | Product Function | Product V2 only | One Rule source occurrence per Function, no Function chaining, and output is select/compare-only rather than bindable. |
 
 Literal admission is operator-sensitive because equality does not require a
-portable ordering or collation. The implemented
-[Q22 literal-equality decision](../../workflow/design/decisions/active/2026-08-20_q22-policy-literal-equality-domain-decision.md)
-separates equality from ordering as follows.
+portable ordering or collation. The implemented contract separates equality
+from ordering as follows.
 
 | Literal domain | `eq` / `ne` disposition | `gt` / `ge` / `lt` / `le` disposition | Rationale |
 |---|---|---|---|

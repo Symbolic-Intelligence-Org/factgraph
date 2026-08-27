@@ -468,10 +468,6 @@ jupyter notebook examples/11_capabilities_e2e_demo.ipynb
 - **§6.6 working hypothesis**:per-capability local engine gate(几行 paragraph 描述完毕),跨 3 个 application capability + 1 evaluator capability 仍 hold;`§6.7` declarative capability schema 未触发
 - **No ledger write from read paths**:Check / Diagnose / Fact Overlay / Why-not / Frontier 都 read-only,assertion 仅由 `set_field` 等显式 write API 写
 
-archived blueprints + cross-session memory anchor 含全部决策溯源:
-- `docs/blueprints/archive/2026-05-{03,04,05}_*.md`(5 个 implemented capability 蓝图)
-- `~/.claude/projects/-Users-zhenzhili-hnsm-backend/memory/project_*_shipped.md`(5 个 shipped anchor)
-
 ---
 
 ## 10. Derivation Evaluate / Accept —— evidence 产生与落 ledger
@@ -741,11 +737,11 @@ for row in response.rows:
 
 ## 14. Audit —— 证据查询
 
-`kernel.audit` 是独立 package,专做证据追踪 / assertion 历史 / compliance 查询。**不读 entity 当前 snapshot**(那是 §11 entity_read),而是重构完整决策链路、candidate 生成历史、evidence 树。
+`kernel.audit` 是独立 package,专做证据追踪 / assertion 历史查询。**不读 entity 当前 snapshot**(那是 §11 entity_read),而是重构完整决策链路、candidate 生成历史、evidence 树。
 
 **核心组件:**
 
-`AuditPackageData`:audit 输出包内存表示(从磁盘 manifest.json + JSONL 加载)。含 `run_ledger` / `candidate_ledger` / `accept_write_ledger` / `decision_log` / `support_artifacts` / `rule_trace_artifacts` / `evidence_graphs` / `provenance_trees`。安装 `domains.ecss` 还含 compliance 注解。
+`AuditPackageData`:audit 输出包内存表示(从磁盘 manifest.json + JSONL 加载)。含 `run_ledger` / `candidate_ledger` / `accept_write_ledger` / `decision_log` / `support_artifacts` / `rule_trace_artifacts` / `evidence_graphs` / `provenance_trees`。
 
 `AuditQuery`:主入口,`AuditQuery(package)` 构造。主要 method:
 - `list_runs()` / `get_run(run_id)`:推导运行
@@ -754,7 +750,6 @@ for row in response.rows:
 - `list_accept_writes(candidate_id=...)` / `list_failures()`:accept 日志与错误
 - `summarize_provenance_coverage()`:provenance 覆盖率统计
 - `list_rule_traces()` / `get_rule_trace_narrative(rule_run_id)`:规则执行轨迹
-- `list_compliance_matrix(req_id=..., status=..., milestone=...)`:**ECSS 合规矩阵**(可选 domain,需 `domains.ecss`,缺则抛 `AuditOptionalDomainError`)
 
 ```python
 from kernel.audit import AuditQuery, load_audit_package
@@ -776,15 +771,9 @@ print(f"premises: {summary.get('premise_count')}")
 cov = audit.summarize_provenance_coverage()
 print(f"provenance: {cov['with_provenance']}/{cov['total_candidates']}")
 
-# 可选:ECSS 合规矩阵(需 domains.ecss)
-try:
-    for req in audit.list_compliance_matrix(status="compliant"):
-        print(f"  {req['req_id']}: {req['status']}")
-except Exception as exc:
-    print(f"compliance unavailable: {exc}")
 ```
 
-**与 §11 entity_read 区别:** entity_read 读"当前 snapshot + 浅层 history";audit 读"完整证据链 + candidate 生成轨迹 + provenance + compliance",时序 + 依赖多维度。
+**与 §11 entity_read 区别:** entity_read 读"当前 snapshot + 浅层 history";audit 读"完整证据链 + candidate 生成轨迹 + provenance",时序 + 依赖多维度。
 
 ---
 

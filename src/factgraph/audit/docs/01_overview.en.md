@@ -6,23 +6,12 @@
 
 ## 1. Module Responsibilities
 
-> **Boundary — v0.1 factgraph-only wheel**
->
-> This document describes how `factgraph.audit` integrates with downstream consumers. The following modules are referenced below but are **not part of the v0.1 factgraph-only wheel**:
->
-> - `service.static_ui` — full audit static-site rendering (monorepo / future deliverable)
-> - `domains.ecss.compliance` — ECSS row assembly + compliance matrix (optional domain bundle)
-> - `domains.ecss.vcd` — ECSS VCD predicate preset (optional domain bundle)
->
-> Calling these modules directly from a factgraph-only install raises `ModuleNotFoundError`. `AuditQuery.list_compliance_matrix(...)` raises `AuditOptionalDomainError` to give an actionable signal instead of letting users hit a bare import failure.
-
 `audit` is the **audit-consumption layer**. It reads exported audit packages and exposes query, DTO, and evidence-graph consumption capabilities.
 
 It is responsible for:
 
 - audit package reading
 - run / candidate / materialization / decision / failure queries
-- requirement-scoped compliance-matrix queries
 - authoring apply-event queries
 - durable round event-log reading and querying
 - audit DTO construction
@@ -34,8 +23,7 @@ It is not responsible for:
 - registry asset versioning
 - package export
 - engine-native provenance generation
-- full static-site rendering (owned by `service.static_ui`)
-- ECSS compliance row assembly semantics (owned by `domains.ecss.compliance`)
+- full static-site rendering
 
 ## 2. Current Public Entry
 
@@ -101,7 +89,6 @@ Related contract documents:
    - `get_candidate_certainty_summary(candidate_id)`
    - `list_decisions(...)`
    - `list_failures(...)`
-   - `list_compliance_matrix(...)` (ECSS / domain-backed optional convenience)
    - `list_rule_traces(...)`
    - `get_rule_trace(rule_run_id)`
    - `list_rule_trace_summaries(...)`
@@ -165,39 +152,18 @@ Default behavior:
 
 This diff does not persist a new index, does not re-run capabilities, does not compare cross-round `affected_action_indices`, and does not implement Batch 7 L5 cross-run module aggregation.
 
-### 3.5 Requirement / Compliance Matrix
-
-When an audit package contains requirement-scoped assertions, `AuditQuery` exposes offline ECSS VCD / compliance-matrix query entrypoints. Row assembly semantics are owned by `domains.ecss.compliance`; the `audit` side only loads the package, builds the assertion index, and exposes query convenience through a lazy import.
-
-In the factgraph-only v0.1 wheel, `domains.ecss` is not part of the install. This entrypoint is preserved as a monorepo / optional-domain compatibility surface; if `domains.ecss` is missing, the call raises `AuditOptionalDomainError` rather than treating `domains` as a factgraph-required dependency:
-
-1. Use requirement / compliance predicates on the write side, for example:
-   - `ecss:requirement`
-   - `ecss:verification_method`
-   - `ecss:compliance_status`
-   - `ecss:requirement_rid`
-   - `ecss:review_milestone`
-2. Export still uses the existing `package_kind="audit"`; no dedicated raw-matrix artifact is added
-3. Consumers go through:
-   - `AuditQuery.list_compliance_matrix(...)`
-   - `build_compliance_matrix_dto(...)`
-4. The query implementation drills into the assertion / fact files already in the package rather than only consuming JSONL audit ledgers
-
-### 3.6 Static audit pages (service owner)
+### 3.5 External audit presentation
 
 1. Prepare an `AuditPackageData`
-2. Call `service.static_ui.render_audit_static_site(package_dir, out_dir)`
-3. Output static HTML and assets
+2. Pass it to an application-owned renderer
+3. Output application-specific presentation artifacts
 
-Full static-site rendering does not belong to the `factgraph.audit` module. `service.static_ui` consumes `factgraph.audit` reader / query / DTO and domain-backed compliance rows, and owns rendered-site contracts such as `site_manifest.json` / `ui_index.json`.
+Full static-site rendering does not belong to the `factgraph.audit` module.
 
 Current static site page filenames / hrefs use a filesystem-safe reversible slug rather than raw percent-encoded ids. The generated site can therefore be browsed directly through ordinary static file servers without depending on special handling of `%xx` paths.
 
 When the package contains requirement / compliance facts, the current static site additionally generates:
 
-- `compliance_matrix.html`
-  - displays requirement, status, milestone, verification methods, and RID links as an offline compliance-matrix table
-  - each row links to the existing assertion-detail page through assertion id
 - `rule_traces.html`
   - serves as a `rule_run_id` proof-entry index
 - `rule_traces/{rule_run_id}.html`
@@ -291,10 +257,6 @@ Candidate NL explain is currently outside the audit first-round scope; the stati
   - audit does not directly query the live `Ledger`
 - `authoring`
   - audit can consume authoring apply events carried by a package, but does not directly manage the registry
-- `ecss`
-  - the canonical preset owner for requirement / compliance predicates is `domains.ecss.vcd`
-  - the ECSS compliance row-assembly owner is `domains.ecss.compliance`
-  - audit lazily imports and exposes `AuditQuery.list_compliance_matrix(...)` but does not own ECSS row semantics; on a factgraph-only wheel where `domains.ecss` is missing, this entrypoint raises `AuditOptionalDomainError`
 - `explainability`
   - the compliance matrix is responsible only for requirement-level delivery; finer assertion / support evidence drill-down is still owned by the assertion detail / explainability substrate
   - rule trace static delivery only consumes the existing `RuleTraceArtifact` from the package and does not add live explain endpoints

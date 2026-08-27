@@ -46,50 +46,20 @@ NOTEBOOKS = [
 REWRITES: list[tuple[str, str]] = [
     # === Pass 1: specific moved files (from/import) ===
     (r"\bfrom factpy_kernel\.tests\._test_helpers\b", "from kernel.tests._test_helpers"),
-    (r"\bfrom factpy_kernel\.audit\.static_ui\b", "from service.static_ui"),
-    (r"\bfrom factpy_kernel\.audit\.compliance\b", "from domains.ecss.compliance"),
-    (r"\bfrom factpy_kernel\.sdk\.ecss\b", "from domains.ecss.sdk_helpers"),
     (r"\bimport factpy_kernel\.tests\._test_helpers\b", "import kernel.tests._test_helpers"),
-    (r"\bimport factpy_kernel\.audit\.static_ui\b", "import service.static_ui"),
-    (r"\bimport factpy_kernel\.audit\.compliance\b", "import domains.ecss.compliance"),
-    (r"\bimport factpy_kernel\.sdk\.ecss\b", "import domains.ecss.sdk_helpers"),
     # === Pass 2: sub-namespace (from/import) ===
-    (r"\bfrom factpy_kernel\.agent\b", "from agent"),
-    (r"\bfrom factpy_kernel\.service\b", "from service"),
-    (r"\bfrom factpy_kernel\.domains\b", "from domains"),
-    (r"\bimport factpy_kernel\.agent\b", "import agent"),
-    (r"\bimport factpy_kernel\.service\b", "import service"),
-    (r"\bimport factpy_kernel\.domains\b", "import domains"),
     # === Pass 3: catch-all (from/import) ===
     (r"\bfrom factpy_kernel\.", "from kernel."),
     (r"\bimport factpy_kernel\.", "import kernel."),
     # === Pass 4: quoted-string runtime targets (double-quote) ===
     (r'"factpy_kernel\.tests\._test_helpers', '"kernel.tests._test_helpers'),
-    (r'"factpy_kernel\.audit\.static_ui', '"service.static_ui'),
-    (r'"factpy_kernel\.audit\.compliance', '"domains.ecss.compliance'),
-    (r'"factpy_kernel\.sdk\.ecss', '"domains.ecss.sdk_helpers'),
-    (r'"factpy_kernel\.agent', '"agent'),
-    (r'"factpy_kernel\.service', '"service'),
-    (r'"factpy_kernel\.domains', '"domains'),
     (r'"factpy_kernel\.', '"kernel.'),
     # === Pass 5: quoted-string runtime targets (single-quote) ===
     (r"'factpy_kernel\.tests\._test_helpers", "'kernel.tests._test_helpers"),
-    (r"'factpy_kernel\.audit\.static_ui", "'service.static_ui"),
-    (r"'factpy_kernel\.audit\.compliance", "'domains.ecss.compliance"),
-    (r"'factpy_kernel\.sdk\.ecss", "'domains.ecss.sdk_helpers"),
-    (r"'factpy_kernel\.agent", "'agent"),
-    (r"'factpy_kernel\.service", "'service"),
-    (r"'factpy_kernel\.domains", "'domains"),
     (r"'factpy_kernel\.", "'kernel."),
     # === Pass 6: naked dotted refs (no prefix — markdown table cells,
     #     inline backticks, code comments) ===
     (r"\bfactpy_kernel\.tests\._test_helpers\b", "kernel.tests._test_helpers"),
-    (r"\bfactpy_kernel\.audit\.static_ui\b", "service.static_ui"),
-    (r"\bfactpy_kernel\.audit\.compliance\b", "domains.ecss.compliance"),
-    (r"\bfactpy_kernel\.sdk\.ecss\b", "domains.ecss.sdk_helpers"),
-    (r"\bfactpy_kernel\.agent\b", "agent"),
-    (r"\bfactpy_kernel\.service\b", "service"),
-    (r"\bfactpy_kernel\.domains\b", "domains"),
     (r"\bfactpy_kernel\.", "kernel."),
     # === Pass 7: bare-string prose (must be LAST — after all dotted forms
     #     have been rewritten) ===

@@ -147,26 +147,6 @@ def build_candidate_evidence_tree_narrative_dto(query: AuditQuery, candidate_id:
     }
 
 
-def build_compliance_matrix_dto(
-    query: AuditQuery,
-    *,
-    req_id: str | None = None,
-    status: str | None = None,
-    milestone: str | None = None,
-) -> dict[str, Any]:
-    _ensure_query(query)
-    try:
-        rows = query.list_compliance_matrix(req_id=req_id, status=status, milestone=milestone)
-    except AuditQueryError as exc:
-        raise AuditDTOError(str(exc)) from exc
-    return {
-        "audit_ui_dto_version": "audit_ui_dto_v1",
-        "kind": "compliance_matrix",
-        "count": len(rows),
-        "rows": [dict(row) for row in rows],
-    }
-
-
 def build_rule_trace_list_dto(
     query: AuditQuery,
     *,

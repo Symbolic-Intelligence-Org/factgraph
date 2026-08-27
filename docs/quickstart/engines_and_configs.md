@@ -417,7 +417,7 @@ SemanticsProfile(
 
 ### 5.3 Pattern parallel
 
-This split (`SemanticsProfile` canonical / `ProbLogConfig` + `PyReasonConfig` ergonomic) is the same SDK-shadow / application-DTO pattern documented at [`docs/quickstart/rules.md`](rules.md) §2.6 for Rule vs the lower-level data shape. The SemanticsProfile naming is benign — application takes a neutral name, SDK takes the user-facing engine-specific names. (Compare the deferred Rule-namespace redesign discussed in [`workflow/design/design-points/active/rule-namespace-rulespec-redesign.zh.md`](../../workflow/design/design-points/active/rule-namespace-rulespec-redesign.zh.md) §2.2, where the same pattern is *not* yet applied.)
+This split (`SemanticsProfile` canonical / `ProbLogConfig` + `PyReasonConfig` ergonomic) is the same SDK-shadow / application-DTO pattern documented at [`docs/quickstart/rules.md`](rules.md) §2.6 for Rule vs the lower-level data shape. The SemanticsProfile naming is benign — application takes a neutral name, SDK takes the user-facing engine-specific names.
 
 ## 6. `fg.eval.preview_config(...)` — inspect-only
 

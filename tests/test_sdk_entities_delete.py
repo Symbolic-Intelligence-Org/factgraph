@@ -314,7 +314,7 @@ def test_apply_entity_delete_retract_not_referenced_in_apply_op_source():
         "_apply_entity_delete_retract must NOT be called from _apply_op "
         "per SF3 P1 amend (path-bound guard-bypass, not metadata signal). "
         "If you intentionally changed this, audit the SF3 lock + Decision Note #3 "
-        "in workflow/blueprints/active/2026-05-30_slice-3a-api-namespace.audit.md "
+        "in the historical API-namespace design record "
         "before re-running."
     )
 

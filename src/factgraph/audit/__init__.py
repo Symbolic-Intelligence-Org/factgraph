@@ -38,7 +38,6 @@ from .dto import (
     build_candidate_evidence_tree_narrative_dto,
     build_candidate_evidence_tree_summary_dto,
     build_candidate_evidence_tree_dto,
-    build_compliance_matrix_dto,
     build_decision_detail_dto,
     build_rule_trace_detail_dto,
     build_rule_trace_detail_payload,
@@ -49,7 +48,7 @@ from .dto import (
     build_run_detail_dto,
     build_run_list_dto,
 )
-from .query import AuditOptionalDomainError, AuditQuery, AuditQueryError
+from .query import AuditQuery, AuditQueryError
 from .proof_frame_diff import (
     AtomDelta,
     EventReference,
@@ -89,11 +88,6 @@ from .round_events import (
     record_round_event,
     start_round,
 )
-
-# Note: ECSS-specific symbols (AuditComplianceError, ECSS_*, build_compliance_matrix_rows,
-# ecss_vcd_predicates, extend_schema_ir_with_ecss_vcd_predicates) moved with compliance.py
-# to domains.ecss.compliance during the namespace split.
-# Note: render_audit_static_site moved with static_ui.py to service.static_ui.
 
 __all__ = [
     "AuthoringApplyEvent",
@@ -156,7 +150,6 @@ __all__ = [
     "evidence_graph_from_dict",
     "AuditQuery",
     "AuditQueryError",
-    "AuditOptionalDomainError",
     "AtomDelta",
     "EventReference",
     "FrameDelta",
@@ -173,7 +166,6 @@ __all__ = [
     "build_run_list_dto",
     "build_run_detail_dto",
     "build_decision_detail_dto",
-    "build_compliance_matrix_dto",
     "build_rule_trace_list_dto",
     "build_rule_trace_narrative_dto",
     "build_rule_trace_summary_list_dto",

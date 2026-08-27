@@ -41,7 +41,7 @@ Use the kernel from source:
 
 ```bash
 git clone <repo-url>
-cd hnsm-backend
+cd factgraph
 pip install -e .
 ```
 
@@ -98,7 +98,7 @@ structured Result/Explain data, and replay.
 |---|---|---|
 | Product public | `factgraph.sdk` | Ergonomic API and outward compatibility surface for human-authored Python product code. |
 | Advanced importable | `factgraph.application`, `factgraph.audit` | Runtime/query authority for automation, wire bridges, and audit consumers; importable directly, but not an SDK ergonomic facade. |
-| Out of v0.2 package | service, agent, domains, internal workflow docs, tutorials, notebooks | Not part of the `factgraph` v0.2 wheel or public source surface. |
+| Out of v0.2 package | service, agent, domain bundles, internal workflow state | Not owned by the `factgraph` package or source repository. |
 
 The compatibility surface retains `Rule` / `RuleExpr`, `EvaluateResult`,
 legacy engine configs, evidence/explanation envelopes, Database attach,
@@ -128,13 +128,10 @@ Current implementation docs:
 - [src/factgraph/adapters/docs/README.md](src/factgraph/adapters/docs/README.md)
 - [src/factgraph/authoring/docs/README.md](src/factgraph/authoring/docs/README.md)
 
-## Audit And Optional Domains
+## Audit
 
 `factgraph.audit` reads exported audit packages and provides offline queries for
 runs, candidates, rule traces, evidence graphs, and related DTOs.
-
-Domain packages are not required capabilities of the `factgraph` wheel. Optional
-domain integrations remain outside the release surface.
 
 ## Tests
 

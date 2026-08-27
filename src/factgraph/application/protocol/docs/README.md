@@ -528,8 +528,3 @@ python -m pytest tests/test_v1_public_surface_exports.py
 ```
 
 ---
-
-## 6. Related Blueprints
-
-- `workflow/blueprints/active/2026-06-09_explain-layer-s5-native-path.md` — S5 invariant + closed_head_false wiring + stale_row/row_not_in_result → unsupported
-- `workflow/blueprints/active/2026-06-09_explain-layer-v2.md` — parent program

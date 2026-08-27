@@ -275,7 +275,7 @@ digest.
 
 Destructive operations (`delete`, `update`, `migrate`, `deprecate`) are not part of the current `fg.schema.*` surface. If you need a non-additive change today — removing a field, changing identity, retyping, or anything that retracts schema state — create a new workspace with the new schema and re-ingest. The core Database has a policy-free schema-transition mechanism for internal orchestration, but its raw transition DTO is intentionally not exported from the public SDK.
 
-This is the **current mode**. Broader schema evolution semantics (destructive operations, in-place migration, digest evolution) are an open design question. The full rejection taxonomy and the design space sit in [`workflow/design/design-points/active/schema-mutation-additive-only.zh.md`](../../workflow/design/design-points/active/schema-mutation-additive-only.zh.md).
+This is the **current mode**. Broader schema evolution semantics (destructive operations, in-place migration, digest evolution) remain outside the current public contract.
 
 ## 5. Reference
 

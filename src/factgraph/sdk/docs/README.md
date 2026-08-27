@@ -155,13 +155,6 @@ all terminals: ``bind``, ``select``, ``expect_contains``, ``using``, ``plan``,
 - Do not expose blueprint history, internal line references or implementation
   debates through `help(...)`.
 
-## Related Historical Blueprints
-
-- `workflow/blueprints/active/2026-07-31_stage-a-lifecycle-convergence.md`
-  — current lifecycle convergence and write-routing contract.
-- `workflow/design/decisions/active/2026-07-31_q-sae-6-release-target-decision.md`
-  — v0.3 release and cross-repository pinning rationale.
-
 ## Doc Map
 
 The user-facing quickstarts live under

@@ -130,26 +130,7 @@ Important boundaries:
 - frames with empty `atom_verdicts` are marked `rule_refs_unsupported` and do not produce per-atom deltas.
 - L5 cross-run aggregation by module is deferred and has no durable index in this slice.
 
-## 5. Domain-Specific Compliance
-
-`AuditQuery.list_compliance_matrix(...)` is a compatibility convenience query over an audit package, but ECSS row assembly is owned by `domains.ecss.compliance`.
-
-In the factgraph-only v0.1 wheel, `domains.ecss` is not part of the installed package set. Calling this convenience without the optional domain package raises `AuditOptionalDomainError` with an actionable message. Kernel consumers should treat this surface as domain-backed and optional, not as a guaranteed factgraph-only contract.
-
-The audit layer:
-
-- loads assertion facts and metadata
-- exposes the query entrypoint
-- wraps domain errors as `AuditQueryError`
-- reports missing optional domain ownership as `AuditOptionalDomainError`
-
-The ECSS domain layer:
-
-- owns ECSS compliance predicate constants through `domains.ecss.vcd`
-- owns requirement/compliance row assembly in `domains.ecss.compliance`
-- defines ECSS-specific validation rules such as required `ingested_at` metadata
-
-## 6. Minimum Provenance Mapping
+## 5. Minimum Provenance Mapping
 
 The current package does not claim full PROV conformance. The minimum responsibility mapping is:
 
@@ -163,9 +144,7 @@ The current package does not claim full PROV conformance. The minimum responsibi
 
 Future provenance work should add fields or mappings explicitly rather than relying on page text or ad hoc payload conventions.
 
-## 7. Ownership Boundary
+## 6. Ownership Boundary
 
 - `factgraph.audit`: package read/query/DTO/evidence graph consumer contracts
-- `service.static_ui`: full static HTML site rendering and rendered site manifest/index contracts
-- `domains.ecss.compliance`: ECSS compliance row semantics
-- `adapters` / runtime service: package export and optional provenance materialization
+- `adapters`: package export and optional provenance materialization

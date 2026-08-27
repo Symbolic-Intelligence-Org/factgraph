@@ -130,8 +130,8 @@ facades:
   Python APIs. The notebooks may import them directly when they demonstrate
   lower-level audit or round-persistence machinery, but new product examples
   should prefer the `FactGraph` namespace when an SDK shell exists.
-- Runtime service routes remain narrower than the Python SDK. Do not infer an
-  HTTP route from an SDK shell unless `src/service/docs/` documents it.
+- Network delivery is application-owned and is not part of this repository.
+  Do not infer an HTTP route from a Python SDK shell.
 
 ## Historical examples
 
