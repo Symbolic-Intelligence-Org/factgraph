@@ -74,15 +74,23 @@ def _build_fg(*, carol_project_id: str | None):
     def ex(e, t):
         set_field(fg.ledger, f"{t}:exists", e, [], None)
 
-    acme = fg.entities.create(Company, company_id="ACME"); ex(acme, "Company")
-    alice = fg.entities.create(User, user_id="Alice"); fg.fields.set(User.company, alice, acme); ex(alice, "User")
-    carol = fg.entities.create(User, user_id="Carol"); fg.fields.set(User.company, carol, acme); ex(carol, "User")
-    p1 = fg.entities.create(Project, project_id="P1"); fg.fields.set(Project.active, p1, True); ex(p1, "Project")
+    acme = fg.entities.create(Company, company_id="ACME")
+    ex(acme, "Company")
+    alice = fg.entities.create(User, user_id="Alice")
+    fg.fields.set(User.company, alice, acme)
+    ex(alice, "User")
+    carol = fg.entities.create(User, user_id="Carol")
+    fg.fields.set(User.company, carol, acme)
+    ex(carol, "User")
+    p1 = fg.entities.create(Project, project_id="P1")
+    fg.fields.set(Project.active, p1, True)
+    ex(p1, "Project")
 
     rows = [("AP1", alice, p1, 30)]
     if carol_project_id is not None:
         pc = fg.entities.create(Project, project_id=carol_project_id)
-        fg.fields.set(Project.active, pc, True); ex(pc, "Project")
+        fg.fields.set(Project.active, pc, True)
+        ex(pc, "Project")
         rows.append(("CP", carol, pc, 30))
     for nm, u, prj, wl in rows:
         g = fg.entities.create(Assignment, assignment_id=nm)
@@ -111,7 +119,8 @@ def _teammates_composite():
                 when=[
                     User(x), Project(p), Assignment(g),
                     Assignment(g).user == x, Assignment(g).project == p,
-                    Project(p).active == True, Assignment(g).workload == wl, wl > 20,
+                    Project(p).active == True,  # noqa: E712 - DSL expression, not a truth test
+                    Assignment(g).workload == wl, wl > 20,
                 ],
                 ports={f"U{sf}": x, f"P{sf}": p},
                 repr=f"%U{sf} works on project %P{sf}",
@@ -136,10 +145,17 @@ def _build_fg_colleagues_only():
     def ex(e, t):
         set_field(fg.ledger, f"{t}:exists", e, [], None)
 
-    acme = fg.entities.create(Company, company_id="ACME"); ex(acme, "Company")
-    alice = fg.entities.create(User, user_id="Alice"); fg.fields.set(User.company, alice, acme); ex(alice, "User")
-    carol = fg.entities.create(User, user_id="Carol"); fg.fields.set(User.company, carol, acme); ex(carol, "User")
-    p1 = fg.entities.create(Project, project_id="P1"); fg.fields.set(Project.active, p1, True); ex(p1, "Project")
+    acme = fg.entities.create(Company, company_id="ACME")
+    ex(acme, "Company")
+    alice = fg.entities.create(User, user_id="Alice")
+    fg.fields.set(User.company, alice, acme)
+    ex(alice, "User")
+    carol = fg.entities.create(User, user_id="Carol")
+    fg.fields.set(User.company, carol, acme)
+    ex(carol, "User")
+    p1 = fg.entities.create(Project, project_id="P1")
+    fg.fields.set(Project.active, p1, True)
+    ex(p1, "Project")
     return fg
 
 
@@ -156,7 +172,8 @@ def _or_composite():
                 when=[
                     User(x), Project(p), Assignment(g),
                     Assignment(g).user == x, Assignment(g).project == p,
-                    Project(p).active == True, Assignment(g).workload == wl, wl > 20,
+                    Project(p).active == True,  # noqa: E712 - DSL expression, not a truth test
+                    Assignment(g).workload == wl, wl > 20,
                 ],
                 ports={f"U{sf}": x, f"P{sf}": p},
                 repr=f"%U{sf} works on project %P{sf}",

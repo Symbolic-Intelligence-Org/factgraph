@@ -56,8 +56,11 @@ def _fg(*, active: bool = True):
     def ex(e, t):
         set_field(fg.ledger, f"{t}:exists", e, [], None)
 
-    alice = fg.entities.create(User, user_id="Alice"); ex(alice, "User")
-    p1 = fg.entities.create(Project, project_id="P1"); fg.fields.set(Project.active, p1, active); ex(p1, "Project")
+    alice = fg.entities.create(User, user_id="Alice")
+    ex(alice, "User")
+    p1 = fg.entities.create(Project, project_id="P1")
+    fg.fields.set(Project.active, p1, active)
+    ex(p1, "Project")
     ap1 = fg.entities.create(Assignment, assignment_id="AP1")
     fg.fields.set(Assignment.user, ap1, alice)
     fg.fields.set(Assignment.project, ap1, p1)
@@ -73,7 +76,8 @@ def _works_rule():
             when=[
                 User(x), Project(p), Assignment(g),
                 Assignment(g).user == x, Assignment(g).project == p,
-                Project(p).active == True, Assignment(g).workload == wl, wl > 20,
+                Project(p).active == True,  # noqa: E712 - DSL expression, not a truth test
+                Assignment(g).workload == wl, wl > 20,
             ],
             ports={"X": x, "P": p},
             repr="%X works on project %P",
@@ -134,7 +138,8 @@ def _works_check(user_id: str):
                 User(x), User(x).user_id == user_id,
                 Project(p), Project(p).project_id == "P1",
                 Assignment(g), Assignment(g).user == x, Assignment(g).project == p,
-                Project(p).active == True, Assignment(g).workload == wl, wl > 20,
+                Project(p).active == True,  # noqa: E712 - DSL expression, not a truth test
+                Assignment(g).workload == wl, wl > 20,
             ],
             ports={"X": x, "P": p},
             repr="%X works on project %P",

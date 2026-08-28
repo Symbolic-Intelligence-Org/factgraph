@@ -1,16 +1,16 @@
 [build-system]
-requires = ["setuptools>=68", "wheel"]
+requires = ["setuptools>=77", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "factgraph"
-version = "0.2.0rc1"
+version = "0.3.0"
 description = "FactGraph package for append-only facts, policy/view projection, and logic export."
 readme = "README.md"
 requires-python = ">=3.10"
-license = {text = "Apache-2.0"}
+license = "Apache-2.0"
+license-files = ["LICENSE"]
 classifiers = [
-    "License :: OSI Approved :: Apache Software License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
@@ -18,7 +18,13 @@ classifiers = [
 dependencies = ["pydantic>=2", "diskcache>=5"]
 
 [project.optional-dependencies]
-dev = ["ruff>=0.15,<1", "mypy>=1.20,<2", "coverage[toml]>=7,<8"]
+dev = [
+    "coverage[toml]>=7,<8",
+    "mypy>=1.20,<2",
+    "networkx>=3,<4",
+    "pytest>=8,<9",
+    "ruff>=0.15,<0.16",
+]
 
 [tool.setuptools]
 include-package-data = false

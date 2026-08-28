@@ -2,7 +2,7 @@
 
 **Append-only fact substrate and auditable reasoning kernel.**
 
-The v0.2 open-source / PyPI surface is the `factgraph` package. It provides:
+The v0.3 open-source / PyPI surface is the `factgraph` package. It provides:
 
 - an append-only fact ledger and field/assertion write semantics
 - the canonical Python runtime authority: `factgraph.application`
@@ -12,7 +12,7 @@ The v0.2 open-source / PyPI surface is the `factgraph` package. It provides:
   target-pinned execution profiles, structured Result/Explain, and replay
 - audit package reader, query, DTO, and evidence graph surfaces
 
-The v0.2 public source and PyPI wheel are scoped to the FactGraph package
+The v0.3 public source and PyPI wheel are scoped to the FactGraph package
 surface. LLM extraction, HTTP delivery, domain bundles, and other companion
 surfaces are not part of the `factgraph` release.
 
@@ -92,13 +92,13 @@ structured Result/Explain data, and replay.
 | Lowest-level ledger / evidence / rule primitives | `factgraph.core` | Intended for runtime implementers, not as the normal user entrypoint |
 | Reading an exported audit package | `factgraph.audit` | Offline reader/query/DTO/evidence consumer surface |
 
-## v0.2 Public Boundary
+## v0.3 Public Boundary
 
 | Tier | Surface | Commitment |
 |---|---|---|
 | Product public | `factgraph.sdk` | Ergonomic API and outward compatibility surface for human-authored Python product code. |
 | Advanced importable | `factgraph.application`, `factgraph.audit` | Runtime/query authority for automation, wire bridges, and audit consumers; importable directly, but not an SDK ergonomic facade. |
-| Out of v0.2 package | service, agent, domain bundles, internal workflow state | Not owned by the `factgraph` package or source repository. |
+| Out of v0.3 package | service, agent, domain bundles, internal workflow state | Not owned by the `factgraph` package or source repository. |
 
 The compatibility surface retains `Rule` / `RuleExpr`, `EvaluateResult`,
 legacy engine configs, evidence/explanation envelopes, Database attach,
