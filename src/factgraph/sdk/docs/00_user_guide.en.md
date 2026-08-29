@@ -51,8 +51,8 @@ python -m pip install factgraph
 For development from source:
 
 ```bash
-git clone https://github.com/Symbolic-Intelligence-Org/factgraph_test.git
-cd factgraph_test
+git clone https://github.com/Symbolic-Intelligence-Org/factgraph.git
+cd factgraph
 python -m pip install -e .
 ```
 
