@@ -77,13 +77,12 @@ def test_emission_8_1_fg_ref_plus_fg_set_atomic_emits_n_identity_field():
 
     fg.fields.set(EmissionUser.name, e_ref, "Alice")
 
-    # 4 Claims atomically emitted per Q-EXISTS §4.4:
-    # 2 Identity Claims (user_id + tenant_id) + the co-emitted :exists + 1 Field (name).
+    # 3 Claims atomically emitted: two Identity Claims plus one Field.
+    # Entity visibility is projected virtually from the complete bundle.
     counts = _claim_counts(fg, e_ref)
     assert counts == Counter({
         PRED_USER_ID: 1,
         PRED_TENANT_ID: 1,
-        PRED_EXISTS: 1,
         PRED_NAME: 1,
     })
 

@@ -126,7 +126,7 @@ class DBAttachLifecycleTests(unittest.TestCase):
 
             self.assertEqual(created.tx_seq, initial.tx_seq + 1)
             created_claims = fg.ledger.find_claims(e_ref=e_ref)
-            self.assertEqual(len(created_claims), 2)
+            self.assertEqual(len(created_claims), 1)
             self.assertEqual(
                 {
                     row.value
@@ -140,7 +140,7 @@ class DBAttachLifecycleTests(unittest.TestCase):
             revoked = fg.entities.delete(e_ref, meta={"note": "remove"})
             deleted = db.head()
 
-            self.assertEqual(revoked, 2)
+            self.assertEqual(revoked, 1)
             self.assertEqual(deleted.tx_seq, created.tx_seq + 1)
             self.assertEqual(deleted.state_digest, initial.state_digest)
             revoker_ids = [fg.ledger.find_revoker(row.asrt_id) for row in created_claims]

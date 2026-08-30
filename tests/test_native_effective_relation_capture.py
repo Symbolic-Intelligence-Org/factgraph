@@ -6,7 +6,12 @@ import inspect
 from types import MappingProxyType
 from unittest.mock import patch
 
-from factgraph.application import evaluate_derivation_plans
+from factgraph.application import (
+    build_schema_index,
+    evaluate_derivation_plans,
+    field_predicate,
+    resolve_selector,
+)
 from factgraph.application.derivation_runtime import (
     _evaluate_derivation_plans_with_native_effective_relation_capture,
     _evaluate_derivation_plans_with_native_relation_capture,
@@ -16,10 +21,11 @@ from factgraph.application.protocol import (
     CompiledDerivationPlan,
     CompiledHeadCall,
     DerivationEvaluateRequest,
+    EntitySelector,
 )
+from factgraph.core.evidence.write_protocol import set_field
 from factgraph.core.store import Store
 from factgraph.core.store import _evaluate as evaluate_module
-from factgraph.core.store.ledger import Claim
 from factgraph.core.store.premise_filter import MetaExclusion
 from factgraph.core.view.projector import project_view_facts_with_witness
 from factgraph.sdk import Entity, Field, Identity, MetaKeyPolicy, compile_schema_from_classes
@@ -33,14 +39,19 @@ class Person(Entity):
 
 def _store_with_people(*names: str) -> Store:
     store = Store(compile_schema_from_classes([Person]))
-    for ordinal, name in enumerate(names):
-        store.ledger.append_claim(
-            Claim(
-                asrt_id=f"person-{ordinal}",
-                pred_id="Person:exists",
-                e_ref=f"idref_v1:Person:{name}",
-                rest_terms=[],
-            )
+    index = build_schema_index(store.schema_ir)
+    identity_pred_id = field_predicate(index, "Person", "name").pred_id
+    for name in names:
+        ref = resolve_selector(
+            EntitySelector(entity_type="Person", identity={"name": name}),
+            index=index,
+        )
+        assert ref.encoded_ref is not None
+        set_field(
+            store.ledger,
+            identity_pred_id,
+            ref.encoded_ref,
+            [("string", name)],
         )
     return store
 
@@ -403,7 +414,8 @@ class NativeEffectiveRelationApplicationTests(unittest.TestCase):
             tuple(observed[0]),
             ("Person:exists", "person:name", "person:nickname"),
         )
-        self.assertEqual(observed[0]["person:name"], ())
+        self.assertEqual(len(observed[0]["person:name"]), 1)
+        self.assertEqual(observed[0]["person:name"][0].fact_tuple[1], "alice")
         self.assertEqual(observed[0]["person:nickname"], ())
         self.assertNotIn("person:unused", observed[0])
 

@@ -240,9 +240,8 @@ class ApplicationEntityWriteTests(unittest.TestCase):
 
         self.assertTrue(plan.can_apply)
         self.assertIsNotNone(plan.resolved_target)
-        # Materializing the missing target now co-emits :exists (record_exists)
-        # atomically with the Identity set ops, before the field mutation.
-        self.assertEqual([op.op for op in plan.planned_ops], ["set", "set", "record_exists", "add"])
+        # Materialization writes only the Identity bundle; :exists is virtual.
+        self.assertEqual([op.op for op in plan.planned_ops], ["set", "set", "add"])
 
     def test_apply_write_plan_writes_target_and_field_values(self) -> None:
         store, index = _build_store()
@@ -266,8 +265,8 @@ class ApplicationEntityWriteTests(unittest.TestCase):
 
         self.assertIsInstance(result, EntityWriteResult)
         self.assertEqual(result.errors, ())
-        # 2 Identity set + 1 :exists (record_exists) + 1 field add.
-        self.assertEqual(len(result.applied), 4)
+        # 2 Identity set + 1 field add.
+        self.assertEqual(len(result.applied), 3)
 
         snapshot = hydrate_entity(plan.resolved_target.encoded_ref or "", store=store, index=index)
         self.assertEqual(snapshot.ref, plan.resolved_target)

@@ -1012,13 +1012,8 @@ def _materialization_ops(
                 meta=dict(meta),
             )
         )
-    # Co-emit the ``<EntityType>:exists`` Claim atomically with the Identity
-    # Claims (ADR-IC §4.4 — the existence-claim transitional guard already treats
-    # :exists as co-emitted-with-identity; this is the emission leg that makes the
-    # claim a real, rule-matchable EDB fact). The record_exists op carries no
-    # field/value (its DTO shape forbids them); ``_apply_op`` routes on
-    # op="record_exists" to info.exists_predicate_id.
-    ops.append(PlannedOpDTO(op="record_exists", target=ref, meta=dict(meta)))
+    # Entity-domain rows are projected virtually from this complete Identity
+    # bundle.  Do not persist a second ``<EntityType>:exists`` truth carrier.
     return ops
 
 

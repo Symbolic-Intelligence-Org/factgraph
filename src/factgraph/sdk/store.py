@@ -1539,7 +1539,7 @@ class _SDKEntitiesManager:
         Notes:
             ``ref`` records identity in the SDK compatibility cache but does
             not establish ledger existence. Use ``entities.create`` for eager
-            identity/existence Claims.
+            Identity Claims; entity-domain membership is projected virtually.
         """
         self._reject_non_entity_class(entity_cls, method="ref")
         return self._sdk._ref(entity_cls, **identity_values)
@@ -1551,12 +1551,11 @@ class _SDKEntitiesManager:
         meta: dict[str, Any] | None = None,
         **identity: Any,
     ) -> str:
-        """Create an entity and atomically append its existence Claims.
+        """Create an entity and atomically append its Identity Claims.
 
         Args:
             entity_cls: SDK ``Entity`` subclass.
-            meta: Optional metadata copied to the created identity/existence
-                Claims.
+            meta: Optional metadata copied to the created Identity Claims.
             **identity: Complete immutable identity-field values.
 
         Returns:
