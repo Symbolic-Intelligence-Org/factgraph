@@ -411,6 +411,19 @@ from .query import (
     QueryRuntimeResponse,
     WhereIR,
 )
+from .relation_query import (
+    PublishedEntityFieldV1,
+    PublishedRelationGraphV1,
+    PublishedRelationPathV1,
+    PublishedRelationQueryV1,
+    PublishedStoredRelationV1,
+    RelationPathStepV1,
+    RelationQueryBindingV1,
+    RelationQueryNodeKind,
+    RelationQuerySelectionV1,
+    RelationQuerySourceV1,
+    RelationQueryValue,
+)
 from .schema_runtime import EntityRef, EntitySelector, FieldPath, IdentityValue, SchemaCapability
 
 __all__ = [
@@ -460,6 +473,17 @@ __all__ = [
     "EvaluationQuerySelection",
     "EvaluationQuerySelectionItem",
     "EvaluationQueryValue",
+    "PublishedEntityFieldV1",
+    "PublishedRelationGraphV1",
+    "PublishedRelationPathV1",
+    "PublishedRelationQueryV1",
+    "PublishedStoredRelationV1",
+    "RelationPathStepV1",
+    "RelationQueryBindingV1",
+    "RelationQueryNodeKind",
+    "RelationQuerySelectionV1",
+    "RelationQuerySourceV1",
+    "RelationQueryValue",
     "CompiledContainsRowExpectationV0",
     "ContainsRowExpectationV0",
     "ExpectationCompletenessBasisV0",

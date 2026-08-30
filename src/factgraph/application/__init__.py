@@ -133,6 +133,14 @@ from .evaluation_query_runtime import (
     CompiledEvaluationQueryV0,
     compile_evaluation_query,
 )
+from .relation_query_runtime import (
+    RelationQueryError,
+    RelationQueryResultV1,
+    ResolvedRelationQuerySelectionV1,
+    SealedRelationQueryInvocationV1,
+    compile_published_relation_query,
+    execute_published_relation_query,
+)
 from .evaluation_expectation_runtime import (
     EvaluationExpectationError,
     assert_compiled_contains_row_expectation_current,
@@ -306,6 +314,10 @@ __all__ = [
     "CheckRuntimeError",
     "CompiledPolicyV0",
     "CompiledEvaluationQueryV0",
+    "RelationQueryError",
+    "RelationQueryResultV1",
+    "ResolvedRelationQuerySelectionV1",
+    "SealedRelationQueryInvocationV1",
     "EvaluationQueryTargetError",
     "scenario_run_bytes",
     "scenario_run_from_bytes",
@@ -376,6 +388,7 @@ __all__ = [
     "check_why_not_universe",
     "compile_policy",
     "compile_evaluation_query",
+    "compile_published_relation_query",
     "compile_targeted_evaluation_query",
     "evaluation_run_bundle_bytes",
     "evaluation_run_bundle_from_bytes",
@@ -388,6 +401,7 @@ __all__ = [
     "entity_info",
     "entity_type_from_ref",
     "evaluate_derivation_plans",
+    "execute_published_relation_query",
     "execute_query",
     "execute_read_request",
     "field_predicate",
