@@ -164,7 +164,12 @@ def _compiled_query_and_relation(
         engine="native",
     )
     projected = project_view_facts_with_witness(source.ledger, source.schema_ir)
-    dependencies = ("Person:exists", "person:age", "person:score")
+    dependencies = (
+        "Person:exists",
+        "person:age",
+        "person:employee_id",
+        "person:score",
+    )
     relation = {predicate_id: tuple(projected[predicate_id]) for predicate_id in dependencies}
     return plan, source.schema_ir, relation
 

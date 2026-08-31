@@ -631,6 +631,64 @@ class EvaluationSelectedRowV2:
 
 
 @dataclass(frozen=True)
+class BranchWitnessV2:
+    """Provider-neutral proof-path witness captured before row de-duplication.
+
+    ``compiled_branch_id`` belongs to the sealed FactGraph target.  It is not
+    a Meander Policy/Branch identity and carries no matched/unknown business
+    classification.
+    """
+
+    compiled_branch_id: str
+    evaluation_side: EvaluationRunWorldSideV2
+    row_identity_digest: str
+    proof_identity_digest: str
+    evidence_references: tuple[str, ...]
+    witness_digest: str = field(init=False)
+
+    def __post_init__(self) -> None:
+        _require_non_empty_str(
+            self.compiled_branch_id, field_name="BranchWitnessV2.compiled_branch_id"
+        )
+        _require_literal(
+            self.evaluation_side,
+            field_name="BranchWitnessV2.evaluation_side",
+            allowed=_WORLD_SIDES,
+        )
+        _require_token(
+            self.row_identity_digest, field_name="BranchWitnessV2.row_identity_digest"
+        )
+        _require_token(
+            self.proof_identity_digest, field_name="BranchWitnessV2.proof_identity_digest"
+        )
+        if not isinstance(self.evidence_references, tuple) or not self.evidence_references:
+            raise ProtocolShapeError(
+                "BranchWitnessV2.evidence_references must be canonical sha256 tokens"
+            )
+        for item in self.evidence_references:
+            _require_token(item, field_name="BranchWitnessV2.evidence_reference")
+        if tuple(sorted(set(self.evidence_references))) != self.evidence_references:
+            raise ProtocolShapeError(
+                "BranchWitnessV2.evidence_references must be canonical sha256 tokens"
+            )
+        expected = _token(
+            "branch_witness_v2",
+            {
+                "compiled_branch_id": self.compiled_branch_id,
+                "evaluation_side": self.evaluation_side,
+                "row_identity_digest": self.row_identity_digest,
+                "proof_identity_digest": self.proof_identity_digest,
+                "evidence_references": self.evidence_references,
+            },
+        )
+        if hasattr(self, "witness_digest"):
+            if self.witness_digest != expected:
+                raise ProtocolShapeError("BranchWitnessV2.witness_digest is stale")
+            return
+        object.__setattr__(self, "witness_digest", expected)
+
+
+@dataclass(frozen=True)
 class EvaluationFunctionCallV2:
     """One sealed pure Function call materialized before engine execution."""
 
@@ -1024,6 +1082,7 @@ class EvaluationEngineFrameV2:
     observations: tuple[EvaluationSelectedRowV2, ...] = ()
     diagnostic_code: str = "EVALUATION_ENGINE_SUCCEEDED"
     probability_materialization: EvaluationProbabilityMaterializationV2 | None = None
+    branch_witnesses: tuple[BranchWitnessV2, ...] = ()
     frame_digest: str = field(init=False)
 
     def __post_init__(self) -> None:
@@ -1049,12 +1108,24 @@ class EvaluationEngineFrameV2:
         observations = tuple(sorted(self.observations, key=lambda item: item.observation_digest))
         if len({item.observation_digest for item in observations}) != len(observations):
             raise ProtocolShapeError("EvaluationEngineFrameV2 observations must be unique")
+        if not isinstance(self.branch_witnesses, tuple) or not all(
+            isinstance(item, BranchWitnessV2) for item in self.branch_witnesses
+        ):
+            raise ProtocolShapeError("EvaluationEngineFrameV2 branch witnesses are malformed")
+        witnesses = tuple(
+            sorted(self.branch_witnesses, key=lambda item: item.witness_digest)
+        )
+        if len({item.witness_digest for item in witnesses}) != len(witnesses):
+            raise ProtocolShapeError("EvaluationEngineFrameV2 branch witnesses must be unique")
+        observation_ids = {item.row_identity_digest for item in observations}
+        if any(item.row_identity_digest not in observation_ids for item in witnesses):
+            raise ProtocolShapeError("branch witness row is absent from the engine frame")
         if self.status == "succeeded":
             if self.diagnostic_code != "EVALUATION_ENGINE_SUCCEEDED":
                 raise ProtocolShapeError(
                     "successful EvaluationEngineFrameV2 has failure diagnostic"
                 )
-        elif observations or self.diagnostic_code == "EVALUATION_ENGINE_SUCCEEDED":
+        elif observations or witnesses or self.diagnostic_code == "EVALUATION_ENGINE_SUCCEEDED":
             raise ProtocolShapeError("failed/unsupported EvaluationEngineFrameV2 cannot carry rows")
         if self.probability_materialization is not None:
             if (
@@ -1069,23 +1140,32 @@ class EvaluationEngineFrameV2:
                     "probability materialization is only valid for a successful ProbLog frame"
                 )
             _assert_probability_materialization_v2_current(self.probability_materialization)
-        expected_digest = _token(
-            "evaluation_engine_frame_v2",
-            {
-                "engine": self.engine,
-                "status": self.status,
-                "observations": tuple(item.observation_digest for item in observations),
-                "diagnostic_code": self.diagnostic_code,
-                "probability_materialization": None
-                if self.probability_materialization is None
-                else self.probability_materialization.materialization_digest,
-            },
-        )
+        digest_payload: dict[str, object] = {
+            "engine": self.engine,
+            "status": self.status,
+            "observations": tuple(item.observation_digest for item in observations),
+            "diagnostic_code": self.diagnostic_code,
+            "probability_materialization": None
+            if self.probability_materialization is None
+            else self.probability_materialization.materialization_digest,
+        }
+        # Preserve every pre-witness V2 frame digest.  The extension is sealed
+        # only when a branch-aware target actually captures witnesses.
+        if witnesses:
+            digest_payload["branch_witnesses"] = tuple(
+                item.witness_digest for item in witnesses
+            )
+        expected_digest = _token("evaluation_engine_frame_v2", digest_payload)
         if hasattr(self, "frame_digest"):
-            if self.observations != observations or self.frame_digest != expected_digest:
+            if (
+                self.observations != observations
+                or self.branch_witnesses != witnesses
+                or self.frame_digest != expected_digest
+            ):
                 raise ProtocolShapeError("EvaluationEngineFrameV2.frame_digest is stale")
             return
         object.__setattr__(self, "observations", observations)
+        object.__setattr__(self, "branch_witnesses", witnesses)
         object.__setattr__(self, "frame_digest", expected_digest)
 
 
@@ -1098,6 +1178,7 @@ def _assert_engine_frame_v2_current(value: EvaluationEngineFrameV2) -> None:
         observations=value.observations,
         diagnostic_code=value.diagnostic_code,
         probability_materialization=value.probability_materialization,
+        branch_witnesses=value.branch_witnesses,
     )
     if fresh.frame_digest != value.frame_digest or fresh.observations != value.observations:
         raise ProtocolShapeError("EvaluationRunSideV2 engine frame seal is stale")
@@ -1538,6 +1619,16 @@ def _rebuild_engine_frame_v2(value: EvaluationEngineFrameV2) -> EvaluationEngine
         probability_materialization=_rebuild_probability_materialization_v2(
             value.probability_materialization
         ),
+        branch_witnesses=tuple(
+            BranchWitnessV2(
+                compiled_branch_id=item.compiled_branch_id,
+                evaluation_side=item.evaluation_side,
+                row_identity_digest=item.row_identity_digest,
+                proof_identity_digest=item.proof_identity_digest,
+                evidence_references=item.evidence_references,
+            )
+            for item in value.branch_witnesses
+        ),
     )
     if fresh.frame_digest != value.frame_digest:
         raise ProtocolShapeError("EvaluationRunV2 engine frame seal is stale")
@@ -1759,6 +1850,7 @@ def evaluation_replay_payload_v2_from_bytes(raw: bytes) -> EvaluationReplayPaylo
 
 
 __all__ = [
+    "BranchWitnessV2",
     "EvaluationEngineFrameV2",
     "EvaluationExpectationSupportV2",
     "EvaluationProbabilityMaterializationActionV2",

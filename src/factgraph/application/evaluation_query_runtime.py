@@ -21,6 +21,7 @@ from .protocol.policy import PolicyError
 from .protocol.rule import Rule
 from .protocol.rule_expr import RuleExprError
 from .protocol.rule_expr_lowering import (
+    _RuleExprBodyPlan,
     RuleExprLoweringPlan,
     _RuleExprQueryHeadLink,
     _RuleExprQueryNavigationLookup,
@@ -94,6 +95,7 @@ class CompiledEvaluationQueryV0:
     projection_head: Rule
     compiled_policy: CompiledPolicyV0 = field(repr=False)
     _lowering_plan: RuleExprLoweringPlan = field(repr=False, compare=False)
+    applicable_branch_ids: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         values = (
@@ -130,6 +132,24 @@ class CompiledEvaluationQueryV0:
             raise ValueError("compiled EvaluationQuery selections are malformed")
         if not _valid_sources(self.bindings) or not _valid_sources(self.selections):
             raise ValueError("compiled EvaluationQuery branch sources are malformed")
+        all_branch_ids = tuple(branch.branch_id for branch in self.compiled_policy.branches)
+        applicable_branch_ids = self.applicable_branch_ids or all_branch_ids
+        if (
+            not isinstance(self.applicable_branch_ids, tuple)
+            or not applicable_branch_ids
+            or len(set(applicable_branch_ids)) != len(applicable_branch_ids)
+            or any(branch_id not in all_branch_ids for branch_id in applicable_branch_ids)
+            or applicable_branch_ids != tuple(
+                branch_id for branch_id in all_branch_ids if branch_id in applicable_branch_ids
+            )
+        ):
+            raise ValueError("compiled EvaluationQuery applicable branches are malformed")
+        expected_source_ids = set(applicable_branch_ids)
+        if any(
+            {source.branch_id for source in item.sources} != expected_source_ids
+            for item in (*self.bindings, *self.selections)
+        ):
+            raise ValueError("compiled EvaluationQuery sources are not case-total")
         for item in self.bindings:
             canonical_value, value_digest = _canonical_value(item.value_type, item.normalized_value)
             if item.normalized_value != canonical_value or item.value_digest != value_digest:
@@ -143,16 +163,19 @@ class CompiledEvaluationQueryV0:
             self.schema_digest,
             self.bindings,
             self.selections,
+            self.applicable_branch_ids,
         ):
             raise ValueError("compiled EvaluationQuery digest does not match query intent")
         expected_plan = _attach_evaluation_query_head(
-            self.compiled_policy._body_plan,
+            _applicable_body(self.compiled_policy, self.applicable_branch_ids),
             head=expected_head,
             query_digest=self.query_digest,
             head_links=_query_head_links(self.selections),
             value_bindings=_query_value_bindings(self.bindings),
             navigation_lookups=_query_navigation_lookups(self.selections),
-            policy_conditions=self.compiled_policy._policy_conditions,
+            policy_conditions=_applicable_policy_conditions(
+                self.compiled_policy, self.applicable_branch_ids
+            ),
         )
         if self._lowering_plan != expected_plan:
             raise ValueError("compiled EvaluationQuery lowering plan is not compiler-derived")
@@ -230,6 +253,7 @@ def compile_evaluation_query(
         schema_index.schema_digest,
         normalized_bindings,
         normalized_selections,
+        (),
     )
     head = Rule.projection(*(item.alias for item in normalized_selections))
     if head.id in schema_index.predicates_by_id:
@@ -514,6 +538,7 @@ def _digest(
     schema_digest: str,
     bindings: tuple[ResolvedEvaluationQueryBinding, ...],
     selections: tuple[ResolvedEvaluationQuerySelectionItem, ...],
+    applicable_branch_ids: tuple[str, ...] = (),
 ) -> str:
     def address(item: Any) -> list[Any]:
         return [
@@ -554,6 +579,11 @@ def _digest(
         "bindings": [[*address(item), item.value_type, item.value_digest] for item in bindings],
         "selections": [selection(item) for item in selections],
     }
+    # Empty means the historical all-branch Query and intentionally preserves
+    # every pre-V3 digest byte.  A non-empty inventory seals an Input Case's
+    # compile-time applicability decision.
+    if applicable_branch_ids:
+        payload["applicable_branch_ids"] = list(applicable_branch_ids)
     return sha256_hex(
         json.dumps(
             payload,
@@ -578,6 +608,41 @@ def _valid_sources(items: Any) -> bool:
         and item.sources
         and all(isinstance(source, EvaluationQueryPortSource) for source in item.sources)
         for item in items
+    )
+
+
+def _applicable_body(
+    policy: CompiledPolicyV0,
+    applicable_branch_ids: tuple[str, ...],
+) -> _RuleExprBodyPlan:
+    if not applicable_branch_ids:
+        return policy._body_plan
+    selected = frozenset(applicable_branch_ids)
+    return _RuleExprBodyPlan(
+        source_kind=policy._body_plan.source_kind,
+        branches=tuple(
+            branch for branch in policy._body_plan.branches if branch.branch_id in selected
+        ),
+        occurrence_map=policy._body_plan.occurrence_map,
+        canonical_key=(
+            *policy._body_plan.canonical_key,
+            "applicable_branches_v1",
+            applicable_branch_ids,
+        ),
+    )
+
+
+def _applicable_policy_conditions(
+    policy: CompiledPolicyV0,
+    applicable_branch_ids: tuple[str, ...],
+) -> tuple[Any, ...]:
+    if not applicable_branch_ids:
+        return policy._policy_conditions
+    selected = frozenset(applicable_branch_ids)
+    return tuple(
+        condition
+        for condition in policy._policy_conditions
+        if condition.branch_id in selected
     )
 
 

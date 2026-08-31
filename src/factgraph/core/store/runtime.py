@@ -116,6 +116,10 @@ class Store:
         self._candidate_confidence_kind_index: dict[str, str] = {}
         self._candidate_pred_index: dict[str, str] = {}
         self._rule_trace_artifacts: dict[str, RuleTraceArtifact] = {}
+        # Product V2 enables this only inside its isolated per-side Store.
+        # Ordinary Store Query/Check behavior continues selecting one stable
+        # support per row.
+        self._capture_all_query_style_supports = False
         if engine_evaluator is not None:
             self._engine_overrides["souffle"] = engine_evaluator
 

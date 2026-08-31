@@ -67,6 +67,16 @@ def query_style_derivation_outputs_from_bindings(
         existing = unique.get(key)
         if existing is None or _support_is_better(output, existing):
             unique[key] = output
+    if getattr(store, "_capture_all_query_style_supports", False):
+        return sorted(
+            outputs,
+            key=lambda cand: (
+                cand.candidate_kind,
+                cand.candidate_key,
+                cand.support_digest,
+                cand.support_kind,
+            ),
+        )
     return sorted(unique.values(), key=lambda cand: (cand.candidate_kind, cand.candidate_key))
 
 

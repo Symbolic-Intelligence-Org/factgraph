@@ -485,6 +485,9 @@ def _execute_goal_plan(invocation: GoalPlanInvocationV1) -> GoalPlanRunV1:
     primary_dependencies = portable_dependency_predicate_ids_v1(
         primary_program, schema_ir=schema_ir
     )
+    primary_dependencies = _expand_virtual_entity_dependencies_v1(
+        primary_dependencies, schema_ir=schema_ir
+    )
     candidate_program = None
     candidate_dependencies: tuple[str, ...] = ()
     if invocation.candidate is not None:
@@ -494,6 +497,9 @@ def _execute_goal_plan(invocation: GoalPlanInvocationV1) -> GoalPlanRunV1:
         )
         candidate_dependencies = portable_dependency_predicate_ids_v1(
             candidate_program, schema_ir=schema_ir
+        )
+        candidate_dependencies = _expand_virtual_entity_dependencies_v1(
+            candidate_dependencies, schema_ir=schema_ir
         )
     # A candidate may legitimately add or remove an extensional dependency.
     # The *world* is nevertheless the same immutable Scenario world for both
@@ -1127,6 +1133,33 @@ def provider_binding_slot_v1(occurrence_alias: str, port_name: str) -> str:
     return "slot:" + sha256_hex(
         _canonical_json_bytes({"occurrence_alias": occurrence_alias, "port_name": port_name})
     )
+
+
+def _expand_virtual_entity_dependencies_v1(
+    dependency_ids: tuple[str, ...],
+    *,
+    schema_ir: Mapping[str, Any],
+) -> tuple[str, ...]:
+    predicates = tuple(
+        item for item in schema_ir.get("predicates", ()) if isinstance(item, Mapping)
+    )
+    by_id = {
+        item["pred_id"]: item for item in predicates if isinstance(item.get("pred_id"), str)
+    }
+    expanded = set(dependency_ids)
+    for predicate_id in dependency_ids:
+        predicate = by_id.get(predicate_id)
+        if predicate is None or predicate.get("is_entity_exists") is not True:
+            continue
+        owner = predicate.get("owner_type")
+        expanded.update(
+            item["pred_id"]
+            for item in predicates
+            if item.get("owner_type") == owner
+            and item.get("is_identity_field") is True
+            and isinstance(item.get("pred_id"), str)
+        )
+    return tuple(sorted(expanded))
 
 
 def _target_ref(

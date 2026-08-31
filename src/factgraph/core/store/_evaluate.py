@@ -35,6 +35,7 @@ from factgraph.core.store._support import (
 from factgraph.core.store._support_capture import (
     build_support_artifact_for_binding,
     derive_rule_ref_edges_for_binding,
+    find_matching_case_indexes,
     find_winning_case_index,
 )
 from factgraph.core.derivation.candidates import DerivationOutput
@@ -332,7 +333,9 @@ def _evaluate_store(
             rows=captures,
             confidence_kind_resolver=confidence_kind_resolver,
         )
-    if _record_support_artifacts:
+    if _record_support_artifacts and not getattr(
+        store, "_capture_all_query_style_supports", False
+    ):
         _remember_output_support_backrefs(store, outputs)
     return outputs
 
@@ -497,39 +500,50 @@ def _evaluate_where_over_view_with_support(
 
     captures: list[BindingSupportCapture] = []
     for binding in bindings:
-        selected_case_index = find_winning_case_index(
-            where=where,
-            binding=binding,
-            witness_facts=cast(Any, witness_facts),
-            rule_ref_resolutions=evaluation.rule_ref_resolutions,
-        )
-        rule_ref_edges = derive_rule_ref_edges_for_binding(
-            where=where,
-            binding=binding,
-            rule_ref_resolutions=evaluation.rule_ref_resolutions,
-            selected_case_index=selected_case_index,
-        )
-        artifact = build_support_artifact_for_binding(
-            where=where,
-            binding=binding,
-            witness_facts=cast(Any, witness_facts),
-            root_result_kind=root_result_kind,
-            selected_case_index=selected_case_index,
-            rule_ref_edges=rule_ref_edges,
-        )
-        support_digest = compute_support_digest(artifact)
-        if _record_support_artifacts:
-            store._remember_support_artifact(support_digest, artifact)
-        else:
-            assert _native_effective_relation_support_artifact_observer is not None
-            _native_effective_relation_support_artifact_observer(support_digest, artifact)
-        captures.append(
-            BindingSupportCapture(
-                binding_items=artifact.binding_items,
-                support_digest=support_digest,
-                support_kind=artifact.kind,
+        if getattr(store, "_capture_all_query_style_supports", False):
+            selected_case_indexes = find_matching_case_indexes(
+                where=where,
+                binding=binding,
+                witness_facts=cast(Any, witness_facts),
+                rule_ref_resolutions=evaluation.rule_ref_resolutions,
             )
-        )
+        else:
+            selected_case_indexes = (
+                find_winning_case_index(
+                    where=where,
+                    binding=binding,
+                    witness_facts=cast(Any, witness_facts),
+                    rule_ref_resolutions=evaluation.rule_ref_resolutions,
+                ),
+            )
+        for selected_case_index in selected_case_indexes:
+            rule_ref_edges = derive_rule_ref_edges_for_binding(
+                where=where,
+                binding=binding,
+                rule_ref_resolutions=evaluation.rule_ref_resolutions,
+                selected_case_index=selected_case_index,
+            )
+            artifact = build_support_artifact_for_binding(
+                where=where,
+                binding=binding,
+                witness_facts=cast(Any, witness_facts),
+                root_result_kind=root_result_kind,
+                selected_case_index=selected_case_index,
+                rule_ref_edges=rule_ref_edges,
+            )
+            support_digest = compute_support_digest(artifact)
+            if _record_support_artifacts:
+                store._remember_support_artifact(support_digest, artifact)
+            else:
+                assert _native_effective_relation_support_artifact_observer is not None
+                _native_effective_relation_support_artifact_observer(support_digest, artifact)
+            captures.append(
+                BindingSupportCapture(
+                    binding_items=artifact.binding_items,
+                    support_digest=support_digest,
+                    support_kind=artifact.kind,
+                )
+            )
     captures.sort(key=lambda row: (row.binding_items, row.support_digest, row.support_kind))
     return captures
 

@@ -365,7 +365,34 @@ def portable_dependency_predicate_ids_v1(
         ) from exc
     _validate_plan_shape(plan, schema)
     dependencies, _ = _validate_positive_body(plan, schema)
-    return dependencies
+    return _expand_virtual_entity_dependencies(dependencies, schema=schema)
+
+
+def _expand_virtual_entity_dependencies(
+    dependency_ids: tuple[str, ...],
+    *,
+    schema: dict[str, Any],
+) -> tuple[str, ...]:
+    predicates = tuple(
+        item for item in schema.get("predicates", ()) if isinstance(item, dict)
+    )
+    by_id = {
+        item["pred_id"]: item for item in predicates if isinstance(item.get("pred_id"), str)
+    }
+    expanded = set(dependency_ids)
+    for predicate_id in dependency_ids:
+        predicate = by_id.get(predicate_id)
+        if predicate is None or predicate.get("is_entity_exists") is not True:
+            continue
+        owner = predicate.get("owner_type")
+        expanded.update(
+            item["pred_id"]
+            for item in predicates
+            if item.get("owner_type") == owner
+            and item.get("is_identity_field") is True
+            and isinstance(item.get("pred_id"), str)
+        )
+    return tuple(sorted(expanded))
 
 
 def materialize_portable_effective_world_v1(
@@ -588,6 +615,7 @@ def _validate_input(
         ) from exc
     _validate_plan_shape(plan, schema)
     dependencies, variable_types = _validate_positive_body(plan, schema)
+    dependencies = _expand_virtual_entity_dependencies(dependencies, schema=schema)
     execution_branches = _build_portable_execution_branches(
         plan,
         schema=schema,
@@ -1198,7 +1226,18 @@ def _materialize_store(validated: _ValidatedPortableInput) -> Store:
         and isinstance(item.get("pred_id"), str)
         and isinstance(item.get("arg_specs"), list)
     }
+    virtual_exists_predicates = {
+        str(item["pred_id"])
+        for item in validated.schema_ir["predicates"]
+        if isinstance(item, dict)
+        and isinstance(item.get("pred_id"), str)
+        and item.get("is_entity_exists") is True
+    }
     for predicate_id in validated.contract.dependency_predicate_ids:
+        if predicate_id in virtual_exists_predicates:
+            # The complete Identity bundle in the same sealed relation is the
+            # sole authority.  Store view projection rematerializes :exists.
+            continue
         specs = predicate_specs[predicate_id]
         # The stable sort above avoids giving ledger append order any semantic
         # role.  ``set_field`` intentionally creates fresh local assertion ids.

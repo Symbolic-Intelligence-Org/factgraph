@@ -23,10 +23,11 @@ through this boundary.
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from decimal import Decimal
 import json
 import math
+import time
 from typing import TYPE_CHECKING, Any, Literal, NoReturn, cast
 
 from factgraph.adapters.problog.rule_ext import (
@@ -57,6 +58,7 @@ from factgraph.application.protocol.derivation import (
     DerivationEvaluateRequest,
 )
 from factgraph.application.protocol.evaluation_run_v2 import (
+    BranchWitnessV2,
     EvaluationEngineFrameV2,
     EvaluationFunctionCallV2,
     EvaluationFunctionMaterializationV2,
@@ -92,8 +94,10 @@ from factgraph.application.protocol.provenance_v1 import (
     ProvenanceRefV1,
 )
 from factgraph.application.protocol.rule_expr_lowering import (
+    RuleExprEvaluationTrace,
     _materialize_adapter_derivation_plan,
 )
+from factgraph.application.evaluation_run_bundle_runtime import _receipt_case_index
 from factgraph.application.protocol.semantic_address import SemanticPortAddress
 from factgraph.application.protocol.scenario_v1 import ScenarioSpecV1, ScenarioValueV1
 from factgraph.application.protocol.scenario_v2 import (
@@ -170,6 +174,144 @@ class ProductEvaluationRuntimeErrorV2(ValueError):
 
 
 @dataclass(frozen=True)
+class ProductInvocationAggregateLimitsV2:
+    """Explicit whole-invocation limits layered over unchanged V2 profiles.
+
+    Aggregate ``units`` are protocol-defined as one per successful engine
+    frame plus one per emitted observation and one per retained branch
+    witness.  This definition is separate from every engine's own resource
+    vocabulary and therefore does not reinterpret profile digests.
+    """
+
+    timeout_ms: int | None = None
+    max_rows: int | None = None
+    max_units: int | None = None
+    max_evidence_bytes: int | None = None
+    max_capture_bytes: int | None = None
+    max_scenarios: int | None = None
+    limits_digest: str = field(init=False)
+
+    def __post_init__(self) -> None:
+        for name in (
+            "timeout_ms",
+            "max_rows",
+            "max_units",
+            "max_evidence_bytes",
+            "max_capture_bytes",
+            "max_scenarios",
+        ):
+            value = getattr(self, name)
+            if value is not None and (
+                isinstance(value, bool) or not isinstance(value, int) or value < 0
+            ):
+                _fail(
+                    f"aggregate {name} must be a non-negative integer or None",
+                    "PRODUCT_INVOCATION_AGGREGATE_LIMIT_INVALID",
+                )
+        expected = _token(
+            "product_invocation_aggregate_limits_v2",
+            {
+                name: getattr(self, name)
+                for name in (
+                    "timeout_ms",
+                    "max_rows",
+                    "max_units",
+                    "max_evidence_bytes",
+                    "max_capture_bytes",
+                    "max_scenarios",
+                )
+            },
+        )
+        if hasattr(self, "limits_digest"):
+            if self.limits_digest != expected:
+                _fail(
+                    "aggregate limits seal is stale",
+                    "PRODUCT_INVOCATION_AGGREGATE_LIMIT_INVALID",
+                )
+            return
+        object.__setattr__(self, "limits_digest", expected)
+
+
+@dataclass
+class _ProductInvocationAggregateMeterV2:
+    limits: ProductInvocationAggregateLimitsV2
+    started_ns: int = field(default_factory=time.monotonic_ns)
+    rows: int = 0
+    units: int = 0
+    evidence_bytes: int = 0
+    capture_bytes: int = 0
+
+    def check_deadline(self) -> None:
+        if self.limits.timeout_ms is None:
+            return
+        elapsed_ms = (time.monotonic_ns() - self.started_ns) // 1_000_000
+        if elapsed_ms > self.limits.timeout_ms:
+            self._exceeded("timeout_ms", int(elapsed_ms), self.limits.timeout_ms)
+
+    def charge_side(
+        self,
+        side: EvaluationRunSideV2,
+        capture: EvaluationReplayWorldV2,
+    ) -> None:
+        self.check_deadline()
+        successful_frames = tuple(
+            frame for frame in side.engine_frames if frame.status == "succeeded"
+        )
+        row_count = sum(len(frame.observations) for frame in successful_frames)
+        witness_count = sum(len(frame.branch_witnesses) for frame in successful_frames)
+        evidence_bytes = sum(
+            len(
+                json.dumps(
+                    {
+                        "branch": witness.compiled_branch_id,
+                        "side": witness.evaluation_side,
+                        "row": witness.row_identity_digest,
+                        "proof": witness.proof_identity_digest,
+                        "evidence": witness.evidence_references,
+                    },
+                    sort_keys=True,
+                    separators=(",", ":"),
+                ).encode("utf-8")
+            )
+            for frame in successful_frames
+            for witness in frame.branch_witnesses
+        )
+        capture_bytes = len(
+            json.dumps(
+                capture.to_wire(),
+                sort_keys=True,
+                separators=(",", ":"),
+                ensure_ascii=False,
+                allow_nan=False,
+            ).encode("utf-8")
+        )
+        self.rows += row_count
+        self.units += len(successful_frames) + row_count + witness_count
+        self.evidence_bytes += evidence_bytes
+        self.capture_bytes += capture_bytes
+        self._check("max_rows", self.rows)
+        self._check("max_units", self.units)
+        self._check("max_evidence_bytes", self.evidence_bytes)
+        self._check("max_capture_bytes", self.capture_bytes)
+
+    def charge_program_capture(self, byte_count: int) -> None:
+        self.capture_bytes += byte_count
+        self._check("max_capture_bytes", self.capture_bytes)
+
+    def _check(self, name: str, observed: int) -> None:
+        limit = getattr(self.limits, name)
+        if limit is not None and observed > limit:
+            self._exceeded(name, observed, limit)
+
+    @staticmethod
+    def _exceeded(dimension: str, observed: int, limit: int) -> NoReturn:
+        _fail(
+            f"aggregate {dimension} exceeded: observed={observed}, limit={limit}",
+            "PRODUCT_INVOCATION_AGGREGATE_LIMIT_EXCEEDED",
+        )
+
+
+@dataclass(frozen=True)
 class ProductEvaluationInvocationV2:
     """In-process V2 intent ready for one captured execution.
 
@@ -184,6 +326,7 @@ class ProductEvaluationInvocationV2:
     scenario: ScenarioSpecV2 | None = None
     candidate: TargetedCompiledEvaluationQueryV0 | None = None
     candidate_product_target: _ProductTarget | None = None
+    aggregate_limits: ProductInvocationAggregateLimitsV2 | None = None
 
     def run(self) -> EvaluationRunV2:
         """Capture one graph view and execute this Product V2 invocation.
@@ -259,6 +402,7 @@ def build_product_evaluation_invocation_v2(
     scenario: ScenarioSpecV2 | None = None,
     candidate: TargetedCompiledEvaluationQueryV0 | None = None,
     candidate_product_target: _ProductTarget | None = None,
+    aggregate_limits: ProductInvocationAggregateLimitsV2 | None = None,
 ) -> ProductEvaluationInvocationV2:
     """Seal V2 intent without reading a live ledger or invoking an engine.
 
@@ -288,6 +432,21 @@ def build_product_evaluation_invocation_v2(
         candidate_product_target, (ProductRuleV1, ProductPolicyV1)
     ):
         _fail("candidate Product target is invalid", "V2_CANDIDATE_TARGET_INVALID")
+    if aggregate_limits is not None and not isinstance(
+        aggregate_limits, ProductInvocationAggregateLimitsV2
+    ):
+        _fail(
+            "aggregate_limits must be ProductInvocationAggregateLimitsV2",
+            "PRODUCT_INVOCATION_AGGREGATE_LIMIT_INVALID",
+        )
+    if (
+        primary.compiled_query.applicable_branch_ids
+        or (candidate is not None and candidate.compiled_query.applicable_branch_ids)
+    ) and profile.kind != "native_deterministic_v2":
+        _fail(
+            "branch witnesses currently require native deterministic V2",
+            "BRANCH_WITNESS_ENGINE_UNSUPPORTED",
+        )
 
     _assert_profile_compiler(profile)
     _assert_targeted_product_match(primary, product_target, side="primary")
@@ -315,6 +474,7 @@ def build_product_evaluation_invocation_v2(
         scenario,
         candidate,
         candidate_product_target,
+        aggregate_limits,
     )
 
 
@@ -327,6 +487,20 @@ def execute_product_evaluation_invocation_v2(
         _fail("invocation must be ProductEvaluationInvocationV2", "V2_INVOCATION_INVALID")
     _assert_invocation_current(invocation)
 
+    aggregate = (
+        None
+        if invocation.aggregate_limits is None
+        else _ProductInvocationAggregateMeterV2(invocation.aggregate_limits)
+    )
+    if aggregate is not None:
+        scenario_count = 0 if invocation.scenario is None else 1
+        limits = invocation.aggregate_limits
+        assert limits is not None
+        scenario_limit = limits.max_scenarios
+        if scenario_limit is not None and scenario_count > scenario_limit:
+            aggregate._exceeded("max_scenarios", scenario_count, scenario_limit)
+        aggregate.check_deadline()
+
     graph = invocation._graph
     base_schema_ir = ensure_schema_ir(dict(graph.schema_ir))
     schema_ir = _execution_schema_ir_v2(
@@ -334,7 +508,7 @@ def execute_product_evaluation_invocation_v2(
         products=(invocation.product_target, invocation.candidate_product_target),
     )
     schema_pin = schema_digest(schema_ir)
-    primary_program, primary_dependencies, primary_base = _materialize_program(
+    primary_program, primary_dependencies, primary_base, primary_traces = _materialize_program(
         invocation.primary,
         invocation.product_target,
         invocation.profile,
@@ -344,9 +518,10 @@ def execute_product_evaluation_invocation_v2(
     candidate_program: CompiledDerivationPlan | None = None
     candidate_base: CompiledDerivationPlan | None = None
     candidate_dependencies: tuple[str, ...] = ()
+    candidate_traces: tuple[RuleExprEvaluationTrace, ...] = ()
     if invocation.candidate is not None:
         assert invocation.candidate_product_target is not None
-        candidate_program, candidate_dependencies, candidate_base = _materialize_program(
+        candidate_program, candidate_dependencies, candidate_base, candidate_traces = _materialize_program(
             invocation.candidate,
             invocation.candidate_product_target,
             invocation.profile,
@@ -361,6 +536,9 @@ def execute_product_evaluation_invocation_v2(
         for item in _functions_for(product)
         for port in (*item.function.inputs, item.function.output)
     }
+    dependency_ids = _expand_virtual_entity_dependencies_v2(
+        dependency_ids, schema_ir=base_schema_ir
+    )
     # Capture once.  Everything after this point consumes only immutable
     # ProjectedFact tuples / V2 worlds; it does not reopen the caller ledger.
     base_view_digest = graph._view_snapshot_digest(query_typed_values=True)
@@ -464,7 +642,11 @@ def execute_product_evaluation_invocation_v2(
         selection_shape=_selection_shape(invocation.primary),
         product=invocation.product_target,
         source_schema_index=graph._application_schema_index,
+        traces=primary_traces if invocation.primary.compiled_query.applicable_branch_ids else (),
     )
+    if aggregate is not None:
+        aggregate.charge_side(baseline_side, baseline_capture)
+        aggregate.check_deadline()
     effective_side = _execute_side(
         name="effective",
         world=effective_world,
@@ -476,7 +658,11 @@ def execute_product_evaluation_invocation_v2(
         selection_shape=_selection_shape(invocation.primary),
         product=invocation.product_target,
         source_schema_index=graph._application_schema_index,
+        traces=primary_traces if invocation.primary.compiled_query.applicable_branch_ids else (),
     )
+    if aggregate is not None:
+        aggregate.charge_side(effective_side, effective_capture)
+        aggregate.check_deadline()
     candidate_side: EvaluationRunSideV2 | None = None
     candidate_capture: EvaluationReplayWorldV2 | None = None
     if candidate_plan is not None:
@@ -497,7 +683,16 @@ def execute_product_evaluation_invocation_v2(
             selection_shape=_selection_shape(invocation.candidate),
             product=invocation.candidate_product_target,
             source_schema_index=graph._application_schema_index,
+            traces=(
+                candidate_traces
+                if invocation.candidate is not None
+                and invocation.candidate.compiled_query.applicable_branch_ids
+                else ()
+            ),
         )
+        if aggregate is not None:
+            aggregate.charge_side(candidate_side, candidate_capture)
+            aggregate.check_deadline()
 
     _assert_function_observations_deterministic_v2(
         tuple(side for side in (baseline_side, effective_side, candidate_side) if side is not None)
@@ -524,6 +719,9 @@ def execute_product_evaluation_invocation_v2(
     )
     if len(program_bytes) > invocation.profile.capture.max_capture_bytes:
         _fail("V2 replay program exceeds profile capture budget", "V2_CAPTURE_LIMIT_EXCEEDED")
+    if aggregate is not None:
+        aggregate.charge_program_capture(len(program_bytes))
+        aggregate.check_deadline()
     worlds: tuple[EvaluationReplayWorldV2, ...] = (
         (baseline_capture, effective_capture)
         if candidate_capture is None
@@ -767,6 +965,22 @@ def _assert_invocation_current(invocation: ProductEvaluationInvocationV2) -> Non
         candidate=invocation.candidate_product_target,
     )
     _assert_no_v1_only_query_features(invocation.primary)
+    if invocation.aggregate_limits is not None:
+        ProductInvocationAggregateLimitsV2.__post_init__(invocation.aggregate_limits)
+    if (
+        (
+            invocation.primary.compiled_query.applicable_branch_ids
+            or (
+                invocation.candidate is not None
+                and invocation.candidate.compiled_query.applicable_branch_ids
+            )
+        )
+        and invocation.profile.kind != "native_deterministic_v2"
+    ):
+        _fail(
+            "branch witnesses currently require native deterministic V2",
+            "BRANCH_WITNESS_ENGINE_UNSUPPORTED",
+        )
     if invocation.scenario is not None:
         try:
             ScenarioSpecV2.__post_init__(invocation.scenario)
@@ -1246,12 +1460,17 @@ def _materialize_program(
     *,
     schema_ir: dict[str, Any],
     side: _TargetSide,
-) -> tuple[CompiledDerivationPlan, tuple[str, ...], CompiledDerivationPlan]:
+) -> tuple[
+    CompiledDerivationPlan,
+    tuple[str, ...],
+    CompiledDerivationPlan,
+    tuple[RuleExprEvaluationTrace, ...],
+]:
     engine: Literal["native", "problog"] = (
         "problog" if profile.kind == "problog_point_v2" else "native"
     )
     try:
-        base, _traces = _materialize_adapter_derivation_plan(
+        base, traces = _materialize_adapter_derivation_plan(
             targeted.compiled_query._lowering_plan,
             engine=engine,
         )
@@ -1282,7 +1501,7 @@ def _materialize_program(
         # The Native evaluator currently has no closed timeout option.  Do not
         # accept a resource field and silently ignore it.
         _fail("native deterministic V2 timeout is not implemented", "V2_NATIVE_TIMEOUT_UNSUPPORTED")
-    return program, dependencies, base
+    return program, dependencies, base, traces
 
 
 def _baseline_metadata_by_witness(
@@ -1486,6 +1705,7 @@ def _execute_side(
     product: _ProductTarget | None = None,
     source_schema_index: Any | None = None,
     captured_function_materializations: tuple[EvaluationFunctionMaterializationV2, ...] = (),
+    traces: tuple[RuleExprEvaluationTrace, ...] = (),
 ) -> EvaluationRunSideV2:
     frames, function_materializations = _execute_program_on_world(
         world=world,
@@ -1496,6 +1716,8 @@ def _execute_side(
         product=product,
         source_schema_index=source_schema_index,
         captured_function_materializations=captured_function_materializations,
+        side=name,
+        traces=traces,
     )
     return EvaluationRunSideV2(
         name=name,
@@ -1519,6 +1741,8 @@ def _execute_program_on_world(
     product: _ProductTarget | None = None,
     source_schema_index: Any | None = None,
     captured_function_materializations: tuple[EvaluationFunctionMaterializationV2, ...] = (),
+    side: Literal["baseline", "effective", "candidate_effective"] = "effective",
+    traces: tuple[RuleExprEvaluationTrace, ...] = (),
 ) -> tuple[
     tuple[EvaluationEngineFrameV2, ...],
     tuple[EvaluationFunctionMaterializationV2, ...],
@@ -1554,6 +1778,8 @@ def _execute_program_on_world(
             schema_ir=schema_ir,
         )
     if profile.kind == "native_deterministic_v2":
+        if traces:
+            store._capture_all_query_style_supports = True
         outputs = _evaluate_engine(engine="native", store=store, program=program, profile=profile)
         rows = _selected_rows(
             outputs,
@@ -1561,7 +1787,19 @@ def _execute_program_on_world(
             probability_required=False,
             max_rows=profile.resources.max_rows,
         )
-        return (EvaluationEngineFrameV2("native", "succeeded", rows),), function_materializations
+        witnesses = _branch_witnesses_v2(
+            outputs,
+            rows=rows,
+            selection_shape=selection_shape,
+            store=store,
+            traces=traces,
+            side=side,
+        )
+        return (
+            EvaluationEngineFrameV2(
+                "native", "succeeded", rows, branch_witnesses=witnesses
+            ),
+        ), function_materializations
     if profile.kind == "portable_deterministic_v2":
         relation = _portable_relation_with_functions_v2(
             world=world,
@@ -2029,6 +2267,77 @@ def _selected_rows(
     return tuple(sorted(rows.values(), key=lambda item: item.observation_digest))
 
 
+def _branch_witnesses_v2(
+    outputs: Sequence[DerivationOutput],
+    *,
+    rows: tuple[EvaluationSelectedRowV2, ...],
+    selection_shape: tuple[tuple[str, str], ...],
+    store: Store,
+    traces: tuple[RuleExprEvaluationTrace, ...],
+    side: Literal["baseline", "effective", "candidate_effective"],
+) -> tuple[BranchWitnessV2, ...]:
+    if not traces:
+        return ()
+    branch_by_case = {trace.runtime_case_index: trace.branch_id for trace in traces}
+    if len(branch_by_case) != len(traces):
+        _fail("branch trace case indexes are ambiguous", "BRANCH_WITNESS_TRACE_INVALID")
+    retained_rows = {row.row_identity_digest for row in rows}
+    witnesses: dict[str, BranchWitnessV2] = {}
+    for output in outputs:
+        artifact = store._lookup_support_artifact(output.support_digest)
+        if artifact is None:
+            _fail(
+                "native branch-aware output lacks its support artifact",
+                "BRANCH_WITNESS_SUPPORT_MISSING",
+            )
+        try:
+            case_index = _receipt_case_index(artifact)
+        except Exception as exc:
+            _raise_from(
+                exc,
+                prefix="branch witness support",
+                default="BRANCH_WITNESS_SUPPORT_INVALID",
+            )
+        projected = _selected_rows(
+            (output,),
+            selection_shape=selection_shape,
+            probability_required=False,
+            max_rows=1,
+        )
+        if len(projected) != 1 or projected[0].row_identity_digest not in retained_rows:
+            _fail(
+                "branch witness cannot be correlated with a retained result row",
+                "BRANCH_WITNESS_ROW_MISMATCH",
+            )
+        evidence_references = tuple(
+            sorted(
+                {
+                    output.support_digest,
+                    *(
+                        edge.child_support_digest
+                        for edge in artifact.rule_ref_edges
+                        if edge.child_support_digest is not None
+                    ),
+                }
+            )
+        )
+        branch_id = branch_by_case.get(case_index)
+        if branch_id is None:
+            _fail(
+                "native support case is outside the compiled branch inventory",
+                "BRANCH_WITNESS_TRACE_MISMATCH",
+            )
+        witness = BranchWitnessV2(
+            compiled_branch_id=branch_id,
+            evaluation_side=side,
+            row_identity_digest=projected[0].row_identity_digest,
+            proof_identity_digest=output.support_digest,
+            evidence_references=evidence_references,
+        )
+        witnesses.setdefault(witness.witness_digest, witness)
+    return tuple(sorted(witnesses.values(), key=lambda item: item.witness_digest))
+
+
 def _goal_value_from_term(value: object, expected_tag: str) -> GoalValueV1:
     if not isinstance(value, Mapping):
         _fail("engine output term is malformed", "V2_PROJECTION_TERM_INVALID")
@@ -2088,6 +2397,20 @@ def _materialize_world_store_v2(
         raw_values = tuple(value.to_raw() for value in fact.values)
         if not isinstance(raw_values[0], str):
             _fail("V2 world entity reference is malformed", "V2_WORLD_SCHEMA_MISMATCH")
+        schema_predicate = next(
+            (
+                item
+                for item in schema_ir.get("predicates", ())
+                if isinstance(item, Mapping) and item.get("pred_id") == fact.predicate_id
+            ),
+            None,
+        )
+        if isinstance(schema_predicate, Mapping) and schema_predicate.get(
+            "is_entity_exists"
+        ) is True:
+            # Entity-domain authority is the complete active Identity bundle.
+            # The captured virtual row is evidence, never a persisted premise.
+            continue
         meta: dict[str, object] | None = None
         if fact.fact_semantics is not None:
             entry = materialized_by_fact.get(fact.evidence_fact_digest)
@@ -2133,6 +2456,35 @@ def _materialize_world_store_v2(
                 default="V2_WORLD_MATERIALIZATION_FAILED",
             )
     return store, probability_materialization
+
+
+def _expand_virtual_entity_dependencies_v2(
+    dependency_ids: tuple[str, ...],
+    *,
+    schema_ir: Mapping[str, Any],
+) -> tuple[str, ...]:
+    """Capture Identity prerequisites for every virtual Entity-domain input."""
+
+    predicates = tuple(
+        item for item in schema_ir.get("predicates", ()) if isinstance(item, Mapping)
+    )
+    by_id = {
+        item["pred_id"]: item for item in predicates if isinstance(item.get("pred_id"), str)
+    }
+    expanded = set(dependency_ids)
+    for predicate_id in dependency_ids:
+        predicate = by_id.get(predicate_id)
+        if predicate is None or predicate.get("is_entity_exists") is not True:
+            continue
+        owner = predicate.get("owner_type")
+        expanded.update(
+            item["pred_id"]
+            for item in predicates
+            if item.get("owner_type") == owner
+            and item.get("is_identity_field") is True
+            and isinstance(item.get("pred_id"), str)
+        )
+    return tuple(sorted(expanded))
 
 
 def _predicate_tags(schema_ir: Mapping[str, Any]) -> dict[str, tuple[str, ...]]:
@@ -2537,6 +2889,11 @@ def _query_carrier_to_wire(
                 ),
             },
             "lowering_canonical_key": _encode_structural(compiled._lowering_plan.canonical_key),
+            **(
+                {"applicable_branch_ids": list(compiled.applicable_branch_ids)}
+                if compiled.applicable_branch_ids
+                else {}
+            ),
         },
     }
 
@@ -2825,9 +3182,8 @@ def _query_carrier_from_wire(
         )
     source_rule_pins = _validate_source_rule_pins(source["rule_pins"])
 
-    query = _exact_keys(
-        row["query"],
-        {
+    query_value = row["query"]
+    query_keys = {
             "query_digest",
             "wrapper_digest",
             "policy_digest",
@@ -2837,7 +3193,12 @@ def _query_carrier_from_wire(
             "selections",
             "projection_head",
             "lowering_canonical_key",
-        },
+        }
+    if isinstance(query_value, Mapping) and "applicable_branch_ids" in query_value:
+        query_keys.add("applicable_branch_ids")
+    query = _exact_keys(
+        query_value,
+        query_keys,
         label="V2 replay Query carrier query",
     )
     for key in (
@@ -2860,6 +3221,20 @@ def _query_carrier_from_wire(
         )
     bindings = _validate_query_bindings_wire(query["bindings"])
     selections = _validate_query_selections_wire(query["selections"])
+    applicable_branch_ids: tuple[str, ...] = ()
+    if "applicable_branch_ids" in query:
+        raw_branch_ids = query["applicable_branch_ids"]
+        if (
+            not isinstance(raw_branch_ids, list)
+            or not raw_branch_ids
+            or not all(isinstance(item, str) and item for item in raw_branch_ids)
+            or len(set(raw_branch_ids)) != len(raw_branch_ids)
+        ):
+            _fail(
+                "V2 replay Query applicable branch inventory is malformed",
+                "V2_REPLAY_PROGRAM_SHAPE_INVALID",
+            )
+        applicable_branch_ids = tuple(raw_branch_ids)
     projection_head = _exact_keys(
         query["projection_head"],
         {"id", "version", "content_digest"},
@@ -2895,6 +3270,7 @@ def _query_carrier_from_wire(
         schema_digest=query["schema_digest"],
         bindings=bindings,
         selections=selections,
+        applicable_branch_ids=applicable_branch_ids,
     )
     if query["query_digest"] != actual_query_digest:
         _fail(
@@ -3095,6 +3471,7 @@ def _compiled_query_digest_from_wire(
     schema_digest: object,
     bindings: Sequence[Mapping[str, object]],
     selections: Sequence[Mapping[str, object]],
+    applicable_branch_ids: tuple[str, ...] = (),
 ) -> str:
     def address(item: Mapping[str, object]) -> list[object]:
         raw_address = item["address"]
@@ -3151,6 +3528,8 @@ def _compiled_query_digest_from_wire(
         "bindings": binding_payload,
         "selections": selection_payload,
     }
+    if applicable_branch_ids:
+        payload["applicable_branch_ids"] = list(applicable_branch_ids)
     return f"sha256:{sha256_hex(_canonical_json_bytes(payload, label='V2 replay Query intent'))}"
 
 
@@ -4071,7 +4450,20 @@ def _replay_side(
         selection_shape=selection_shape,
         captured_function_materializations=declared.function_materializations,
     )
-    declared_digests = tuple(item.frame_digest for item in declared.engine_frames)
+    # Detached replay has always declared ``proof_parity='not_claimed'``.
+    # Branch witnesses are retained proof-path evidence, so compare the
+    # historical engine outcome surface while leaving witness attestation to
+    # the sealed run itself.
+    declared_digests = tuple(
+        EvaluationEngineFrameV2(
+            engine=item.engine,
+            status=item.status,
+            observations=item.observations,
+            diagnostic_code=item.diagnostic_code,
+            probability_materialization=item.probability_materialization,
+        ).frame_digest
+        for item in declared.engine_frames
+    )
     observed_digests = tuple(item.frame_digest for item in observed.engine_frames)
     return EvaluationRunReplaySideV2(
         side=name,
@@ -4286,6 +4678,7 @@ __all__ = [
     "EvaluationRunReplayV2",
     "GOAL_PLAN_V2_COMPILER_DIGEST",
     "ProductEvaluationInvocationV2",
+    "ProductInvocationAggregateLimitsV2",
     "ProductEvaluationRuntimeErrorV2",
     "build_product_evaluation_invocation_v2",
     "choice_capture_from_evaluation_run_v2",

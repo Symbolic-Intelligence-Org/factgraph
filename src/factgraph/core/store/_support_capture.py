@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal, cast
 
 from factgraph.core.rules.ruleref_types import NativeRuleRefResolution
 from factgraph.core.rules.where_eval import (
@@ -18,8 +18,8 @@ from factgraph.core.store._support import (
     NonFactStep,
     PredWitness,
     ProjectedFact,
-    RuleRefEdge,
     ProofReceipt,
+    RuleRefEdge,
     make_non_fact_step_key,
     make_pred_condition_key,
     normalize_asrt_ids,
@@ -155,7 +155,6 @@ def find_winning_case_index(
     resolution_by_key = {row.ruleref_condition_key: row for row in rule_ref_resolutions}
     view_facts = _view_facts_from_witness_facts(witness_facts)
     ast_gate_on = _where_ast_gate_enabled()
-
     for case_index, branch in enumerate(branches):
         if _branch_satisfies(
             case_index=case_index,
@@ -167,8 +166,41 @@ def find_winning_case_index(
             ast_gate_on=ast_gate_on,
         ):
             return case_index
-
     raise WhereValidationError("no satisfying branch for final binding")
+
+
+def find_matching_case_indexes(
+    *,
+    where: list[Any],
+    binding: dict[str, Any],
+    witness_facts: dict[str, list[ProjectedFact]],
+    rule_ref_resolutions: tuple[NativeRuleRefResolution, ...],
+) -> tuple[int, ...]:
+    """Return every satisfied DNF case for one final binding.
+
+    The existing public Check/Explain behavior intentionally keeps using
+    :func:`find_winning_case_index`.  Product V2 branch-witness capture opts
+    into this complete inventory before result-row de-duplication so two
+    independent proof paths for the same projected row are not collapsed.
+    """
+
+    branches = _normalize_where_branches(where)
+    resolution_by_key = {row.ruleref_condition_key: row for row in rule_ref_resolutions}
+    view_facts = _view_facts_from_witness_facts(witness_facts)
+    ast_gate_on = _where_ast_gate_enabled()
+    return tuple(
+        case_index
+        for case_index, branch in enumerate(branches)
+        if _branch_satisfies(
+            case_index=case_index,
+            branch=branch,
+            binding=binding,
+            witness_facts=witness_facts,
+            view_facts=view_facts,
+            resolution_by_key=resolution_by_key,
+            ast_gate_on=ast_gate_on,
+        )
+    )
 
 
 def _build_pred_witness(
@@ -518,14 +550,15 @@ def _require_selected_branch(
     return branches[selected_case_index]
 
 
-def _validate_root_result_kind(value: str) -> str:
+def _validate_root_result_kind(value: str) -> Literal["fact", "entity", "row"]:
     if value not in {"fact", "entity", "row"}:
         raise WhereValidationError("root_result_kind must be 'fact', 'entity', or 'row'")
-    return value
+    return cast(Literal["fact", "entity", "row"], value)
 
 
 __all__ = [
     "build_support_artifact_for_binding",
     "derive_rule_ref_edges_for_binding",
+    "find_matching_case_indexes",
     "find_winning_case_index",
 ]
