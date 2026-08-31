@@ -95,6 +95,12 @@ or probabilistic choice.
 | `WeightedChoice` | Product V2, ProbLog point profile only | It is distinct from ordinary `any(...)`; the first slice cannot coexist with Product Function topology. |
 | Product Function | Product V2 only | One Rule source occurrence per Function, no Function chaining, and output is select/compare-only rather than bindable. |
 
+The relationship/multi-hop limit above belongs to the SDK Product
+Policy/Query surface. The separate advanced application contract
+`PublishedRelationQueryV1` can compile published stored-relation paths, but it
+is not an SDK Query builder or a Policy target; see the
+[application relation-query contract](../../src/factgraph/application/docs/relation_query.md).
+
 Literal admission is operator-sensitive because equality does not require a
 portable ordering or collation. The implemented contract separates equality
 from ordering as follows.

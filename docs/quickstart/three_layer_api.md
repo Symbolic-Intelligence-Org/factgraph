@@ -10,7 +10,7 @@ The model is a triangle:
 
 - **Entity** answers *"what thing is this?"* — a coordinate identified by its identity bundle.
 - **Field** answers *"what content does it have at one cell?"* — a `(Field descriptor, entity ref)` cell, plus a value when writing.
-- **Assertion** answers *"who wrote this particular fact, and when?"* — one individual write record, identified by its content-addressed `asrt_id`.
+- **Assertion** answers *"who wrote this particular fact, and when?"* — one individual write record, identified by its server-assigned `asrt_id`.
 
 Each layer's primary API takes its own navigation key:
 
@@ -44,7 +44,7 @@ Form 1 is for first-time lookup or creation; Form 2 is for following operations 
 
 | Method | What it does |
 |---|---|
-| `create(EntityCls, *, meta=None, **identity)` | Eagerly emits the complete Identity Claim bundle + `:exists` Claim; returns the new `e_ref` string |
+| `create(EntityCls, *, meta=None, **identity)` | Eagerly emits the complete Identity Claim bundle; the entity-domain `:exists` row is projected virtually and is not persisted; returns the new `e_ref` string |
 | `delete(e_ref_or_cls, *, meta=None, **identity)` | Whole-entity revoke. Two forms: `delete(e_ref)` (string passed back from `ref`/`create`) or `delete(EntityCls, **identity)` (rebuilds the e_ref from the identity bundle) |
 | `edit(EntityCls, **identity)` | Opens an `EntityEditor` context manager for staged multi-field writes against one entity |
 
@@ -345,13 +345,14 @@ Remove verbs scale by layer to match granularity:
 
 ```text
   fg.entities.delete(e_ref)                 ► every claim on that entity
-                                              (Identity + :exists + every Field)
+                                              (Identity + every Field, plus any
+                                               legacy :exists Claim present)
   fg.fields.delete(field, e_ref)            ► every value at one field cell
                                               (fail-fast on first revoke error)
   fg.fields.retract(field, e_ref, value)    ► the one (field, ref, value) record
                                               (raises on 0 or >1 matches)
   fg.assertions.retract(asrt_id)            ► exactly one assertion id
-                                              (Identity / :exists asrt_ids rejected)
+                                              (Identity / legacy :exists ids rejected)
 ```
 
 Pick the smallest layer whose key you already have.

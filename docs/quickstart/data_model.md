@@ -32,7 +32,15 @@ Claim(
 
 Every v0.3 claim is a **unary fact** (INV-9): the subject lives in the `e_ref` column and the fact carries at most one value term. On disk that value is stored in dedicated `value` / `value_tag` columns (see §4), so the row above persists as `value="Alice"`, `value_tag="string"`, and `rest_terms="[]"`. The `rest_terms` column is a **retained legacy carrier** for the not-yet-rewritten PyReason n-ary adapter path only; new writes always leave it `[]`.
 
-### 1.1 Three user-facing claim categories
+This unary statement covers canonical v0.3 Database and SDK/application field
+writes. `Relationship` declarations are currently compile-level schema only;
+the SDK has no relationship CRUD surface. The advanced application
+`PublishedRelationQueryV1` executor can read stored ternary relationship facts
+from an unmanaged in-memory `Store` or compatible legacy/imported relation
+data, but that does not widen the canonical durable write contract. See the
+[published relation query contract](../../src/factgraph/application/docs/relation_query.md#5-store-and-durability-boundary).
+
+### 1.1 User-facing claims and the virtual entity domain
 
 The `pred_id` pattern tells you what role a claim plays:
 
@@ -40,9 +48,22 @@ The `pred_id` pattern tells you what role a claim plays:
 |---|---|---|---|
 | **Identity Claim** | `<owner>:<identity_field>` — snake_case owner, e.g. `user:user_id` | `fg.entities.create` | only via `fg.entities.delete` (whole entity) — direct retract raises `INV_7C_IDENTITY_PROTECTED` |
 | **Field Claim** | `<owner>:<field>` — snake_case owner, e.g. `user:name` | `fg.fields.set` / `fg.fields.add` | yes — `fg.assertions.retract(asrt_id)` or `fg.fields.retract` |
-| **`:exists` Claim** | `<EntityType>:exists` — raw type name, e.g. `User:exists` | co-emitted (legacy / transitional) on `fg.entities.create` | only via `fg.entities.delete` — direct retract raises `EXISTENCE_CLAIM_TRANSITIONAL_GUARD` |
+| **Legacy `:exists` Claim** | `<EntityType>:exists` — raw type name, e.g. `User:exists` | older ledgers and compatibility/internal derivation paths; new SDK entity materialization does not emit it | only via `fg.entities.delete` — direct retract raises `EXISTENCE_CLAIM_TRANSITIONAL_GUARD` |
 
-Note the two `pred_id` conventions: field and identity predicates use the **lowercased snake_case** owner prefix (`user:name`), while the `:exists` predicate uses the **raw entity-type name** (`User:exists`). The Identity mirror Claim is the authoritative existence evidence; the `:exists` claim is co-emitted for compatibility and is slated to retire.
+Field and Identity predicates use the **lowercased snake_case** owner prefix
+(`user:name`), while the generated entity-domain predicate uses the **raw
+entity-type name** (`User:exists`). The latter remains usable in rule bodies,
+but its rows are now a view projection rather than a second persisted truth
+carrier.
+
+`fg.entities.create(...)` persists the complete Identity Claim bundle. During
+view projection, FactGraph emits one virtual `<EntityType>:exists(e_ref)` row
+only when every Identity field has a current chosen value and those typed
+values reconstruct exactly that content-derived `e_ref`. Partial or revoked
+bundles and bundles stored under a mismatched `e_ref` produce no domain row.
+Each projected row has a deterministic virtual witness derived from all
+supporting Identity assertion ids. A persisted legacy `:exists` marker alone
+is deliberately ignored and cannot create or duplicate an entity-domain row.
 
 Identity values are part of the entity reference's content-derived hash, so they cannot be mutated without changing the entity's `e_ref`. That's why direct identity retraction is protected.
 

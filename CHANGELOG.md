@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Breaking
 
+- **SDK/application entity materialization no longer persists a second
+  `<EntityType>:exists` truth carrier.** `fg.entities.create(...)` and lazy
+  field materialization emit the complete Identity Claim bundle only. View
+  projection derives one virtual entity-domain row when the complete chosen
+  bundle reconstructs the same content-derived `e_ref`; incomplete, revoked,
+  mismatched, or legacy-marker-only entities remain outside the domain.
+  Existing legacy `:exists` Claims remain retract-guarded compatibility data
+  and do not become projection authority.
 - **Post-creation system metadata overrides now fail closed.** Append or UNSET
   operations cannot replace `ingested_at`, `ingest_key`, or
   `revoked_asrt_id`; these are the lifecycle-managed S-class keys. Source
@@ -62,6 +70,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Application-level published relation queries are shipped.** A
+  `PublishedRelationGraphV1` admits only schema-matching stored entity fields,
+  stored ternary relations, and endpoint-continuous forward/reverse paths.
+  Typed bindings and ordered selections compile into a schema- and
+  graph-pinned `SealedRelationQueryInvocationV1`; native execution consumes
+  only that sealed compiler product, adds virtual entity-domain guards for
+  every path node, rejects schema drift and tampering, and fails closed when
+  the published row limit would be exceeded. This read/compile surface operates
+  on relation facts already present in an application `Store`; it does not add
+  SDK Relationship CRUD or a durable ternary Database writer.
 - **Database commits now carry dual state/history commitments.** One logical
   batch is one SQLite transaction with a CAS-protected head, incremental
   `lthash16-v2` state digest binding assertion id plus content digest, and a

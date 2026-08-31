@@ -2,12 +2,15 @@
 
 - Scope: `src/factgraph/application/protocol/evaluate_result.py`,
   `explanation_render.py`, and the private R3d receipt-inventory DTOs
-- Last updated: 2026-08-16
+- Last updated: 2026-08-30
 - Audience: SDK layer maintainers, adapter writers, and test authors
 
 This document covers the V0 evaluate-result / explain slice and the separate
-Q18 V1 GoalPlan / Scenario / EvaluationRun protocol family. Other protocol
-files (`derivation.py`, `entity_read.py`, etc.) are covered by the application
+Q18 V1 GoalPlan / Scenario / EvaluationRun protocol family. The published
+stored-relation query DTOs in `relation_query.py` are documented with their
+compiler/runtime boundary in
+`src/factgraph/application/docs/relation_query.md`. Other protocol files
+(`derivation.py`, `entity_read.py`, etc.) are covered by the application
 overview doc at `src/factgraph/application/docs/01_overview_en.md`.
 
 ---

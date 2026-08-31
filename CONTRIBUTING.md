@@ -10,7 +10,7 @@ update public documentation and tests whenever behavior changes.
 
 ```bash
 python -m pip install --upgrade pip
-python -m pip install -e ".[dev]"
+python -m pip install -e ".[dev]" pytest
 ```
 
 ## Tests

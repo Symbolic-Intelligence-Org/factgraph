@@ -49,6 +49,10 @@ compatibility.
     `CapturedReceiptEvidenceV0` receipt inventory, which is deliberately
     separate from existing `EvidenceGraph` playback and absent from every
     application/protocol root or Product/SDK/Meander/Agent/MCP façade.
+- `src/factgraph/application/docs/relation_query.md`
+  - Published stored-relation graph admission, typed path bindings and
+    selections, virtual entity-domain guards, sealed compiler products,
+    native execution, row-limit behavior, and stable error boundaries.
 - `src/factgraph/application/docs/product_result_explain_v2.md`
   - Immutable Product read views over sealed V1 and V2 runs: explicit
     row/summary targets, structured Explain data, pure renderers, detached

@@ -1,7 +1,7 @@
 # FactGraph SDK User Guide
 
 - Applicable scope: `src/factgraph/sdk`
-- Last updated: 2026-08-15
+- Last updated: 2026-08-30
 
 The end-to-end tour of `factgraph.sdk` for new users. Reading this doc plus
 running the snippets is enough to use the SDK confidently for typical
@@ -1075,7 +1075,7 @@ Notable changes:
 | `temporal` field on `Field` | (removed) | Temporal semantics moved to `meta` |
 | `dims` field on `Field` | (removed) | Multi-dimensional fields not supported |
 | `fg.get/find/ref/match` | `fg.entities.get/where/ref/match` | Layer 1 entity navigation |
-| (new in v3) | `fg.entities.create` | Explicit Identity Claim + `:exists` Claim emit; replaces implicit-create through `fg.fields.set` |
+| (new in v3) | `fg.entities.create` | Explicit complete Identity Claim bundle emit; entity-domain `:exists` is projected virtually rather than persisted |
 | (new in v3) | `fg.entities.delete` | Whole-entity retract; PF-S2 Form A `(e_ref)` or Form B `(EntityCls, **identity)` |
 | (new in v3) | `fg.entities.exists` | Boolean visibility check on the active Identity Claim bundle (no snapshot materialization) |
 | `fg.set/add` | `fg.fields.set/add` | Layer 2 field writes |

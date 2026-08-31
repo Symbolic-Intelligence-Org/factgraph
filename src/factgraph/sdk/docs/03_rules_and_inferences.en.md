@@ -801,6 +801,13 @@ non-native configuration surface. Navigation is not accepted in `bind` or
 Policy authoring. Ordinary capture/evidence remains the existing F4 path;
 the Run anchor records whether its source was a direct Policy or a Rule lift.
 
+That relationship/multi-hop boundary is specific to the SDK Product Query
+surface. The separate advanced application `PublishedRelationQueryV1`
+contract admits published stored-relation paths and compiles them into a
+sealed native invocation; it is not an SDK Query builder, Policy target, or
+captured F4 run. See
+`src/factgraph/application/docs/relation_query.md`.
+
 A direct Policy may itself contain the narrow application-level
 `PolicyCompare` constraint. Its operands are direct scalar
 `SemanticPortAddress` values, a structured `PolicyFieldNavigation` from an

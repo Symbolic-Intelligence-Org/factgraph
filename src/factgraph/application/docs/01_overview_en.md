@@ -1,7 +1,7 @@
 # Overview of the Application Module (`factgraph`)
 
 - Scope: `src/factgraph/application`
-- Last updated: 2026-06-08
+- Last updated: 2026-08-30
 - Target readers: developers who need to understand Python runtime authority, SDK adapter boundaries, and service/agent consumer constraints
 
 ## 1. Module Responsibilities
@@ -47,6 +47,8 @@ It is not responsible for:
   - `entity_read.py`: read request/response, snapshot, field value/assertion DTOs
   - `entity_write.py`: write command/plan/result DTOs
   - `query.py`: `QueryRuntimeRequest` / `QueryRuntimeResponse` / return contract
+  - `relation_query.py`: published stored-field/relation/path graph DTOs,
+    typed bindings and ordered selection DTOs. See `relation_query.md`.
   - `ingest.py`: normalized ingest item/request/result DTOs
   - `derivation.py`: compiled derivation evaluate/accept request DTOs
   - `derivation_check.py`: explicit-binding Check protocol DTOs (`CheckRequest` / `CheckResult` / `EvidenceEnvelope`); the envelope records `as_of_event_seq=(tx_seq, op_ordinal)` while the proof body remains content-addressed independently
@@ -73,6 +75,12 @@ It is not responsible for:
   - `plan_write_command(...)`, `apply_write_plan(...)`
 - `query_runtime.py`
   - `execute_query(...)`
+- `relation_query_runtime.py`
+  - `compile_published_relation_query(...)` admits a server-resolved published
+    stored-relation graph against the exact schema and returns a sealed,
+    digest-pinned native invocation; `execute_published_relation_query(...)`
+    executes only that compiler product over the current projected view. See
+    `relation_query.md`.
 - `ingest_runtime.py`
   - `apply_ingest_request(...)`
 - `authoring_runtime.py`
@@ -331,5 +339,5 @@ Key focused tests:
 
 ## 8. Related Documents
 
-- [docs/architecture_principles.md](../../../../docs/architecture_principles.md)
+- [src/factgraph/core/docs/01_architecture.en.md](../../core/docs/01_architecture.en.md)
 - [src/factgraph/sdk/docs/README.md](../../sdk/docs/README.md)
