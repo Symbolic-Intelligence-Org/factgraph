@@ -15,6 +15,8 @@ from factgraph.application.frozen_evaluation_target_v2 import (
     FROZEN_EVALUATION_TARGET_V2_RUNTIME_ABI,
     FrozenEvaluationTargetError,
     FrozenEvaluationTargetV2,
+    _decode,
+    _encode,
 )
 from factgraph.application.goal_plan_v2_runtime import (
     ProductInvocationAggregateLimitsV2,
@@ -124,6 +126,14 @@ class FrozenEvaluationTargetV2Tests(unittest.TestCase):
         self.assertEqual(restored.to_bytes(), self.raw)
         self.assertEqual(restored.material_digest, self.frozen.material_digest)
 
+    def test_mapping_order_is_explicit_canonical_execution_material(self) -> None:
+        first = {"left": 1, "right": 2}
+        reversed_order = {"right": 2, "left": 1}
+
+        encoded = _encode(first)
+        self.assertEqual(_decode(encoded), first)
+        self.assertNotEqual(encoded, _encode(reversed_order))
+
     def test_decode_and_execute_never_calls_policy_compiler(self) -> None:
         graph = _runtime_graph()
         before = _run(self.frozen, graph)
@@ -146,14 +156,26 @@ class FrozenEvaluationTargetV2Tests(unittest.TestCase):
         self.assertEqual(after_frame.observations, before_frame.observations)
         self.assertEqual(
             {
-                (item.compiled_branch_id, item.evaluation_side, item.row_identity_digest)
+                (
+                    item.compiled_branch_id,
+                    item.evaluation_side,
+                    item.row_identity_digest,
+                )
                 for item in after_frame.branch_witnesses
             },
             {
-                (item.compiled_branch_id, item.evaluation_side, item.row_identity_digest)
+                (
+                    item.compiled_branch_id,
+                    item.evaluation_side,
+                    item.row_identity_digest,
+                )
                 for item in before_frame.branch_witnesses
             },
         )
+        for frame in (before_frame, after_frame):
+            for item in frame.branch_witnesses:
+                self.assertTrue(item.proof_identity_digest.startswith("sha256:"))
+                self.assertIn(item.proof_identity_digest, item.evidence_references)
         self.assertEqual(
             {item.compiled_branch_id for item in after_frame.branch_witnesses},
             set(self.branch_ids),
@@ -204,7 +226,13 @@ frame = run.effective.engine_frames[0]
 print(json.dumps({
     "rows": [item.row_identity_digest for item in frame.observations],
     "witnesses": [
-        [item.compiled_branch_id, item.row_identity_digest, item.proof_identity_digest]
+        [
+            item.compiled_branch_id,
+            item.evaluation_side,
+            item.row_identity_digest,
+            item.proof_identity_digest,
+            list(item.evidence_references),
+        ]
         for item in frame.branch_witnesses
     ],
 }, sort_keys=True))
@@ -236,12 +264,19 @@ graph.close()
             [item.row_identity_digest for item in before.observations],
         )
         self.assertEqual(
-            sorted((item[0], item[1]) for item in restarted["witnesses"]),
+            sorted(tuple(item[:3]) for item in restarted["witnesses"]),
             sorted(
-                (item.compiled_branch_id, item.row_identity_digest)
+                (
+                    item.compiled_branch_id,
+                    item.evaluation_side,
+                    item.row_identity_digest,
+                )
                 for item in before.branch_witnesses
             ),
         )
+        for item in restarted["witnesses"]:
+            self.assertTrue(item[3].startswith("sha256:"))
+            self.assertIn(item[3], item[4])
 
     def test_tamper_missing_material_unknown_version_and_abi_fail_closed(self) -> None:
         base = json.loads(self.raw)

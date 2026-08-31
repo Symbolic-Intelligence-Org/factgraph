@@ -2,26 +2,29 @@
 
 from __future__ import annotations
 
-from dataclasses import replace
 import json
 import shutil
 import unittest
+from dataclasses import replace
 
 from factgraph.application.goal_plan_v2_runtime import (
     ProductEvaluationRuntimeErrorV2,
+    _decode_structural,
+    _encode_structural,
     replay_evaluation_run_v2,
 )
+from factgraph.application.product_result_views_v2 import result_view_v2_from_evaluation_run_v2
 from factgraph.application.protocol.common import ProtocolShapeError
 from factgraph.application.protocol.evaluation_run_v2 import (
     EvaluationReplayPayloadV2,
     EvaluationReplayWorldV2,
 )
 from factgraph.application.protocol.execution_profile_v2 import EvaluationTargetPinV2
+from factgraph.application.protocol.rule import PortType
 from factgraph.application.protocol.semantic_address import SemanticPortAddress
 from factgraph.application.protocol.semantic_port import entity_identity, field_endpoint
-from factgraph.application.product_result_views_v2 import result_view_v2_from_evaluation_run_v2
 from factgraph.core.evidence.write_protocol import set_field
-from factgraph.core.rules.where_ast import PredAtom, Var
+from factgraph.core.rules.where_ast import Origin, PredAtom, Var
 from factgraph.sdk import AssetMeta, Entity, Field, Identity, SDKStore
 
 
@@ -56,6 +59,37 @@ def _graph_and_rule() -> tuple[SDKStore, object, str]:
 
 
 class GoalPlanV2RuntimeTests(unittest.TestCase):
+    def test_replay_structural_codec_preserves_typed_rule_material(self) -> None:
+        value = {
+            "entity": Var("$entity", Origin("authoring", "query.nodes.case")),
+            "result": PortType("entity_ref", "Span"),
+        }
+
+        self.assertEqual(_decode_structural(_encode_structural(value)), value)
+
+    def test_replay_structural_codec_rejects_unknown_typed_material(self) -> None:
+        malformed = (
+            {
+                "$type": "FactGraphStructuralValueV1",
+                "kind": "var",
+                "name": "$entity",
+                "origin": {"source": "provider", "path": None},
+            },
+            {
+                "$type": "FactGraphStructuralValueV1",
+                "kind": "port_type",
+                "port_kind": "collection",
+                "entity_type": "Person",
+            },
+        )
+
+        for value in malformed:
+            with self.subTest(value=value), self.assertRaises(
+                ProductEvaluationRuntimeErrorV2
+            ) as raised:
+                _decode_structural(value)
+            self.assertEqual(raised.exception.code, "V2_REPLAY_PROGRAM_SHAPE_INVALID")
+
     def test_public_native_scenario_set_is_isolated_and_replays(self) -> None:
         graph, rule, alice = _graph_and_rule()
         profile = graph.execution.native_deterministic(target=rule).build()

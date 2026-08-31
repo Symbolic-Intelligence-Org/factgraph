@@ -58,6 +58,10 @@ compatibility.
     row/summary targets, structured Explain data, pure renderers, detached
     versioned `to_dict()` / canonical bytes / read-projection digest, V1/V2
     availability boundaries, and sanitized evidence/provenance display.
+- `src/factgraph/application/docs/frozen_evaluation_target_v2.md`
+  - Internal restart-safe compiled Product target and Input Case persistence,
+    closed/canonical codec rules, deterministic-only V1 scope, neutral Branch
+    witness identity, and aggregate Product Invocation limits.
 - `src/factgraph/application/explain/docs/README.md`
   - Paths-model evidence tree types (`EvidenceGraph`, `EvidenceTree`,
     `EvidenceRule`, `EvidenceAtom`, `Certainty`, `AtomForm`, `Verdict`) and

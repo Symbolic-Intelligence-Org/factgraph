@@ -70,6 +70,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Branch-aware Product V2 targets can be retained and executed after a
+  process restart.** `FrozenEvaluationTargetV2` stores a closed, canonical,
+  ABI- and digest-bound deterministic Product Policy target together with its
+  normalized schema/address-space material and compiled Input Cases. Decode
+  never compiles Policy or reads latest state. Product runs retain neutral
+  multi-proof Branch witnesses before row deduplication and may enforce an
+  explicit whole-invocation aggregate budget without changing existing
+  per-side execution-profile semantics. The internal replay codec includes
+  explicit typed `Var`/`Origin` and `PortType` arms required by sealed Query
+  Graph targets; it is not a public raw-address or arbitrary-object wire.
 - **Application-level published relation queries are shipped.** A
   `PublishedRelationGraphV1` admits only schema-matching stored entity fields,
   stored ternary relations, and endpoint-continuous forward/reverse paths.

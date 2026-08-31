@@ -88,7 +88,7 @@ from factgraph.application.protocol.evaluation_query import (
     EvaluationQuerySelection,
 )
 from factgraph.application.protocol.policy import Policy, PolicyOccurrence
-from factgraph.application.protocol.rule import Rule
+from factgraph.application.protocol.rule import PortType, Rule
 from factgraph.application.protocol.provenance_v1 import (
     ProvenanceLocatorV1,
     ProvenanceRefV1,
@@ -138,7 +138,7 @@ from factgraph.core.semantics import SemanticsProfile
 from factgraph.core.store._support import ProjectedFact
 from factgraph.core.store.runtime import Store
 from factgraph.core.view.projector import project_view_facts_with_witness
-from factgraph.core.rules.where_ast import PredAtom, Var
+from factgraph.core.rules.where_ast import Origin, PredAtom, Var
 from factgraph.sdk.product_authoring import (
     FunctionOccurrenceTopologyV1,
     ProductPolicyV1,
@@ -4572,6 +4572,24 @@ def _encode_structural(value: object, *, depth: int = 0) -> dict[str, object]:
         if not math.isfinite(value):
             _fail("V2 replay program has non-finite float", "V2_PROGRAM_SHAPE_INVALID")
         return {"$type": _STRUCTURAL_VALUE_TYPE, "kind": "float64", "value": value.hex()}
+    if isinstance(value, Var):
+        return {
+            "$type": _STRUCTURAL_VALUE_TYPE,
+            "kind": "var",
+            "name": value.name,
+            "origin": (
+                None
+                if value.origin is None
+                else {"source": value.origin.source, "path": value.origin.path}
+            ),
+        }
+    if isinstance(value, PortType):
+        return {
+            "$type": _STRUCTURAL_VALUE_TYPE,
+            "kind": "port_type",
+            "port_kind": value.kind,
+            "entity_type": value.entity_type,
+        }
     if isinstance(value, tuple):
         return {
             "$type": _STRUCTURAL_VALUE_TYPE,
@@ -4595,7 +4613,11 @@ def _encode_structural(value: object, *, depth: int = 0) -> dict[str, object]:
                 for key, item in sorted(value.items())
             ],
         }
-    _fail("V2 replay program has unsupported structural value", "V2_PROGRAM_SHAPE_INVALID")
+    _fail(
+        "V2 replay program has unsupported structural value: "
+        f"{type(value).__name__}",
+        "V2_PROGRAM_SHAPE_INVALID",
+    )
 
 
 def _decode_structural(value: object, *, depth: int = 0, budget: list[int] | None = None) -> object:
@@ -4629,6 +4651,64 @@ def _decode_structural(value: object, *, depth: int = 0, budget: list[int] | Non
         if not math.isfinite(result) or result.hex() != row["value"]:
             _fail("V2 structural float is noncanonical", "V2_REPLAY_PROGRAM_SHAPE_INVALID")
         return result
+    if isinstance(value, dict) and value.get("kind") == "var":
+        row = _exact_keys(
+            value,
+            {"$type", "kind", "name", "origin"},
+            label="V2 structural Var",
+        )
+        if (
+            row["$type"] != _STRUCTURAL_VALUE_TYPE
+            or not isinstance(row["name"], str)
+            or not row["name"]
+        ):
+            _fail("V2 structural Var is invalid", "V2_REPLAY_PROGRAM_SHAPE_INVALID")
+        origin_value = row["origin"]
+        origin = None
+        if origin_value is not None:
+            origin_row = _exact_keys(
+                origin_value,
+                {"source", "path"},
+                label="V2 structural Var origin",
+            )
+            if origin_row["source"] not in {"sdk", "authoring", "raw_ir"} or (
+                origin_row["path"] is not None
+                and not isinstance(origin_row["path"], str)
+            ):
+                _fail(
+                    "V2 structural Var origin is invalid",
+                    "V2_REPLAY_PROGRAM_SHAPE_INVALID",
+                )
+            origin = Origin(
+                cast(Literal["sdk", "authoring", "raw_ir"], origin_row["source"]),
+                origin_row["path"],
+            )
+        return Var(row["name"], origin)
+    if isinstance(value, dict) and value.get("kind") == "port_type":
+        row = _exact_keys(
+            value,
+            {"$type", "kind", "port_kind", "entity_type"},
+            label="V2 structural PortType",
+        )
+        if row["$type"] != _STRUCTURAL_VALUE_TYPE or row["port_kind"] not in {
+            "value",
+            "entity_ref",
+        }:
+            _fail(
+                "V2 structural PortType is invalid",
+                "V2_REPLAY_PROGRAM_SHAPE_INVALID",
+            )
+        if row["entity_type"] is not None and not isinstance(
+            row["entity_type"], str
+        ):
+            _fail(
+                "V2 structural PortType Entity is invalid",
+                "V2_REPLAY_PROGRAM_SHAPE_INVALID",
+            )
+        return PortType(
+            cast(Literal["entity_ref", "value"], row["port_kind"]),
+            row["entity_type"],
+        )
     if (
         not isinstance(value, dict)
         or value.get("$type") != _STRUCTURAL_VALUE_TYPE
