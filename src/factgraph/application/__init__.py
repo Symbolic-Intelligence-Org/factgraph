@@ -1,5 +1,6 @@
 """Application-layer modules built on top of core runtime primitives."""
 
+from .authoring_runtime import AuthoringRuntimeError
 from .capability_helpers import (
     CapabilityHelperError,
     OriginPackageError,
@@ -15,6 +16,10 @@ from .capability_helpers import (
     build_rule_disable_request,
     build_rule_literal_replace_request,
     build_why_not_candidate_universe,
+)
+from .captured_evaluation_query_run_runtime import (
+    captured_evaluation_query_run_bytes,
+    captured_evaluation_query_run_from_bytes,
 )
 from .derivation_check_runtime import (
     CheckRuntimeError,
@@ -50,111 +55,16 @@ from .entity_write import (
     plan_write_command,
     planned_ops_to_inputs,
 )
-from .fact_overlay_runtime import check_fact_overlay_binding
-from .ingest_runtime import (
-    IngestRuntimeError,
-    apply_ingest_request,
-)
-from .walker import (
-    AssertionView,
-    ConditionKeyView,
-    FrozenTupleView,
-    IRAtomView,
-    IRBodyWalker,
-    ProofFrameDiffView,
-    ProofFrameView,
-    SupportArtifactView,
-    frozen_collection,
-    parse_condition_key,
-)
-from .workspace_runtime import (
-    WORKSPACE_LEDGER,
-    WORKSPACE_MANIFEST_NAME,
-    WORKSPACE_SAVE_SCOPE,
-    WORKSPACE_VERSION,
-    WorkspacePaths,
-    WorkspaceRuntimeError,
-    copy_ledger_to_workspace,
-    load_workspace,
-    resolve_workspace_paths,
-    save_workspace,
-    save_workspace_manifest,
-    validate_workspace_manifest,
-    workspace_manifest_payload,
-)
-from .query_runtime import (
-    QueryRuntimeError,
-    execute_query,
-)
-from .rule_disable_runtime import check_rule_disable_action
-from .rule_add_condition_runtime import check_rule_add_condition_action
-from .rule_literal_replace_runtime import check_rule_literal_replace_action
-from .proofframe_runtime import (
-    recheck_proof_frame,
-    render_proof_frame_narrative,
-)
-from .schema_runtime import (
-    EntityTypeInfo,
-    FieldTypeInfo,
-    IdentityFieldInfo,
-    PredicateInfo,
-    SchemaIndex,
-    SchemaResolutionError,
-    build_schema_index,
-    encode_entity_ref,
-    entity_info,
-    entity_type_from_ref,
-    field_predicate,
-    field_value_type,
-    materialize_identity,
-    render_entity_repr,
-    resolve_selector,
-)
-from .semantic_port_runtime import (
-    ResolvedRuleBundle,
-    SemanticPortResolutionError,
-    assert_rule_contract_current,
-    build_resolved_rule,
-    resolve_rule_contract,
-)
-from .semantic_address_runtime import (
-    ManagedRuleOccurrence,
-    SemanticAddressResolutionError,
-    SemanticAddressSpace,
-    manage_rule_occurrence,
-)
-from .product_compilation_context_v1 import (
-    ProductCompilationContextErrorV1,
-    ProductCompilationContextV1,
-    ProductFieldDescriptorV1,
-    ProductRelationArgumentV1,
-    ProductRelationPremiseV1,
-    build_product_compilation_context_v1,
-)
-from .policy_runtime import (
-    CompiledPolicyV0,
-    PolicyCompiledBranch,
-    PolicyRulePin,
-    compile_policy,
-)
-from .evaluation_query_runtime import (
-    CompiledEvaluationQueryV0,
-    compile_evaluation_query,
-)
-from .relation_query_runtime import (
-    RelationQueryError,
-    RelationQueryResultV1,
-    ResolvedRelationQuerySelectionV1,
-    SealedRelationQueryInvocationV1,
-    compile_published_relation_query,
-    execute_published_relation_query,
-)
 from .evaluation_expectation_runtime import (
     EvaluationExpectationError,
     assert_compiled_contains_row_expectation_current,
     compile_contains_row_expectations_v0,
     evaluate_captured_contains_row_expectations_v0,
     evaluate_contains_row_expectations_v0,
+)
+from .evaluation_query_runtime import (
+    CompiledEvaluationQueryV0,
+    compile_evaluation_query,
 )
 from .evaluation_query_target_runtime import (
     EvaluationQueryTargetError,
@@ -169,62 +79,7 @@ from .evaluation_run_bundle_runtime import (
     evaluation_run_bundle_bytes,
     evaluation_run_bundle_from_bytes,
 )
-from .evaluation_run_verification_runtime import verify_evaluation_run_bundle
 from .evaluation_run_evidence_runtime import evaluation_run_bundle_evidence
-from .policy_explanation_runtime import project_policy_explanation_v0
-from .scenario_run_runtime import (
-    scenario_run_bytes,
-    scenario_run_from_bytes,
-)
-from .captured_evaluation_query_run_runtime import (
-    captured_evaluation_query_run_bytes,
-    captured_evaluation_query_run_from_bytes,
-)
-from .goal_plan_v1_runtime import (
-    GOAL_PLAN_V1_COMPILER_DIGEST,
-    GoalPlanFailureV1,
-    GoalPlanInvocationV1,
-    GoalPlanRunV1,
-    GoalPlanRuntimeError,
-    build_goal_plan_invocation_v1,
-    execute_goal_plan_invocation_v1,
-    native_deterministic_profile_v1,
-    portable_deterministic_profile_v1,
-    provider_binding_slot_v1,
-)
-from .scenario_v1_runtime import (
-    EvidenceScopeApplicationV1,
-    ImmutableProjectedRelationV1,
-    ProjectedRelationV1,
-    ScenarioResolutionErrorV1,
-    apply_evidence_scope_v1,
-    effective_world_to_relation_v1,
-    resolve_scenario_v1,
-    scenario_dependency_predicate_ids_v1,
-    select_dependency_relation_v1,
-)
-from .relation_provider_v1_runtime import (
-    ProviderRelationMaterializationError,
-    merge_provider_materialization_v1,
-    provider_materialization_to_relation_v1,
-)
-from .portable_evaluation_runtime import (
-    PORTABLE_DETERMINISTIC_V1,
-    PortableEngineDiagnosticV1,
-    PortableEngineEvaluationV1,
-    PortableEngineObservationFrameV1,
-    PortableEvaluationError,
-    PortableEvaluationObservationV1,
-    PortableEvaluationResultV1,
-    PortableExecutionContractV1,
-    PortableSelectedRowV1,
-    execute_native_deterministic_v1,
-    execute_portable_deterministic_v1,
-    materialize_portable_effective_world_v1,
-    observe_portable_deterministic_v1,
-    portable_dependency_predicate_ids_v1,
-    validate_portable_deterministic_v1,
-)
 from .evaluation_run_v1_runtime import (
     DecodedEvaluationReplayProgramV1,
     EvaluationRunExplanationV1,
@@ -244,6 +99,77 @@ from .evaluation_run_v1_runtime import (
     evaluate_sealed_evaluation_request_v1,
     explain_evaluation_run_v1,
     replay_evaluation_run_v1,
+)
+from .evaluation_run_verification_runtime import verify_evaluation_run_bundle
+from .fact_overlay_runtime import check_fact_overlay_binding
+from .goal_plan_v1_runtime import (
+    GOAL_PLAN_V1_COMPILER_DIGEST,
+    GoalPlanFailureV1,
+    GoalPlanInvocationV1,
+    GoalPlanRuntimeError,
+    GoalPlanRunV1,
+    build_goal_plan_invocation_v1,
+    execute_goal_plan_invocation_v1,
+    native_deterministic_profile_v1,
+    portable_deterministic_profile_v1,
+    provider_binding_slot_v1,
+)
+from .ingest_runtime import (
+    IngestRuntimeError,
+    apply_ingest_request,
+)
+from .policy_explanation_runtime import project_policy_explanation_v0
+from .policy_runtime import (
+    CompiledPolicyV0,
+    PolicyCompiledBranch,
+    PolicyRulePin,
+    compile_policy,
+)
+from .portable_evaluation_runtime import (
+    PORTABLE_DETERMINISTIC_V1,
+    PortableEngineDiagnosticV1,
+    PortableEngineEvaluationV1,
+    PortableEngineObservationFrameV1,
+    PortableEvaluationError,
+    PortableEvaluationObservationV1,
+    PortableEvaluationResultV1,
+    PortableExecutionContractV1,
+    PortableSelectedRowV1,
+    execute_native_deterministic_v1,
+    execute_portable_deterministic_v1,
+    materialize_portable_effective_world_v1,
+    observe_portable_deterministic_v1,
+    portable_dependency_predicate_ids_v1,
+    validate_portable_deterministic_v1,
+)
+from .product_compilation_context_v1 import (
+    ProductCompilationContextErrorV1,
+    ProductCompilationContextV1,
+    ProductFieldDescriptorV1,
+    ProductRelationArgumentV1,
+    ProductRelationPremiseV1,
+    build_product_compilation_context_v1,
+)
+from .product_explanation_data_v2 import (
+    EvaluationExplanationDataV2,
+    EvaluationRunV2ExplanationDataV2,
+    EvaluationRunV2ExplanationIdentityViewV2,
+    EvaluationRunV2OutcomePresentationViewV2,
+    EvaluationRunV2QueryDescriptorViewV2,
+    EvidenceGraphViewV2,
+    EvidenceSourceViewV2,
+    EvidenceSupportViewV2,
+    OpaqueProvenanceDescriptorV2,
+    PolicyPresentationViewV2,
+    ScenarioPresentationViewV2,
+    evaluation_explanation_data_v2_from_evaluation_run_v2,
+    evaluation_explanation_data_v2_from_run,
+    evidence_graph_view_v2_from_graph,
+    narrate_evaluation_explanation_v2,
+    narrate_evaluation_run_v2_explanation_v2,
+    render_evaluation_explanation_text_v2,
+    render_evaluation_run_v2_explanation_text_v2,
+    safe_opaque_provenance_descriptor_v2,
 )
 from .product_result_views_v2 import (
     AssetDescriptorCaptureViewV2,
@@ -265,14 +191,12 @@ from .product_result_views_v2 import (
     FunctionInputBindingViewV2,
     FunctionOccurrenceViewV2,
     FunctionPortViewV2,
-    ProductViewErrorV2,
     ProbabilityMaterializationEntryViewV2,
     ProbabilityMaterializationViewV2,
+    ProductViewErrorV2,
     ResultValueViewV2,
     ResultViewV2,
     RowViewV2,
-    SummaryViewV2,
-    TargetViewV2,
     ScenarioCaptureViewV2,
     ScenarioFactSemanticsViewV2,
     ScenarioFactViewV2,
@@ -280,37 +204,115 @@ from .product_result_views_v2 import (
     ScenarioOperationMetadataViewV2,
     ScenarioProvenanceReferenceViewV2,
     ScenarioWorldCaptureViewV2,
+    SummaryViewV2,
+    TargetViewV2,
     result_view_v2_from_evaluation_run_v2,
     result_view_v2_from_run,
 )
-from .product_explanation_data_v2 import (
-    EvaluationExplanationDataV2,
-    EvaluationRunV2ExplanationDataV2,
-    EvaluationRunV2ExplanationIdentityViewV2,
-    EvaluationRunV2OutcomePresentationViewV2,
-    EvaluationRunV2QueryDescriptorViewV2,
-    EvidenceGraphViewV2,
-    EvidenceSourceViewV2,
-    EvidenceSupportViewV2,
-    OpaqueProvenanceDescriptorV2,
-    PolicyPresentationViewV2,
-    ScenarioPresentationViewV2,
-    evidence_graph_view_v2_from_graph,
-    evaluation_explanation_data_v2_from_evaluation_run_v2,
-    evaluation_explanation_data_v2_from_run,
-    narrate_evaluation_explanation_v2,
-    narrate_evaluation_run_v2_explanation_v2,
-    render_evaluation_explanation_text_v2,
-    render_evaluation_run_v2_explanation_text_v2,
-    safe_opaque_provenance_descriptor_v2,
+from .proofframe_runtime import (
+    recheck_proof_frame,
+    render_proof_frame_narrative,
 )
-from .authoring_runtime import AuthoringRuntimeError
+from .query_runtime import (
+    QueryRuntimeError,
+    execute_query,
+)
+from .relation_provider_v1_runtime import (
+    ProviderRelationMaterializationError,
+    merge_provider_materialization_v1,
+    provider_materialization_to_relation_v1,
+)
+from .relation_query_runtime import (
+    RelationQueryError,
+    RelationQueryResultV1,
+    ResolvedRelationQuerySelectionV1,
+    SealedRelationQueryInvocationV1,
+    compile_published_relation_query,
+    execute_published_relation_query,
+)
+from .rule_add_condition_runtime import check_rule_add_condition_action
+from .rule_disable_runtime import check_rule_disable_action
+from .rule_literal_replace_runtime import check_rule_literal_replace_action
+from .scenario_run_runtime import (
+    scenario_run_bytes,
+    scenario_run_from_bytes,
+)
+from .scenario_v1_runtime import (
+    EvidenceScopeApplicationV1,
+    ImmutableProjectedRelationV1,
+    ProjectedRelationV1,
+    ScenarioResolutionErrorV1,
+    apply_evidence_scope_v1,
+    effective_world_to_relation_v1,
+    resolve_scenario_v1,
+    scenario_dependency_predicate_ids_v1,
+    select_dependency_relation_v1,
+)
+from .schema_runtime import (
+    EntityTypeInfo,
+    FieldTypeInfo,
+    IdentityFieldInfo,
+    PredicateInfo,
+    SchemaIndex,
+    SchemaResolutionError,
+    build_schema_index,
+    encode_entity_ref,
+    entity_info,
+    entity_type_from_ref,
+    field_predicate,
+    field_value_type,
+    materialize_identity,
+    render_entity_repr,
+    resolve_selector,
+)
+from .semantic_address_runtime import (
+    ManagedRuleOccurrence,
+    SemanticAddressResolutionError,
+    SemanticAddressSpace,
+    manage_rule_occurrence,
+)
+from .semantic_port_runtime import (
+    ResolvedRuleBundle,
+    SemanticPortResolutionError,
+    assert_rule_contract_current,
+    build_resolved_rule,
+    resolve_rule_contract,
+)
+from .walker import (
+    AssertionView,
+    ConditionKeyView,
+    FrozenTupleView,
+    IRAtomView,
+    IRBodyWalker,
+    ProofFrameDiffView,
+    ProofFrameView,
+    SupportArtifactView,
+    frozen_collection,
+    parse_condition_key,
+)
 from .why_not_runtime import (
     WhyNotRuntimeError,
     check_why_not_universe,
 )
+from .workspace_runtime import (
+    WORKSPACE_LEDGER,
+    WORKSPACE_MANIFEST_NAME,
+    WORKSPACE_SAVE_SCOPE,
+    WORKSPACE_VERSION,
+    WorkspacePaths,
+    WorkspaceRuntimeError,
+    copy_ledger_to_workspace,
+    load_workspace,
+    resolve_workspace_paths,
+    save_workspace,
+    save_workspace_manifest,
+    validate_workspace_manifest,
+    workspace_manifest_payload,
+)
 
-__all__ = [
+# Public exports stay grouped by protocol generation and subsystem rather than
+# alphabetically; changing their order would make this compatibility index less useful.
+__all__ = [  # noqa: RUF022
     "AssertionView",
     "EvaluationExpectationError",
     "assert_compiled_contains_row_expectation_current",

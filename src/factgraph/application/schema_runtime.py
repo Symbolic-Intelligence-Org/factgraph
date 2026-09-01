@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping
 from dataclasses import dataclass
-import re
 from typing import Any, Literal
 
 from factgraph.core.protocol.idref_v1 import encode_idref_v1
@@ -330,7 +330,7 @@ def display_value(
     if isinstance(value, EntityRef):
         try:
             return render_entity_repr(index, value.entity_type, value.identity)
-        except Exception:
+        except (SchemaResolutionError, TypeError, ValueError):
             return value.encoded_ref or value
     if isinstance(value, Mapping):
         identity = value.get("identity")
@@ -338,7 +338,7 @@ def display_value(
         if isinstance(entity_type, str) and isinstance(identity, Mapping):
             try:
                 return render_entity_repr(index, entity_type, identity)
-            except Exception:
+            except (SchemaResolutionError, TypeError, ValueError):
                 return value
     if isinstance(value, str):
         entity_type = entity_type_from_ref(value)
@@ -350,7 +350,7 @@ def display_value(
                 identity = resolver(entity_type, value, index)
                 if isinstance(identity, Mapping):
                     return render_entity_repr(index, entity_type, identity)
-            except Exception:
+            except Exception:  # noqa: BLE001 - provider display is best-effort
                 return value
     return value
 
@@ -373,7 +373,7 @@ def _identity_value_text(
     if type_domain == "float64":
         try:
             return display_float64_value(value)
-        except Exception:
+        except ValueError:
             return str(value)
     return str(value)
 
@@ -631,10 +631,10 @@ __all__ = [
     "SchemaIndex",
     "SchemaResolutionError",
     "build_schema_index",
+    "display_value",
     "encode_entity_ref",
     "entity_info",
     "entity_type_from_ref",
-    "display_value",
     "field_predicate",
     "field_value_type",
     "materialize_identity",

@@ -37,11 +37,11 @@ from .protocol.scenario_v1 import (
     ScenarioSetEffectiveValueV1,
     ScenarioSetExactMembersV1,
     ScenarioSpecV1,
-    ScenarioValueV1,
     ScenarioValueTagV1,
-    ScenarioWithoutFieldV1,
+    ScenarioValueV1,
     ScenarioWithoutAssertionV1,
     ScenarioWithoutEntityV1,
+    ScenarioWithoutFieldV1,
     ScenarioWithoutRelationV1,
     ScenarioWithoutValueV1,
     _token,
@@ -59,7 +59,6 @@ from .schema_runtime import (
     materialize_identity,
 )
 from .value_validation import FieldValueValidationError, validate_field_value
-
 
 ProjectedRelationV1: TypeAlias = Mapping[str, Sequence[ProjectedFact]]
 ImmutableProjectedRelationV1: TypeAlias = Mapping[str, tuple[ProjectedFact, ...]]
@@ -1053,6 +1052,96 @@ def _make_resolved_operation(
     )
 
 
+def _apply_field_intent(
+    intent: _Intent,
+    *,
+    mutable: dict[str, list[ProjectedFact]],
+    ephemeral_intents: Sequence[_Intent],
+    synthetic_ids: set[str],
+    index: SchemaIndex,
+) -> ResolvedScenarioOperationV1:
+    """Apply one normalized field intent to the run-local effective relation."""
+
+    assert intent.info is not None
+    assert intent.entity_type is not None and intent.entity_ref is not None
+    info = entity_info(index, intent.entity_type)
+    ephemeral = any(item.entity_ref == intent.entity_ref for item in ephemeral_intents)
+    if not ephemeral and not _entity_exists(mutable, info=info, entity_ref=intent.entity_ref):
+        raise ScenarioResolutionErrorV1(
+            f"scenario target entity is not visible: {intent.entity_ref}",
+            code="SCENARIO_ENTITY_NOT_VISIBLE",
+        )
+    pred_info = intent.info
+    rows = mutable[pred_info.pred_id]
+    target_rows = [
+        row for row in rows if row.fact_tuple and row.fact_tuple[0] == intent.entity_ref
+    ]
+    field_masked: list[str] = []
+    field_created: list[str] = []
+
+    def remove_rows(predicate: Any) -> None:
+        nonlocal rows
+        kept: list[ProjectedFact] = []
+        for row in rows:
+            if predicate(row):
+                field_masked.append(row.asrt_id)
+            else:
+                kept.append(row)
+        rows = kept
+        mutable[pred_info.pred_id] = kept
+
+    def add_value(value: ScenarioValueV1) -> None:
+        synthetic = _synthetic_id(
+            "scenario_effective_fact_v1",
+            {
+                "premise_ids": intent.premise_ids,
+                "predicate": pred_info.pred_id,
+                "entity": intent.entity_ref,
+                "value": value.value_digest,
+            },
+        )
+        rows.append(ProjectedFact(synthetic, (intent.entity_ref, value.to_raw())))
+        field_created.append(synthetic)
+        synthetic_ids.add(synthetic)
+
+    if intent.kind == "set_effective_value":
+        baseline_values = {row.fact_tuple[1] for row in target_rows if len(row.fact_tuple) == 2}
+        if len(baseline_values) > 1:
+            raise ScenarioResolutionErrorV1(
+                f"single field {pred_info.pred_id} has conflicting visible values",
+                code="SCENARIO_BASELINE_CARDINALITY_CONFLICT",
+            )
+        remove_rows(lambda row: row.fact_tuple and row.fact_tuple[0] == intent.entity_ref)
+        add_value(intent.values[0])
+    elif intent.kind == "ensure_member":
+        existing = {row.fact_tuple[1] for row in target_rows if len(row.fact_tuple) == 2}
+        for value in intent.values:
+            if value.to_raw() not in existing:
+                add_value(value)
+    elif intent.kind == "set_exact_members":
+        remove_rows(lambda row: row.fact_tuple and row.fact_tuple[0] == intent.entity_ref)
+        for value in intent.values:
+            add_value(value)
+    elif intent.kind == "without_field":
+        remove_rows(lambda row: row.fact_tuple and row.fact_tuple[0] == intent.entity_ref)
+    elif intent.kind == "without_value":
+        values = {value.to_raw() for value in intent.values}
+        remove_rows(
+            lambda row: (
+                len(row.fact_tuple) == 2
+                and row.fact_tuple[0] == intent.entity_ref
+                and row.fact_tuple[1] in values
+            )
+        )
+    else:  # pragma: no cover - closed normalizer
+        raise ScenarioResolutionErrorV1(
+            "unsupported normalized scenario operation", code="SCENARIO_OPERATION_UNKNOWN"
+        )
+    return _make_resolved_operation(
+        intent, masked=tuple(field_masked), synthetic=tuple(field_created)
+    )
+
+
 def _apply_intents(
     relation: ImmutableProjectedRelationV1,
     *,
@@ -1212,84 +1301,13 @@ def _apply_intents(
         field_intents,
         key=lambda item: (item.entity_ref, item.info.pred_id if item.info else "", item.kind),
     ):
-        assert intent.info is not None
-        assert intent.entity_type is not None and intent.entity_ref is not None
-        info = entity_info(index, intent.entity_type)
-        ephemeral = any(item.entity_ref == intent.entity_ref for item in ephemeral_intents)
-        if not ephemeral and not _entity_exists(mutable, info=info, entity_ref=intent.entity_ref):
-            raise ScenarioResolutionErrorV1(
-                f"scenario target entity is not visible: {intent.entity_ref}",
-                code="SCENARIO_ENTITY_NOT_VISIBLE",
-            )
-        pred_info = intent.info
-        rows = mutable[pred_info.pred_id]
-        target_rows = [
-            row for row in rows if row.fact_tuple and row.fact_tuple[0] == intent.entity_ref
-        ]
-        field_masked: list[str] = []
-        field_created: list[str] = []
-
-        def remove_rows(predicate: Any) -> None:
-            nonlocal rows
-            kept: list[ProjectedFact] = []
-            for row in rows:
-                if predicate(row):
-                    field_masked.append(row.asrt_id)
-                else:
-                    kept.append(row)
-            rows = kept
-            mutable[pred_info.pred_id] = kept
-
-        def add_value(value: ScenarioValueV1) -> None:
-            synthetic = _synthetic_id(
-                "scenario_effective_fact_v1",
-                {
-                    "premise_ids": intent.premise_ids,
-                    "predicate": pred_info.pred_id,
-                    "entity": intent.entity_ref,
-                    "value": value.value_digest,
-                },
-            )
-            rows.append(ProjectedFact(synthetic, (intent.entity_ref, value.to_raw())))
-            field_created.append(synthetic)
-            synthetic_ids.add(synthetic)
-
-        if intent.kind == "set_effective_value":
-            baseline_values = {row.fact_tuple[1] for row in target_rows if len(row.fact_tuple) == 2}
-            if len(baseline_values) > 1:
-                raise ScenarioResolutionErrorV1(
-                    f"single field {pred_info.pred_id} has conflicting visible values",
-                    code="SCENARIO_BASELINE_CARDINALITY_CONFLICT",
-                )
-            remove_rows(lambda row: row.fact_tuple and row.fact_tuple[0] == intent.entity_ref)
-            add_value(intent.values[0])
-        elif intent.kind == "ensure_member":
-            existing = {row.fact_tuple[1] for row in target_rows if len(row.fact_tuple) == 2}
-            for value in intent.values:
-                if value.to_raw() not in existing:
-                    add_value(value)
-        elif intent.kind == "set_exact_members":
-            remove_rows(lambda row: row.fact_tuple and row.fact_tuple[0] == intent.entity_ref)
-            for value in intent.values:
-                add_value(value)
-        elif intent.kind == "without_field":
-            remove_rows(lambda row: row.fact_tuple and row.fact_tuple[0] == intent.entity_ref)
-        elif intent.kind == "without_value":
-            values = {value.to_raw() for value in intent.values}
-            remove_rows(
-                lambda row: (
-                    len(row.fact_tuple) == 2
-                    and row.fact_tuple[0] == intent.entity_ref
-                    and row.fact_tuple[1] in values
-                )
-            )
-        else:  # pragma: no cover - closed normalizer
-            raise ScenarioResolutionErrorV1(
-                "unsupported normalized scenario operation", code="SCENARIO_OPERATION_UNKNOWN"
-            )
         resolved.append(
-            _make_resolved_operation(
-                intent, masked=tuple(field_masked), synthetic=tuple(field_created)
+            _apply_field_intent(
+                intent,
+                mutable=mutable,
+                ephemeral_intents=ephemeral_intents,
+                synthetic_ids=synthetic_ids,
+                index=index,
             )
         )
 

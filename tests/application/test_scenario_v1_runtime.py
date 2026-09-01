@@ -1,22 +1,22 @@
 from __future__ import annotations
 
-from copy import deepcopy
 import unittest
+from copy import deepcopy
 
 from factgraph.application import build_schema_index, entity_info, field_predicate, resolve_selector
 from factgraph.application.protocol import EntityRef, EntitySelector, FieldPath, ProtocolShapeError
 from factgraph.application.protocol.scenario_v1 import (
     EvidenceScopeV1,
+    ResolvedScenarioOperationV1,
     ScenarioCreateEphemeralEntityV1,
     ScenarioEnsureMemberV1,
     ScenarioEnsureRelationV1,
     ScenarioSetEffectiveValueV1,
     ScenarioSetExactMembersV1,
-    ResolvedScenarioOperationV1,
     ScenarioSpecV1,
     ScenarioValueV1,
-    ScenarioWithoutEntityV1,
     ScenarioWithoutAssertionV1,
+    ScenarioWithoutEntityV1,
     ScenarioWithoutFieldV1,
     ScenarioWithoutRelationV1,
     ScenarioWithoutValueV1,
@@ -30,7 +30,6 @@ from factgraph.application.scenario_v1_runtime import (
 )
 from factgraph.core.store._support import ProjectedFact
 from factgraph.sdk import Entity, Field, Identity, SDKStore
-
 
 _DIGEST = "sha256:" + "a" * 64
 
@@ -598,7 +597,7 @@ class ScenarioV1RuntimeTests(unittest.TestCase):
             )
 
     def test_dependency_subset_is_explicit_and_never_treated_as_empty(self) -> None:
-        index, relation, _, _ = self._fixture()
+        _index, relation, _, _ = self._fixture()
         chosen = tuple(sorted(relation))
         subset = select_dependency_relation_v1(relation, dependency_predicate_ids=chosen)
         self.assertEqual(tuple(subset), chosen)
