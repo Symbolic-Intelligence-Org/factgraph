@@ -123,6 +123,14 @@ from .semantic_address_runtime import (
     SemanticAddressSpace,
     manage_rule_occurrence,
 )
+from .product_compilation_context_v1 import (
+    ProductCompilationContextErrorV1,
+    ProductCompilationContextV1,
+    ProductFieldDescriptorV1,
+    ProductRelationArgumentV1,
+    ProductRelationPremiseV1,
+    build_product_compilation_context_v1,
+)
 from .policy_runtime import (
     CompiledPolicyV0,
     PolicyCompiledBranch,
@@ -337,6 +345,11 @@ __all__ = [
     "IRBodyWalker",
     "OriginPackageError",
     "ManagedRuleOccurrence",
+    "ProductCompilationContextErrorV1",
+    "ProductCompilationContextV1",
+    "ProductFieldDescriptorV1",
+    "ProductRelationArgumentV1",
+    "ProductRelationPremiseV1",
     "PredicateInfo",
     "PolicyCompiledBranch",
     "PolicyRulePin",
@@ -362,6 +375,7 @@ __all__ = [
     "accept_derivation_candidate_set",
     "accept_derivation_candidate_sets",
     "apply_ingest_request",
+    "build_product_compilation_context_v1",
     "apply_create_plan",
     "apply_delete_plan",
     "apply_write_plan",

@@ -92,6 +92,27 @@ RuleExpr values while SDK evaluation owns execution. `fg.rules.inspect(rule)`
 returns a `RuleExprInspect` value with closed-head fields for application Rule
 inputs; structural RuleExpr inspect does not define closed-head semantics.
 
+## Trusted Product Compilation Context V1
+
+Server-side product compilers should construct
+`build_product_compilation_context_v1(schema_ir)` instead of reading a
+`FactGraph` instance's private schema index. The immutable context exposes two
+narrow projections:
+
+- `describe_field(endpoint)` returns the exact predicate, public value kind,
+  value type and cardinality for one resolved `FieldEndpoint`;
+- `relation_premises(bundle)` returns positive, schema-declared relation
+  premises with deterministic identity, ordered argument types and the public
+  semantic ports that anchor each argument.
+
+The projection admits standalone extensional predicates and
+entity-reference relationship fields. Identity/existence predicates, scalar
+fields, derived heads, compiler predicates and relation atoms with an
+incomplete typed argument list are omitted. The context never exposes its
+`SchemaIndex`, a Store, ledger data or mutable authoring authority. Its
+predicate identities are for trusted server compilation and are not a browser,
+Agent or general SDK query surface.
+
 ## Unified Syntax via SDK DSL Bridge
 
 Use `factgraph.sdk.dsl.build_application_rule(...)` when starting from SDK DSL

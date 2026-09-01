@@ -41,6 +41,15 @@ class Person(Entity):
     skills: list[str] = Field()
 
 
+class Country(Entity):
+    code: str = Identity()
+
+
+class Resident(Entity):
+    resident_id: str = Identity()
+    lives_in: Country = Field()
+
+
 class ScenarioV1RuntimeTests(unittest.TestCase):
     def _fixture(self, *, membership: bool = False, single_membership: bool = False):
         graph = SDKStore([Person])
@@ -367,6 +376,7 @@ class ScenarioV1RuntimeTests(unittest.TestCase):
                 base_view_digest=_DIGEST,
                 admissibility_digest=_DIGEST,
             )
+
         remove = ScenarioSpecV1((ScenarioWithoutRelationV1("remove", "membership"),))
         removed = resolve_scenario_v1(
             remove,
@@ -414,6 +424,55 @@ class ScenarioV1RuntimeTests(unittest.TestCase):
                 base_view_digest=_DIGEST,
                 admissibility_digest=_DIGEST,
             )
+
+    def test_ensure_relation_accepts_schema_declared_entity_relation_field(self) -> None:
+        graph = SDKStore([Country, Resident])
+        index = build_schema_index(graph.schema_ir)
+        resident = resolve_selector(
+            EntitySelector(entity_type="Resident", identity={"resident_id": "alice"}),
+            index=index,
+        )
+        country = resolve_selector(
+            EntitySelector(entity_type="Country", identity={"code": "de"}),
+            index=index,
+        )
+        assert resident.encoded_ref is not None and country.encoded_ref is not None
+        resident_info = entity_info(index, "Resident")
+        country_info = entity_info(index, "Country")
+        predicate_id = field_predicate(index, "Resident", "lives_in").pred_id
+        relation = {
+            resident_info.exists_predicate_id: (
+                ProjectedFact("exists-resident", (resident.encoded_ref,)),
+            ),
+            country_info.exists_predicate_id: (
+                ProjectedFact("exists-country", (country.encoded_ref,)),
+            ),
+            predicate_id: (),
+        }
+
+        resolved = resolve_scenario_v1(
+            ScenarioSpecV1(
+                (
+                    ScenarioEnsureRelationV1(
+                        "assume-residence",
+                        predicate_id,
+                        (
+                            ScenarioValueV1.from_raw("entity_ref", resident.encoded_ref),
+                            ScenarioValueV1.from_raw("entity_ref", country.encoded_ref),
+                        ),
+                    ),
+                )
+            ),
+            schema_index=index,
+            baseline_relation=relation,
+            base_view_digest=_DIGEST,
+            admissibility_digest=_DIGEST,
+        )
+
+        self.assertEqual(
+            effective_world_to_relation_v1(resolved.effective_world)[predicate_id][0].fact_tuple,
+            (resident.encoded_ref, country.encoded_ref),
+        )
 
     def test_relation_rejects_removed_or_invisible_entities_and_allows_created_entity(self) -> None:
         index, relation, alice, bob = self._fixture(membership=True)

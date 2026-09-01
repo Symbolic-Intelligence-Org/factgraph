@@ -55,6 +55,7 @@ from .schema_runtime import (
     entity_info,
     entity_type_from_ref,
     field_predicate,
+    is_scenario_relation_predicate_v1,
     materialize_identity,
 )
 from .value_validation import FieldValueValidationError, validate_field_value
@@ -735,7 +736,7 @@ def _assert_relation_cardinality(
 def _relation_intent(
     operation: ScenarioEnsureRelationV1 | ScenarioWithoutRelationV1, *, index: SchemaIndex
 ) -> _Intent:
-    record = _schema_predicate_record(index, operation.predicate_id)
+    _schema_predicate_record(index, operation.predicate_id)
     info = index.predicates_by_id.get(operation.predicate_id)
     if info is None:
         raise ScenarioResolutionErrorV1(
@@ -743,16 +744,9 @@ def _relation_intent(
             code="SCENARIO_RELATION_SCHEMA_UNKNOWN",
         )
     # Relation v1 is deliberately for schema-declared extensional relations,
-    # not lowered heads, compiled projections, or a derived rule output.
-    if (
-        info.is_entity_exists
-        or info.is_identity_field
-        or info.py_field_name is not None
-        or bool(record.get("is_derived"))
-        or record.get("kind") == "derived"
-        or record.get("source_kind") == "derived"
-        or operation.predicate_id.startswith("**")
-    ):
+    # including an Entity-reference relationship field, but not a scalar
+    # field, lowered head, compiled projection, or derived rule output.
+    if not is_scenario_relation_predicate_v1(index, operation.predicate_id):
         raise ScenarioResolutionErrorV1(
             f"predicate {operation.predicate_id!r} is not an allowed extensional relation",
             code="SCENARIO_DERIVED_RELATION_UNSUPPORTED",

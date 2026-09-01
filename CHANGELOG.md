@@ -70,6 +70,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Trusted product compilers have a public, schema-bound compilation
+  context.** `build_product_compilation_context_v1(...)` projects typed field
+  descriptions and positive schema-declared relation premises from a resolved
+  Rule without exposing `SchemaIndex`, mutable Store state, or Rule AST to the
+  consumer. Entity-reference relationship fields are valid
+  `ensure_relation` Scenario targets; scalar fields and derived predicates
+  remain rejected.
 - **Branch-aware Product V2 targets can be retained and executed after a
   process restart.** `FrozenEvaluationTargetV2` stores a closed, canonical,
   ABI- and digest-bound deterministic Product Policy target together with its

@@ -431,6 +431,34 @@ def field_value_type(index: SchemaIndex, entity_type: str, field_name: str) -> F
     )
 
 
+def is_scenario_relation_predicate_v1(index: SchemaIndex, predicate_id: str) -> bool:
+    """Return whether one schema predicate is an admissible relation Scenario target."""
+
+    info = index.predicates_by_id.get(predicate_id)
+    record = next(
+        (
+            item
+            for item in index.schema_ir.get("predicates", ())
+            if isinstance(item, dict) and item.get("pred_id") == predicate_id
+        ),
+        None,
+    )
+    if info is None or record is None:
+        return False
+    return not (
+        info.is_entity_exists
+        or info.is_identity_field
+        or (
+            info.py_field_name is not None
+            and info.value_type_domain != "entity_ref"
+        )
+        or bool(record.get("is_derived"))
+        or record.get("kind") == "derived"
+        or record.get("source_kind") == "derived"
+        or predicate_id.startswith("**")
+    )
+
+
 def materialize_identity(
     entity_type: str,
     partial_identity: dict[str, Any],
