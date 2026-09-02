@@ -12,11 +12,12 @@ becomes a fabricated native ``EvidenceGraph``.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
-from dataclasses import dataclass, field as dc_field, fields
-from hashlib import sha256
 import json
 import math
+from collections.abc import Mapping
+from dataclasses import dataclass, fields
+from dataclasses import field as dc_field
+from hashlib import sha256
 from types import MappingProxyType, UnionType
 from typing import (
     Any,
@@ -49,8 +50,8 @@ from .explain.evidence_tree import (
     EvidenceRule,
     EvidenceTimeline,
     EvidenceTree,
-    Fails,
     Fact,
+    Fails,
     Holds,
     NotReached,
     Source,
@@ -74,10 +75,10 @@ from .product_result_views_v2 import (
     FunctionInputBindingViewV2,
     FunctionOccurrenceViewV2,
     FunctionPortViewV2,
-    ProductRunSideV2,
-    ProductViewErrorV2,
     ProbabilityMaterializationEntryViewV2,
     ProbabilityMaterializationViewV2,
+    ProductRunSideV2,
+    ProductViewErrorV2,
     ResultValueViewV2,
     ResultViewV2,
     RowViewV2,
@@ -92,6 +93,7 @@ from .product_result_views_v2 import (
     result_view_v2_from_run,
 )
 from .protocol.certainty import Certainty
+from .protocol.evaluation_evidence_capture_v2 import project_evaluation_evidence_v2
 from .protocol.evaluation_run_v1 import EvaluationRunV1, ExplainTargetV1
 from .protocol.evaluation_run_v2 import EvaluationRunV2
 from .protocol.goal_plan_v1 import GoalPlanV1, GoalTechnicalAssessmentV1
@@ -104,8 +106,8 @@ from .protocol.policy import (
 from .protocol.scenario_v1 import ResolvedScenarioOperationV1
 from .protocol.semantic_address import SemanticPortAddress
 
-
 EvidenceSupportStateV2: TypeAlias = Literal[
+    "native_retained_capture",
     "native_detached_recomputed",
     "portable_native_inner_not_parity",
     "problog_trace_captured",
@@ -118,6 +120,7 @@ ExplanationConclusionV2: TypeAlias = Literal["holds", "not_claimed"]
 
 _EVIDENCE_SUPPORT_STATES = frozenset(
     {
+        "native_retained_capture",
         "native_detached_recomputed",
         "portable_native_inner_not_parity",
         "problog_trace_captured",
@@ -384,6 +387,7 @@ class EvidenceSupportViewV2:
                 code="PRODUCT_EXPLAIN_V2_EVIDENCE_STATE_INVALID",
             )
         graph_states = {
+            "native_retained_capture",
             "native_detached_recomputed",
             "portable_native_inner_not_parity",
             "problog_trace_captured",
@@ -1299,7 +1303,7 @@ def evaluation_explanation_data_v2_from_evaluation_run_v2(
             "V2 Explain target observation link is malformed",
             code="PRODUCT_EXPLAIN_V2_TARGET_INVALID",
         )
-    evidence = _v2_observation_evidence_support(view)
+    evidence = _v2_observation_evidence_support(run, view, target=target)
     return EvaluationRunV2ExplanationDataV2(
         identity=EvaluationRunV2ExplanationIdentityViewV2(
             source_protocol="evaluation_run_v2",
@@ -1337,17 +1341,44 @@ def evaluation_explanation_data_v2_from_evaluation_run_v2(
 
 
 def _v2_observation_evidence_support(
+    run: EvaluationRunV2,
     view: EvaluationRunV2ResultView,
+    *,
+    target: EvaluationRunV2ExplainTarget,
 ) -> EvidenceSupportViewV2:
-    """State the V2 proof boundary without creating a synthetic graph."""
+    """Project retained V2 evidence without replaying or reading live state."""
 
-    if view.engine == "problog":
-        return EvidenceSupportViewV2("not_available", "PROBLOG_V2_EVIDENCE_GRAPH_NOT_CAPTURED")
-    if view.engine == "native":
-        return EvidenceSupportViewV2(
-            "not_available", "NATIVE_V2_DETACHED_EVIDENCE_GRAPH_NOT_IMPLEMENTED"
+    capture = run.evidence_capture
+    if capture.availability != "available":
+        if capture.availability == "not_requested":
+            reason = (
+                "PROBLOG_V2_EVIDENCE_GRAPH_NOT_CAPTURED"
+                if view.engine == "problog"
+                else "NATIVE_V2_DETACHED_EVIDENCE_GRAPH_NOT_IMPLEMENTED"
+            )
+            return EvidenceSupportViewV2("not_available", reason)
+        state: EvidenceSupportStateV2 = (
+            "unsupported" if capture.availability == "unsupported" else "not_available"
         )
-    return EvidenceSupportViewV2("unsupported", "V2_ENGINE_EVIDENCE_GRAPH_UNSUPPORTED")
+        return EvidenceSupportViewV2(state, capture.reason_code)
+    assert capture.artifact is not None
+    try:
+        graph = project_evaluation_evidence_v2(
+            capture.artifact,
+            run_digest=view.run_digest,
+            side=target.side,
+            engine=target.engine,
+            observation_digest=target.observation_digest,
+        )
+    except Exception as exc:
+        raise ProductViewErrorV2(
+            "retained V2 evidence is invalid or does not match this target",
+            code="PRODUCT_EXPLAIN_V2_EVIDENCE_ARTIFACT_INVALID",
+        ) from exc
+    return EvidenceSupportViewV2(
+        "native_retained_capture",
+        graph=evidence_graph_view_v2_from_graph(graph),
+    )
 
 
 def _explanation_data_v2(
@@ -1841,7 +1872,7 @@ def safe_opaque_provenance_descriptor_v2(value: object) -> OpaqueProvenanceDescr
 def _opaque_locator_wire(value: object) -> Mapping[str, object] | None:
     if isinstance(value, Mapping):
         raw: Mapping[str, object] = value
-    elif hasattr(value, "to_wire") and callable(getattr(value, "to_wire")):
+    elif hasattr(value, "to_wire") and callable(value.to_wire):
         try:
             candidate = value.to_wire()
         except Exception:  # pragma: no cover - third-party descriptor defense.
@@ -2158,9 +2189,9 @@ __all__ = [
     "QueryDescriptorViewV2",
     "ScenarioOperationViewV2",
     "ScenarioPresentationViewV2",
-    "evidence_graph_view_v2_from_graph",
-    "evaluation_explanation_data_v2_from_run",
     "evaluation_explanation_data_v2_from_evaluation_run_v2",
+    "evaluation_explanation_data_v2_from_run",
+    "evidence_graph_view_v2_from_graph",
     "narrate_evaluation_explanation_v2",
     "narrate_evaluation_run_v2_explanation_v2",
     "render_evaluation_explanation_text_v2",

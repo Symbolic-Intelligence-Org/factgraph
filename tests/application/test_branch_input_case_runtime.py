@@ -20,6 +20,12 @@ from factgraph.application.goal_plan_v2_runtime import (
     build_product_evaluation_invocation_v2,
     replay_product_evaluation_run_v2,
 )
+from factgraph.application.protocol.common import ProtocolShapeError
+from factgraph.application.protocol.evaluation_evidence_capture_v2 import (
+    EvaluationEvidenceArtifactV2,
+    evaluation_evidence_artifact_from_bytes_v2,
+    project_evaluation_evidence_v2,
+)
 from factgraph.application.protocol.schema_runtime import EntityRef
 from factgraph.application.protocol.semantic_address import SemanticPortAddress
 from factgraph.application.protocol.semantic_port import entity_identity, field_endpoint
@@ -128,7 +134,108 @@ class BranchInputCaseRuntimeTests(unittest.TestCase):
             {item.row_identity_digest for item in frame.branch_witnesses},
             {frame.observations[0].row_identity_digest},
         )
+        self.assertEqual(run.evidence_capture.availability, "available")
+        artifact = run.evidence_capture.artifact
+        self.assertIsInstance(artifact, EvaluationEvidenceArtifactV2)
+        assert artifact is not None
+        restored = evaluation_evidence_artifact_from_bytes_v2(artifact.to_bytes())
+        graph.close()
+        evidence = project_evaluation_evidence_v2(
+            restored,
+            run_digest=run.run_digest,
+            side="effective",
+            engine="native",
+            observation_digest=frame.observations[0].observation_digest,
+        )
+        self.assertEqual(evidence.subject_binding["age"], 20)
+        self.assertEqual(len(evidence.paths), 2)
         self.assertEqual(replay_product_evaluation_run_v2(run).status, "matched")
+
+    def test_retained_evidence_rejects_target_and_byte_substitution(self) -> None:
+        graph, product, template, _branch_ids = _fixture()
+        targeted = instantiate_compiled_input_case_v1(
+            template,
+            values={"person": EntityRef("Person", {"person_id": "alice"})},
+        )
+        run = build_product_evaluation_invocation_v2(
+            graph=graph,
+            primary=targeted,
+            product_target=product,
+            profile=graph.execution.native_deterministic(target=product).build(),
+            aggregate_limits=ProductInvocationAggregateLimitsV2(
+                max_evidence_bytes=20_000,
+                max_capture_bytes=1_000_000,
+            ),
+        ).run()
+        artifact = run.evidence_capture.artifact
+        assert artifact is not None
+        with self.assertRaises(ProtocolShapeError):
+            project_evaluation_evidence_v2(
+                artifact,
+                run_digest="sha256:" + "0" * 64,
+                side="effective",
+                engine="native",
+                observation_digest=run.effective.engine_frames[0].observations[0].observation_digest,
+            )
+        raw = bytearray(artifact.to_bytes())
+        raw[-2] = ord("0") if raw[-2] != ord("0") else ord("1")
+        with self.assertRaises(ProtocolShapeError):
+            evaluation_evidence_artifact_from_bytes_v2(bytes(raw))
+
+    def test_evidence_availability_is_explicit_for_zero_rows_and_no_budget(self) -> None:
+        graph, product, template, _branch_ids = _fixture()
+        missing = instantiate_compiled_input_case_v1(
+            template,
+            values={"person": EntityRef("Person", {"person_id": "missing"})},
+        )
+        zero = build_product_evaluation_invocation_v2(
+            graph=graph,
+            primary=missing,
+            product_target=product,
+            profile=graph.execution.native_deterministic(target=product).build(),
+            aggregate_limits=ProductInvocationAggregateLimitsV2(
+                max_evidence_bytes=20_000,
+                max_capture_bytes=1_000_000,
+            ),
+        ).run()
+        self.assertEqual(zero.evidence_capture.availability, "zero_row")
+        present = instantiate_compiled_input_case_v1(
+            template,
+            values={"person": EntityRef("Person", {"person_id": "alice"})},
+        )
+        not_requested = build_product_evaluation_invocation_v2(
+            graph=graph,
+            primary=present,
+            product_target=product,
+            profile=graph.execution.native_deterministic(target=product).build(),
+            aggregate_limits=ProductInvocationAggregateLimitsV2(
+                max_evidence_bytes=None,
+                max_capture_bytes=1_000_000,
+            ),
+        ).run()
+        self.assertEqual(not_requested.evidence_capture.availability, "not_requested")
+
+    def test_evidence_budget_fails_the_whole_invocation(self) -> None:
+        graph, product, template, _branch_ids = _fixture()
+        targeted = instantiate_compiled_input_case_v1(
+            template,
+            values={"person": EntityRef("Person", {"person_id": "alice"})},
+        )
+        with self.assertRaises(ProductEvaluationRuntimeErrorV2) as raised:
+            build_product_evaluation_invocation_v2(
+                graph=graph,
+                primary=targeted,
+                product_target=product,
+                profile=graph.execution.native_deterministic(target=product).build(),
+                aggregate_limits=ProductInvocationAggregateLimitsV2(
+                    max_evidence_bytes=1,
+                    max_capture_bytes=1_000_000,
+                ),
+            ).run()
+        self.assertEqual(
+            raised.exception.code,
+            "PRODUCT_INVOCATION_AGGREGATE_LIMIT_EXCEEDED",
+        )
 
     def test_missing_required_value_never_instantiates_unconstrained_query(self) -> None:
         _graph, _product, template, _branch_ids = _fixture()

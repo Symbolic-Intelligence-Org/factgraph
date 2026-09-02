@@ -22,12 +22,12 @@ through this boundary.
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, field, replace
-from decimal import Decimal
 import json
 import math
 import time
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass, field, replace
+from decimal import Decimal
 from typing import TYPE_CHECKING, Any, Literal, NoReturn, cast
 
 from factgraph.adapters.problog.rule_ext import (
@@ -37,14 +37,27 @@ from factgraph.adapters.problog.rule_ext import (
     ProbLogWeightedChoiceExt,
 )
 from factgraph.application.derivation_runtime import evaluate_derivation_plans
+from factgraph.application.evaluation_query_runtime import (
+    ResolvedEvaluationQueryNavigationSelectionV0,
+    compile_evaluation_query,
+)
 from factgraph.application.evaluation_query_target_runtime import (
     TargetedCompiledEvaluationQueryV0,
     assert_targeted_evaluation_query_current,
     targeted_evaluation_query_wrapper_digest_v0,
 )
-from factgraph.application.evaluation_query_runtime import (
-    ResolvedEvaluationQueryNavigationSelectionV0,
-    compile_evaluation_query,
+from factgraph.application.evaluation_run_bundle_runtime import _receipt_case_index
+from factgraph.application.explain.evidence_tree import (
+    LAYOUT_TREE,
+    Builtin,
+    Const,
+    EvidenceAtom,
+    EvidenceGraph,
+    EvidenceRule,
+    EvidenceTree,
+    Fact,
+    Holds,
+    Source,
 )
 from factgraph.application.policy_runtime import compile_policy
 from factgraph.application.portable_evaluation_runtime import (
@@ -57,18 +70,28 @@ from factgraph.application.protocol.derivation import (
     CompiledHeadCall,
     DerivationEvaluateRequest,
 )
+from factgraph.application.protocol.evaluation_evidence_capture_v2 import (
+    EvaluationEvidenceArtifactV2,
+    EvaluationEvidenceCaptureV2,
+    EvaluationEvidenceEntryV2,
+    evaluation_evidence_graph_to_bytes_v2,
+)
+from factgraph.application.protocol.evaluation_query import (
+    EvaluationQuery,
+    EvaluationQuerySelection,
+)
 from factgraph.application.protocol.evaluation_run_v2 import (
     BranchWitnessV2,
     EvaluationEngineFrameV2,
     EvaluationFunctionCallV2,
     EvaluationFunctionMaterializationV2,
+    EvaluationProbabilityMaterializationV2,
     EvaluationReplayPayloadV2,
     EvaluationReplayWorldV2,
     EvaluationRunPlanV2,
     EvaluationRunSideV2,
     EvaluationRunV2,
     EvaluationSelectedRowV2,
-    EvaluationProbabilityMaterializationV2,
     assert_evaluation_run_v2_current,
     problog_probability_materialization_v2_from_world,
 )
@@ -76,29 +99,23 @@ from factgraph.application.protocol.execution_profile_v2 import (
     EvaluationExecutionProfileV2,
     EvaluationTargetPinV2,
     ProbLogPointSemanticsV2,
-    ResolvedExecutionAttachmentV2,
     ResolvedExecutionAttachmentsV2,
+    ResolvedExecutionAttachmentV2,
     assert_evaluation_execution_profile_v2_current,
     profile_accepts_fact_semantics_v2,
     validate_resolved_execution_attachments_v2,
 )
 from factgraph.application.protocol.goal_plan_v1 import GoalValueV1
-from factgraph.application.protocol.evaluation_query import (
-    EvaluationQuery,
-    EvaluationQuerySelection,
-)
 from factgraph.application.protocol.policy import Policy, PolicyOccurrence
-from factgraph.application.protocol.rule import PortType, Rule
 from factgraph.application.protocol.provenance_v1 import (
     ProvenanceLocatorV1,
     ProvenanceRefV1,
 )
+from factgraph.application.protocol.rule import PortType, Rule
 from factgraph.application.protocol.rule_expr_lowering import (
     RuleExprEvaluationTrace,
     _materialize_adapter_derivation_plan,
 )
-from factgraph.application.evaluation_run_bundle_runtime import _receipt_case_index
-from factgraph.application.protocol.semantic_address import SemanticPortAddress
 from factgraph.application.protocol.scenario_v1 import ScenarioSpecV1, ScenarioValueV1
 from factgraph.application.protocol.scenario_v2 import (
     EffectiveWorldFactV2,
@@ -110,6 +127,7 @@ from factgraph.application.protocol.scenario_v2 import (
     canonical_decimal_v2,
 )
 from factgraph.application.protocol.schema_runtime import EntityRef
+from factgraph.application.protocol.semantic_address import SemanticPortAddress
 from factgraph.application.scenario_v1_runtime import (
     ScenarioResolutionErrorV1,
     resolve_scenario_v1,
@@ -133,12 +151,12 @@ from factgraph.core.derivation.candidates import DerivationOutput
 from factgraph.core.evidence.write_protocol import set_field
 from factgraph.core.protocol.digests import sha256_hex, sha256_token
 from factgraph.core.protocol.tup_v1 import claim_args_from_rest_terms
+from factgraph.core.rules.where_ast import Origin, PredAtom, Var
 from factgraph.core.schema.schema_ir import ensure_schema_ir, schema_digest
 from factgraph.core.semantics import SemanticsProfile
-from factgraph.core.store._support import ProjectedFact
+from factgraph.core.store._support import ProjectedFact, ProofReceipt
 from factgraph.core.store.runtime import Store
 from factgraph.core.view.projector import project_view_facts_with_witness
-from factgraph.core.rules.where_ast import Origin, PredAtom, Var
 from factgraph.sdk.product_authoring import (
     FunctionOccurrenceTopologyV1,
     ProductPolicyV1,
@@ -146,8 +164,8 @@ from factgraph.sdk.product_authoring import (
     WeightedChoiceArmV1,
     WeightedChoiceTopologyV1,
     _function_port_predicate_id,
-    asset_snapshot_v1,
     assert_asset_binding_current_v1,
+    asset_snapshot_v1,
 )
 
 # The public SDK V2 profile builder deliberately uses this exact digest.  It
@@ -259,23 +277,6 @@ class _ProductInvocationAggregateMeterV2:
         )
         row_count = sum(len(frame.observations) for frame in successful_frames)
         witness_count = sum(len(frame.branch_witnesses) for frame in successful_frames)
-        evidence_bytes = sum(
-            len(
-                json.dumps(
-                    {
-                        "branch": witness.compiled_branch_id,
-                        "side": witness.evaluation_side,
-                        "row": witness.row_identity_digest,
-                        "proof": witness.proof_identity_digest,
-                        "evidence": witness.evidence_references,
-                    },
-                    sort_keys=True,
-                    separators=(",", ":"),
-                ).encode("utf-8")
-            )
-            for frame in successful_frames
-            for witness in frame.branch_witnesses
-        )
         capture_bytes = len(
             json.dumps(
                 capture.to_wire(),
@@ -287,12 +288,15 @@ class _ProductInvocationAggregateMeterV2:
         )
         self.rows += row_count
         self.units += len(successful_frames) + row_count + witness_count
-        self.evidence_bytes += evidence_bytes
         self.capture_bytes += capture_bytes
         self._check("max_rows", self.rows)
         self._check("max_units", self.units)
         self._check("max_evidence_bytes", self.evidence_bytes)
         self._check("max_capture_bytes", self.capture_bytes)
+
+    def charge_evidence_capture(self, byte_count: int) -> None:
+        self.evidence_bytes += byte_count
+        self._check("max_evidence_bytes", self.evidence_bytes)
 
     def charge_program_capture(self, byte_count: int) -> None:
         self.capture_bytes += byte_count
@@ -312,6 +316,15 @@ class _ProductInvocationAggregateMeterV2:
 
 
 @dataclass(frozen=True)
+class _PendingEvaluationEvidenceV2:
+    side: Literal["baseline", "effective", "candidate_effective"]
+    engine: str
+    observation_digest: str
+    row_identity_digest: str
+    graph: EvidenceGraph
+
+
+@dataclass(frozen=True)
 class ProductEvaluationInvocationV2:
     """In-process V2 intent ready for one captured execution.
 
@@ -319,7 +332,7 @@ class ProductEvaluationInvocationV2:
     used only by :meth:`run` to take the one permitted live view capture.
     """
 
-    _graph: "SDKStore"
+    _graph: SDKStore
     primary: TargetedCompiledEvaluationQueryV0
     product_target: _ProductTarget
     profile: EvaluationExecutionProfileV2
@@ -395,7 +408,7 @@ class CapturedFunctionDefinitionV2:
 
 def build_product_evaluation_invocation_v2(
     *,
-    graph: "SDKStore",
+    graph: SDKStore,
     primary: TargetedCompiledEvaluationQueryV0,
     product_target: _ProductTarget,
     profile: EvaluationExecutionProfileV2,
@@ -630,6 +643,13 @@ def execute_product_evaluation_invocation_v2(
     )
     baseline_capture = EvaluationReplayWorldV2("baseline", baseline_world)
     effective_capture = EvaluationReplayWorldV2("effective", effective_world)
+    evidence_requested = (
+        invocation.aggregate_limits is not None
+        and invocation.aggregate_limits.max_evidence_bytes is not None
+    )
+    pending_evidence: list[_PendingEvaluationEvidenceV2] | None = (
+        [] if evidence_requested else None
+    )
 
     baseline_side = _execute_side(
         name="baseline",
@@ -643,6 +663,7 @@ def execute_product_evaluation_invocation_v2(
         product=invocation.product_target,
         source_schema_index=graph._application_schema_index,
         traces=primary_traces if invocation.primary.compiled_query.applicable_branch_ids else (),
+        evidence_output=pending_evidence,
     )
     if aggregate is not None:
         aggregate.charge_side(baseline_side, baseline_capture)
@@ -659,6 +680,7 @@ def execute_product_evaluation_invocation_v2(
         product=invocation.product_target,
         source_schema_index=graph._application_schema_index,
         traces=primary_traces if invocation.primary.compiled_query.applicable_branch_ids else (),
+        evidence_output=pending_evidence,
     )
     if aggregate is not None:
         aggregate.charge_side(effective_side, effective_capture)
@@ -689,6 +711,7 @@ def execute_product_evaluation_invocation_v2(
                 and invocation.candidate.compiled_query.applicable_branch_ids
                 else ()
             ),
+            evidence_output=pending_evidence,
         )
         if aggregate is not None:
             aggregate.charge_side(candidate_side, candidate_capture)
@@ -739,7 +762,7 @@ def execute_product_evaluation_invocation_v2(
     )
     if len(payload.compiled_program_bytes) > invocation.profile.capture.max_capture_bytes:
         _fail("V2 replay payload exceeds profile capture budget", "V2_CAPTURE_LIMIT_EXCEEDED")
-    return EvaluationRunV2(
+    run = EvaluationRunV2(
         primary_plan=primary_plan,
         profile=invocation.profile,
         replay_payload=payload,
@@ -748,6 +771,15 @@ def execute_product_evaluation_invocation_v2(
         candidate_plan=candidate_plan,
         candidate_effective=candidate_side,
     )
+    capture = _seal_evaluation_evidence_capture_v2(
+        run=run,
+        requested=evidence_requested,
+        pending=() if pending_evidence is None else tuple(pending_evidence),
+    )
+    if aggregate is not None and capture.artifact is not None:
+        aggregate.charge_evidence_capture(len(capture.artifact.to_bytes()))
+        aggregate.check_deadline()
+    return replace(run, evidence_capture=capture)
 
 
 def replay_product_evaluation_run_v2(run: EvaluationRunV2) -> EvaluationRunReplayV2:
@@ -1505,7 +1537,7 @@ def _materialize_program(
 
 
 def _baseline_metadata_by_witness(
-    graph: "SDKStore",
+    graph: SDKStore,
     relation: Mapping[str, Sequence[ProjectedFact]],
 ) -> dict[str, ScenarioMetaV2]:
     output: dict[str, ScenarioMetaV2] = {}
@@ -1706,6 +1738,7 @@ def _execute_side(
     source_schema_index: Any | None = None,
     captured_function_materializations: tuple[EvaluationFunctionMaterializationV2, ...] = (),
     traces: tuple[RuleExprEvaluationTrace, ...] = (),
+    evidence_output: list[_PendingEvaluationEvidenceV2] | None = None,
 ) -> EvaluationRunSideV2:
     frames, function_materializations = _execute_program_on_world(
         world=world,
@@ -1718,6 +1751,7 @@ def _execute_side(
         captured_function_materializations=captured_function_materializations,
         side=name,
         traces=traces,
+        evidence_output=evidence_output,
     )
     return EvaluationRunSideV2(
         name=name,
@@ -1743,6 +1777,7 @@ def _execute_program_on_world(
     captured_function_materializations: tuple[EvaluationFunctionMaterializationV2, ...] = (),
     side: Literal["baseline", "effective", "candidate_effective"] = "effective",
     traces: tuple[RuleExprEvaluationTrace, ...] = (),
+    evidence_output: list[_PendingEvaluationEvidenceV2] | None = None,
 ) -> tuple[
     tuple[EvaluationEngineFrameV2, ...],
     tuple[EvaluationFunctionMaterializationV2, ...],
@@ -1795,6 +1830,18 @@ def _execute_program_on_world(
             traces=traces,
             side=side,
         )
+        if evidence_output is not None:
+            evidence_output.extend(
+                _capture_native_evidence_v2(
+                    side=side,
+                    outputs=outputs,
+                    rows=rows,
+                    selection_shape=selection_shape,
+                    witnesses=witnesses,
+                    store=store,
+                    world=world,
+                )
+            )
         return (
             EvaluationEngineFrameV2(
                 "native", "succeeded", rows, branch_witnesses=witnesses
@@ -2336,6 +2383,195 @@ def _branch_witnesses_v2(
         )
         witnesses.setdefault(witness.witness_digest, witness)
     return tuple(sorted(witnesses.values(), key=lambda item: item.witness_digest))
+
+
+def _capture_native_evidence_v2(
+    *,
+    side: Literal["baseline", "effective", "candidate_effective"],
+    outputs: Sequence[DerivationOutput],
+    rows: tuple[EvaluationSelectedRowV2, ...],
+    selection_shape: tuple[tuple[str, str], ...],
+    witnesses: tuple[BranchWitnessV2, ...],
+    store: Store,
+    world: EffectiveWorldV2,
+) -> tuple[_PendingEvaluationEvidenceV2, ...]:
+    """Capture exact positive-row support before the temporary Store closes."""
+
+    rows_by_identity = {row.row_identity_digest: row for row in rows}
+    branch_by_proof = {
+        witness.proof_identity_digest: witness.compiled_branch_id for witness in witnesses
+    }
+    paths_by_row: dict[str, list[EvidenceTree]] = {key: [] for key in rows_by_identity}
+    for output in outputs:
+        projected = _selected_rows(
+            (output,),
+            selection_shape=selection_shape,
+            probability_required=False,
+            max_rows=1,
+        )
+        if len(projected) != 1:
+            _fail("native evidence output is not one selected row", "V2_EVIDENCE_CAPTURE_INVALID")
+        row = rows_by_identity.get(projected[0].row_identity_digest)
+        if row is None:
+            continue
+        receipt = store._lookup_support_artifact(output.support_digest)
+        if not isinstance(receipt, ProofReceipt):
+            _fail("native evidence support is missing", "V2_EVIDENCE_CAPTURE_INCOMPLETE")
+        branch_id = branch_by_proof.get(output.support_digest, "query")
+        paths_by_row[row.row_identity_digest].append(
+            _evidence_tree_from_receipt_v2(
+                receipt,
+                branch_id=branch_id,
+                proof_digest=output.support_digest,
+            )
+        )
+
+    captured: list[_PendingEvaluationEvidenceV2] = []
+    scenario_operations = tuple(
+        item.resolved_operation_digest for item in world.operation_evidence
+    )
+    for row in rows:
+        paths = tuple(paths_by_row[row.row_identity_digest])
+        if not paths:
+            _fail("native result row has no retained evidence", "V2_EVIDENCE_CAPTURE_INCOMPLETE")
+        subject = {alias: value.value for alias, value in row.values}
+        graph = EvidenceGraph(
+            graph_id=_token(
+                "evaluation_evidence_graph_v2",
+                {
+                    "side": side,
+                    "row": row.row_identity_digest,
+                    "paths": tuple(path.tree_id for path in paths),
+                },
+            ),
+            engine="native",
+            layout_hint=LAYOUT_TREE,
+            subject_binding=subject,
+            paths=paths,
+            metadata={
+                "evidence_scope": "positive_row",
+                "world_capture_digest": world.world_digest,
+                "scenario_operation_digests": scenario_operations,
+            },
+        )
+        captured.append(
+            _PendingEvaluationEvidenceV2(
+                side=side,
+                engine="native",
+                observation_digest=row.observation_digest,
+                row_identity_digest=row.row_identity_digest,
+                graph=graph,
+            )
+        )
+    return tuple(captured)
+
+
+def _evidence_tree_from_receipt_v2(
+    receipt: ProofReceipt,
+    *,
+    branch_id: str,
+    proof_digest: str,
+) -> EvidenceTree:
+    atoms: list[EvidenceAtom] = []
+    for index, witness in enumerate(receipt.pred_witnesses):
+        predicate = witness.pred_condition_key.rsplit(":", 1)[-1]
+        atoms.append(
+            EvidenceAtom(
+                atom_id=f"{branch_id}:fact:{index}",
+                form=Fact(predicate=predicate, terms=()),
+                verdict=Holds(
+                    support=tuple(
+                        Source(ref=assertion_id, meta={"role": "captured_witness"})
+                        for assertion_id in witness.asrt_ids
+                    )
+                ),
+            )
+        )
+    for index, step in enumerate(receipt.non_fact_steps):
+        atoms.append(
+            EvidenceAtom(
+                atom_id=f"{branch_id}:step:{index}",
+                form=Builtin(
+                    kind=step.kind,
+                    operands=tuple(Const(value) for _key, value in step.details),
+                ),
+                verdict=Holds(),
+            )
+        )
+    rule = EvidenceRule(
+        occurrence_alias=branch_id,
+        rule_id=branch_id,
+        role="head",
+        status="holds",
+        ports={key: value for key, value in receipt.binding_items},
+        atoms=tuple(atoms),
+    )
+    return EvidenceTree(
+        tree_id=_token(
+            "evaluation_evidence_tree_v2",
+            {"branch": branch_id, "proof": proof_digest},
+        ),
+        status="holds",
+        rules=(rule,),
+        metadata={"proof_identity_digest": proof_digest},
+    )
+
+
+def _seal_evaluation_evidence_capture_v2(
+    *,
+    run: EvaluationRunV2,
+    requested: bool,
+    pending: tuple[_PendingEvaluationEvidenceV2, ...],
+) -> EvaluationEvidenceCaptureV2:
+    if not requested:
+        return EvaluationEvidenceCaptureV2(
+            "not_requested", reason_code="EVALUATION_EVIDENCE_NOT_REQUESTED"
+        )
+    supported_frames = tuple(
+        frame
+        for side in (run.baseline, run.effective, run.candidate_effective)
+        if side is not None
+        for frame in side.engine_frames
+        if frame.status == "succeeded"
+    )
+    observations = sum(len(frame.observations) for frame in supported_frames)
+    if observations == 0:
+        return EvaluationEvidenceCaptureV2("zero_row", reason_code="EVALUATION_EVIDENCE_ZERO_ROW")
+    if any(frame.engine != "native" for frame in supported_frames):
+        return EvaluationEvidenceCaptureV2(
+            "unsupported", reason_code="EVALUATION_EVIDENCE_ENGINE_UNSUPPORTED"
+        )
+    if len(pending) != observations:
+        return EvaluationEvidenceCaptureV2(
+            "incomplete", reason_code="EVALUATION_EVIDENCE_CAPTURE_INCOMPLETE"
+        )
+    artifact = EvaluationEvidenceArtifactV2(
+        run_digest=run.run_digest,
+        profile_digest=run.profile.profile_digest,
+        plan_digests=tuple(
+            sorted(
+                {
+                    run.primary_plan.plan_digest,
+                    *(
+                        ()
+                        if run.candidate_plan is None
+                        else (run.candidate_plan.plan_digest,)
+                    ),
+                }
+            )
+        ),
+        entries=tuple(
+            EvaluationEvidenceEntryV2(
+                side=item.side,
+                engine=item.engine,
+                observation_digest=item.observation_digest,
+                row_identity_digest=item.row_identity_digest,
+                graph_bytes=evaluation_evidence_graph_to_bytes_v2(item.graph),
+            )
+            for item in pending
+        ),
+    )
+    return EvaluationEvidenceCaptureV2("available", artifact=artifact)
 
 
 def _goal_value_from_term(value: object, expected_tag: str) -> GoalValueV1:
@@ -4753,13 +4989,13 @@ if TYPE_CHECKING:  # pragma: no cover
 
 
 __all__ = [
+    "GOAL_PLAN_V2_COMPILER_DIGEST",
     "CapturedFunctionDefinitionV2",
     "EvaluationRunReplaySideV2",
     "EvaluationRunReplayV2",
-    "GOAL_PLAN_V2_COMPILER_DIGEST",
     "ProductEvaluationInvocationV2",
-    "ProductInvocationAggregateLimitsV2",
     "ProductEvaluationRuntimeErrorV2",
+    "ProductInvocationAggregateLimitsV2",
     "build_product_evaluation_invocation_v2",
     "choice_capture_from_evaluation_run_v2",
     "execute_product_evaluation_invocation_v2",

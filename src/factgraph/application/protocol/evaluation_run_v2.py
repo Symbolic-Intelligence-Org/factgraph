@@ -17,6 +17,7 @@ from typing import Literal, TypeAlias
 from factgraph.core.protocol.digests import sha256_hex
 
 from .common import ProtocolShapeError, _require_non_empty_str
+from .evaluation_evidence_capture_v2 import EvaluationEvidenceCaptureV2
 from .execution_profile_v2 import (
     EvaluationEngineV2,
     EvaluationExecutionProfileV2,
@@ -38,7 +39,6 @@ from .scenario_v2 import (
     ScenarioOperationMetaBindingV2,
     canonical_decimal_v2,
 )
-
 
 EvaluationRunWorldSideV2: TypeAlias = Literal["baseline", "effective", "candidate_effective"]
 EvaluationRunFrameStatusV2: TypeAlias = Literal["succeeded", "failed", "unsupported"]
@@ -889,7 +889,7 @@ class EvaluationProbabilityMaterializationEntryV2:
             field_name="EvaluationProbabilityMaterializationEntryV2.declared_point_probability",
         )
         if declared != self.declared_point_probability or not (
-            Decimal("0") <= Decimal(declared) <= Decimal("1")
+            Decimal(0) <= Decimal(declared) <= Decimal(1)
         ):
             raise ProtocolShapeError(
                 "EvaluationProbabilityMaterializationEntryV2 declared probability is invalid"
@@ -1379,6 +1379,11 @@ class EvaluationRunV2:
     effective: EvaluationRunSideV2
     candidate_plan: EvaluationRunPlanV2 | None = None
     candidate_effective: EvaluationRunSideV2 | None = None
+    evidence_capture: EvaluationEvidenceCaptureV2 = field(
+        default_factory=lambda: EvaluationEvidenceCaptureV2(
+            "not_requested", reason_code="EVALUATION_EVIDENCE_NOT_REQUESTED"
+        )
+    )
     run_digest: str = field(init=False)
 
     def __post_init__(self) -> None:
@@ -1452,8 +1457,30 @@ class EvaluationRunV2:
         if hasattr(self, "run_digest"):
             if self.run_digest != expected_digest:
                 raise ProtocolShapeError("EvaluationRunV2.run_digest is stale")
-            return
-        object.__setattr__(self, "run_digest", expected_digest)
+        else:
+            object.__setattr__(self, "run_digest", expected_digest)
+        if not isinstance(self.evidence_capture, EvaluationEvidenceCaptureV2):
+            raise ProtocolShapeError("EvaluationRunV2 evidence capture is malformed")
+        artifact = self.evidence_capture.artifact
+        if artifact is not None:
+            expected_plans = tuple(
+                sorted(
+                    {
+                        self.primary_plan.plan_digest,
+                        *(
+                            ()
+                            if self.candidate_plan is None
+                            else (self.candidate_plan.plan_digest,)
+                        ),
+                    }
+                )
+            )
+            if (
+                artifact.run_digest != expected_digest
+                or artifact.profile_digest != self.profile.profile_digest
+                or artifact.plan_digests != expected_plans
+            ):
+                raise ProtocolShapeError("EvaluationRunV2 evidence pins do not match the run")
 
     def _validate_side(
         self,
@@ -1776,8 +1803,9 @@ def assert_evaluation_run_v2_current(run: EvaluationRunV2) -> None:
             if run.candidate_effective is None
             else _rebuild_run_side_v2(run.candidate_effective)
         ),
+        evidence_capture=run.evidence_capture,
     )
-    if fresh.run_digest != run.run_digest:
+    if fresh.run_digest != run.run_digest or fresh.evidence_capture != run.evidence_capture:
         raise ProtocolShapeError("EvaluationRunV2 run seal is stale")
 
 
@@ -1850,14 +1878,18 @@ def evaluation_replay_payload_v2_from_bytes(raw: bytes) -> EvaluationReplayPaylo
 
 
 __all__ = [
+    "MAX_EVALUATION_REPLAY_V2_BYTES",
+    "MAX_EVALUATION_REPLAY_V2_DEPTH",
+    "MAX_EVALUATION_REPLAY_V2_DESCRIPTOR_BYTES",
+    "MAX_EVALUATION_REPLAY_V2_ROWS",
     "BranchWitnessV2",
     "EvaluationEngineFrameV2",
     "EvaluationExpectationSupportV2",
+    "EvaluationFunctionCallV2",
+    "EvaluationFunctionMaterializationV2",
     "EvaluationProbabilityMaterializationActionV2",
     "EvaluationProbabilityMaterializationEntryV2",
     "EvaluationProbabilityMaterializationV2",
-    "EvaluationFunctionCallV2",
-    "EvaluationFunctionMaterializationV2",
     "EvaluationReplayPayloadV2",
     "EvaluationReplayWorldV2",
     "EvaluationRunFrameStatusV2",
@@ -1866,13 +1898,9 @@ __all__ = [
     "EvaluationRunV2",
     "EvaluationRunWorldSideV2",
     "EvaluationSelectedRowV2",
-    "MAX_EVALUATION_REPLAY_V2_BYTES",
-    "MAX_EVALUATION_REPLAY_V2_DEPTH",
-    "MAX_EVALUATION_REPLAY_V2_DESCRIPTOR_BYTES",
-    "MAX_EVALUATION_REPLAY_V2_ROWS",
+    "assert_evaluation_replay_payload_v2_current",
+    "assert_evaluation_run_v2_current",
     "evaluation_replay_payload_v2_bytes",
     "evaluation_replay_payload_v2_from_bytes",
     "problog_probability_materialization_v2_from_world",
-    "assert_evaluation_replay_payload_v2_current",
-    "assert_evaluation_run_v2_current",
 ]
