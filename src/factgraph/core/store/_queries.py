@@ -38,7 +38,7 @@ def explain_fact(store: Any, pred_id: str, e_ref: str, *val_atoms: Any) -> dict[
         chosen_ids = set(chosen_map.values())
         matching = [row["asrt_id"] for row in claim_rows if row["asrt_id"] in chosen_ids]
         if matching:
-            chosen_asrt_id = sorted(matching)[0]
+            chosen_asrt_id = min(matching)
 
     return {
         "pred_id": pred_id,

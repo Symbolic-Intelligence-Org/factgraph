@@ -845,7 +845,7 @@ def _branch_declared_port_source_for_name(
     if not _same_name_bindings_are_joined(name, bindings, branch.pending_joins, occurrence_map):
         aliases = ", ".join(sorted(binding.occurrence_alias for binding in bindings))
         raise RuleExprError(f"declared port {name!r} is ambiguous across occurrences: {aliases}")
-    return _branch_source(branch.branch_id, sorted(bindings, key=_binding_sort_key)[0])
+    return _branch_source(branch.branch_id, min(bindings, key=_binding_sort_key))
 
 
 def _declared_port_state_for_rule_expr_plan(
@@ -926,7 +926,7 @@ def _branch_declared_port_sources(
         if not _same_name_bindings_are_joined(name, bindings, branch.pending_joins, occurrence_map):
             aliases = ", ".join(sorted(binding.occurrence_alias for binding in bindings))
             raise RuleExprError(f"declared port {name!r} is ambiguous across occurrences: {aliases}")
-        declared[name] = _branch_source(branch.branch_id, sorted(bindings, key=_binding_sort_key)[0])
+        declared[name] = _branch_source(branch.branch_id, min(bindings, key=_binding_sort_key))
     return declared
 
 

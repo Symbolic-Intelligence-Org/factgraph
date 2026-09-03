@@ -1077,7 +1077,7 @@ def _validate_atom_subset(atom: Any) -> tuple[Any, ...]:
     if kind == "pred":
         if len(atom) != 3:
             raise WhereValidationError("pred atom must be ('pred', pred_id, [terms...])")
-        _, pred_id, terms = atom
+        _, _pred_id, terms = atom
         if not isinstance(terms, list):
             raise WhereValidationError("pred terms must be list")
         return atom

@@ -365,7 +365,7 @@ def _validate_atom(atom: Any) -> tuple[Any, ...]:
     if kind == "pred":
         if len(atom) != 3:
             raise WhereValidationError("pred atom must be ('pred', pred_id, [terms...])")
-        _, pred_id, terms = atom
+        _, _pred_id, terms = atom
         if not isinstance(terms, list):
             raise WhereValidationError("pred terms must be list")
         if any(_is_aggregate_term(term) for term in terms):
@@ -1252,7 +1252,7 @@ def _visible_vars_in_term(term: Any, bound_vars: set[str]) -> set[str]:
     if _is_var(term):
         return {term}
     if _is_aggregate_term(term):
-        kind, target, filter_atoms = term
+        _kind, target, filter_atoms = term
         target_vars = _visible_vars_in_term(target, bound_vars) if target is not None else set()
         filter_vars = set(_vars_in_atoms(filter_atoms))
         return target_vars | (filter_vars & bound_vars)

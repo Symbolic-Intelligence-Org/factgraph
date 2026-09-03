@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from itertools import pairwise
 from typing import Any, Mapping, Sequence
 
 _SUPPORT_RE = re.compile(r"^(?P<src>.+?) -\[(?P<rel>.+?)\]-> (?P<dst>.+)$")
@@ -249,7 +250,7 @@ def validate_struct_support_proto(
         return False, "broken_struct_chain"
     if parsed[-1][2] != triple[2]:
         return False, "broken_struct_chain"
-    for left, right in zip(parsed, parsed[1:]):
+    for left, right in pairwise(parsed):
         if left[2] != right[0]:
             return False, "broken_struct_chain"
     return True, ""

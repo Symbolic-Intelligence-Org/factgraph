@@ -1030,7 +1030,7 @@ def _aggregate_target_label(target: Any, filter_atoms: Any) -> str:
             ):
                 return pred_id.rsplit(":", 1)[1]
     if target_vars:
-        return _clean_var_label(sorted(target_vars)[0])
+        return _clean_var_label(min(target_vars))
     return "value"
 
 

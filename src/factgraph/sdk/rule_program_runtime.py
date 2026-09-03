@@ -181,10 +181,10 @@ def evaluate_rule_program(
     )
     support_digest: str | None = None
     if evaluation.bindings:
-        binding = sorted(
+        binding = min(
             evaluation.bindings,
             key=lambda row: tuple(sorted((str(key), repr(value)) for key, value in row.items())),
-        )[0]
+        )
         case_index = find_winning_case_index(
             where=root_where,
             binding=binding,

@@ -261,7 +261,7 @@ def run_package_provenance(
     with tempfile.TemporaryDirectory() as work_dir:
         program_path = Path(work_dir) / "program.dl"
         program_path.write_text(
-            "\n".join([view_text, policy_text, idb_text]) + "\n",
+            f"{view_text}\n{policy_text}\n{idb_text}\n",
             encoding="utf-8",
         )
 

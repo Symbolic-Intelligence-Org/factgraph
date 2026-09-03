@@ -72,7 +72,7 @@ def _evaluation_run_bundle_evidence(
     """
     if not isinstance(row_capture_digest, str) or not row_capture_digest:
         raise ProtocolShapeError("row_capture_digest must be a non-empty string")
-    where, relation, view = _materialize_evaluation_run_bundle_input(bundle)
+    where, _relation, view = _materialize_evaluation_run_bundle_input(bundle)
     matches = tuple(row for row in bundle.rows if row.row_capture_digest == row_capture_digest)
     if not matches:
         raise ProtocolShapeError("EvaluationRun row_capture_digest was not found")

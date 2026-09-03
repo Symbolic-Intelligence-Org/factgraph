@@ -307,7 +307,7 @@ class Entity(metaclass=EntityMeta):
                 if isinstance(row, dict) and isinstance(row.get("py_name"), str)
             )
         seen = set(ordered_names)
-        ordered_names.extend(sorted(name for name in self.__dict__.keys() if name not in seen))
+        ordered_names.extend(sorted(name for name in self.__dict__ if name not in seen))
         items = [f"{name}={reprlib.repr(getattr(self, name))}" for name in ordered_names]
         preview = ", ".join(items[:8])
         if len(items) > 8:
