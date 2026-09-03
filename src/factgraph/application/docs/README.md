@@ -53,6 +53,10 @@ compatibility.
   - Published stored-relation graph admission, typed path bindings and
     selections, virtual entity-domain guards, sealed compiler products,
     native execution, row-limit behavior, and stable error boundaries.
+- `src/factgraph/application/docs/semantic_candidates.md`
+  - Product-neutral read-only scalar candidate batches, exact and normalized
+    matching, bounded suggestions, canonical evidence, and the Product V2
+    optimistic revision guard and typed failure semantics.
 - `src/factgraph/application/docs/product_result_explain_v2.md`
   - Immutable Product read views over sealed V1 and V2 runs: explicit
     row/summary targets, structured Explain data, pure renderers, detached
