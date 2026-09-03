@@ -321,38 +321,30 @@ def _where_ast_gate_enabled() -> bool:
 def _adapt_where_ast_error(exc: Exception) -> WhereValidationError:
     adapted = WhereValidationError(str(exc))
     origin_path = getattr(exc, "path", None) or "$.where"
-    setattr(adapted, "kind", "where_ast_validate")
-    setattr(adapted, "path", origin_path)
-    setattr(
-        adapted,
-        "details",
-        {
-            "ast_error_code": type(exc).__name__,
-            "message": str(exc),
-            "origin_source": None,
-            "origin_path": getattr(exc, "path", None),
-            "op": None,
-            "tag": None,
-        },
-    )
+    adapted.kind = "where_ast_validate"
+    adapted.path = origin_path
+    adapted.details = {
+        "ast_error_code": type(exc).__name__,
+        "message": str(exc),
+        "origin_source": None,
+        "origin_path": getattr(exc, "path", None),
+        "op": None,
+        "tag": None,
+    }
     return adapted
 
 
 def _runtime_invariant_error(message: str, *, op: str | None = None) -> WhereValidationError:
     err = WhereValidationError(message)
-    setattr(err, "kind", "where_compile_runtime")
-    setattr(err, "path", "$.where")
-    setattr(
-        err,
-        "details",
-        {
-            "message": message,
-            "origin_source": "where_compile",
-            "origin_path": "$.where",
-            "op": op,
-            "tag": "validator_miss",
-        },
-    )
+    err.kind = "where_compile_runtime"
+    err.path = "$.where"
+    err.details = {
+        "message": message,
+        "origin_source": "where_compile",
+        "origin_path": "$.where",
+        "op": op,
+        "tag": "validator_miss",
+    }
     return err
 
 

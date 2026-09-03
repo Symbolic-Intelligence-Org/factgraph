@@ -409,7 +409,7 @@ def _atom_repr_text(form: StructureAtomForm | None, *, schema_index: object | No
                 "%FLD": _term_repr_text(form.terms[1]) if len(form.terms) > 1 else "",
                 "%ENT": _static_entity_repr_for_fact(form, info),
             }
-            rendered = str(getattr(info, "repr"))
+            rendered = str(info.repr)
             for token, value in placeholder_values.items():
                 rendered = rendered.replace(token, value)
             return rendered

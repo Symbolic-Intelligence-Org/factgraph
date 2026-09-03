@@ -105,20 +105,16 @@ def _where_ast_gate_enabled() -> bool:
 def _adapt_where_ast_error(exc: Exception) -> WhereValidationError:
     adapted = WhereValidationError(str(exc))
     origin_path = getattr(exc, "path", None) or "$.where"
-    setattr(adapted, "kind", "where_ast_validate")
-    setattr(adapted, "path", origin_path)
-    setattr(
-        adapted,
-        "details",
-        {
-            "ast_error_code": type(exc).__name__,
-            "message": str(exc),
-            "origin_source": None,
-            "origin_path": getattr(exc, "path", None),
-            "op": None,
-            "tag": None,
-        },
-    )
+    adapted.kind = "where_ast_validate"
+    adapted.path = origin_path
+    adapted.details = {
+        "ast_error_code": type(exc).__name__,
+        "message": str(exc),
+        "origin_source": None,
+        "origin_path": getattr(exc, "path", None),
+        "op": None,
+        "tag": None,
+    }
     return adapted
 
 

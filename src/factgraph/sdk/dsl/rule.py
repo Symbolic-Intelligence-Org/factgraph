@@ -338,7 +338,7 @@ class Query:
 
 def _lower_select_item(item: Any) -> Any:
     if hasattr(item, "token") and isinstance(getattr(item, "token", None), str):
-        return getattr(item, "token")
+        return item.token
     return item
 
 

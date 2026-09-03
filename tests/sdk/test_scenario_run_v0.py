@@ -116,7 +116,7 @@ def _support_state(graph: SDKStore) -> tuple[object, ...]:
 
 
 def _all_sources(explanation: object) -> list[object]:
-    evidence = getattr(explanation, "evidence")
+    evidence = explanation.evidence
     return [
         source
         for tree in evidence.paths

@@ -487,7 +487,7 @@ class GoalPlanV1SDKTests(unittest.TestCase):
         ).pred_id
 
         def age_supports(explanation: object) -> tuple[object, ...]:
-            evidence_graph = getattr(explanation, "evidence_graph")
+            evidence_graph = explanation.evidence_graph
             assert evidence_graph is not None
             return tuple(
                 source

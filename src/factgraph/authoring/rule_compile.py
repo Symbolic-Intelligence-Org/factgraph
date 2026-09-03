@@ -227,15 +227,11 @@ def _rule_ast_gate_enabled() -> bool:
 def _adapt_rule_ast_error(exc: Exception) -> AuthoringRuleCompileError:
     origin_path = getattr(exc, "path", None) or "$.query_rule"
     err = AuthoringRuleCompileError(str(exc), path=origin_path)
-    setattr(err, "kind", "rule_ast_validate")
-    setattr(
-        err,
-        "details",
-        {
-            "ast_error_code": type(exc).__name__,
-            "message": str(exc),
-            "origin_source": "authoring.rule_compile",
-            "origin_path": getattr(exc, "path", None),
-        },
-    )
+    err.kind = "rule_ast_validate"
+    err.details = {
+        "ast_error_code": type(exc).__name__,
+        "message": str(exc),
+        "origin_source": "authoring.rule_compile",
+        "origin_path": getattr(exc, "path", None),
+    }
     return err

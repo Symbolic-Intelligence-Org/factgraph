@@ -99,7 +99,7 @@ def _validate_where_for_ruleref(where: list[Any]) -> None:
         )
     except (WhereASTError, WhereASTValidationError) as exc:
         adapted = WhereValidationError(str(exc))
-        setattr(adapted, "path", getattr(exc, "path", None) or "$.where")
+        adapted.path = getattr(exc, "path", None) or "$.where"
         raise adapted from exc
 
 

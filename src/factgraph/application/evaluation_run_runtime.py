@@ -222,7 +222,7 @@ def _assert_anchor_target_matches_query(
 def _certainty(value: object) -> object:
     if value is None:
         return None
-    return {"lo": getattr(value, "lo"), "hi": getattr(value, "hi"), "kind": getattr(value, "kind")}
+    return {"lo": value.lo, "hi": value.hi, "kind": value.kind}
 
 
 __all__ = ["build_evaluation_run_anchor_v0", "build_evaluation_run_target_v0"]
