@@ -23,6 +23,10 @@ PYTHONPATH=src python -m pytest
 
 ## Quality Checks
 
+The `dev` extra pins Ruff to `0.16.5` so local and CI lint checks use the same
+rules. Install that extra before running the checks. Review tool upgrades
+separately from source cleanup; Python 3.10 and 3.11 remain supported.
+
 ```bash
 python -m ruff check src/factgraph tests
 python -m mypy src/factgraph
