@@ -13,6 +13,9 @@ def _split_top_level_args(args_text: str) -> list[str]:
     while i < len(args_text):
         ch = args_text[i]
         if in_single:
+            if ch == "\\":
+                i += 2
+                continue
             if ch == "'" and i + 1 < len(args_text) and args_text[i + 1] == "'":
                 i += 2
                 continue
@@ -21,6 +24,9 @@ def _split_top_level_args(args_text: str) -> list[str]:
             i += 1
             continue
         if in_double:
+            if ch == "\\":
+                i += 2
+                continue
             if ch == '"':
                 in_double = False
             i += 1

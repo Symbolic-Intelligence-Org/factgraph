@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 import json
 import re
@@ -15,6 +15,7 @@ from factgraph.adapters.problog.rule_ext import (
 )
 from factgraph.adapters.souffle.where_compile import extract_where_variables
 from factgraph.core.store.runtime import Store
+from factgraph.core.view.projector import _project_entity_domains_with_witness
 
 _NONE_VALUE = "__none__"
 _VAR_IDENT_RE = re.compile(r"[^A-Za-z0-9_]")
@@ -103,29 +104,11 @@ def export_problog(
         lines.append(":- use_module(library(lists)).")
         lines.append("")
 
-    active_claims = [
-        claim
-        for claim in store.ledger.claims
-        if not store.ledger.has_active_revocation(claim.asrt_id)
-    ]
-    active_claims.sort(key=lambda row: row.asrt_id)
-
-    for claim in active_claims:
-        prob = _claim_probability(
-            store,
-            claim.asrt_id,
-            uncertainty_projection=projection,
-            projection_decisions=projection_decisions,
-        )
-        value_term = _claim_value_term(claim.rest_terms)
-        lines.append(
-            f"{probability_formatter(prob)}::edb_fact("
-            f"{_to_problog_literal(claim.asrt_id)}, "
-            f"{_to_problog_literal(claim.pred_id)}, "
-            f"{_to_problog_literal(claim.e_ref)}, "
-            f"{value_term}"
-            ")."
-        )
+    lines.extend(_emit_fact_lines(
+        store, uncertainty_projection=projection,
+        probability_formatter=probability_formatter,
+        projection_decisions=projection_decisions,
+    ))
 
     if lines and lines[-1] != "":
         lines.append("")
@@ -261,6 +244,56 @@ def _choice_predicate_digest(choice: ProbLogWeightedChoiceExt, arm_id: str) -> s
 
     raw = "\x1f".join((choice.choice_node_id, choice.topology_digest, arm_id)).encode("utf-8")
     return hashlib.sha256(raw).hexdigest()[:32]
+
+
+def _emit_fact_lines(
+    store: Store,
+    *,
+    uncertainty_projection: dict[str, Any] | None,
+    probability_formatter: Callable[[float], str],
+    projection_decisions: dict[str, dict[str, Any]] | None = None,
+) -> list[str]:
+    """Emit scoped physical Claims and canonical virtual domains for both callers.
+
+    A domain's first edb_fact slot is an opaque witness, not a Claim or an
+    annotation capability. Ordinary Claims retain their active/probability policy.
+    """
+    # Evaluation supplies its premise-scoped Store. Preserve the low-level
+    # exporter's explicit raw-Store diagnostic mode; never unwrap either view.
+    domain_predicates = {
+        pred["pred_id"] for pred in store.schema_ir["predicates"]
+        if pred.get("is_entity_exists", False)
+    }
+    active_claims = sorted(
+        (claim for claim in store.ledger.claims
+         if claim.pred_id not in domain_predicates
+         and not store.ledger.has_active_revocation(claim.asrt_id)),
+        key=lambda row: row.asrt_id,
+    )
+    lines = ["edb_fact(_, _, _, _) :- fail."]
+    for claim in active_claims:
+        probability = _claim_probability(
+            store, claim.asrt_id, uncertainty_projection=uncertainty_projection,
+            projection_decisions=projection_decisions,
+        )
+        lines.append(
+            f"{probability_formatter(probability)}::edb_fact("
+            f"{_to_problog_literal(claim.asrt_id)}, "
+            f"{_to_problog_literal(claim.pred_id)}, "
+            f"{_to_problog_literal(claim.e_ref)}, "
+            f"{_claim_value_term(claim.rest_terms)})."
+        )
+    domains = _project_entity_domains_with_witness(store.ledger, store.schema_ir)
+    for pred_id in sorted(domains):
+        for row in domains[pred_id]:
+            lines.append(
+                f"{probability_formatter(1.0)}::edb_fact("
+                f"{_to_problog_literal(row.asrt_id)}, "
+                f"{_to_problog_literal(pred_id)}, "
+                f"{_to_problog_literal(row.fact_tuple[0])}, "
+                f"{_to_problog_literal(_NONE_VALUE)})."
+            )
+    return lines
 
 
 def _claim_probability(

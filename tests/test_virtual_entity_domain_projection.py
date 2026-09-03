@@ -34,7 +34,7 @@ def test_incomplete_identity_intersection_stays_empty(absent, mode):
     store = Store(schema)
     index = build_schema_index(schema)
     info = entity_info(index, "TripleDomain")
-    identity = dict(first="a", middle="b", last="c")
+    identity = {"first": "a", "middle": "b", "last": "c"}
     ref = resolve_selector(
         EntitySelector(entity_type="TripleDomain", identity=identity), index=index
     )
@@ -66,7 +66,7 @@ def test_disjoint_intermediate_identity_intersection_stays_empty():
     index = build_schema_index(schema)
     info = entity_info(index, "TripleDomain")
     for name, first in [("first", "a"), ("middle", "other"), ("last", "a")]:
-        identity = dict(first=first, middle="b", last="c")
+        identity = {"first": first, "middle": "b", "last": "c"}
         ref = resolve_selector(
             EntitySelector(entity_type="TripleDomain", identity=identity), index=index
         )

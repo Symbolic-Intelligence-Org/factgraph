@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+import math
 import re
 from typing import Any
 
@@ -13,6 +14,11 @@ from factgraph.core.rules.where_eval import WhereValidationError
 
 _INT_RE = re.compile(r"^[+-]?\d+$")
 _FLOAT_RE = re.compile(r"^[+-]?(?:\d+\.\d*|\d*\.\d+|\d+)(?:[eE][+-]?\d+)?$")
+_VARIABLE_RE = re.compile(r"[A-Z_][A-Za-z0-9_]*\Z")
+_RESULT_TOKEN_RE = re.compile(
+    r"(?:[+-]?(?:\d+\.\d*|\d*\.\d+|\d+)(?:[eE][+-]?\d+)?)"
+    r"|(?:[^\W\d]\w*)", re.UNICODE,
+)
 
 
 class ProbLogImportError(Exception):
@@ -161,6 +167,8 @@ def _parse_rows(
 
         split = _split_result_line(line)
         if split is None:
+            if re.match(rf"^(?:query\(\s*)?{re.escape(query_pred)}\s*\(", line):
+                raise ProbLogImportError("invalid query result or probability")
             continue
         expr, prob_text = split
 
@@ -175,12 +183,105 @@ def _parse_rows(
                 f"query result arity mismatch: expected {len(query_vars)}, got {len(args)}"
             )
         prob = _parse_probability(prob_text)
+        free_variables = [_term_variables(token) for token in args]
+        if any(free_variables):
+            if prob == 0.0 and _is_query_variant(args, query_vars):
+                continue
+            raise ProbLogImportError("non-ground query result is not a zero query variant")
         binding = {
             var: _decode_term(token)
             for var, token in zip(query_vars, args)
         }
         out.append((binding, prob))
     return out
+
+
+def _is_query_variant(args: list[str], query_vars: list[str]) -> bool:
+    """Recognize only the whole variable-only query with its equality pattern."""
+    if not args or not all(_VARIABLE_RE.fullmatch(arg) for arg in args):
+        return False
+    # Anonymous variables denote a fresh variable at every occurrence.
+    identities = [("anonymous", i) if arg == "_" else ("named", arg)
+                  for i, arg in enumerate(args)]
+    return all(
+        (query_vars[i] == query_vars[j]) == (identities[i] == identities[j])
+        for i in range(len(args)) for j in range(i)
+    )
+
+
+def _term_variables(token: str) -> set[str]:
+    """Inspect balanced output terms without interpreting quoted data as Prolog.
+
+    This lexer does not import the optional engine library or decode compounds.
+    Ground terms retain the existing decoder; free variables fail before it.
+    """
+    if not token:
+        raise ProbLogImportError("empty result term")
+    variables: set[str] = set()
+    closers: list[str] = []
+    expecting_value = True
+    may_call = False
+    last = ""
+    i = 0
+    while i < len(token):
+        ch = token[i]
+        if ch.isspace():
+            i += 1
+            continue
+        if ch in "'\"":
+            if not expecting_value:
+                raise ProbLogImportError("adjacent result terms")
+            quote = ch
+            i += 1
+            while i < len(token):
+                if token[i] == "\\":
+                    i += 2
+                elif token[i] == quote:
+                    if i + 1 < len(token) and token[i + 1] == quote:
+                        i += 2
+                    else:
+                        i += 1
+                        break
+                else:
+                    i += 1
+            else:
+                raise ProbLogImportError("unterminated quoted result term")
+            expecting_value, may_call, last = False, quote == "'", "value"
+            continue
+        if ch in "([{":
+            if ch == "(":
+                if expecting_value or not may_call:
+                    raise ProbLogImportError("invalid result functor")
+            elif not expecting_value:
+                raise ProbLogImportError("adjacent result terms")
+            closers.append({"(": ")", "[": "]", "{": "}"}[ch])
+            expecting_value, may_call, last = True, False, ch
+        elif ch in ")]}":
+            if expecting_value and (ch == ")" or last != {"]": "[", "}": "{"}.get(ch)):
+                raise ProbLogImportError("missing result term")
+            if not closers or closers.pop() != ch:
+                raise ProbLogImportError("unbalanced result term")
+            expecting_value, may_call, last = False, False, ch
+        elif ch in ",|:":
+            if expecting_value or not closers or (ch == "|" and closers[-1] != "]"):
+                raise ProbLogImportError("invalid result separator")
+            expecting_value, may_call, last = True, False, ch
+        else:
+            match = _RESULT_TOKEN_RE.match(token, i)
+            if match:
+                if not expecting_value:
+                    raise ProbLogImportError("adjacent result terms")
+                word = match.group()
+                if word[0].isupper() or word[0] == "_":
+                    variables.add(word)
+                expecting_value, may_call, last = False, word[0].islower(), "value"
+                i = match.end()
+                continue
+            raise ProbLogImportError("invalid result token")
+        i += 1
+    if closers or expecting_value:
+        raise ProbLogImportError("unbalanced result term")
+    return variables
 
 
 def _split_result_line(line: str) -> tuple[str, str] | None:
@@ -223,7 +324,7 @@ def _parse_probability(text: str) -> float:
     if not _FLOAT_RE.fullmatch(value):
         raise ProbLogImportError(f"invalid probability value: {text}")
     prob = float(value)
-    if prob < 0.0 or prob > 1.0:
+    if not math.isfinite(prob) or prob < 0.0 or prob > 1.0:
         raise ProbLogImportError(f"probability out of range [0,1]: {prob}")
     return prob
 

@@ -598,6 +598,26 @@ The atom line's `repr_text` is the schema-authored / default-rendered text (§4.
 
 ### 4.7 `certainty` carry-over
 
+ProbLog evaluation and reach Explain include canonical virtual Entity domains
+from complete, chosen Identity bundles in their premise-scoped view. Missing,
+retracted or excluded Identity members do not establish membership; persisted
+legacy domain markers are not membership authority. Domain membership is
+deterministic and does not create a ledger assertion or probability annotation.
+
+An empty eligible relation is a valid empty result. The evaluation importer
+recognizes only a probability-zero, whole-query variable-renaming placeholder
+as no ground answer. Ground zero-probability rows remain valid; positive or
+partially ground variable answers and malformed results raise import errors
+before exposing candidates. Engine/process failures are never empty success.
+
+The existing `problog_provenance_v1` trace format is unchanged. Virtual witness
+tokens in engine trace are not assertion citations or label bases.
+`fg.audit.support_witnesses` reports `support_missing` for a ProbLog-only
+provenance digest, not a fabricated Store ProofReceipt. This legacy Explain
+path is not a new sealed replay guarantee, and prior evidence is not rewritten.
+Branch probability and input certainty remain distinct: input atom certainty
+uses its existing `raw_kind/bound` source, not the adapter probability annotation.
+
 When the source row has uncertainty meta, `Explanation.row.certainty` carries the normalized `Certainty(lo, hi, kind)` value — read-side counterpart to the write-side uncertainty metadata in [`engines_and_configs.md`](engines_and_configs.md) §2.1. Native/Souffle rows use boolean certainty; ProbLog uses probabilistic certainty; PyReason uses possibilistic interval certainty.
 
 ## 5. The closed-head concept
