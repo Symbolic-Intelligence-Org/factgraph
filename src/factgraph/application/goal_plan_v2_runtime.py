@@ -585,7 +585,11 @@ def execute_product_evaluation_invocation_v2(
                 admitted_relation=full_relation,
             )
         except ScenarioResolutionErrorV1 as exc:
-            _raise_from(exc, prefix="Scenario dependency", default="V2_SCENARIO_DEPENDENCY_INVALID")
+            raise _runtime_error_from(
+                exc,
+                prefix="Scenario dependency",
+                default="V2_SCENARIO_DEPENDENCY_INVALID",
+            ) from exc
         dependency_ids = tuple(sorted(set(dependency_ids) | set(scenario_dependencies)))
 
     capture_dependency_ids = tuple(
@@ -597,7 +601,11 @@ def execute_product_evaluation_invocation_v2(
             full_relation, dependency_predicate_ids=capture_dependency_ids
         )
     except ScenarioResolutionErrorV1 as exc:
-        _raise_from(exc, prefix="V2 dependency relation", default="V2_DEPENDENCY_INVALID")
+        raise _runtime_error_from(
+            exc,
+            prefix="V2 dependency relation",
+            default="V2_DEPENDENCY_INVALID",
+        ) from exc
 
     admissibility_digest = _token(
         "product_evaluation_v2_admission",
@@ -632,9 +640,9 @@ def execute_product_evaluation_invocation_v2(
                 baseline_metadata_by_witness_id=baseline_metadata,
             )
         except (ScenarioResolutionErrorV1, ScenarioResolutionErrorV2) as exc:
-            _raise_from(
+            raise _runtime_error_from(
                 exc, prefix="Scenario V2 resolution", default="V2_SCENARIO_RESOLUTION_INVALID"
-            )
+            ) from exc
         baseline_world = resolved_v2.baseline_world
         effective_world = resolved_v2.effective_world
 
@@ -812,7 +820,11 @@ def replay_product_evaluation_run_v2(run: EvaluationRunV2) -> EvaluationRunRepla
     try:
         assert_evaluation_run_v2_current(run)
     except Exception as exc:
-        _raise_from(exc, prefix="V2 run", default="V2_REPLAY_PROTOCOL_INVALID")
+        raise _runtime_error_from(
+            exc,
+            prefix="V2 run",
+            default="V2_REPLAY_PROTOCOL_INVALID",
+        ) from exc
     decoded = _decode_program_envelope(run)
     profile = run.profile
     baseline = _replay_side(
@@ -886,7 +898,11 @@ def choice_capture_from_evaluation_run_v2(
     try:
         assert_evaluation_run_v2_current(run)
     except Exception as exc:
-        _raise_from(exc, prefix="V2 choice capture run", default="V2_REPLAY_PROTOCOL_INVALID")
+        raise _runtime_error_from(
+            exc,
+            prefix="V2 choice capture run",
+            default="V2_REPLAY_PROTOCOL_INVALID",
+        ) from exc
     _decode_program_envelope(run)
     envelope = _parse_canonical_json(
         run.replay_payload.compiled_program_bytes, label="V2 replay program"
@@ -931,7 +947,11 @@ def function_capture_from_evaluation_run_v2(
     try:
         assert_evaluation_run_v2_current(run)
     except Exception as exc:
-        _raise_from(exc, prefix="V2 Function capture run", default="V2_REPLAY_PROTOCOL_INVALID")
+        raise _runtime_error_from(
+            exc,
+            prefix="V2 Function capture run",
+            default="V2_REPLAY_PROTOCOL_INVALID",
+        ) from exc
     decoded = _decode_program_envelope(run)
     envelope = _parse_canonical_json(
         run.replay_payload.compiled_program_bytes, label="V2 replay program"
@@ -1040,7 +1060,11 @@ def _assert_invocation_current(invocation: ProductEvaluationInvocationV2) -> Non
         try:
             ScenarioSpecV2.__post_init__(invocation.scenario)
         except Exception as exc:
-            _raise_from(exc, prefix="Scenario V2", default="V2_SCENARIO_INVALID")
+            raise _runtime_error_from(
+                exc,
+                prefix="Scenario V2",
+                default="V2_SCENARIO_INVALID",
+            ) from exc
     if (invocation.candidate is None) != (invocation.candidate_product_target is None):
         _fail("candidate target splice", "V2_INVOCATION_CANDIDATE_SPLICE")
     if invocation.candidate is not None:
@@ -1061,7 +1085,7 @@ def _assert_profile_compiler(profile: EvaluationExecutionProfileV2) -> None:
     try:
         assert_evaluation_execution_profile_v2_current(profile)
     except Exception as exc:
-        _raise_from(exc, prefix="V2 profile", default="V2_PROFILE_INVALID")
+        raise _runtime_error_from(exc, prefix="V2 profile", default="V2_PROFILE_INVALID") from exc
     if profile.compiler_digest != GOAL_PLAN_V2_COMPILER_DIGEST:
         _fail(
             "V2 profile compiler pin is unsupported by this runner", "V2_PROFILE_COMPILER_MISMATCH"
@@ -1074,7 +1098,7 @@ def _assert_no_v1_only_query_features(targeted: TargetedCompiledEvaluationQueryV
     try:
         assert_targeted_evaluation_query_current(targeted)
     except Exception as exc:
-        _raise_from(exc, prefix="V2 typed Query", default="V2_QUERY_INVALID")
+        raise _runtime_error_from(exc, prefix="V2 typed Query", default="V2_QUERY_INVALID") from exc
     if targeted.expectations:
         _fail("V2 rows execution does not support V1 expectations", "V2_EXPECTATIONS_UNSUPPORTED")
 
@@ -1090,7 +1114,11 @@ def _assert_targeted_product_match(
         assert_asset_binding_current_v1(product)
         _assert_weighted_topology_current(product)
     except Exception as exc:
-        _raise_from(exc, prefix="Product asset", default="V2_ASSET_BINDING_INVALID")
+        raise _runtime_error_from(
+            exc,
+            prefix="Product asset",
+            default="V2_ASSET_BINDING_INVALID",
+        ) from exc
     source = targeted.target.run_target
     expected_kind = "rule" if isinstance(product, ProductRuleV1) else "policy"
     expected_id = product.rule.id if isinstance(product, ProductRuleV1) else product.policy.id
@@ -1333,7 +1361,11 @@ def _validate_profile_attachment_inventory(
     try:
         validate_resolved_execution_attachments_v2(profile, resolved)
     except Exception as exc:
-        _raise_from(exc, prefix="V2 execution attachment", default="V2_PROFILE_ATTACHMENT_INVALID")
+        raise _runtime_error_from(
+            exc,
+            prefix="V2 execution attachment",
+            default="V2_PROFILE_ATTACHMENT_INVALID",
+        ) from exc
     return resolved
 
 
@@ -1384,7 +1416,7 @@ def _execution_schema_ir_v2(
             )
         )
     except (TypeError, ValueError) as exc:
-        _raise_from(exc, prefix="V2 schema", default="V2_SCHEMA_INVALID")
+        raise _runtime_error_from(exc, prefix="V2 schema", default="V2_SCHEMA_INVALID") from exc
     assert isinstance(schema, dict)
     existing_predicates = {item["pred_id"] for item in schema["predicates"]}
     existing_entities = {item["entity_type"] for item in schema["entities"]}
@@ -1531,7 +1563,11 @@ def _materialize_program(
         )
         dependencies = portable_dependency_predicate_ids_v1(base, schema_ir=schema_ir)
     except (PortableEvaluationError, ValueError, TypeError) as exc:
-        _raise_from(exc, prefix="V2 Query materialization", default="V2_QUERY_CAPABILITY_REJECTED")
+        raise _runtime_error_from(
+            exc,
+            prefix="V2 Query materialization",
+            default="V2_QUERY_CAPABILITY_REJECTED",
+        ) from exc
     program = base
     if profile.kind == "problog_point_v2":
         if isinstance(product, ProductPolicyV1) and product.weighted_choices:
@@ -1542,11 +1578,11 @@ def _materialize_program(
                     plan=base,
                 )
             except ProductWeightedChoiceProbLogV2Error as exc:
-                _raise_from(
+                raise _runtime_error_from(
                     exc,
                     prefix="WeightedChoice ProbLog lowering",
                     default="V2_WEIGHTED_CHOICE_LOWERING_FAILED",
-                )
+                ) from exc
         if profile.resources.timeout_ms is not None:
             program = replace(
                 program,
@@ -1581,11 +1617,11 @@ def _baseline_metadata_by_witness(
                         _exact_point_bound(raw_kind, bound)
                     )
                 except Exception as exc:
-                    _raise_from(
+                    raise _runtime_error_from(
                         exc,
                         prefix="baseline uncertainty metadata",
                         default="V2_BASELINE_SEMANTICS_INVALID",
-                    )
+                    ) from exc
             source = meta.get("source")
             source_loc = meta.get("source_loc")
             if (source is None) != (source_loc is None):
@@ -1609,9 +1645,9 @@ def _baseline_metadata_by_witness(
                         ),
                     )
                 except Exception as exc:
-                    _raise_from(
+                    raise _runtime_error_from(
                         exc, prefix="baseline provenance", default="V2_BASELINE_PROVENANCE_INVALID"
-                    )
+                    ) from exc
             note = meta.get("note")
             if note is not None and not isinstance(note, str):
                 _fail("baseline note metadata is malformed", "V2_BASELINE_DISPLAY_INVALID")
@@ -1622,7 +1658,11 @@ def _baseline_metadata_by_witness(
                     display=ScenarioDisplayV2(note=note),
                 )
             except Exception as exc:
-                _raise_from(exc, prefix="baseline metadata", default="V2_BASELINE_METADATA_INVALID")
+                raise _runtime_error_from(
+                    exc,
+                    prefix="baseline metadata",
+                    default="V2_BASELINE_METADATA_INVALID",
+                ) from exc
     return output
 
 
@@ -1690,11 +1730,11 @@ def _projected_fact_values_v2(
             for tag, raw in zip(tags, row.fact_tuple, strict=True)
         )
     except Exception as exc:
-        _raise_from(
+        raise _runtime_error_from(
             exc,
             prefix=f"captured fact {predicate_id}",
             default="V2_WORLD_SCHEMA_MISMATCH",
-        )
+        ) from exc
 
 
 def _assert_world_profile_compatibility(
@@ -1705,7 +1745,11 @@ def _assert_world_profile_compatibility(
         try:
             profile_accepts_fact_semantics_v2(profile, fact.fact_semantics)
         except Exception as exc:
-            _raise_from(exc, prefix="V2 world semantics", default="V2_WORLD_SEMANTICS_UNSUPPORTED")
+            raise _runtime_error_from(
+                exc,
+                prefix="V2 world semantics",
+                default="V2_WORLD_SEMANTICS_UNSUPPORTED",
+            ) from exc
     if profile.kind in {
         "native_deterministic_v2",
         "portable_deterministic_v2",
@@ -1884,11 +1928,11 @@ def _execute_program_on_world(
                 effective_relations=relation,
             )
         except PortableEvaluationError as exc:
-            _raise_from(
+            raise _runtime_error_from(
                 exc,
                 prefix="V2 portable deterministic execution",
                 default="V2_PORTABLE_EXECUTION_FAILED",
-            )
+            ) from exc
         frames: list[EvaluationEngineFrameV2] = []
         for execution in portable.executions:
             converted: list[EvaluationSelectedRowV2] = []
@@ -2080,11 +2124,11 @@ def _materialize_function_occurrences_v2(
         except ProductEvaluationRuntimeErrorV2:
             raise
         except Exception as exc:
-            _raise_from(
+            raise _runtime_error_from(
                 exc,
                 prefix=f"Function {topology.alias} input materialization",
                 default="V2_FUNCTION_INPUT_MATERIALIZATION_FAILED",
-            )
+            ) from exc
 
         calls: list[EvaluationFunctionCallV2] = []
         for row in input_rows:
@@ -2097,22 +2141,22 @@ def _materialize_function_occurrences_v2(
                     *(value.value for _name, value in ordered_inputs)
                 )
             except Exception as exc:
-                _raise_from(
+                raise _runtime_error_from(
                     exc,
                     prefix=f"Function {topology.alias} invocation",
                     default="V2_FUNCTION_INVOCATION_FAILED",
-                )
+                ) from exc
             try:
                 output = GoalValueV1(
                     topology.function.output.scalar_domain,
                     raw_output,
                 )
             except Exception as exc:
-                _raise_from(
+                raise _runtime_error_from(
                     exc,
                     prefix=f"Function {topology.alias} output",
                     default="V2_FUNCTION_OUTPUT_INVALID",
-                )
+                ) from exc
             call_key_token = _token(
                 "product_function_call_key_v1",
                 {
@@ -2128,11 +2172,11 @@ def _materialize_function_occurrences_v2(
                     index=execution_index,
                 )
             except Exception as exc:
-                _raise_from(
+                raise _runtime_error_from(
                     exc,
                     prefix="Function call identity",
                     default="V2_FUNCTION_CALL_IDENTITY_INVALID",
-                )
+                ) from exc
             call = EvaluationFunctionCallV2(
                 occurrence_alias=topology.alias,
                 function_digest=topology.function.logical_identity_digest,
@@ -2177,11 +2221,11 @@ def _insert_function_call_v2(store: Store, call: EvaluationFunctionCallV2) -> No
                 [(value.tag, value.value)],
             )
     except Exception as exc:
-        _raise_from(
+        raise _runtime_error_from(
             exc,
             prefix=f"Function {call.occurrence_alias} relation materialization",
             default="V2_FUNCTION_RELATION_MATERIALIZATION_FAILED",
-        )
+        ) from exc
 
 
 def _assert_function_observations_deterministic_v2(
@@ -2256,7 +2300,11 @@ def _evaluate_engine(
             store=store,
         )
     except Exception as exc:
-        _raise_from(exc, prefix=f"V2 {engine} execution", default="V2_ENGINE_EXECUTION_FAILED")
+        raise _runtime_error_from(
+            exc,
+            prefix=f"V2 {engine} execution",
+            default="V2_ENGINE_EXECUTION_FAILED",
+        ) from exc
     if not all(
         isinstance(item, DerivationOutput) for item in outputs
     ):  # pragma: no cover - runtime seam.
@@ -2310,11 +2358,11 @@ def _selected_rows(
                     output.confidence, field_name="ProbLog output probability"
                 )
             except Exception as exc:
-                _raise_from(
+                raise _runtime_error_from(
                     exc,
                     prefix="ProbLog output probability",
                     default="V2_PROBLOG_PROBABILITY_INVALID",
-                )
+                ) from exc
             if Decimal(point_probability) < 0 or Decimal(point_probability) > 1:
                 _fail(
                     "ProbLog point observation is outside [0, 1]", "V2_PROBLOG_PROBABILITY_INVALID"
@@ -2363,11 +2411,11 @@ def _branch_witnesses_v2(
         try:
             case_index = _receipt_case_index(artifact)
         except Exception as exc:
-            _raise_from(
+            raise _runtime_error_from(
                 exc,
                 prefix="branch witness support",
                 default="BRANCH_WITNESS_SUPPORT_INVALID",
-            )
+            ) from exc
         projected = _selected_rows(
             (output,),
             selection_shape=selection_shape,
@@ -2625,7 +2673,11 @@ def _goal_value_from_term(value: object, expected_tag: str) -> GoalValueV1:
             normalized,
         )
     except Exception as exc:
-        _raise_from(exc, prefix="engine output value", default="V2_PROJECTION_VALUE_INVALID")
+        raise _runtime_error_from(
+            exc,
+            prefix="engine output value",
+            default="V2_PROJECTION_VALUE_INVALID",
+        ) from exc
 
 
 def _materialize_world_store_v2(
@@ -2686,11 +2738,11 @@ def _materialize_world_store_v2(
             try:
                 numeric_probability = float.fromhex(entry.float64_hex)
             except ValueError as exc:  # pragma: no cover - projection DTO guards it.
-                _raise_from(
+                raise _runtime_error_from(
                     exc,
                     prefix="V2 point probability materialization",
                     default="V2_WORLD_MATERIALIZATION_FAILED",
-                )
+                ) from exc
             if not math.isfinite(numeric_probability) or not 0.0 < numeric_probability <= 1.0:
                 _fail(
                     "V2 point probability cannot materialize into core metadata",
@@ -2709,11 +2761,11 @@ def _materialize_world_store_v2(
                 meta=meta,
             )
         except Exception as exc:
-            _raise_from(
+            raise _runtime_error_from(
                 exc,
                 prefix="V2 isolated world materialization",
                 default="V2_WORLD_MATERIALIZATION_FAILED",
-            )
+            ) from exc
     return store, probability_materialization
 
 
@@ -3854,11 +3906,11 @@ def _choice_capture_from_wire(value: object) -> dict[str, object] | None:
             ),
         )
     except Exception as exc:
-        _raise_from(
+        raise _runtime_error_from(
             exc,
             prefix="V2 replay WeightedChoice capture",
             default="V2_REPLAY_PROGRAM_SHAPE_INVALID",
-        )
+        ) from exc
     if row["node_id"] != rebuilt.node_id or row["topology_digest"] != rebuilt.topology_digest:
         _fail("V2 replay WeightedChoice topology seal is stale", "V2_REPLAY_PROGRAM_PIN_MISMATCH")
     expected_arms = [
@@ -4210,20 +4262,20 @@ def _resolved_attachments_from_wire(
                 tuple(slots),
             )
         except Exception as exc:
-            _raise_from(
+            raise _runtime_error_from(
                 exc,
                 prefix="V2 replay attachment resolution",
                 default="V2_REPLAY_PROGRAM_SHAPE_INVALID",
-            )
+            ) from exc
         if item_row["resolution_digest"] != resolved_item.resolution_digest:
             _fail("V2 replay attachment item is noncanonical", "V2_REPLAY_PROGRAM_PIN_MISMATCH")
         actual_items.append(resolved_item)
     try:
         actual = ResolvedExecutionAttachmentsV2(profile.profile_digest, tuple(actual_items))
     except Exception as exc:
-        _raise_from(
+        raise _runtime_error_from(
             exc, prefix="V2 replay attachment resolution", default="V2_REPLAY_PROGRAM_SHAPE_INVALID"
-        )
+        ) from exc
     if row["resolution_digest"] != actual.resolution_digest:
         _fail("V2 replay attachment resolution is noncanonical", "V2_REPLAY_PROGRAM_PIN_MISMATCH")
     expected = _resolved_attachments_from_carrier(
@@ -4355,9 +4407,9 @@ def _resolved_attachments_from_carrier(
     try:
         return ResolvedExecutionAttachmentsV2(profile.profile_digest, tuple(resolved))
     except Exception as exc:
-        _raise_from(
+        raise _runtime_error_from(
             exc, prefix="V2 replay attachment slots", default="V2_REPLAY_PROGRAM_PIN_MISMATCH"
-        )
+        ) from exc
 
 
 def _decode_program_envelope(run: EvaluationRunV2) -> _DecodedProgramV2:
@@ -4394,7 +4446,11 @@ def _decode_program_envelope(run: EvaluationRunV2) -> _DecodedProgramV2:
     try:
         schema_ir = ensure_schema_ir(dict(row["schema"]))
     except Exception as exc:
-        _raise_from(exc, prefix="V2 replay schema", default="V2_REPLAY_SCHEMA_INVALID")
+        raise _runtime_error_from(
+            exc,
+            prefix="V2 replay schema",
+            default="V2_REPLAY_SCHEMA_INVALID",
+        ) from exc
     if (
         schema_digest(schema_ir) != run.replay_payload.schema_digest
         or row["schema_digest"] != run.replay_payload.schema_digest
@@ -4559,7 +4615,11 @@ def _run_plan_from_wire(value: object) -> EvaluationRunPlanV2:
             address_space_digest=row["address_space_digest"],  # type: ignore[arg-type]
         )
     except Exception as exc:
-        _raise_from(exc, prefix="V2 replay plan", default="V2_REPLAY_PROGRAM_SHAPE_INVALID")
+        raise _runtime_error_from(
+            exc,
+            prefix="V2 replay plan",
+            default="V2_REPLAY_PROGRAM_SHAPE_INVALID",
+        ) from exc
     if row["plan_digest"] != plan.plan_digest:
         _fail("V2 replay plan is not canonical", "V2_REPLAY_PROGRAM_PIN_MISMATCH")
     return plan
@@ -4595,9 +4655,9 @@ def _compiled_plan_from_wire(value: object) -> CompiledDerivationPlan:
             engine_options=dict(row["engine_options"]),
         )
     except Exception as exc:
-        _raise_from(
+        raise _runtime_error_from(
             exc, prefix="V2 replay compiled plan", default="V2_REPLAY_PROGRAM_SHAPE_INVALID"
-        )
+        ) from exc
     if _canonical_json_bytes(
         _compiled_plan_to_wire(plan), label="V2 replay compiled plan"
     ) != _canonical_json_bytes(value, label="V2 replay compiled plan"):
@@ -4650,9 +4710,9 @@ def _engine_ext_from_wire(value: object) -> ProbLogRuleExt | None:
             domain_body=_decode_structural(row["domain_body"]),  # type: ignore[arg-type]
         )
     except Exception as exc:
-        _raise_from(
+        raise _runtime_error_from(
             exc, prefix="V2 replay engine extension", default="V2_REPLAY_PROGRAM_SHAPE_INVALID"
-        )
+        ) from exc
     return ProbLogRuleExt(weighted_choice=choice)
 
 
@@ -4810,7 +4870,11 @@ def _parse_canonical_json(raw: object, *, label: str) -> object:
             parse_constant=lambda text: (_ for _ in ()).throw(ValueError(text)),
         )
     except Exception as exc:
-        _raise_from(exc, prefix=label, default="V2_REPLAY_PROGRAM_SHAPE_INVALID")
+        raise _runtime_error_from(
+            exc,
+            prefix=label,
+            default="V2_REPLAY_PROGRAM_SHAPE_INVALID",
+        ) from exc
     if _canonical_json_bytes(value, label=label) != raw:
         _fail(f"{label} is not canonical JSON", "V2_REPLAY_PROGRAM_SHAPE_INVALID")
     return value
@@ -4904,9 +4968,9 @@ def _decode_structural(value: object, *, depth: int = 0, budget: list[int] | Non
         try:
             result = float.fromhex(row["value"])
         except ValueError as exc:
-            _raise_from(
+            raise _runtime_error_from(
                 exc, prefix="V2 structural float", default="V2_REPLAY_PROGRAM_SHAPE_INVALID"
-            )
+            ) from exc
         if not math.isfinite(result) or result.hex() != row["value"]:
             _fail("V2 structural float is noncanonical", "V2_REPLAY_PROGRAM_SHAPE_INVALID")
         return result
@@ -5002,9 +5066,12 @@ def _fail(message: str, code: str) -> NoReturn:
     raise ProductEvaluationRuntimeErrorV2(message, code=code)
 
 
-def _raise_from(exc: Exception, *, prefix: str, default: str) -> NoReturn:
+def _runtime_error_from(
+    exc: Exception, *, prefix: str, default: str
+) -> ProductEvaluationRuntimeErrorV2:
+    """Construct the typed error; the caller owns the explicit raise and cause."""
     code = getattr(exc, "code", default)
-    raise ProductEvaluationRuntimeErrorV2(f"{prefix} rejected: {exc}", code=code) from exc
+    return ProductEvaluationRuntimeErrorV2(f"{prefix} rejected: {exc}", code=code)
 
 
 if TYPE_CHECKING:  # pragma: no cover

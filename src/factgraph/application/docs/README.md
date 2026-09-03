@@ -90,6 +90,17 @@ compatibility.
 
 ## Conventions
 
+V2 Product execution and detached replay translate dependency/validation
+failures into `ProductEvaluationRuntimeErrorV2` at their existing guarded call
+sites. Translation preserves an upstream `code` when present, otherwise uses
+the site's fallback code, prefixes the original message, and retains the
+original exception as `__cause__`. The private error constructor does not raise:
+each caller explicitly uses `raise ... from exc`. The existing `Exception`
+handlers still contain unexpected dependency failures; they do not intercept
+process-control exceptions such as `KeyboardInterrupt` or `SystemExit`.
+`tests/application/test_goal_plan_v2_runtime.py` covers these guarantees through
+the public replay, WeightedChoice capture, and Function capture readers.
+
 - Documents in this directory reflect current implementation
   behavior, not standalone design drafts.
 - When adding or adjusting public `application` entry points, update
