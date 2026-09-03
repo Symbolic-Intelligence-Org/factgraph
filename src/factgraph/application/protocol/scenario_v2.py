@@ -187,7 +187,7 @@ class FactSemanticsV2:
         )
 
     @classmethod
-    def probabilistic_point(cls, value: object) -> "FactSemanticsV2":
+    def probabilistic_point(cls, value: object) -> FactSemanticsV2:
         """Create exact declared point-probability semantics.
 
         Args:

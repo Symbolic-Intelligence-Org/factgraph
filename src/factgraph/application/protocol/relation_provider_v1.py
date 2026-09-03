@@ -257,7 +257,7 @@ class ProviderMaterializationV1:
             ),
         )
 
-    def to_receipt_ref_v1(self) -> "ProviderReceiptRefV1":
+    def to_receipt_ref_v1(self) -> ProviderReceiptRefV1:
         """Build the replay-safe opaque receipt bridge for this snapshot.
 
         The import is deliberately lazy: the relation-provider declaration is

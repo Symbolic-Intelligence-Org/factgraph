@@ -283,27 +283,27 @@ class PolicyCompare:
         )
 
     @classmethod
-    def gt(cls, left: PolicyComparisonOperand, right: PolicyComparisonOperand) -> "PolicyCompare":
+    def gt(cls, left: PolicyComparisonOperand, right: PolicyComparisonOperand) -> PolicyCompare:
         return cls("gt", left, right)
 
     @classmethod
-    def ge(cls, left: PolicyComparisonOperand, right: PolicyComparisonOperand) -> "PolicyCompare":
+    def ge(cls, left: PolicyComparisonOperand, right: PolicyComparisonOperand) -> PolicyCompare:
         return cls("ge", left, right)
 
     @classmethod
-    def lt(cls, left: PolicyComparisonOperand, right: PolicyComparisonOperand) -> "PolicyCompare":
+    def lt(cls, left: PolicyComparisonOperand, right: PolicyComparisonOperand) -> PolicyCompare:
         return cls("lt", left, right)
 
     @classmethod
-    def le(cls, left: PolicyComparisonOperand, right: PolicyComparisonOperand) -> "PolicyCompare":
+    def le(cls, left: PolicyComparisonOperand, right: PolicyComparisonOperand) -> PolicyCompare:
         return cls("le", left, right)
 
     @classmethod
-    def eq(cls, left: PolicyComparisonOperand, right: PolicyComparisonOperand) -> "PolicyCompare":
+    def eq(cls, left: PolicyComparisonOperand, right: PolicyComparisonOperand) -> PolicyCompare:
         return cls("eq", left, right)
 
     @classmethod
-    def ne(cls, left: PolicyComparisonOperand, right: PolicyComparisonOperand) -> "PolicyCompare":
+    def ne(cls, left: PolicyComparisonOperand, right: PolicyComparisonOperand) -> PolicyCompare:
         return cls("ne", left, right)
 
 
@@ -361,7 +361,7 @@ class PolicyWeightedChoiceArm:
 
     arm_id: str
     probability: str
-    condition: "PolicyExpression"
+    condition: PolicyExpression
 
     def __post_init__(self) -> None:
         if (
@@ -464,7 +464,7 @@ class PolicyWeightedChoice:
         )
 
     @property
-    def children(self) -> tuple["PolicyExpression", ...]:
+    def children(self) -> tuple[PolicyExpression, ...]:
         """Arm conditions for generic structural traversal only."""
 
         return tuple(item.condition for item in self.arms)

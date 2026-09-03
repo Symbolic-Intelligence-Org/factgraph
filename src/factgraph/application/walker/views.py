@@ -105,7 +105,7 @@ class FrozenTupleView(Generic[ViewT]):
         self,
         predicate: Callable[[ViewT], bool] | None = None,
         **attrs: Any,
-    ) -> "FrozenTupleView[ViewT]":
+    ) -> FrozenTupleView[ViewT]:
         """Return a new eager view narrowed by predicate and attr equality.
 
         The returned view preserves this view's `source_id`.
@@ -237,7 +237,7 @@ class AssertionView:
         object.__setattr__(self, "_frozen", True)
 
     @classmethod
-    def _from_snapshot(cls, snapshot: "_AssertionSnapshot") -> "AssertionView":
+    def _from_snapshot(cls, snapshot: _AssertionSnapshot) -> AssertionView:
         view = cls.__new__(cls)
         object.__setattr__(view, "_frozen", False)
         _set_assertion_snapshot(view, snapshot, snapshot.underlying)

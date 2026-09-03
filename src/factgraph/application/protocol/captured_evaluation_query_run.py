@@ -112,7 +112,7 @@ class CapturedEvaluationQueryRunV0:
         )
         object.__setattr__(self, "captured_query_run_digest", expected)
 
-    def verify(self) -> "CapturedEvaluationQueryRunVerificationV0":
+    def verify(self) -> CapturedEvaluationQueryRunVerificationV0:
         """Verify the exact captured F4 bundle in isolation.
 
         Returns:
@@ -128,7 +128,7 @@ class CapturedEvaluationQueryRunV0:
 
         return verify_captured_evaluation_query_run_v0(self)
 
-    def explain(self, *, row_capture_digest: str) -> "CapturedEvaluationQueryRunExplanationV0":
+    def explain(self, *, row_capture_digest: str) -> CapturedEvaluationQueryRunExplanationV0:
         """Play evidence for one positive captured row.
 
         Args:
@@ -163,7 +163,7 @@ class CapturedEvaluationQueryRunV0:
         return captured_evaluation_query_run_bytes(self)
 
     @classmethod
-    def from_bytes(cls, raw: bytes) -> "CapturedEvaluationQueryRunV0":
+    def from_bytes(cls, raw: bytes) -> CapturedEvaluationQueryRunV0:
         """Decode a detached captured Query run without a live Store.
 
         Args:

@@ -293,8 +293,8 @@ def _rule_logical_identity(bundle: ResolvedRuleBundle) -> str:
 
 def _policy_logical_identity(
     target: AuthoredPolicyTargetV1,
-    choices: tuple["WeightedChoiceTopologyV1", ...],
-    functions: tuple["FunctionOccurrenceTopologyV1", ...] = (),
+    choices: tuple["WeightedChoiceTopologyV1", ...],  # noqa: UP037 - Preserve Python 3.10 runtime hint shape.
+    functions: tuple["FunctionOccurrenceTopologyV1", ...] = (),  # noqa: UP037 - Preserve Python 3.10 runtime hint shape.
 ) -> str:
     payload: dict[str, object] = {
         "policy_id": target.policy.id,
@@ -906,14 +906,14 @@ class FunctionOccurrenceHandleV1(PolicyOccurrenceHandle):
         self,
         base: PolicyOccurrenceHandle,
         function: ProductFunctionV1,
-        function_occurrences: Mapping[str, "FunctionOccurrenceHandleV1"],
+        function_occurrences: Mapping[str, "FunctionOccurrenceHandleV1"],  # noqa: UP037 - Preserve Python 3.10 runtime hint shape.
     ) -> None:
         super().__init__(base._owner, base._managed, base._schema_index)
         self.function = function
         self._input_bindings: dict[str, PolicyScalarPortHandle] = {}
         self._function_occurrences = function_occurrences
 
-    def inputs(self, **sources: PolicyScalarPortHandle) -> "FunctionOccurrenceHandleV1":
+    def inputs(self, **sources: PolicyScalarPortHandle) -> FunctionOccurrenceHandleV1:
         """Connect every Function input to direct scalar Rule ports.
 
         Args:
@@ -981,7 +981,7 @@ class _PendingPolicyUseV1:
     __slots__ = ("_builder", "_asset")
 
     def __init__(
-        self, builder: "PolicyBuilder", asset: ResolvedRuleBundle | ProductFunctionV1
+        self, builder: PolicyBuilder, asset: ResolvedRuleBundle | ProductFunctionV1
     ) -> None:
         self._builder = builder
         self._asset = asset
@@ -2079,7 +2079,7 @@ class RuleBuilder:
 
     def __init__(
         self,
-        graph: "SDKStore",
+        graph: SDKStore,
         id: str,
         *,
         version: str | None = None,
@@ -2174,7 +2174,7 @@ class RuleBuilder:
 
 
 def rule_builder(
-    graph: "SDKStore",
+    graph: SDKStore,
     id: str,
     *,
     version: str | None = None,
@@ -2195,7 +2195,7 @@ def rule_builder(
 
 
 def build_rule(
-    graph: "SDKStore",
+    graph: SDKStore,
     *,
     id: str,
     when: Sequence[Any],
@@ -2268,7 +2268,7 @@ class PolicyBuilder:
 
     def __init__(
         self,
-        graph: "SDKStore",
+        graph: SDKStore,
         id: str,
         *,
         version: str | None = None,

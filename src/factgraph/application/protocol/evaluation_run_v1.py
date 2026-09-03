@@ -516,7 +516,7 @@ class EvaluationReplayProgramEnvelopeV1:
         return evaluation_replay_program_envelope_v1_bytes(self)
 
     @classmethod
-    def from_bytes(cls, raw: bytes) -> "EvaluationReplayProgramEnvelopeV1":
+    def from_bytes(cls, raw: bytes) -> EvaluationReplayProgramEnvelopeV1:
         value = evaluation_replay_program_envelope_v1_from_bytes(raw)
         if not isinstance(value, cls):  # pragma: no cover - defensive boundary
             raise ProtocolShapeError("Evaluation replay program envelope codec returned wrong type")
@@ -638,7 +638,7 @@ class EvaluationReplayPayloadV1:
         return evaluation_replay_payload_v1_bytes(self)
 
     @classmethod
-    def from_bytes(cls, raw: bytes) -> "EvaluationReplayPayloadV1":
+    def from_bytes(cls, raw: bytes) -> EvaluationReplayPayloadV1:
         value = evaluation_replay_payload_v1_from_bytes(raw)
         if not isinstance(value, cls):  # pragma: no cover - defensive import boundary
             raise ProtocolShapeError("Evaluation replay payload codec returned wrong type")

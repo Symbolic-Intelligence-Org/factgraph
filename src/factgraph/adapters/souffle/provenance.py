@@ -35,7 +35,7 @@ class SouffleProofNodeV0:
     relation: str
     args: tuple[str, ...]
     rule_number: str | None
-    children: tuple["SouffleProofNodeV0", ...]
+    children: tuple["SouffleProofNodeV0", ...]  # noqa: UP037 - Preserve Python 3.10 runtime hint shape.
 
 
 @dataclass(frozen=True)

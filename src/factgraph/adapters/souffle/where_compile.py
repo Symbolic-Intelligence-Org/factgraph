@@ -570,7 +570,7 @@ def _expand_ruleref_relations_for_query_export(
     where: list[Any],
     registry: Any | None,
     pred_type_domains: dict[str, list[str]],
-) -> "_ExpandedRuleRefQuery":
+) -> _ExpandedRuleRefQuery:
     relation_specs: dict[str, _RuleRefRelationSpec] = {}
     pending_rule_specs: dict[tuple[str, str], tuple[str, tuple[str, ...], list[Any]]] = {}
 

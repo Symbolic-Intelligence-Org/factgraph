@@ -205,7 +205,7 @@ def _is_reserved_annotation_meta_key(key: str) -> bool:
 
 
 class _MetaRowsProxy(list[MetaRow]):
-    def __init__(self, ledger: "Ledger") -> None:
+    def __init__(self, ledger: Ledger) -> None:
         self._ledger = ledger
         super().__init__(ledger.meta_rows)
 

@@ -548,7 +548,7 @@ def execute_native_deterministic_v1(
 @dataclass(frozen=True)
 class _ValidatedPortableInput:
     plan: CompiledDerivationPlan
-    execution_branches: tuple["_PortableExecutionBranch", ...]
+    execution_branches: tuple["_PortableExecutionBranch", ...]  # noqa: UP037 - Preserve Python 3.10 runtime hint shape.
     schema_ir: dict[str, Any]
     relations: Mapping[str, tuple[ProjectedFact, ...]]
     contract: PortableExecutionContractV1

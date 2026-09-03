@@ -101,7 +101,7 @@ class _PolicyHandle:
             code="POLICY_SYMBOLIC_BOOLEAN_UNSUPPORTED",
         )
 
-    def _require_same_draft(self, other: object, *, label: str) -> "_PolicyHandle":
+    def _require_same_draft(self, other: object, *, label: str) -> _PolicyHandle:
         if not isinstance(other, _PolicyHandle) or other._owner is not self._owner:
             raise PolicyAuthoringError(
                 f"{label} must use handles from the same Policy draft",
@@ -165,7 +165,7 @@ class PolicyOccurrenceHandle(PolicyNodeHandle):
         self,
         owner: object,
         managed: ManagedRuleOccurrence,
-        schema_index: "SchemaIndex",
+        schema_index: SchemaIndex,
     ) -> None:
         super().__init__(owner, PolicyOccurrence(managed.occurrence.alias))
         self._managed = managed
@@ -176,7 +176,7 @@ class PolicyOccurrenceHandle(PolicyNodeHandle):
         """Return this occurrence's Policy-local alias."""
         return self._managed.occurrence.alias
 
-    def port(self, name: str) -> "PolicyPortHandle":
+    def port(self, name: str) -> PolicyPortHandle:
         """Resolve one declared semantic port as an owner-bound handle.
 
         Args:
@@ -235,7 +235,7 @@ class PolicyOccurrenceHandle(PolicyNodeHandle):
             code="POLICY_UNSUPPORTED_PORT_ENDPOINT",
         )
 
-    def __getattr__(self, name: str) -> "PolicyPortHandle":
+    def __getattr__(self, name: str) -> PolicyPortHandle:
         if not _is_safe_attribute_name(name):
             raise AttributeError(name)
         try:
@@ -278,7 +278,7 @@ class PolicyEntityPortHandle(PolicyPortHandle):
         owner: object,
         address: SemanticPortAddress,
         entity_type: str,
-        schema_index: "SchemaIndex",
+        schema_index: SchemaIndex,
     ) -> None:
         super().__init__(owner, address)
         self.entity_type = entity_type
@@ -325,7 +325,7 @@ class PolicyEntityPortHandle(PolicyPortHandle):
                 code=code,
             ) from exc
 
-    def field(self, name: str) -> "PolicyFieldHandle":
+    def field(self, name: str) -> PolicyFieldHandle:
         """Navigate an entity port to one single scalar field.
 
         Args:
@@ -364,7 +364,7 @@ class PolicyEntityPortHandle(PolicyPortHandle):
             value_type.scalar_domain,
         )
 
-    def __getattr__(self, name: str) -> "PolicyFieldHandle":
+    def __getattr__(self, name: str) -> PolicyFieldHandle:
         if not _is_safe_attribute_name(name):
             raise AttributeError(name)
         try:
@@ -501,7 +501,7 @@ class PolicyDraft:
 
     __slots__ = ("_graph", "_id", "_version", "_owner", "_occurrences")
 
-    def __init__(self, graph: "SDKStore", policy_id: str, *, version: str | None = None) -> None:
+    def __init__(self, graph: SDKStore, policy_id: str, *, version: str | None = None) -> None:
         if not isinstance(policy_id, str) or not policy_id:
             raise PolicyAuthoringError(
                 "Policy id must be a non-empty string", code="POLICY_INVALID_ID"
@@ -719,7 +719,7 @@ class PolicyDraft:
         return value
 
 
-def policy_draft(graph: "SDKStore", policy_id: str, *, version: str | None = None) -> PolicyDraft:
+def policy_draft(graph: SDKStore, policy_id: str, *, version: str | None = None) -> PolicyDraft:
     """Build one SDK Policy draft owned by ``graph``'s trusted schema index."""
 
     return PolicyDraft(graph, policy_id, version=version)

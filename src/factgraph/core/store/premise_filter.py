@@ -250,7 +250,7 @@ def normalize_premise_exclusions(
 
 
 def normalize_premise_allowances(
-    allowances: "PredicatePremiseAllowance | Iterable[PredicatePremiseAllowance] | None",
+    allowances: PredicatePremiseAllowance | Iterable[PredicatePremiseAllowance] | None,
 ) -> tuple[PredicatePremiseAllowance, ...]:
     """Normalize the per-predicate allowance input to a validated tuple (empty = disabled).
 
@@ -282,7 +282,7 @@ def normalize_premise_allowances(
 
 
 def normalize_premise_blocks(
-    blocks: "PredicatePremiseBlock | Iterable[PredicatePremiseBlock] | None",
+    blocks: PredicatePremiseBlock | Iterable[PredicatePremiseBlock] | None,
 ) -> tuple[PredicatePremiseBlock, ...]:
     """Normalize the per-predicate blocklist input to a validated tuple (empty = disabled).
 
@@ -435,8 +435,8 @@ def is_predicate_premise_blocked(
 def premise_scoped_ledger(
     ledger: Ledger,
     exclusions: MetaExclusion | Iterable[MetaExclusion] | None,
-    allowances: "PredicatePremiseAllowance | Iterable[PredicatePremiseAllowance] | None" = None,
-    blocks: "PredicatePremiseBlock | Iterable[PredicatePremiseBlock] | None" = None,
+    allowances: PredicatePremiseAllowance | Iterable[PredicatePremiseAllowance] | None = None,
+    blocks: PredicatePremiseBlock | Iterable[PredicatePremiseBlock] | None = None,
 ) -> Ledger:
     """Return ``ledger`` unchanged when nothing is configured, else a live filtered view.
 

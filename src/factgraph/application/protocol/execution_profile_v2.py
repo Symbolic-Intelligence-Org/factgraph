@@ -858,7 +858,7 @@ class EvaluationExecutionProfileV2:
         return evaluation_execution_profile_v2_bytes(self)
 
     @classmethod
-    def from_bytes(cls, raw: bytes) -> "EvaluationExecutionProfileV2":
+    def from_bytes(cls, raw: bytes) -> EvaluationExecutionProfileV2:
         """Decode and validate a canonical V2 execution profile.
 
         Args:

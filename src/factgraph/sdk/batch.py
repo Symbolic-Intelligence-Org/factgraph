@@ -102,7 +102,7 @@ class BatchApplyResult:
 
 @dataclass(frozen=True)
 class BatchCommitResult:
-    plan: "BatchPlan"
+    plan: BatchPlan
     apply_result: BatchApplyResult
 
 
@@ -114,7 +114,7 @@ class BatchPlan:
     _application_plans_by_handle_id: dict[int, EntityWritePlan] = dc_field(default_factory=dict, repr=False, compare=False)
 
     # Wire plan is the commit-equivalent serialized representation of this in-memory BatchPlan.
-    def export(self, sdk: "SDKStore") -> "WireBatchPlan":
+    def export(self, sdk: SDKStore) -> WireBatchPlan:
         ref_index: dict[int, RefOp] = {}
         wire_ops: list[WireBatchOp] = []
         for op in self.ops:
@@ -181,10 +181,10 @@ class BatchPlan:
             ops=wire_ops,
         )
 
-    def to_json(self, sdk: "SDKStore") -> str:
+    def to_json(self, sdk: SDKStore) -> str:
         return self.export(sdk).to_json()
 
-    def apply(self, sdk: "SDKStore") -> BatchApplyResult:
+    def apply(self, sdk: SDKStore) -> BatchApplyResult:
         if not self.ops:
             return BatchApplyResult(refs_by_handle_id={}, assertion_ids=[])
         if self._application_handle_order:
@@ -358,7 +358,7 @@ class WireBatchPlan:
         return _canonical_json_dumps(payload)
 
     @classmethod
-    def from_json(cls, text: str) -> "WireBatchPlan":
+    def from_json(cls, text: str) -> WireBatchPlan:
         try:
             payload = json.loads(text)
         except json.JSONDecodeError as exc:
@@ -366,7 +366,7 @@ class WireBatchPlan:
         return cls.from_dict(payload)
 
     @classmethod
-    def from_dict(cls, payload: dict[str, Any]) -> "WireBatchPlan":
+    def from_dict(cls, payload: dict[str, Any]) -> WireBatchPlan:
         if not isinstance(payload, dict):
             raise SDKStoreError("wire batch plan must be object")
         wire_version = payload.get("wire_version")
@@ -396,7 +396,7 @@ class WireBatchPlan:
                 raise SDKStoreError(f"wire ops[{idx}] unknown kind: {kind!r}")
         return cls(wire_version=wire_version, schema_digest=schema_digest, ops=ops)
 
-    def apply(self, sdk: "SDKStore", *, strict_schema: bool = True) -> BatchApplyResult:
+    def apply(self, sdk: SDKStore, *, strict_schema: bool = True) -> BatchApplyResult:
         actual_digest = _sdk_wire_schema_digest(sdk)
         if strict_schema and self.schema_digest != actual_digest:
             raise SDKStoreError(
@@ -498,7 +498,7 @@ class WireBatchPlan:
         return BatchApplyResult(refs_by_handle_id=refs_by_handle_id, assertion_ids=assertion_ids)
 
 
-def _first_unrepresentable_batch_op(plan: BatchPlan, sdk: "SDKStore") -> tuple[str, str]:
+def _first_unrepresentable_batch_op(plan: BatchPlan, sdk: SDKStore) -> tuple[str, str]:
     """Describe the first legacy-only op before an attached batch fails closed."""
     refs_by_handle_id: dict[int, RefOp] = {}
     for op in plan.ops:
@@ -559,7 +559,7 @@ def _resolve_planned_value(op: SetOp | AddOp, refs_by_handle_id: dict[int, str])
     return op.value
 
 
-def _apply_application_batch_plan(plan: BatchPlan, sdk: "SDKStore") -> BatchApplyResult:
+def _apply_application_batch_plan(plan: BatchPlan, sdk: SDKStore) -> BatchApplyResult:
     if sdk._database is not None:
         return _apply_attached_application_batch_plan(plan, sdk)
 
@@ -593,7 +593,7 @@ def _apply_application_batch_plan(plan: BatchPlan, sdk: "SDKStore") -> BatchAppl
     return BatchApplyResult(refs_by_handle_id=refs_by_handle_id, assertion_ids=assertion_ids)
 
 
-def _apply_attached_application_batch_plan(plan: BatchPlan, sdk: "SDKStore") -> BatchApplyResult:
+def _apply_attached_application_batch_plan(plan: BatchPlan, sdk: SDKStore) -> BatchApplyResult:
     database = sdk._database_for_application_write("fg.batch")
     assert database is not None
     plans: list[EntityWritePlan] = []
@@ -630,7 +630,7 @@ def _apply_attached_application_batch_plan(plan: BatchPlan, sdk: "SDKStore") -> 
     return BatchApplyResult(refs_by_handle_id=refs_by_handle_id, assertion_ids=assertion_ids)
 
 
-def _apply_attached_wire_batch_plan(plan: WireBatchPlan, sdk: "SDKStore") -> BatchApplyResult:
+def _apply_attached_wire_batch_plan(plan: WireBatchPlan, sdk: SDKStore) -> BatchApplyResult:
     database = sdk._database_for_application_write("WireBatchPlan.apply")
     assert database is not None
     entity_cls_by_type = _sdk_entity_cls_by_type(sdk)
@@ -745,7 +745,7 @@ def _apply_attached_wire_batch_plan(plan: WireBatchPlan, sdk: "SDKStore") -> Bat
     )
 
 
-def _wire_application_value(value: dict[str, Any], *, sdk: "SDKStore", path: str) -> Any:
+def _wire_application_value(value: dict[str, Any], *, sdk: SDKStore, path: str) -> Any:
     kind = value.get("kind")
     if kind == "scalar":
         return value.get("data")
@@ -926,7 +926,7 @@ def _normalize_wire_value(raw: Any, *, path: str) -> dict[str, Any]:
     raise SDKStoreError(f"{path}.kind must be 'scalar' or 'ref_identity'")
 
 
-def _resolve_wire_value_for_apply(value: dict[str, Any], *, sdk: "SDKStore", path: str) -> Any:
+def _resolve_wire_value_for_apply(value: dict[str, Any], *, sdk: SDKStore, path: str) -> Any:
     kind = value.get("kind")
     if kind == "scalar":
         return value.get("data")
@@ -1016,7 +1016,7 @@ def _canonical_json_bytes(payload: Any) -> bytes:
     return _canonical_json_dumps(payload).encode("utf-8")
 
 
-def _sdk_entity_cls_by_type(sdk: "SDKStore") -> dict[str, type[Entity]]:
+def _sdk_entity_cls_by_type(sdk: SDKStore) -> dict[str, type[Entity]]:
     out: dict[str, type[Entity]] = {}
     for entity_cls, spec in sdk._entity_spec_by_class.items():
         entity_type = spec.get("entity_type")
@@ -1025,7 +1025,7 @@ def _sdk_entity_cls_by_type(sdk: "SDKStore") -> dict[str, type[Entity]]:
     return out
 
 
-def _sdk_pred_field_index(sdk: "SDKStore") -> dict[str, dict[str, Any]]:
+def _sdk_pred_field_index(sdk: SDKStore) -> dict[str, dict[str, Any]]:
     out: dict[str, dict[str, Any]] = {}
     for field_desc, pred in sdk._field_pred_by_descriptor.items():
         if not isinstance(pred, dict):
@@ -1048,7 +1048,7 @@ def _sdk_pred_field_index(sdk: "SDKStore") -> dict[str, dict[str, Any]]:
     return out
 
 
-def _sdk_record_exists_pred_index(sdk: "SDKStore") -> dict[str, dict[str, Any]]:
+def _sdk_record_exists_pred_index(sdk: SDKStore) -> dict[str, dict[str, Any]]:
     out: dict[str, dict[str, Any]] = {}
     for pred in sdk.schema_ir.get("predicates", []):
         if not isinstance(pred, dict):
@@ -1065,7 +1065,7 @@ def _sdk_record_exists_pred_index(sdk: "SDKStore") -> dict[str, dict[str, Any]]:
     return out
 
 
-def _sdk_identity_pred_index(sdk: "SDKStore") -> dict[str, list[dict[str, Any]]]:
+def _sdk_identity_pred_index(sdk: SDKStore) -> dict[str, list[dict[str, Any]]]:
     out: dict[str, list[dict[str, Any]]] = {}
     for pred in sdk.schema_ir.get("predicates", []):
         if not isinstance(pred, dict):
@@ -1102,7 +1102,7 @@ def _sdk_identity_pred_index(sdk: "SDKStore") -> dict[str, list[dict[str, Any]]]
 
 def _write_identity_predicates_for_ref(
     *,
-    sdk: "SDKStore",
+    sdk: SDKStore,
     identity_pred_index: dict[str, list[dict[str, Any]]],
     e_ref: str,
     entity_type: str,
@@ -1131,7 +1131,7 @@ def _write_identity_predicates_for_ref(
         assertion_ids.append(asrt_id)
 
 
-def _resolve_wire_field_for_write_op(*, sdk: "SDKStore", pred_index: dict[str, dict[str, Any]], op: WireWriteOp) -> Field:
+def _resolve_wire_field_for_write_op(*, sdk: SDKStore, pred_index: dict[str, dict[str, Any]], op: WireWriteOp) -> Field:
     row = pred_index.get(op.pred_id)
     if row is None:
         raise SDKStoreError(f"{op.path}: pred_id not found in sdk schema: {op.pred_id}")
@@ -1157,7 +1157,7 @@ def _resolve_wire_field_for_write_op(*, sdk: "SDKStore", pred_index: dict[str, d
     return field_desc
 
 
-def _validate_wire_retract_binding(*, sdk: "SDKStore", pred_index: dict[str, dict[str, Any]], op: WireRetractOp) -> None:
+def _validate_wire_retract_binding(*, sdk: SDKStore, pred_index: dict[str, dict[str, Any]], op: WireRetractOp) -> None:
     row = pred_index.get(op.pred_id)
     if row is None:
         raise SDKStoreError(f"{op.path}: pred_id not found in sdk schema: {op.pred_id}")
@@ -1190,7 +1190,7 @@ def _validate_wire_record_exists_binding(
         )
 
 
-def _sdk_wire_schema_digest(sdk: "SDKStore") -> str:
+def _sdk_wire_schema_digest(sdk: SDKStore) -> str:
     rows: list[dict[str, Any]] = []
     for field_desc, pred in sdk._field_pred_by_descriptor.items():
         if not isinstance(pred, dict):
@@ -1248,7 +1248,7 @@ class _StagedFieldOp:
 
 
 class ManagedFieldHandle:
-    def __init__(self, tx: "SDKBatchTx", owner: "ManagedEntityHandle", field_name: str, field: Field) -> None:
+    def __init__(self, tx: SDKBatchTx, owner: ManagedEntityHandle, field_name: str, field: Field) -> None:
         self._tx = tx
         self._owner = owner
         self._field_name = field_name
@@ -1259,7 +1259,7 @@ class ManagedFieldHandle:
         value: Any,
         *,
         meta: dict[str, Any] | None = None,
-    ) -> "ManagedEntityHandle":
+    ) -> ManagedEntityHandle:
         if self._field.cardinality != "single":
             raise SDKStoreError(f"{self._owner.path}.{self._field_name}: multi field only supports add(...) in batch staging v1")
         self._tx._stage_field_op(self._owner, "set", self._field_name, self._field, value, meta=meta)
@@ -1270,7 +1270,7 @@ class ManagedFieldHandle:
         value: Any,
         *,
         meta: dict[str, Any] | None = None,
-    ) -> "ManagedEntityHandle":
+    ) -> ManagedEntityHandle:
         if self._field.cardinality != "multi":
             raise SDKStoreError(f"{self._owner.path}.{self._field_name}: single field only supports set(...) in batch staging v1")
         self._tx._stage_field_op(self._owner, "add", self._field_name, self._field, value, meta=meta)
@@ -1281,13 +1281,13 @@ class ManagedFieldHandle:
         assertion_id: str,
         *,
         meta: dict[str, Any] | None = None,
-    ) -> "ManagedEntityHandle":
+    ) -> ManagedEntityHandle:
         self._tx._stage_retract_op(self._owner, self._field_name, self._field, assertion_id, meta=meta)
         return self._owner
 
 
 class _IdentityWriteGuard:
-    def __init__(self, owner: "ManagedEntityHandle", field_name: str) -> None:
+    def __init__(self, owner: ManagedEntityHandle, field_name: str) -> None:
         self._owner = owner
         self._field_name = field_name
 
@@ -1323,7 +1323,7 @@ class _IdentityWriteGuard:
 class ManagedEntityHandle:
     def __init__(
         self,
-        tx: "SDKBatchTx",
+        tx: SDKBatchTx,
         *,
         handle_id: int,
         creation_index: int,
@@ -1353,7 +1353,7 @@ class ManagedEntityHandle:
                 order[py_name] = idx
         self._field_order = order
 
-    def bind(self, **identity_values: Any) -> "ManagedEntityHandle":
+    def bind(self, **identity_values: Any) -> ManagedEntityHandle:
         self._tx._bind_identity(self, identity_values)
         return self
 
@@ -1374,7 +1374,7 @@ class ManagedEntityHandle:
     def _append_staged(self, op: _StagedFieldOp) -> None:
         self._staged_ops.append(op)
 
-    def _dependencies(self) -> list["ManagedEntityHandle"]:
+    def _dependencies(self) -> list["ManagedEntityHandle"]:  # noqa: UP037 - Preserve Python 3.10 runtime hint shape.
         seen: set[int] = set()
         out: list[ManagedEntityHandle] = []
         for op in self._staged_ops:
@@ -1388,7 +1388,7 @@ class ManagedEntityHandle:
 
 
 class SDKBatchTx:
-    def __init__(self, sdk: "SDKStore", *, meta: dict[str, Any] | None = None) -> None:
+    def __init__(self, sdk: SDKStore, *, meta: dict[str, Any] | None = None) -> None:
         self._sdk = sdk
         self._batch_meta = _copy_meta(meta)
         self._handles_by_e_ref: dict[str, ManagedEntityHandle] = {}
@@ -1398,7 +1398,7 @@ class SDKBatchTx:
         self._next_handle_id = 1
         self._next_op_index = 1
 
-    def __enter__(self) -> "SDKBatchTx":
+    def __enter__(self) -> SDKBatchTx:
         return self
 
     def __exit__(self, exc_type, exc, tb) -> None:

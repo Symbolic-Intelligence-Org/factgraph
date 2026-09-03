@@ -636,7 +636,7 @@ class GoalResultRowV1:
             if self.anchor.semantic_row_digest != semantic:
                 raise ProtocolShapeError("GoalResultRowV1 anchor does not match values")
 
-    def anchored(self, plan_digest: str) -> "GoalResultRowV1":
+    def anchored(self, plan_digest: str) -> GoalResultRowV1:
         """Return this immutable row with its deterministic plan-bound anchor."""
 
         return GoalResultRowV1(

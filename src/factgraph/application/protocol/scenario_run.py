@@ -464,7 +464,7 @@ class ScenarioRunV0:
         *,
         side: Literal["baseline", "effective"],
         row_capture_digest: str,
-    ) -> "ScenarioRunExplanationV0":
+    ) -> ScenarioRunExplanationV0:
         """Explain one positive row from a captured Scenario side.
 
         Args:
@@ -478,7 +478,7 @@ class ScenarioRunV0:
 
         return explain_scenario_run_v0(self, side=side, row_capture_digest=row_capture_digest)
 
-    def verify(self) -> "ScenarioRunVerificationV0":
+    def verify(self) -> ScenarioRunVerificationV0:
         """Verify both sides against their isolated captured relations.
 
         Returns:
@@ -499,7 +499,7 @@ class ScenarioRunV0:
         return scenario_run_bytes(self)
 
     @classmethod
-    def from_bytes(cls, raw: bytes) -> "ScenarioRunV0":
+    def from_bytes(cls, raw: bytes) -> ScenarioRunV0:
         """Decode a detached ScenarioRun without consulting a live Store.
 
         Args:

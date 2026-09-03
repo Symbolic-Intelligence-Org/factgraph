@@ -32,7 +32,7 @@ class _EntityFieldSpec:
     cardinality: str
 
 
-def execute_query_plan(sdk: "SDKStore", plan: QueryPlan, *, registry: Any | None = None) -> list[Any]:
+def execute_query_plan(sdk: SDKStore, plan: QueryPlan, *, registry: Any | None = None) -> list[Any]:
     where_ir = lower_query_rule_ast_to_ir(plan.rule_ast)["where"]
     request = QueryRuntimeRequest(
         entity_type=_primary_entity_type(plan.return_contract),
@@ -134,7 +134,7 @@ def _sdk_path_from_app_path(path: tuple[str, ...]) -> str:
 def _map_app_row_to_sdk_row(
     row: dict[str, Any],
     return_contract: tuple[ReturnContractEntry, ...],
-    sdk: "SDKStore",
+    sdk: SDKStore,
 ) -> dict[str, Any]:
     out: dict[str, Any] = {}
     for entry in return_contract:
@@ -168,7 +168,7 @@ def _map_app_row_to_sdk_row(
 def _ensure_query_field_assertions(
     snapshot: EntitySnapshot,
     *,
-    sdk: "SDKStore",
+    sdk: SDKStore,
     entity_type: str,
 ) -> EntitySnapshot:
     field_map = object.__getattribute__(snapshot.assertions, "_field_map")
@@ -257,7 +257,7 @@ def _to_hashable(value: Any) -> Any:
         return ("repr", repr(value))
 
 
-def _entity_cls_for_type(sdk: "SDKStore", entity_type: str) -> type:
+def _entity_cls_for_type(sdk: SDKStore, entity_type: str) -> type:
     for entity_cls, spec in sdk._entity_spec_by_class.items():
         if spec.get("entity_type") == entity_type:
             return entity_cls
@@ -267,7 +267,7 @@ def _entity_cls_for_type(sdk: "SDKStore", entity_type: str) -> type:
     )
 
 
-def _entity_field_specs_for_type(sdk: "SDKStore", entity_type: str) -> tuple[str | None, list[_EntityFieldSpec]]:
+def _entity_field_specs_for_type(sdk: SDKStore, entity_type: str) -> tuple[str | None, list[_EntityFieldSpec]]:
     predicates = sdk.schema_ir.get("predicates")
     if not isinstance(predicates, list):
         raise SDKStoreError("schema_ir.predicates must be list", path="$.store.schema_ir.predicates")

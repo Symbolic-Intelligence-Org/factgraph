@@ -194,7 +194,7 @@ class GoalPlanInvocationV1:
     on detached immutable relations only.
     """
 
-    _graph: "SDKStore"
+    _graph: SDKStore
     plan: GoalPlanV1
     primary: TargetedCompiledEvaluationQueryV0
     profile: EvaluationExecutionProfileV1
@@ -281,7 +281,7 @@ def portable_deterministic_profile_v1(
 
 def build_goal_plan_invocation_v1(
     *,
-    graph: "SDKStore",
+    graph: SDKStore,
     primary: TargetedCompiledEvaluationQueryV0,
     result_mode: GoalResultModeV1,
     expectations: tuple[GoalExpectationV1, ...],

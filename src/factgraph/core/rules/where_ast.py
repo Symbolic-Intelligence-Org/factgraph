@@ -67,7 +67,7 @@ class BuiltinAtom:
 
 @dataclass(frozen=True)
 class NotAtom:
-    body: "WhereExpr"
+    body: WhereExpr
     origin: Origin | None = None
 
 

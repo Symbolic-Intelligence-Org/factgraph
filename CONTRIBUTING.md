@@ -27,6 +27,12 @@ The `dev` extra pins Ruff to `0.16.5` so local and CI lint checks use the same
 rules. Install that extra before running the checks. Review tool upgrades
 separately from source cleanup; Python 3.10 and 3.11 remain supported.
 
+Selected nested generic forward references retain quoted names because removing
+them changes `get_type_hints` results on Python 3.10. Their line-local `UP037`
+exceptions preserve existing behavior; `tests/sdk/test_annotation_compatibility.py`
+checks each affected hint on the supported versions. Do not replace those
+exceptions with a blanket rule ignore or silently alter the runtime hints.
+
 ```bash
 python -m ruff check src/factgraph tests
 python -m mypy src/factgraph

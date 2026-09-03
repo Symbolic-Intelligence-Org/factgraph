@@ -89,9 +89,9 @@ class Store:
         *,
         engine_evaluator: EngineEvaluatorFn | None = None,
         artifact_sidecar: ArtifactSidecar | None = None,
-        premise_exclusions: "MetaExclusion | Iterable[MetaExclusion] | None" = None,
-        premise_allowances: "PredicatePremiseAllowance | Iterable[PredicatePremiseAllowance] | None" = None,
-        premise_blocks: "PredicatePremiseBlock | Iterable[PredicatePremiseBlock] | None" = None,
+        premise_exclusions: MetaExclusion | Iterable[MetaExclusion] | None = None,
+        premise_allowances: PredicatePremiseAllowance | Iterable[PredicatePremiseAllowance] | None = None,
+        premise_blocks: PredicatePremiseBlock | Iterable[PredicatePremiseBlock] | None = None,
     ) -> None:
         if not isinstance(schema_ir, dict):
             raise ValueError("schema_ir must be dict")
@@ -142,7 +142,7 @@ class Store:
 
     def set_premise_exclusions(
         self,
-        exclusions: "MetaExclusion | Iterable[MetaExclusion] | None",
+        exclusions: MetaExclusion | Iterable[MetaExclusion] | None,
     ) -> None:
         """Configure evaluation premise exclusions; see core/store/premise_filter.py.
 
@@ -173,7 +173,7 @@ class Store:
 
     def set_premise_allowances(
         self,
-        allowances: "PredicatePremiseAllowance | Iterable[PredicatePremiseAllowance] | None",
+        allowances: PredicatePremiseAllowance | Iterable[PredicatePremiseAllowance] | None,
     ) -> None:
         """Configure per-predicate evaluation allowances; see core/store/premise_filter.py.
 
@@ -208,7 +208,7 @@ class Store:
 
     def set_premise_blocks(
         self,
-        blocks: "PredicatePremiseBlock | Iterable[PredicatePremiseBlock] | None",
+        blocks: PredicatePremiseBlock | Iterable[PredicatePremiseBlock] | None,
     ) -> None:
         """Configure per-predicate evaluation blocklists; see core/store/premise_filter.py.
 
@@ -397,7 +397,7 @@ class Store:
         where: WhereIR,
         mode: EvaluateMode = "native",
         head: HeadSpecIR | None = None,
-        registry: "RuleRegistry | None" = None,
+        registry: RuleRegistry | None = None,
         confidence_kind_resolver: Any | None = None,
         engine_ext: EngineExtBase | None = None,
         engine_options: EngineOptionsIR = None,

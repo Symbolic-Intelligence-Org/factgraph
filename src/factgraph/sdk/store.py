@@ -532,7 +532,7 @@ class _SDKAssertionViewsManager:
     assertion set name when callers create it.
     """
 
-    def __init__(self, sdk: "SDKStore") -> None:
+    def __init__(self, sdk: SDKStore) -> None:
         # Read-only attribute boundary per post-L redesign §5.4 lock.
         # Internal init bypasses ``__setattr__`` via ``object.__setattr__``;
         # external assignment (``fg.assertion_views.foo = ...``) raises
@@ -659,7 +659,7 @@ class AssertionsManager:
         belong to ``fg.fields``.
     """
 
-    def __init__(self, sdk: "SDKStore") -> None:
+    def __init__(self, sdk: SDKStore) -> None:
         object.__setattr__(self, "_sdk", sdk)
 
     def __setattr__(self, name: str, value: Any) -> None:
@@ -1029,7 +1029,7 @@ class AssertionsManager:
 class _SDKSchemaManager:
     """Namespace manager for schema registration and extension."""
 
-    def __init__(self, sdk: "SDKStore") -> None:
+    def __init__(self, sdk: SDKStore) -> None:
         object.__setattr__(self, "_sdk", sdk)
 
     def __setattr__(self, name: str, value: Any) -> None:
@@ -1144,7 +1144,7 @@ class _SDKFieldsManager:
         Product V2 Scenario offers separate run-local write-like methods.
     """
 
-    def __init__(self, sdk: "SDKStore") -> None:
+    def __init__(self, sdk: SDKStore) -> None:
         object.__setattr__(self, "_sdk", sdk)
 
     def __setattr__(self, name: str, value: Any) -> None:
@@ -1413,7 +1413,7 @@ class _SDKEntitiesManager:
         belong to ``fg.fields``.
     """
 
-    def __init__(self, sdk: "SDKStore") -> None:
+    def __init__(self, sdk: SDKStore) -> None:
         object.__setattr__(self, "_sdk", sdk)
 
     def __setattr__(self, name: str, value: Any) -> None:
@@ -1829,7 +1829,7 @@ class _SDKEntitiesManager:
 class _SDKRulesManager:
     """Read-only namespace manager for rule structure inspection and persistence."""
 
-    def __init__(self, sdk: "SDKStore") -> None:
+    def __init__(self, sdk: SDKStore) -> None:
         object.__setattr__(self, "_sdk", sdk)
 
     def __setattr__(self, name: str, value: Any) -> None:
@@ -1867,7 +1867,7 @@ class _SDKInferencesManager:
     a separate decision out of slice 6 scope.
     """
 
-    def __init__(self, sdk: "SDKStore") -> None:
+    def __init__(self, sdk: SDKStore) -> None:
         object.__setattr__(self, "_sdk", sdk)
 
     def __setattr__(self, name: str, value: Any) -> None:
@@ -1877,7 +1877,7 @@ class _SDKInferencesManager:
 class _SDKEvalManager:
     """Read-only namespace manager for T5 evaluation and explanation."""
 
-    def __init__(self, sdk: "SDKStore") -> None:
+    def __init__(self, sdk: SDKStore) -> None:
         object.__setattr__(self, "_sdk", sdk)
 
     def __setattr__(self, name: str, value: Any) -> None:
@@ -1973,7 +1973,7 @@ class _SDKAuditManager:
     proof-frame outcomes — post-hoc audit, not hypothetical evaluation.
     """
 
-    def __init__(self, sdk: "SDKStore") -> None:
+    def __init__(self, sdk: SDKStore) -> None:
         object.__setattr__(self, "_sdk", sdk)
 
     def __setattr__(self, name: str, value: Any) -> None:
@@ -2076,7 +2076,7 @@ class _SDKMetaManager:
     `factgraph.application.capabilities`.
     """
 
-    def __init__(self, sdk: "SDKStore") -> None:
+    def __init__(self, sdk: SDKStore) -> None:
         object.__setattr__(self, "_sdk", sdk)
 
     def __setattr__(self, name: str, value: Any) -> None:
@@ -2100,7 +2100,7 @@ class _SDKMetaManager:
 class _SDKPackageManager:
     """Read-only namespace manager for the `package` taxonomy group."""
 
-    def __init__(self, sdk: "SDKStore") -> None:
+    def __init__(self, sdk: SDKStore) -> None:
         object.__setattr__(self, "_sdk", sdk)
 
     def __setattr__(self, name: str, value: Any) -> None:
@@ -2317,7 +2317,7 @@ class SDKStore:
         registry_root: str | Path | None = None,
         registry: Any | None = None,
         default_row_format: str | None = None,
-    ) -> "SDKStore":
+    ) -> SDKStore:
         """Create a `FactGraph` from Python `Entity` classes.
 
         This is the normal SDK constructor. Pass `path=` to create a durable
@@ -2395,7 +2395,7 @@ class SDKStore:
         registry_root: str | Path | None = None,
         registry: Any | None = None,
         default_row_format: str | None = None,
-    ) -> "SDKStore":
+    ) -> SDKStore:
         """Create the lower-level unmanaged-Ledger compatibility runtime.
 
         Args:
@@ -2438,7 +2438,7 @@ class SDKStore:
         *,
         schema_classes: list[type[Entity]] | None = None,
         default_row_format: str | None = None,
-    ) -> "SDKStore":
+    ) -> SDKStore:
         """Open a durable FactGraph workspace from disk.
 
         Workspace load restores the ledger and validates the workspace schema
@@ -2499,7 +2499,7 @@ class SDKStore:
         view: DatabaseFrozenAssertionSet | None = None,
         default_row_format: str | None = None,
         **kwargs: Any,
-    ) -> "SDKStore":
+    ) -> SDKStore:
         """Attach the SDK facade to a caller-owned Database.
 
         Args:
@@ -2549,7 +2549,7 @@ class SDKStore:
         schema_ir: dict[str, Any],
         view: DatabaseFrozenAssertionSet | None = None,
         default_row_format: str | None = None,
-    ) -> "SDKStore":
+    ) -> SDKStore:
         digest = schema_digest(schema_ir)
         if digest != db.schema_digest:
             raise SDKStoreError(
@@ -2571,7 +2571,7 @@ class SDKStore:
             attached._workspace_path = paths.root
         return attached
 
-    def __enter__(self) -> "SDKStore":
+    def __enter__(self) -> SDKStore:
         return self
 
     def __exit__(
@@ -2604,7 +2604,7 @@ class SDKStore:
         schema_ir: dict[str, Any] | None = None,
         workspace_path: str | Path | None = None,
         default_row_format: str | None = None,
-    ) -> "SDKStore":
+    ) -> SDKStore:
         if ledger is not None and ledger_path is not None:
             raise SDKStoreError("provide either ledger or ledger_path, not both")
 
@@ -2761,7 +2761,7 @@ class SDKStore:
         except ValueError as exc:
             raise SDKStoreError(str(exc)) from exc
 
-    def premise_scoped_view(self) -> "SDKStore":
+    def premise_scoped_view(self) -> SDKStore:
         """Read-only `FactGraph` whose reads see only evaluation-admissible facts.
 
         Every entity/field/assertion read through the returned view applies the
@@ -3059,7 +3059,7 @@ class SDKStore:
 
         return scenario_builder_v2(self)
 
-    def policy(self, policy_id: str, *, version: str | None = None) -> "PolicyDraft":
+    def policy(self, policy_id: str, *, version: str | None = None) -> PolicyDraft:
         """Start one typed, in-process Policy authoring draft.
 
         The draft emits the existing managed Policy and SemanticAddressSpace
@@ -3461,7 +3461,7 @@ class SDKStore:
         *,
         warnings: Any = (),
         include_unchanged: bool = False,
-    ) -> "ProofFrameDiff":
+    ) -> ProofFrameDiff:
         """Diff two rounds' proof-frame events.
 
         Args:
@@ -3859,7 +3859,7 @@ class SDKStore:
 
     def _outputs_for_derivation(
         self, derivation: Any, *, raw_engine: Any, raw_config: Any
-    ) -> tuple[list[DerivationOutput], list[dict[str, Any]], str, "SemanticsProfile | None"]:
+    ) -> tuple[list[DerivationOutput], list[dict[str, Any]], str, "SemanticsProfile | None"]:  # noqa: UP037 - Preserve Python 3.10 runtime hint shape.
         """Erzeugt die rohen DerivationOutputs für eine Inference oder ein Derivation-Dict.
 
         Gemeinsamer Kern von _evaluate und _evaluate_candidates: engine/semantics

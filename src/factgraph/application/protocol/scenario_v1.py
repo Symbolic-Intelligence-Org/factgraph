@@ -150,7 +150,7 @@ class ScenarioValueV1:
             raise ProtocolShapeError("ScenarioValueV1 storage is not canonical")
 
     @classmethod
-    def from_raw(cls, tag: ScenarioValueTagV1, value: Any) -> "ScenarioValueV1":
+    def from_raw(cls, tag: ScenarioValueTagV1, value: Any) -> ScenarioValueV1:
         """Normalize one Python value into canonical Scenario storage.
 
         Args:
