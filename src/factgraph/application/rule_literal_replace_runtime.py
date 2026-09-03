@@ -277,39 +277,37 @@ def _build_proof_frame_result(
     action: RuleLiteralReplaceAction,
 ) -> ProofFrameRecheckResult:
     target_prefix = _atom_key_prefix(action)
-    atom_verdicts = tuple(
-        [
-            *(
-                ProofFrameConditionVerdict(
-                    condition_key=witness.pred_condition_key,
-                    verdict=(
-                        "invalidated"
-                        if witness.pred_condition_key.startswith(target_prefix)
-                        else "still_valid"
-                    ),
-                    affected_action_indices=(
-                        (action_index,)
-                        if witness.pred_condition_key.startswith(target_prefix)
-                        else ()
-                    ),
-                )
-                for witness in artifact.pred_witnesses
-            ),
-            *(
-                ProofFrameConditionVerdict(
-                    condition_key=step.step_key,
-                    verdict=(
-                        "invalidated"
-                        if step.step_key.startswith(target_prefix)
-                        else "still_valid"
-                    ),
-                    affected_action_indices=(
-                        (action_index,) if step.step_key.startswith(target_prefix) else ()
-                    ),
-                )
-                for step in artifact.non_fact_steps
-            ),
-        ]
+    atom_verdicts = (
+        *(
+            ProofFrameConditionVerdict(
+                condition_key=witness.pred_condition_key,
+                verdict=(
+                    "invalidated"
+                    if witness.pred_condition_key.startswith(target_prefix)
+                    else "still_valid"
+                ),
+                affected_action_indices=(
+                    (action_index,)
+                    if witness.pred_condition_key.startswith(target_prefix)
+                    else ()
+                ),
+            )
+            for witness in artifact.pred_witnesses
+        ),
+        *(
+            ProofFrameConditionVerdict(
+                condition_key=step.step_key,
+                verdict=(
+                    "invalidated"
+                    if step.step_key.startswith(target_prefix)
+                    else "still_valid"
+                ),
+                affected_action_indices=(
+                    (action_index,) if step.step_key.startswith(target_prefix) else ()
+                ),
+            )
+            for step in artifact.non_fact_steps
+        ),
     )
     return ProofFrameRecheckResult(
         status=aggregate_proof_frame_status(atom_verdicts),

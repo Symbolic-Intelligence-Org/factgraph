@@ -63,24 +63,22 @@ def recheck_proof_frame(
         action_index=action_index,
     )
 
-    atom_verdicts = tuple(
-        [
-            *(
-                _recheck_pred_witness(
-                    witness,
-                    visible_rows=visible_rows,
-                    action_index=action_index,
-                )
-                for witness in artifact.pred_witnesses
-            ),
-            *(
-                _recheck_non_fact_step(
-                    step,
-                    frame_relevant_action_indices=frame_relevant_action_indices,
-                )
-                for step in artifact.non_fact_steps
-            ),
-        ]
+    atom_verdicts = (
+        *(
+            _recheck_pred_witness(
+                witness,
+                visible_rows=visible_rows,
+                action_index=action_index,
+            )
+            for witness in artifact.pred_witnesses
+        ),
+        *(
+            _recheck_non_fact_step(
+                step,
+                frame_relevant_action_indices=frame_relevant_action_indices,
+            )
+            for step in artifact.non_fact_steps
+        ),
     )
     return ProofFrameRecheckResult(
         status=aggregate_proof_frame_status(atom_verdicts),

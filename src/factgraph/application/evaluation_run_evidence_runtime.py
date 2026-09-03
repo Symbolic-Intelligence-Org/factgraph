@@ -226,7 +226,7 @@ def _evaluation_run_bundle_evidence(
     )
     selected_anchor = bundle.run_anchor.row_anchors[row.ordinal]
     certainty = _certainty(row)
-    outside_ids = tuple((*query_atom_ids, *query_navigation_atom_ids, *head_atom_ids))
+    outside_ids = (*query_atom_ids, *query_navigation_atom_ids, *head_atom_ids)
     metadata = {
         "evidence_mode": "detached_receipt_playback_v0",
         "logical_verification": "not_performed",

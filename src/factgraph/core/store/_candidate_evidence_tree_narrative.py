@@ -100,8 +100,10 @@ def render_candidate_evidence_tree_narrative(
         rule_chain_lines = ["No recursive rule-chain proof is available for degraded support."]
     elif is_problog:
         evidence_lines = [
-            "ProbLog proof tree: "
-            f"{proof_goal_count or 0} intermediate goals, {proof_leaf_count or 0} leaf facts."
+            (
+                "ProbLog proof tree: "
+                f"{proof_goal_count or 0} intermediate goals, {proof_leaf_count or 0} leaf facts."
+            )
         ]
         rule_chain_lines = [f"Proof depth: {recursive_depth}."]
     else:
@@ -229,8 +231,10 @@ def _build_certainty_section(value: Any) -> tuple[list[str], dict[str, Any] | No
 
     aggregate_label = "additive" if aggregation == "additive" else "bottleneck"
     lines = [
-        "Certainty (eligible child-proof subtree): "
-        f"aggregate certainty ({aggregate_label}): {aggregate_certainty if aggregate_certainty is not None else '-'}."
+        (
+            "Certainty (eligible child-proof subtree): "
+            f"aggregate certainty ({aggregate_label}): {aggregate_certainty if aggregate_certainty is not None else '-'}."
+        )
     ]
     bottleneck_keys: list[str] = []
     bottleneck_impact: float | None = None

@@ -476,7 +476,7 @@ def _validate_query_where_branch_wrapper(node: Any, *, path: str) -> None:
 
 def _normalize_derivation_head_items(head: Any) -> tuple[HeadCall, ...]:
     if head is None:
-        return tuple()
+        return ()
     if isinstance(head, list):
         head_items = list(head)
     else:

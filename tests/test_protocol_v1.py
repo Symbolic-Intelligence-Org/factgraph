@@ -13,7 +13,6 @@ from factgraph.core.protocol.tup_v1 import (
 )
 from factgraph.core.store.ledger import Ledger
 
-
 _INVALID_TYPED_VALUES = (
     ("string", 12, "string value must be str"),
     ("entity_ref", 12, "entity_ref value must be str"),

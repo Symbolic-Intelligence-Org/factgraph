@@ -180,8 +180,8 @@ def _ensure_query_field_assertions(
             entity_type=entity_type,
             field_name=spec.field_name,
             cardinality=spec.cardinality,
-            active_records=tuple(),
-            history_records=tuple(),
+            active_records=(),
+            history_records=(),
         )
         for spec in field_specs
     }

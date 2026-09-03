@@ -1351,14 +1351,12 @@ class Database:
             revocation_writes.append(
                 LedgerRevocationWrite(
                     revokes=Revokes(record.revoker_asrt_id, record.revoked_asrt_id),
-                    meta_rows=tuple(
-                        [
-                            *input_meta_rows,
-                            MetaRow(
-                                record.revoker_asrt_id, "schema_digest", "str", self._schema_digest
-                            ),
-                            MetaRow(record.revoker_asrt_id, "tx_id", "str", tx_id),
-                        ]
+                    meta_rows=(
+                        *input_meta_rows,
+                        MetaRow(
+                            record.revoker_asrt_id, "schema_digest", "str", self._schema_digest
+                        ),
+                        MetaRow(record.revoker_asrt_id, "tx_id", "str", tx_id),
                     ),
                     annotation_rows=tuple(_annotation_rows(record.revoker_asrt_id, record.meta)),
                 )
