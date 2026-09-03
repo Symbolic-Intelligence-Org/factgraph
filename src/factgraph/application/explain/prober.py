@@ -1032,13 +1032,11 @@ def _aggregate_target_label(target: Any, filter_atoms: Any) -> str:
 
 
 def _clean_var_label(var_name: str) -> str:
-    label = var_name[1:] if var_name.startswith("$") else var_name
+    label = var_name.removeprefix("$")
     if "__" in label:
         label = label.rsplit("__", 1)[1]
-    if label.startswith("_agg"):
-        label = label[4:]
-    if label.startswith("agg"):
-        label = label[3:]
+    label = label.removeprefix("_agg")
+    label = label.removeprefix("agg")
     return label or "value"
 
 

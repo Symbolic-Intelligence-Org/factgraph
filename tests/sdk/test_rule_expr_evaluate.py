@@ -434,9 +434,11 @@ class RuleExprEvaluatePublicDispatchTests(unittest.TestCase):
         inspected = RuleExprInspect(ast=(), occurrences=(), joins=(), unjoined_same_name_ports=())
 
         for invalid in (legacy_rule, inference, {"head": "dict"}, "Person:exists", inspected):
-            with self.subTest(invalid=type(invalid).__name__):
-                with self.assertRaisesRegex(SDKStoreError, "head= must be Rule"):
-                    graph.eval.evaluate(rule, head=invalid)
+            with (
+                self.subTest(invalid=type(invalid).__name__),
+                self.assertRaisesRegex(SDKStoreError, "head= must be Rule"),
+            ):
+                graph.eval.evaluate(rule, head=invalid)
 
     def test_external_head_filters_rows_and_evaluates(self) -> None:
         graph = _store()
@@ -696,9 +698,11 @@ class RuleExprEvaluatePublicDispatchTests(unittest.TestCase):
             ),
         )
 
-        with patch("factgraph.sdk.store.evaluate_derivation_plans", return_value=[candidate]):
-            with patch.object(graph._store, "_lookup_support_artifact", return_value=artifact):
-                result = graph.eval.evaluate(rule, head=rule, engine="souffle")
+        with (
+            patch("factgraph.sdk.store.evaluate_derivation_plans", return_value=[candidate]),
+            patch.object(graph._store, "_lookup_support_artifact", return_value=artifact),
+        ):
+            result = graph.eval.evaluate(rule, head=rule, engine="souffle")
 
         explanation = result[0].explain()
 
@@ -1071,13 +1075,17 @@ class RuleExprEvaluatePublicDispatchTests(unittest.TestCase):
             ),
         )
 
-        with patch("factgraph.sdk.store.evaluate_derivation_plans", return_value=[candidate]):
-            with patch.object(graph._store, "_lookup_support_artifact", return_value=artifact):
-                result = graph.eval.evaluate(rule, head=rule, engine="souffle")
+        with (
+            patch("factgraph.sdk.store.evaluate_derivation_plans", return_value=[candidate]),
+            patch.object(graph._store, "_lookup_support_artifact", return_value=artifact),
+        ):
+            result = graph.eval.evaluate(rule, head=rule, engine="souffle")
 
-        with patch("factgraph.sdk.store.souffle_reach_explain_to_evidence_graph", side_effect=ValueError("reach bad")):
-            with patch("factgraph.sdk.store._souffle_support_artifact_to_evidence_graph", side_effect=ValueError("bad")):
-                explanation = result[0].explain()
+        with (
+            patch("factgraph.sdk.store.souffle_reach_explain_to_evidence_graph", side_effect=ValueError("reach bad")),
+            patch("factgraph.sdk.store._souffle_support_artifact_to_evidence_graph", side_effect=ValueError("bad")),
+        ):
+            explanation = result[0].explain()
 
         self.assertEqual(explanation.status, "passed")
         assert explanation.evidence is not None
@@ -1151,9 +1159,11 @@ Person:exists({encoded}):\t0.73
             payload=problog_trace_to_dict(trace),
         )
 
-        with patch("factgraph.sdk.store.evaluate_derivation_plans", return_value=[candidate]):
-            with patch.object(graph._store, "_lookup_provenance_envelope", return_value=envelope):
-                result = graph.eval.evaluate(rule, head=rule, engine="problog")
+        with (
+            patch("factgraph.sdk.store.evaluate_derivation_plans", return_value=[candidate]),
+            patch.object(graph._store, "_lookup_provenance_envelope", return_value=envelope),
+        ):
+            result = graph.eval.evaluate(rule, head=rule, engine="problog")
 
         explanation = result[0].explain()
 
@@ -1213,9 +1223,11 @@ Person:exists({encoded}):\t0.73
             payload={"engine": "problog", "trace_type": "proof_trace", "events": [], "answers": []},
         )
 
-        with patch("factgraph.sdk.store.evaluate_derivation_plans", return_value=[candidate]):
-            with patch.object(graph._store, "_lookup_provenance_envelope", return_value=envelope):
-                result = graph.eval.evaluate(rule, head=rule, engine="problog")
+        with (
+            patch("factgraph.sdk.store.evaluate_derivation_plans", return_value=[candidate]),
+            patch.object(graph._store, "_lookup_provenance_envelope", return_value=envelope),
+        ):
+            result = graph.eval.evaluate(rule, head=rule, engine="problog")
 
         with patch("factgraph.sdk.store.problog_reach_explain_to_evidence_graph", side_effect=ValueError("reach bad")):
             explanation = result[0].explain()
@@ -1274,9 +1286,11 @@ Person:exists({encoded}):\t0.73
             payload={"engine": "problog", "trace_type": "proof_trace", "events": [], "answers": []},
         )
 
-        with patch("factgraph.sdk.store.evaluate_derivation_plans", return_value=[candidate]):
-            with patch.object(graph._store, "_lookup_provenance_envelope", return_value=envelope):
-                result = graph.eval.evaluate(rule, head=rule, engine="problog")
+        with (
+            patch("factgraph.sdk.store.evaluate_derivation_plans", return_value=[candidate]),
+            patch.object(graph._store, "_lookup_provenance_envelope", return_value=envelope),
+        ):
+            result = graph.eval.evaluate(rule, head=rule, engine="problog")
 
         with patch("factgraph.sdk.store.problog_trace_to_evidence_graph", side_effect=AssertionError("trace should not run")):
             explanation = result[0].explain()
@@ -1440,9 +1454,11 @@ Person:exists({encoded}):\t0.73
             payload=pyreason_trace_to_dict(trace),
         )
 
-        with patch("factgraph.sdk.store.evaluate_derivation_plans", return_value=[candidate]):
-            with patch.object(graph._store, "_lookup_provenance_envelope", return_value=envelope):
-                result = graph.eval.evaluate(rule, head=rule, engine="pyreason")
+        with (
+            patch("factgraph.sdk.store.evaluate_derivation_plans", return_value=[candidate]),
+            patch.object(graph._store, "_lookup_provenance_envelope", return_value=envelope),
+        ):
+            result = graph.eval.evaluate(rule, head=rule, engine="pyreason")
 
         explanation = result[0].explain()
 
@@ -1483,9 +1499,11 @@ Person:exists({encoded}):\t0.73
             payload={"engine": "pyreason", "trace_type": "event_log", "timesteps": 0, "node_events": [], "edge_events": []},
         )
 
-        with patch("factgraph.sdk.store.evaluate_derivation_plans", return_value=[candidate]):
-            with patch.object(graph._store, "_lookup_provenance_envelope", return_value=envelope):
-                result = graph.eval.evaluate(rule, head=rule, engine="pyreason")
+        with (
+            patch("factgraph.sdk.store.evaluate_derivation_plans", return_value=[candidate]),
+            patch.object(graph._store, "_lookup_provenance_envelope", return_value=envelope),
+        ):
+            result = graph.eval.evaluate(rule, head=rule, engine="pyreason")
 
         explanation = result[0].explain()
 

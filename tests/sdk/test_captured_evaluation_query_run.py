@@ -272,9 +272,11 @@ class CapturedEvaluationQueryRunV0Tests(unittest.TestCase):
 
         ordinary = query.evaluate()
         self.assertEqual(len(ordinary.expectation_results), 65)
-        with patch("factgraph.sdk.store.evaluate_derivation_plans", wraps=store_module.evaluate_derivation_plans) as evaluator:
-            with self.assertRaisesRegex(SDKStoreError, "inventory exceeds"):
-                query.capture()
+        with (
+            patch("factgraph.sdk.store.evaluate_derivation_plans", wraps=store_module.evaluate_derivation_plans) as evaluator,
+            self.assertRaisesRegex(SDKStoreError, "inventory exceeds"),
+        ):
+            query.capture()
         evaluator.assert_not_called()
 
     def test_capture_rejects_an_inventory_that_cannot_fit_its_durable_codec(self) -> None:

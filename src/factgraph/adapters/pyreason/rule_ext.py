@@ -443,7 +443,7 @@ def _compile_term(term: Any) -> str:
         token = term.token or term.label
         if not isinstance(token, str) or not token:
             raise PyReasonCompileError("LogicVar has neither token nor label")
-        return token[1:] if token.startswith("$") else token
+        return token.removeprefix("$")
     if isinstance(term, str):
         return term
     if isinstance(term, (int, float)) and not isinstance(term, bool):

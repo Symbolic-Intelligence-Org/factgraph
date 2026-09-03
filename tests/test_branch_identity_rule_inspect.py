@@ -115,9 +115,11 @@ class BranchIdentityConstructionTests(unittest.TestCase):
             ("probability", 0.9),
             ("engine_ext", object()),
         ):
-            with self.subTest(keyword=keyword):
-                with self.assertRaises((TypeError, SDKDSLError)):
-                    Case([Pred("user:tag_seed", "$u", "$tag")], **{keyword: value})
+            with (
+                self.subTest(keyword=keyword),
+                self.assertRaises((TypeError, SDKDSLError)),
+            ):
+                Case([Pred("user:tag_seed", "$u", "$tag")], **{keyword: value})
 
 
 class RuleInspectTests(unittest.TestCase):

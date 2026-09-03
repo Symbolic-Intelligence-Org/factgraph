@@ -640,7 +640,7 @@ def sdk_find(
     identity_names = [field["name"] for field in spec.get("identity_fields", []) if isinstance(field, dict)]
     field_names = [field["py_name"] for field in spec.get("fields", []) if isinstance(field, dict)]
     allowed = set(identity_names) | set(field_names)
-    unknown = sorted([k for k in filter_kwargs.keys() if k not in allowed])
+    unknown = sorted([k for k in filter_kwargs if k not in allowed])
     if unknown:
         raise SDKSchemaError(f"unknown filter fields for {entity_cls.__name__}: {unknown}")
 

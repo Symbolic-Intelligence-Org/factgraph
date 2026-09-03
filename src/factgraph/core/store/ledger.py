@@ -1744,12 +1744,11 @@ class Ledger:
         """No-op for API compatibility; write-through cache updates eagerly."""
 
     def close(self) -> None:
-        with self._write_lock:
-            with self._connections_lock:
-                if self._closed:
-                    return
-                self._closed = True
-                self._all_connections.clear()
+        with self._write_lock, self._connections_lock:
+            if self._closed:
+                return
+            self._closed = True
+            self._all_connections.clear()
 
         current_conn = getattr(self._local, "conn", None)
         if current_conn is not None:

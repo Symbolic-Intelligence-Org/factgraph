@@ -634,7 +634,7 @@ def _extend_manifest_outputs(manifest_path: Path, entrypoints: Sequence[str]) ->
 
 
 def _var(name: str) -> str:
-    raw = name[1:] if name.startswith("$") else name
+    raw = name.removeprefix("$")
     safe = re.sub(r"[^A-Za-z0-9_]", "_", raw).strip("_") or "v"
     if safe[0].isdigit():
         safe = f"v_{safe}"
@@ -650,7 +650,7 @@ def _symbol(value: str) -> str:
 
 
 def _safe_suffix(value: str) -> str:
-    raw = value[1:] if value.startswith("$") else value
+    raw = value.removeprefix("$")
     safe = re.sub(r"[^A-Za-z0-9_]", "_", raw).strip("_") or "x"
     if safe[0].isdigit():
         safe = f"v_{safe}"

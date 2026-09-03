@@ -567,7 +567,7 @@ def _var_port_names(plan: RuleExprLoweringPlan) -> dict[str, str]:
     out: dict[str, str] = {}
     for port_name, var in plan.head.ports.items():
         out[var.name] = port_name
-        source = var.name[1:] if var.name.startswith("$") else var.name
+        source = var.name.removeprefix("$")
         out[f"$__head__{source}"] = port_name
     for occurrence in plan.occurrence_map:
         for binding in occurrence.port_bindings:

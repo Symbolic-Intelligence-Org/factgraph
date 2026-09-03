@@ -1736,7 +1736,7 @@ def _alias_var_map(alias: str, atoms: tuple[Atom, ...]) -> dict[Var, Var]:
 
 
 def _alias_var_name(alias: str, var: Var) -> str:
-    source = var.name[1:] if var.name.startswith("$") else var.name
+    source = var.name.removeprefix("$")
     return f"${alias}__{source}"
 
 

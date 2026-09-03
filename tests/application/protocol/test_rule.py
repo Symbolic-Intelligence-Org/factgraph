@@ -186,9 +186,8 @@ class RuleOccurrenceTests(unittest.TestCase):
     def test_invalid_aliases_raise(self) -> None:
         rule = self._rule()
         for alias in ("", "1a", "_a", "a-b"):
-            with self.subTest(alias=alias):
-                with self.assertRaises(RuleValidationError):
-                    rule.as_(alias)
+            with self.subTest(alias=alias), self.assertRaises(RuleValidationError):
+                rule.as_(alias)
 
     def test_non_identifier_rule_id_default_alias_raises(self) -> None:
         rule = self._rule(rule_id="bad-rule")

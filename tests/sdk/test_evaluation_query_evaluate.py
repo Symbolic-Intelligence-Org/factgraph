@@ -297,9 +297,11 @@ class EvaluationQueryNativeEvaluateTests(unittest.TestCase):
         self.assertEqual(evaluation_run_bundle_from_bytes(payload), detached)
 
         for invalid in (True, False, "unknown", 1):
-            with self.subTest(capture=invalid):
-                with self.assertRaisesRegex(SDKStoreError, "capture"):
-                    graph.eval.evaluate(compiled, capture=invalid)
+            with (
+                self.subTest(capture=invalid),
+                self.assertRaisesRegex(SDKStoreError, "capture"),
+            ):
+                graph.eval.evaluate(compiled, capture=invalid)
 
         with self.assertRaisesRegex(SDKStoreError, "only accepted for CompiledEvaluationQueryV0"):
             graph.eval.evaluate({"derivation_id": "not-a-query"}, capture="run_bundle_v0")
@@ -373,9 +375,8 @@ class EvaluationQueryNativeEvaluateTests(unittest.TestCase):
         with patch(
             "factgraph.sdk.store._build_evaluation_run_bundle_v0",
             side_effect=mutate_after_capture,
-        ):
-            with self.assertRaisesRegex(SDKStoreError, "view changed"):
-                graph.eval.evaluate(compiled, capture="run_bundle_v0")
+        ), self.assertRaisesRegex(SDKStoreError, "view changed"):
+            graph.eval.evaluate(compiled, capture="run_bundle_v0")
 
     def test_run_bundle_cannot_be_attached_to_another_result(self) -> None:
         graph = SDKStore([Person])
@@ -492,9 +493,8 @@ class EvaluationQueryNativeEvaluateTests(unittest.TestCase):
         with patch(
             "factgraph.sdk.store.evaluate_derivation_plans",
             side_effect=add_extra_term,
-        ):
-            with self.assertRaisesRegex(SDKStoreError, "exactly align"):
-                graph.eval.evaluate(compiled)
+        ), self.assertRaisesRegex(SDKStoreError, "exactly align"):
+            graph.eval.evaluate(compiled)
 
     def test_query_candidate_target_mismatch_fails_closed(self) -> None:
         graph = SDKStore([Person])
@@ -522,9 +522,8 @@ class EvaluationQueryNativeEvaluateTests(unittest.TestCase):
         with patch(
             "factgraph.sdk.store.evaluate_derivation_plans",
             side_effect=change_target,
-        ):
-            with self.assertRaisesRegex(SDKStoreError, "exactly match"):
-                graph.eval.evaluate(compiled)
+        ), self.assertRaisesRegex(SDKStoreError, "exactly match"):
+            graph.eval.evaluate(compiled)
 
     def test_query_candidate_runtime_tag_must_be_self_consistent(self) -> None:
         graph = SDKStore([Person])
@@ -546,9 +545,8 @@ class EvaluationQueryNativeEvaluateTests(unittest.TestCase):
         with patch(
             "factgraph.sdk.store.evaluate_derivation_plans",
             side_effect=contradict_runtime_tag,
-        ):
-            with self.assertRaisesRegex(SDKStoreError, "contradicts its runtime tag"):
-                graph.eval.evaluate(compiled)
+        ), self.assertRaisesRegex(SDKStoreError, "contradicts its runtime tag"):
+            graph.eval.evaluate(compiled)
 
     def test_query_and_occurrence_identity_are_in_result_fingerprints(self) -> None:
         graph = SDKStore([Person])
@@ -684,25 +682,28 @@ class EvaluationQueryNativeEvaluateTests(unittest.TestCase):
             )
 
         for forged in forged_anchors:
-            with self.subTest(forged=forged):
-                with self.assertRaises(ProtocolShapeError):
-                    replace(result, run_anchor=forged)
+            with self.subTest(forged=forged), self.assertRaises(ProtocolShapeError):
+                replace(result, run_anchor=forged)
 
     def test_execution_revalidates_artifact_and_store_schema_before_engine(self) -> None:
         graph = SDKStore([Person])
         compiled, bundle = _compiled_person_query(graph)
         bundle.rule.when[1].terms[1] = Var("$changed")
 
-        with patch("factgraph.sdk.store.evaluate_derivation_plans") as evaluator:
-            with self.assertRaisesRegex(SDKStoreError, "integrity check"):
-                graph.eval.evaluate(compiled)
+        with (
+            patch("factgraph.sdk.store.evaluate_derivation_plans") as evaluator,
+            self.assertRaisesRegex(SDKStoreError, "integrity check"),
+        ):
+            graph.eval.evaluate(compiled)
         evaluator.assert_not_called()
 
         clean, _bundle = _compiled_person_query(graph)
         other_graph = SDKStore([Person, Other])
-        with patch("factgraph.sdk.store.evaluate_derivation_plans") as evaluator:
-            with self.assertRaisesRegex(SDKStoreError, "schema does not match"):
-                other_graph.eval.evaluate(clean)
+        with (
+            patch("factgraph.sdk.store.evaluate_derivation_plans") as evaluator,
+            self.assertRaisesRegex(SDKStoreError, "schema does not match"),
+        ):
+            other_graph.eval.evaluate(clean)
         evaluator.assert_not_called()
 
     def test_query_only_surfaces_and_native_boundary_reject_explicitly(self) -> None:
@@ -738,9 +739,8 @@ class EvaluationQueryNativeEvaluateTests(unittest.TestCase):
         with patch(
             "factgraph.sdk.store.evaluate_derivation_plans",
             side_effect=mutate_after_evaluate,
-        ):
-            with self.assertRaisesRegex(SDKStoreError, "view changed during"):
-                graph.eval.evaluate(compiled)
+        ), self.assertRaisesRegex(SDKStoreError, "view changed during"):
+            graph.eval.evaluate(compiled)
 
     def test_view_change_during_result_adaptation_aborts_result(self) -> None:
         graph = SDKStore([Person])
@@ -757,9 +757,8 @@ class EvaluationQueryNativeEvaluateTests(unittest.TestCase):
             graph,
             "_derivation_outputs_to_evaluate_result",
             side_effect=mutate_after_adaptation,
-        ):
-            with self.assertRaisesRegex(SDKStoreError, "view changed during"):
-                graph.eval.evaluate(compiled)
+        ), self.assertRaisesRegex(SDKStoreError, "view changed during"):
+            graph.eval.evaluate(compiled)
 
     def test_premise_policy_is_rejected_and_cannot_appear_during_or_after_run(self) -> None:
         exclusion = MetaExclusion("provenance_class", frozenset({"untrusted"}))
@@ -767,9 +766,11 @@ class EvaluationQueryNativeEvaluateTests(unittest.TestCase):
         blocked = SDKStore([Person])
         compiled, _bundle = _compiled_person_query(blocked)
         blocked.set_premise_exclusions(exclusion)
-        with patch("factgraph.sdk.store.evaluate_derivation_plans") as evaluator:
-            with self.assertRaisesRegex(SDKStoreError, "premise-filtered"):
-                blocked.eval.evaluate(compiled)
+        with (
+            patch("factgraph.sdk.store.evaluate_derivation_plans") as evaluator,
+            self.assertRaisesRegex(SDKStoreError, "premise-filtered"),
+        ):
+            blocked.eval.evaluate(compiled)
         evaluator.assert_not_called()
 
         during = SDKStore([Person])
@@ -784,9 +785,11 @@ class EvaluationQueryNativeEvaluateTests(unittest.TestCase):
             during.set_premise_exclusions(exclusion)
             return candidates
 
-        with patch("factgraph.sdk.store.evaluate_derivation_plans", side_effect=enable_filter):
-            with self.assertRaisesRegex(SDKStoreError, "premise policy changed"):
-                during.eval.evaluate(compiled)
+        with (
+            patch("factgraph.sdk.store.evaluate_derivation_plans", side_effect=enable_filter),
+            self.assertRaisesRegex(SDKStoreError, "premise policy changed"),
+        ):
+            during.eval.evaluate(compiled)
 
         after = SDKStore([Person])
         _seed_person(after, "alice", age=22, score=9)
@@ -916,9 +919,8 @@ class EvaluationQueryNativeEvaluateTests(unittest.TestCase):
         with patch(
             "factgraph.sdk.store.evaluate_derivation_plans",
             side_effect=mutate_artifact_after_evaluate,
-        ):
-            with self.assertRaisesRegex(SDKStoreError, "integrity check"):
-                graph.eval.evaluate(compiled)
+        ), self.assertRaisesRegex(SDKStoreError, "integrity check"):
+            graph.eval.evaluate(compiled)
 
     def test_view_change_after_result_blocks_close_and_explain(self) -> None:
         graph = SDKStore([Person])

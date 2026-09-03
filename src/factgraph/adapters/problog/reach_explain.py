@@ -704,7 +704,7 @@ def _resolve_term(term: Any, row: Mapping[str, Any]) -> Any:
 
 
 def _safe_suffix(value: str) -> str:
-    raw = value[1:] if value.startswith("$") else value
+    raw = value.removeprefix("$")
     safe = re.sub(r"[^A-Za-z0-9_]", "_", raw).strip("_") or "x"
     if safe[0].isdigit():
         safe = f"v_{safe}"

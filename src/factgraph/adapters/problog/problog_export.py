@@ -844,7 +844,7 @@ def _to_problog_arith_term(value: Any) -> str:
 
 
 def _to_problog_var(token: str) -> str:
-    raw = token[1:] if token.startswith("$") else token
+    raw = token.removeprefix("$")
     normalized = _VAR_IDENT_RE.sub("_", raw).strip("_")
     if not normalized:
         normalized = "v"
