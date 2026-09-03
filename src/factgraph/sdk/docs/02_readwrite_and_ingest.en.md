@@ -124,6 +124,10 @@ with sdk.batch(meta={"trace_id": "seed"}) as tx:
 Additional semantics:
 - Batch meta merge precedence is `commit_meta > field_op_meta > entity_meta > batch_meta`.
 - `with sdk.batch() as tx:` context manager does not auto-commit or auto-rollback; you must call `commit()` explicitly.
+- Field type determines value semantics: a string beginning `idref_v1:` remains
+  unchanged scalar data on a string Field, including multi-valued `add` and wire
+  roundtrips. Only entity-reference Fields resolve tokens as relationships;
+  unresolved external relationships still reject the entire attached batch.
 
 ### 4.2 Cardinality and identity constraints
 
@@ -144,7 +148,9 @@ Additional semantics:
 `sdk_batch_plan_v1` notes:
 - Wire ops no longer carry `dims/fact_key`.
 - `cardinality` uses `single|multi`.
-- Wire export (`to_json`/`export`) rejects raw `idref_v1` token values; use same-tx handles for entity references.
+- Wire export (`to_json`/`export`) rejects raw `idref_v1` relationship tokens;
+  use same-tx handles for entity references. Token-shaped string Field values
+  use the existing scalar wire arm and are not entity references.
 
 ## 5. Entities Read and Edit
 

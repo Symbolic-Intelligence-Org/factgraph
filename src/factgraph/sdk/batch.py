@@ -1633,7 +1633,7 @@ class SDKBatchTx:
         for field_name in sorted(grouped.keys(), key=handle._field_sort_key):
             ops = sorted(grouped[field_name], key=lambda row: row.op_index)
             for op in ops:
-                value_kind, value_payload = self._plan_value(op.value, path=op.path)
+                value_kind, value_payload = self._plan_value(op.value, field=op.field, path=op.path)
                 effective_meta = _merge_meta(self._batch_meta, handle.entity_meta, op.meta, commit_meta)
                 if op.kind == "set":
                     out.append(
@@ -1855,11 +1855,16 @@ class SDKBatchTx:
             return False
         return any(op.kind in {"set", "add"} for op in handle._staged_ops)
 
-    def _plan_value(self, value: Any, *, path: str) -> tuple[_ValueKind, Any]:
+    def _plan_value(self, value: Any, *, field: Field, path: str) -> tuple[_ValueKind, Any]:
         if isinstance(value, ManagedEntityHandle):
             return ("handle", value.handle_id)
         if isinstance(value, str) and value.startswith("idref_v1:"):
-            return ("entity_ref", value)
+            # A token-shaped string is still scalar evidence on a string Field.
+            # Only declared relationships enter managed-reference resolution.
+            schema_pred = self._sdk._schema_pred_for_field(field)
+            terms = self._sdk._rest_terms_for_field(schema_pred, value=value)
+            if terms[0][0] == "entity_ref":
+                return ("entity_ref", value)
         return ("scalar", value)
 
     def _value_dedup_key(self, value: Any) -> str:
