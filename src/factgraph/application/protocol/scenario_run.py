@@ -12,8 +12,9 @@ the outer record but are not exposed as an ``EvaluationRunBundleV0`` API.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field as dataclass_field
 import json
+from dataclasses import dataclass
+from dataclasses import field as dataclass_field
 from typing import Any, Literal, TypeAlias
 
 from factgraph.core.protocol.digests import sha256_hex
@@ -24,7 +25,6 @@ from .evaluation_run_verification import EvaluationRunVerificationV0
 from .evaluation_scenario import ScenarioResultDiffV0, ScenarioScalarValueV0
 from .policy_explanation import PolicyExplanationViewV0
 from .schema_runtime import FieldPath
-
 
 ScenarioRunSide: TypeAlias = Literal["baseline", "effective"]
 ScenarioOriginKind: TypeAlias = Literal[

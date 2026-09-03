@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Literal, TypeAlias, Any
+from typing import Any, Literal, TypeAlias
 
 from factgraph.core.store._support import (
     BindingItems,
-    ProvenanceEnvelope,
     ProofReceipt,
+    ProvenanceEnvelope,
     normalize_binding_items,
 )
 
@@ -19,7 +19,6 @@ from .common import (
     _validate_tuple_items,
 )
 from .derivation import CompiledDerivationPlan
-
 
 CheckStatus: TypeAlias = Literal["passed", "failed", "unsupported", "invalid_request"]
 CheckEngine: TypeAlias = Literal["native", "souffle", "problog", "pyreason"]

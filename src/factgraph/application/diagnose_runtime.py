@@ -31,8 +31,8 @@ from factgraph.core.rules.where_eval import (
 )
 from factgraph.core.store._support import (
     BindingItems,
-    ProvenanceEnvelope,
     ProofReceipt,
+    ProvenanceEnvelope,
     normalize_binding_items,
 )
 from factgraph.core.store._support_capture import find_winning_case_index

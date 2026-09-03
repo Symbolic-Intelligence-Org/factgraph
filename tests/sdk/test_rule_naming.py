@@ -4,8 +4,7 @@ import unittest
 
 import factgraph.sdk as sdk
 import factgraph.sdk.dsl as dsl
-from factgraph.application.protocol import Rule
-from factgraph.application.protocol import RuleValidationError
+from factgraph.application.protocol import Rule, RuleValidationError
 from factgraph.sdk import Entity, Field, Identity
 
 

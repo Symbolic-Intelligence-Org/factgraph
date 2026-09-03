@@ -15,10 +15,10 @@ from factgraph.core.store.runtime import Store
 from factgraph.core.view.projector import project_view_facts
 
 from .protocol import (
+    ConditionPath,
     ErrorDTO,
     ProofFrameConditionVerdict,
     ProofFrameRecheckResult,
-    ConditionPath,
     RuleLiteralReplaceAction,
     RuleLiteralReplaceRequest,
     RuleLiteralReplaceResult,

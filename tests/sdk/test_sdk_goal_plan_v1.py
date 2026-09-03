@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from dataclasses import replace
 import json
 import unittest
+from dataclasses import replace
 from unittest.mock import patch
 
 from factgraph.application import (
@@ -10,6 +10,14 @@ from factgraph.application import (
     build_resolved_rule,
     build_schema_index,
     manage_rule_occurrence,
+)
+from factgraph.application.evaluation_run_v1_runtime import (
+    EvaluationRunRuntimeErrorV1,
+    ScenarioDiffV1,
+    replay_evaluation_run_v1,
+)
+from factgraph.application.evaluation_run_v1_runtime import (
+    _token as _runtime_token,
 )
 from factgraph.application.goal_plan_v1_runtime import (
     GoalPlanFailureV1,
@@ -21,12 +29,6 @@ from factgraph.application.portable_evaluation_runtime import (
     PortableEngineDiagnosticV1,
     PortableEngineObservationFrameV1,
     observe_portable_deterministic_v1,
-)
-from factgraph.application.evaluation_run_v1_runtime import (
-    EvaluationRunRuntimeErrorV1,
-    ScenarioDiffV1,
-    _token as _runtime_token,
-    replay_evaluation_run_v1,
 )
 from factgraph.application.protocol import (
     EntityRef,
@@ -46,16 +48,6 @@ from factgraph.application.protocol.evaluation_run_v1 import (
     EvaluationRunV1,
     ExplainTargetV1,
 )
-from factgraph.application.protocol.scenario_v1 import (
-    EvidenceScopeV1,
-    ExactLocalClosureTargetV1,
-    ScenarioCreateEphemeralEntityV1,
-    ScenarioSetEffectiveValueV1,
-    ScenarioSpecV1,
-    ScenarioWithoutAssertionV1,
-    ScenarioWithoutFieldV1,
-    ScenarioValueV1,
-)
 from factgraph.application.protocol.goal_plan_v1 import (
     ContainsRowExpectationV1,
     CountEqExpectationV1,
@@ -69,6 +61,16 @@ from factgraph.application.protocol.relation_provider_v1 import (
     ProviderMaterializationV1,
     ProviderRelationRowV1,
     RelationProviderV1,
+)
+from factgraph.application.protocol.scenario_v1 import (
+    EvidenceScopeV1,
+    ExactLocalClosureTargetV1,
+    ScenarioCreateEphemeralEntityV1,
+    ScenarioSetEffectiveValueV1,
+    ScenarioSpecV1,
+    ScenarioValueV1,
+    ScenarioWithoutAssertionV1,
+    ScenarioWithoutFieldV1,
 )
 from factgraph.application.schema_runtime import entity_info, field_predicate, resolve_selector
 from factgraph.core.evidence.write_protocol import set_field

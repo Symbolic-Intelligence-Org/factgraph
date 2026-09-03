@@ -17,7 +17,6 @@ from factgraph.sdk import (
     SDKStore,
 )
 
-
 _DIGEST = "sha256:" + "a" * 64
 
 

@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from hashlib import sha256
 import json
+import unittest
+from hashlib import sha256
 from pathlib import Path
 from tempfile import TemporaryDirectory
-import unittest
 
 from factgraph.sdk import (
     AssetMeta,

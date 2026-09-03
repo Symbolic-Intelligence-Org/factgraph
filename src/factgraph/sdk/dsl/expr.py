@@ -7,7 +7,6 @@ from typing import Any
 from .branch import Case
 from .errors import SDKDSLError
 
-
 _VAR_IDS = count(1)
 
 

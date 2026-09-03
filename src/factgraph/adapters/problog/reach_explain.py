@@ -21,7 +21,9 @@ from factgraph.adapters.problog.problog_export import (
     _to_problog_literal,
     _to_problog_var,
 )
-from factgraph.application.explain.diagnostic_assemble import diagnostic_problog_result_to_evidence_graph
+from factgraph.application.explain.diagnostic_assemble import (
+    diagnostic_problog_result_to_evidence_graph,
+)
 from factgraph.application.explain.diagnostic_projection import BranchCompanion, CompanionProgram
 from factgraph.application.explain.evidence_tree import EvidenceGraph
 from factgraph.application.protocol.certainty import Certainty

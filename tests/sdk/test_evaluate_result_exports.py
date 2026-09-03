@@ -10,8 +10,8 @@ from factgraph.application.protocol import (
     EvaluateRow,
     Explanation,
     ResultFingerprint,
+    Rule,
 )
-from factgraph.application.protocol import Rule
 
 
 class EvaluateResultSDKExportTests(unittest.TestCase):

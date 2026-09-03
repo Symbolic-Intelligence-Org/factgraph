@@ -54,13 +54,13 @@ from factgraph.application.rule_add_condition_runtime import (
     check_rule_add_condition_action,
 )
 
+from ..errors import SDKStoreError
 from ._validation import (
+    resolve_rule_spec,
     resolve_runtime_registry,
     validate_optional_evaluation_overlay,
-    resolve_rule_spec,
     validate_support_artifact,
 )
-from ..errors import SDKStoreError
 
 
 def sdk_rule_add_condition(

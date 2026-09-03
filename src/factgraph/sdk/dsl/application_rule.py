@@ -5,8 +5,8 @@ from typing import Any
 
 from factgraph.application.protocol import Rule as ApplicationRule
 from factgraph.core.rules.where_ast import (
-    AndExpr,
     AggregateAtom,
+    AndExpr,
     Atom,
     BuiltinAtom,
     CmpAtom,
@@ -14,12 +14,16 @@ from factgraph.core.rules.where_ast import (
     InAtom,
     NotAtom,
     OrExpr,
-    PredAtom as CorePredAtom,
-    RuleRefAtom as CoreRuleRefAtom,
     Var,
     WhereASTError,
     WhereExpr,
     parse_where_ir_to_ast,
+)
+from factgraph.core.rules.where_ast import (
+    PredAtom as CorePredAtom,
+)
+from factgraph.core.rules.where_ast import (
+    RuleRefAtom as CoreRuleRefAtom,
 )
 from factgraph.core.rules.where_ast_validate import (
     WhereASTValidationError,
@@ -32,10 +36,14 @@ from .expr import (
     AttrRef,
     CompareExpr,
     NotExpr,
-    PredAtom as DSLPredAtom,
-    RuleRefAtom as DSLRuleRefAtom,
     _AggregateRef,
     lower_where,
+)
+from .expr import (
+    PredAtom as DSLPredAtom,
+)
+from .expr import (
+    RuleRefAtom as DSLRuleRefAtom,
 )
 
 

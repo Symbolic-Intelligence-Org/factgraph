@@ -19,10 +19,10 @@ from factgraph.core.derivation.candidates import DerivationOutput
 from factgraph.core.rules.where_eval import WhereValidationError
 from factgraph.core.store import builders as store_builders
 from factgraph.core.store._support import (
+    SOUFFLE_WITNESS_KIND,
     BindingItems,
     BindingSupportCapture,
     ProjectedFact,
-    SOUFFLE_WITNESS_KIND,
     ProofReceipt,
     binding_dict_from_items,
     compute_support_digest,

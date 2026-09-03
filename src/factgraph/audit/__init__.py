@@ -1,12 +1,29 @@
 from __future__ import annotations
 
+from .assertions import AuditAssertionIndex, AuditAssertionReadError, load_assertion_index
 from .authoring_events import (
     AuthoringApplyEvent,
     AuthoringAuditReadError,
     load_authoring_apply_events,
     summarize_authoring_apply_events,
 )
-from .assertions import AuditAssertionIndex, AuditAssertionReadError, load_assertion_index
+from .dto import (
+    AuditDTOError,
+    build_authoring_apply_run_detail_dto,
+    build_authoring_apply_run_list_dto,
+    build_candidate_evidence_tree_dto,
+    build_candidate_evidence_tree_narrative_dto,
+    build_candidate_evidence_tree_summary_dto,
+    build_decision_detail_dto,
+    build_rule_trace_detail_dto,
+    build_rule_trace_detail_payload,
+    build_rule_trace_list_dto,
+    build_rule_trace_narrative_dto,
+    build_rule_trace_summary_dto,
+    build_rule_trace_summary_list_dto,
+    build_run_detail_dto,
+    build_run_list_dto,
+)
 from .evidence_graph import (
     LAYOUT_TIMELINE,
     LAYOUT_TREE,
@@ -31,34 +48,6 @@ from .evidence_graph import (
     evidence_graph_from_dict,
     evidence_graph_to_dict,
 )
-from .dto import (
-    AuditDTOError,
-    build_authoring_apply_run_detail_dto,
-    build_authoring_apply_run_list_dto,
-    build_candidate_evidence_tree_narrative_dto,
-    build_candidate_evidence_tree_summary_dto,
-    build_candidate_evidence_tree_dto,
-    build_decision_detail_dto,
-    build_rule_trace_detail_dto,
-    build_rule_trace_detail_payload,
-    build_rule_trace_list_dto,
-    build_rule_trace_narrative_dto,
-    build_rule_trace_summary_dto,
-    build_rule_trace_summary_list_dto,
-    build_run_detail_dto,
-    build_run_list_dto,
-)
-from .query import AuditQuery, AuditQueryError
-from .proof_frame_diff import (
-    AtomDelta,
-    EventReference,
-    FrameDelta,
-    FrameIdentity,
-    FrameStatusChange,
-    ProofFrameDiff,
-    ProofFrameDiffError,
-)
-from .package_export import export_audit_package, write_audit_artifacts
 from .meta_history import (
     MetaHistoryError,
     MetaHistoryEvent,
@@ -69,6 +58,17 @@ from .meta_history import (
     read_meta_history,
     receipt_as_of_event_seq,
 )
+from .package_export import export_audit_package, write_audit_artifacts
+from .proof_frame_diff import (
+    AtomDelta,
+    EventReference,
+    FrameDelta,
+    FrameIdentity,
+    FrameStatusChange,
+    ProofFrameDiff,
+    ProofFrameDiffError,
+)
+from .query import AuditQuery, AuditQueryError
 from .reader import AuditPackageData, AuditReadError, load_audit_package
 from .round_events import (
     ROUND_EVENT_KINDS,

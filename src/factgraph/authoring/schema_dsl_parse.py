@@ -11,7 +11,6 @@ from factgraph.core.schema.schema_repr import (
     validate_meta_repr_template,
 )
 
-
 _BUILTIN_TAG_MAP = {
     "str": "string",
     "int": "int",

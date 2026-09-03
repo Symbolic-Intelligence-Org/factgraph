@@ -2,8 +2,10 @@ from __future__ import annotations
 
 from typing import Any
 
-from factgraph.core.rules.rule_ir import RuleCompileError, RuleRegistry, RuleSpec, run_rule
-from factgraph.core.rules.where_eval import WhereValidationError
+from factgraph.authoring.derivation_compile import (
+    AuthoringDerivationCompileError,
+    compile_authoring_derivation_v1,
+)
 from factgraph.authoring.diagnostic_codes import (
     CODE_AUTHORING_DERIVATION_COMPILE_ERROR,
     CODE_AUTHORING_RULE_COMPILE_ERROR,
@@ -28,18 +30,16 @@ from factgraph.authoring.diagnostic_codes import (
     PHASE_SCHEMA_PREFLIGHT,
     PHASE_SCHEMA_VALIDATE,
 )
-from factgraph.authoring.schema_compile import (
-    AuthoringSchemaCompileError,
-    compile_authoring_schema_v1,
-)
 from factgraph.authoring.rule_compile import (
     AuthoringRuleCompileError,
     compile_authoring_rule_v1,
 )
-from factgraph.authoring.derivation_compile import (
-    AuthoringDerivationCompileError,
-    compile_authoring_derivation_v1,
+from factgraph.authoring.schema_compile import (
+    AuthoringSchemaCompileError,
+    compile_authoring_schema_v1,
 )
+from factgraph.core.rules.rule_ir import RuleCompileError, RuleRegistry, RuleSpec, run_rule
+from factgraph.core.rules.where_eval import WhereValidationError
 from factgraph.core.schema.schema_ir import (
     SchemaIRValidationError,
     ensure_schema_ir,

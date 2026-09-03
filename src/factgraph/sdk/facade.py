@@ -1,21 +1,25 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-from datetime import datetime, timezone
 import os
 import re
 import reprlib
-from typing import Any, TYPE_CHECKING
 import warnings
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from typing import TYPE_CHECKING, Any
 
 from factgraph.application import execute_read_request, hydrate_entity
 from factgraph.application.protocol import (
     AssertionRecordDTO,
     EntityReadRequest,
-    EntityRef as AppEntityRef,
-    EntitySelector as AppEntitySelector,
     EntitySnapshotDTO,
     FieldAssertionsDTO,
+)
+from factgraph.application.protocol import (
+    EntityRef as AppEntityRef,
+)
+from factgraph.application.protocol import (
+    EntitySelector as AppEntitySelector,
 )
 from factgraph.application.schema_runtime import encode_entity_ref as encode_app_entity_ref
 from factgraph.core.policy.active import is_active
@@ -32,6 +36,7 @@ from .errors import (
 
 if TYPE_CHECKING:
     from factgraph.core.store.ledger import Claim
+
     from .batch import BatchCommitResult, BatchPlan
     from .store import SDKStore
 

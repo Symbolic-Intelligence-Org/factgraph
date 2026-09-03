@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 import hashlib
 import json
+from dataclasses import dataclass
 from typing import Any
 
 from factgraph.core.rules.rule_ast import QueryRuleAst, RuleASTError, parse_query_rule_ir_to_ast

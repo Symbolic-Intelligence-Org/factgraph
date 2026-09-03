@@ -21,8 +21,8 @@ from __future__ import annotations
 
 import base64
 import binascii
-from dataclasses import asdict, dataclass, field, is_dataclass
 import json
+from dataclasses import asdict, dataclass, field, is_dataclass
 from typing import Literal, TypeAlias
 
 from factgraph.core.protocol.digests import sha256_hex
@@ -30,7 +30,6 @@ from factgraph.core.protocol.tup_v1 import CANONICAL_TAGS, claim_args_from_rest_
 
 from .common import ProtocolShapeError, _require_non_empty_str
 from .scenario_v1 import ExactLocalClosureTargetV1
-
 
 GoalTargetKindV1: TypeAlias = Literal["rule", "policy", "relation_provider"]
 GoalResultModeV1: TypeAlias = Literal["rows", "exists", "count", "set"]

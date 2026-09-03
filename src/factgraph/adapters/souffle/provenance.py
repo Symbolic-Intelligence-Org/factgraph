@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from factgraph.application.explain.evidence_tree import (
+    LAYOUT_TREE,
     Const,
     EvidenceAtom,
     EvidenceGraph,
@@ -16,7 +17,6 @@ from factgraph.application.explain.evidence_tree import (
     EvidenceTree,
     Fact,
     Holds,
-    LAYOUT_TREE,
     Source,
 )
 from factgraph.application.protocol.certainty import BOOLEAN_CERTAINTY

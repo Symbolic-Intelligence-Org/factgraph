@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-
 SHARED_ANNOTATION_KEYS: dict[str, tuple[str, str]] = {
     "source": ("source", "observed"),
     "source_loc": ("source", "observed"),

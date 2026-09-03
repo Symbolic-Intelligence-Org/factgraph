@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 import hashlib
 import json
 import os
+from dataclasses import dataclass
 from typing import Any
 
 from factgraph.adapters.souffle.pred_norm import normalize_pred_id

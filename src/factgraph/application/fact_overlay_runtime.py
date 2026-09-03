@@ -17,10 +17,10 @@ from .protocol import (
     FactOverlayAction,
     FactOverlayCheckRequest,
     FactOverlayCheckResult,
-    RemoveFact,
-    ReplaceFact,
     OverlayCheckDiff,
     OverlayCheckPhase,
+    RemoveFact,
+    ReplaceFact,
 )
 
 

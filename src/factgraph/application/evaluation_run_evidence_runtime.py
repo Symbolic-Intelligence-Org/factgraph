@@ -7,6 +7,7 @@ from typing import Any
 
 from factgraph.application.explain.evidence_tree import (
     BOOLEAN_CERTAINTY,
+    LAYOUT_TREE,
     Certainty,
     EvidenceAtom,
     EvidenceGraph,
@@ -15,7 +16,6 @@ from factgraph.application.explain.evidence_tree import (
     EvidenceRule,
     EvidenceTree,
     Holds,
-    LAYOUT_TREE,
     PortRef,
     Source,
 )

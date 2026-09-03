@@ -1,10 +1,12 @@
 from __future__ import annotations
+
 import base64
-from dataclasses import dataclass
 import json
 import math
 import struct
+from dataclasses import dataclass
 from typing import Literal, TypeAlias
+
 from factgraph.core.protocol.digests import sha256_hex, sha256_token
 from factgraph.core.protocol.tup_v1 import (
     CANONICAL_TAGS,
@@ -12,14 +14,19 @@ from factgraph.core.protocol.tup_v1 import (
     claim_args_from_rest_terms,
 )
 from factgraph.core.schema.schema_ir import canonicalize_schema_ir_jcs, schema_digest
+
 from .common import ProtocolShapeError
 from .evaluation_run import (
     EvaluationRunAnchorV0,
     _plain,
-    _seal as _seal_token,
     _sha_hex,
     _sha_token,
     _text,
+)
+from .evaluation_run import (
+    _seal as _seal_token,
+)
+from .evaluation_run import (
     _token as _anchor_token,
 )
 

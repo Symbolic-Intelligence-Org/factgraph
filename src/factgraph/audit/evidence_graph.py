@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from factgraph.application.explain import (
+    LAYOUT_TIMELINE,
+    LAYOUT_TREE,
     Aggregate,
     AtomForm,
     BoundVar,
@@ -17,8 +19,6 @@ from factgraph.application.explain import (
     Fact,
     Fails,
     Holds,
-    LAYOUT_TIMELINE,
-    LAYOUT_TREE,
     LayoutHint,
     NotReached,
     PortRef,

@@ -31,7 +31,6 @@ from .protocol.scenario_v1 import (
     ScenarioWithoutFieldV1,
     ScenarioWithoutValueV1,
 )
-from .protocol.schema_runtime import EntityRef, FieldPath
 from .protocol.scenario_v2 import (
     EffectiveWorldFactV2,
     EffectiveWorldV2,
@@ -44,6 +43,7 @@ from .protocol.scenario_v2 import (
     _token,
     lower_scenario_meta_v2,
 )
+from .protocol.schema_runtime import EntityRef, FieldPath
 
 
 class ScenarioResolutionErrorV2(ValueError):

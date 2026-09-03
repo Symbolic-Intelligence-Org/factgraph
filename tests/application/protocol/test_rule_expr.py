@@ -1,19 +1,25 @@
 from __future__ import annotations
 
-from dataclasses import FrozenInstanceError
 import unittest
+from dataclasses import FrozenInstanceError
 from typing import get_type_hints
 
 import factgraph.sdk as sdk
-from factgraph.application.protocol import ExplicitBoolError, Rule, RuleExpr, RuleExprError, RuleJoinConstraint
+from factgraph.application.protocol import (
+    ExplicitBoolError,
+    Rule,
+    RuleExpr,
+    RuleExprError,
+    RuleJoinConstraint,
+)
+from factgraph.application.protocol.rule import PortType, RulePortRef
 from factgraph.application.protocol.rule_expr import (
     _AndGroup,
+    _coerce_rule_expr_operand,
     _OrGroup,
     _RuleExpr,
     _RuleOperand,
-    _coerce_rule_expr_operand,
 )
-from factgraph.application.protocol.rule import PortType, RulePortRef
 from factgraph.core.rules.where_ast import PredAtom, Var
 from factgraph.sdk.dsl import Rule as LegacyRule
 from factgraph.sdk.dsl.errors import SDKDSLError

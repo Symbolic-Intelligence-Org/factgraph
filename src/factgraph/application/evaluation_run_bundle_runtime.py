@@ -1,11 +1,13 @@
 from __future__ import annotations
+
 import base64
-from collections.abc import Mapping, Sequence
-from dataclasses import fields, is_dataclass
 import json
 import math
 import struct
+from collections.abc import Mapping, Sequence
+from dataclasses import fields, is_dataclass
 from typing import Any, cast
+
 from factgraph.core.protocol.digests import sha256_hex, sha256_token
 from factgraph.core.protocol.tup_v1 import claim_args_from_rest_terms
 from factgraph.core.rules.where_ast import (
@@ -32,18 +34,19 @@ from factgraph.core.store._support import (
     support_artifact_from_dict,
 )
 from factgraph.core.store._support_capture import build_support_artifact_for_binding
+
 from .evaluation_query_runtime import (
     CompiledEvaluationQueryV0,
     _assert_compiled_evaluation_query_current,
 )
 from .protocol.common import ProtocolShapeError
 from .protocol.derivation import CompiledDerivationPlan
-from .protocol.evaluation_query import EvaluationQueryFieldNavigationV0
 from .protocol.evaluate_result import (
     EvaluateResult,
     canonical_bytes_for_evaluate,
     claim_digest_for,
 )
+from .protocol.evaluation_query import EvaluationQueryFieldNavigationV0
 from .protocol.evaluation_run import (
     EvaluationRunAnchorV0,
     EvaluationRunBindingV0,
@@ -75,9 +78,9 @@ from .protocol.policy import (
     PolicyStructureNodeV0,
     PolicyStructureV0,
 )
+from .protocol.rule_expr_lowering import _materialize_adapter_derivation_plan
 from .protocol.schema_runtime import FieldPath
 from .protocol.semantic_address import SemanticPortAddress
-from .protocol.rule_expr_lowering import _materialize_adapter_derivation_plan
 
 MAX_EVALUATION_RUN_BUNDLE_BYTES = 1024 * 1024
 MAX_EVALUATION_RUN_BUNDLE_PREDICATES = 128

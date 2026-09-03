@@ -5,7 +5,10 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from factgraph.adapters.problog.problog_export import export_problog
-from factgraph.adapters.souffle.where_compile import _normalize_where_subset, compile_where_to_query_dl
+from factgraph.adapters.souffle.where_compile import (
+    _normalize_where_subset,
+    compile_where_to_query_dl,
+)
 from factgraph.application.protocol import Rule
 from factgraph.application.protocol.rule_expr_lowering import (
     RuleExprAdapterSupport,

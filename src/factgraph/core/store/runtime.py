@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import warnings
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
 from factgraph.core.derivation.accept import AcceptOptions, AcceptRequest, AcceptResult
-from factgraph.core.derivation.candidates import CandidateSet
-from factgraph.core.derivation.candidates import DerivationOutput, make_derivation_output
+from factgraph.core.derivation.candidates import (
+    CandidateSet,
+    DerivationOutput,
+    make_derivation_output,
+)
 from factgraph.core.evidence.write_protocol import now_epoch_nanos
 from factgraph.core.mapping.canon import MappingResolution
 from factgraph.core.protocol.digests import sha256_token
@@ -21,8 +24,8 @@ from factgraph.core.store._explain_rule_trace import render_rule_trace_artifact
 from factgraph.core.store._explain_support import render_support_artifact
 from factgraph.core.store._support import (
     ENGINE_NO_WITNESS_KIND,
-    ProvenanceEnvelope,
     ProofReceipt,
+    ProvenanceEnvelope,
     provenance_envelope_to_dict,
 )
 from factgraph.core.store.evaluation import evaluate_store
@@ -41,8 +44,8 @@ from factgraph.core.store.queries import conflicts as store_conflicts
 from factgraph.core.store.queries import explain_fact as store_explain_fact
 from factgraph.core.store.queries import resolve_mapping as store_resolve_mapping
 from factgraph.core.store.types import (
-    EngineExtBase,
     EngineEvaluatorFn,
+    EngineExtBase,
     EngineOptionsIR,
     EvaluateMode,
     HeadSpecIR,

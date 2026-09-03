@@ -9,7 +9,6 @@ from typing import Any
 
 from factgraph.core.store.ledger import Ledger
 
-
 WORKSPACE_MANIFEST_NAME = "factgraph_workspace.json"
 WORKSPACE_VERSION = "1"
 WORKSPACE_SAVE_SCOPE = "level_4"

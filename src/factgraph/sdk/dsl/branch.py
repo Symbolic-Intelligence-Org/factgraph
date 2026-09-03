@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import KW_ONLY, dataclass
 import re
+from dataclasses import KW_ONLY, dataclass
 from typing import Any
 
 from .errors import SDKDSLError

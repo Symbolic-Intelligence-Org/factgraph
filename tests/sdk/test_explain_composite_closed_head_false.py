@@ -17,12 +17,12 @@ from __future__ import annotations
 import shutil
 import unittest
 
-from factgraph.sdk import Entity, FactGraph, Field, Identity, build_application_rule, vars
-from factgraph.core.evidence.write_protocol import set_field
 from factgraph.application import build_schema_index, entity_info
-from factgraph.application.protocol import Rule
 from factgraph.application.explain.evidence_tree import Fails
+from factgraph.application.protocol import Rule
+from factgraph.core.evidence.write_protocol import set_field
 from factgraph.core.rules.where_ast import Const, PredAtom, Var
+from factgraph.sdk import Entity, FactGraph, Field, Identity, build_application_rule, vars
 
 _PROBLOG = shutil.which("problog") is not None
 

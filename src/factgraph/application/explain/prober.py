@@ -1,14 +1,14 @@
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-import re
 from typing import Any, cast
 
+from factgraph.application import schema_runtime
 from factgraph.application.diagnose_runtime import _extend_env_with_atom
 from factgraph.application.entity_view import _recover_identity_from_predicates
-from factgraph.application import schema_runtime
-from factgraph.application.protocol.schema_runtime import EntityRef
+from factgraph.application.protocol.certainty import BOOLEAN_CERTAINTY
 from factgraph.application.protocol.rule_expr_lowering import (
     RuleExprEvaluationTrace,
     RuleExprLoweringBranch,
@@ -17,9 +17,9 @@ from factgraph.application.protocol.rule_expr_lowering import (
     _materialize_native_derivation_plan,
     transitively_expand_seed,
 )
-from factgraph.application.protocol.certainty import BOOLEAN_CERTAINTY
+from factgraph.application.protocol.schema_runtime import EntityRef
 from factgraph.core.protocol.tup_v1 import ENTITY_REF_PREFIX, display_float64_value
-from factgraph.core.rules.where_ast import _AGGREGATE_KINDS, _parse_term, AggregateAtom
+from factgraph.core.rules.where_ast import _AGGREGATE_KINDS, AggregateAtom, _parse_term
 from factgraph.core.rules.where_ast_validate import _aggregate_filter_bound_vars
 
 from .evidence_tree import (

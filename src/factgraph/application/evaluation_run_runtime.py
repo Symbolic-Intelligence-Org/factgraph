@@ -13,12 +13,18 @@ from .evaluation_query_runtime import (
 from .policy_runtime import CompiledPolicyV0, _assert_compiled_policy_current
 from .protocol.evaluate_result import EvaluateResult, canonical_bytes_for_evaluate
 from .protocol.evaluation_run import (
-    EvaluationRunAnchorV0, EvaluationRunBindingV0, EvaluationRunExecutionProfileV0,
-    EvaluationRunNavigationSelectionV0, EvaluationRunRowAnchorV0,
-    EvaluationRunRulePinV0, EvaluationRunSelectionV0, EvaluationRunSummaryAnchorV0,
-    EvaluationRunTargetV0, _plain, _token,
+    EvaluationRunAnchorV0,
+    EvaluationRunBindingV0,
+    EvaluationRunExecutionProfileV0,
+    EvaluationRunNavigationSelectionV0,
+    EvaluationRunRowAnchorV0,
+    EvaluationRunRulePinV0,
+    EvaluationRunSelectionV0,
+    EvaluationRunSummaryAnchorV0,
+    EvaluationRunTargetV0,
+    _plain,
+    _token,
 )
-
 
 NATIVE_WHERE_SEMANTICS_VERSION = "native_where_v1"
 EVALUATION_QUERY_PROJECTION_ADAPTER_VERSION = "evaluation_query_projection_v0"

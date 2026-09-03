@@ -1,15 +1,22 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
+import shutil
 import unittest
 import warnings
-import shutil
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
 import factgraph.sdk as sdk
 import factgraph.sdk.dsl as dsl
+from factgraph.adapters.problog.provenance import parse_problog_trace, problog_trace_to_dict
+from factgraph.adapters.pyreason.provenance import (
+    PyReasonTraceEventV0,
+    PyReasonTraceV0,
+    pyreason_trace_to_dict,
+)
+from factgraph.adapters.souffle.runner import find_souffle_binary
 from factgraph.application import build_schema_index, entity_info, field_predicate, resolve_selector
 from factgraph.application.protocol import (
     DetachedRowError,
@@ -20,29 +27,33 @@ from factgraph.application.protocol import (
     RuleExprError,
     RuleExprInspect,
 )
-from factgraph.application.protocol.rule_expr_inspect import _inspect_closed_head
 from factgraph.application.protocol.evaluate_result import closed_head_digest_for
-from factgraph.application.protocol.rule_expr_lowering import _lower_application_rule, _lower_rule_expr
-from factgraph.adapters.problog.provenance import parse_problog_trace, problog_trace_to_dict
-from factgraph.adapters.souffle.runner import find_souffle_binary
-from factgraph.adapters.pyreason.provenance import (
-    PyReasonTraceEventV0,
-    PyReasonTraceV0,
-    pyreason_trace_to_dict,
+from factgraph.application.protocol.rule_expr_inspect import _inspect_closed_head
+from factgraph.application.protocol.rule_expr_lowering import (
+    _lower_application_rule,
+    _lower_rule_expr,
 )
 from factgraph.core.derivation.candidates import CandidateSet
 from factgraph.core.evidence.write_protocol import set_field
-from factgraph.core.rules.where_ast import AggregateAtom, AndExpr, CmpAtom, Const, NotAtom, PredAtom, Var
+from factgraph.core.rules.where_ast import (
+    AggregateAtom,
+    AndExpr,
+    CmpAtom,
+    Const,
+    NotAtom,
+    PredAtom,
+    Var,
+)
 from factgraph.core.rules.where_eval import WhereValidationError
-from factgraph.core.store.ledger import AnnotationRow
 from factgraph.core.store._support import (
     PROBLOG_PROVENANCE_KIND,
     PYREASON_PROVENANCE_KIND,
+    SOUFFLE_WITNESS_KIND,
     PredWitness,
     ProofReceipt,
     ProvenanceEnvelope,
-    SOUFFLE_WITNESS_KIND,
 )
+from factgraph.core.store.ledger import AnnotationRow
 from factgraph.sdk import Entity, Field, Identity
 from factgraph.sdk.store import SDKStoreError, _initial_probe_bindings_for_row
 
@@ -1364,7 +1375,10 @@ Person:exists({encoded}):\t0.73
 
     @unittest.skipIf(shutil.which("problog") is None, "problog CLI is not available")
     def test_problog_reach_chain_guard_handles_zero_fact_program(self) -> None:
-        from factgraph.adapters.problog.reach_explain import _build_reach_program, _run_reach_program
+        from factgraph.adapters.problog.reach_explain import (
+            _build_reach_program,
+            _run_reach_program,
+        )
 
         graph = _store()
         rule = _person_exists_rule("person_exists_guard")

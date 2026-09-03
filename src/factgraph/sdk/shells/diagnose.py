@@ -42,8 +42,8 @@ from factgraph.application.capability_helpers import (
 from factgraph.application.diagnose_runtime import diagnose_derivation_binding
 from factgraph.application.protocol import DiagnoseResult
 
-from ._validation import resolve_derivation_plan, resolve_runtime_registry, validate_binding
 from ..errors import SDKStoreError
+from ._validation import resolve_derivation_plan, resolve_runtime_registry, validate_binding
 
 
 def sdk_diagnose(

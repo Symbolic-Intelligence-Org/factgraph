@@ -40,11 +40,15 @@ from factgraph.application.capability_helpers import (
     CapabilityHelperError,
     build_why_not_candidate_universe,
 )
-from factgraph.application.protocol import ProtocolShapeError, WhyNotUniverseRequest, WhyNotUniverseResult
+from factgraph.application.protocol import (
+    ProtocolShapeError,
+    WhyNotUniverseRequest,
+    WhyNotUniverseResult,
+)
 from factgraph.application.why_not_runtime import WhyNotRuntimeError, check_why_not_universe
 
-from ._validation import resolve_derivation_plan, resolve_runtime_registry
 from ..errors import SDKStoreError
+from ._validation import resolve_derivation_plan, resolve_runtime_registry
 
 
 def sdk_why_not(

@@ -17,7 +17,9 @@ from factgraph.adapters.souffle.pred_norm import normalize_pred_id
 from factgraph.adapters.souffle.runner import run_package
 from factgraph.adapters.souffle.tsv_v1 import tsv_cell_v1_decode
 from factgraph.adapters.souffle.where_compile import SOUFFLE_MAX_SUPPORTED_ARITY
-from factgraph.application.explain.diagnostic_assemble import diagnostic_problog_result_to_evidence_graph
+from factgraph.application.explain.diagnostic_assemble import (
+    diagnostic_problog_result_to_evidence_graph,
+)
 from factgraph.application.explain.diagnostic_projection import BranchCompanion, CompanionProgram
 from factgraph.application.explain.evidence_tree import EvidenceGraph
 from factgraph.application.protocol.certainty import Certainty

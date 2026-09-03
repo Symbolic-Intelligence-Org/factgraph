@@ -1,14 +1,15 @@
 """ProbLog provenance trace carrier (adapter-local, V0 spike)."""
 from __future__ import annotations
 
-from collections import Counter
 import re
+from collections import Counter
 from dataclasses import dataclass, field
 from typing import Any, Callable, Mapping
 
 from factgraph.adapters.problog._parsing import _split_top_level_args
 from factgraph.application.explain.evidence_tree import (
     BOOLEAN_CERTAINTY,
+    LAYOUT_TREE,
     Const,
     EvidenceAtom,
     EvidenceGraph,
@@ -16,7 +17,6 @@ from factgraph.application.explain.evidence_tree import (
     EvidenceTree,
     Fact,
     Holds,
-    LAYOUT_TREE,
     Source,
 )
 from factgraph.application.protocol.certainty import Certainty

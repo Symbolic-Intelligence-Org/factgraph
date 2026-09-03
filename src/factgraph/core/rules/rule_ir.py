@@ -14,8 +14,12 @@ from factgraph.core.rules._trace import (
     RuleTraceRuleRefLink,
 )
 from factgraph.core.rules.ruleref_common import internal_rule_pred_id, resolve_exposed_rule_ref
-from factgraph.core.store._support import ProjectedFact, make_non_fact_step_key, make_pred_condition_key
 from factgraph.core.rules.where_eval import WhereValidationError, evaluate_where
+from factgraph.core.store._support import (
+    ProjectedFact,
+    make_non_fact_step_key,
+    make_pred_condition_key,
+)
 from factgraph.core.store.runtime import Store
 from factgraph.core.view.projector import project_view_facts, project_view_facts_with_witness
 

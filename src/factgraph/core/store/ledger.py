@@ -17,7 +17,6 @@ from typing import Any, Callable, Iterator, Literal, Mapping, Sequence
 from factgraph.core.protocol.annotation_v1 import initial_meta_annotation_v1
 from factgraph.core.protocol.tup_v1 import claim_args_from_rest_terms
 
-
 META_KINDS = {"str", "int", "float", "bool", "time", "json"}
 ANNOTATION_ORIGINS = {"observed", "derived"}
 ANNOTATION_CATEGORIES = {"source", "semantic", "derived", "operational"}

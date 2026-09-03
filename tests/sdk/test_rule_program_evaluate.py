@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import pytest
 
-from factgraph.core.rules.where_ast import Const, PredAtom, Var
 from factgraph.application.explain import evidence_graph_to_dict
 from factgraph.application.protocol.explanation_render import narrate_evidence
+from factgraph.core.rules.where_ast import Const, PredAtom, Var
 from factgraph.sdk import (
     Entity,
     EvaluationPremiseScope,
@@ -12,13 +12,13 @@ from factgraph.sdk import (
     Field,
     Identity,
     MetaExclusion,
+    PredicatePremiseBlock,
     Rule,
     RuleProgram,
     RuleProgramClause,
     RuleProgramFact,
     RuleProgramGoal,
     SDKStoreError,
-    PredicatePremiseBlock,
 )
 
 

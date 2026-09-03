@@ -18,7 +18,6 @@ import math
 from dataclasses import dataclass
 from typing import Any, Mapping, Sequence
 
-
 AGGREGATION_STRATEGIES = ("bottleneck", "additive")
 
 

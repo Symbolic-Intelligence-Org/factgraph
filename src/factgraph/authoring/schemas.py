@@ -7,7 +7,7 @@ remember the individual leaf module names.
 
 from __future__ import annotations
 
-from .preflight import schema_preflight, schema_preflight_authoring, AuthoringPreflightError
+from .preflight import AuthoringPreflightError, schema_preflight, schema_preflight_authoring
 from .schema_compile import AuthoringSchemaCompileError, compile_authoring_schema_v1
 from .schema_dsl_parse import AuthoringSchemaDSLParseError, parse_authoring_schema_dsl_v1
 

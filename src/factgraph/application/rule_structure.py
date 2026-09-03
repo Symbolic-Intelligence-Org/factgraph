@@ -9,8 +9,12 @@ from factgraph.application.explain.structure_keys import (
     is_head_atom,
     join_id_for_materialization,
 )
-from factgraph.application.protocol.rule_expr import RuleExprError, RuleJoinConstraint
-from factgraph.application.protocol.rule_expr import _RuleExpr, _iter_rule_operands
+from factgraph.application.protocol.rule_expr import (
+    RuleExprError,
+    RuleJoinConstraint,
+    _iter_rule_operands,
+    _RuleExpr,
+)
 from factgraph.application.protocol.rule_expr_inspect import (
     ConditionDescriptor,
     OccurrenceInspect,

@@ -7,6 +7,7 @@ from factgraph.application.protocol.evaluate_result import (
     canonical_bytes_for_evaluate,
     claim_digest_for,
     closed_head_digest_for_parts,
+    config_digest_for,
     evidence_ref_id_for,
     expr_digest_for_payload,
     new_run_id,
@@ -14,7 +15,6 @@ from factgraph.application.protocol.evaluate_result import (
     result_id_for,
     row_id_for,
     rule_set_digest_for_entries,
-    config_digest_for,
     view_snapshot_digest_for_parts,
 )
 from factgraph.core.protocol.digests import sha256_hex, sha256_token

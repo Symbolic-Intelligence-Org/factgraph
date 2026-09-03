@@ -1,98 +1,11 @@
 from __future__ import annotations
 
-from .compile import (
-    build_authoring_schema_from_classes,
-    compile_schema_from_classes,
-    schema_preflight_from_classes,
-)
-from .errors import (
-    CardinalityError,
-    EditorClosedError,
-    EntityAlreadyExistsError,
-    EntityNotFoundError,
-    FrozenSnapshotError,
-    SchemaConflictError,
-    SchemaNonAdditiveError,
-    SchemaNotFoundError,
-    SDKSchemaError,
-    SDKStoreError,
-    SDKValueError,
-)
-from .error_codes import (
-    INVALID_ROW_FORMAT,
-    QUERY_ALIAS_CONFLICT,
-    QUERY_INVALID_ROW_FORMAT,
-    QUERY_MISSING_REF,
-    QUERY_NOT_IMPLEMENTED,
-    QUERY_TYPE_MISMATCH,
-    QUERY_UNBOUND_VAR,
-)
-from .schema import Entity, Field, Identity, Relationship
-from .semantics import ProbLogConfig, PyReasonConfig
-from .rule_program import (
-    EvaluationPremiseScope,
-    RuleProgram,
-    RuleProgramClause,
-    RuleProgramExplanation,
-    RuleProgramFact,
-    RuleProgramGoal,
-    RuleProgramResult,
-)
-from .store import FactGraph, SDKStore
-from .evaluation_query_builder import (
-    EvaluationQueryBuilderV1,
-    ProviderQueryTargetV1,
-    ScenarioGoalPlanBuilderV1,
-)
-from .policy_authoring import (
-    AuthoredPolicyTargetV1,
-    PolicyAuthoringError,
-    PolicyConstraintHandle,
-    PolicyDraft,
-    PolicyEntityPortHandle,
-    PolicyFieldHandle,
-    PolicyNodeHandle,
-    PolicyOccurrenceHandle,
-    PolicyPortHandle,
-    PolicyScalarPortHandle,
-)
-from .product_authoring import (
-    ASSET_META_ABSENT_V1,
-    AssetMeta,
-    AssetMetaAbsentV1,
-    AssetMetaStateV1,
-    FunctionBuilder,
-    FunctionInputBindingV1,
-    FunctionOccurrenceHandleV1,
-    FunctionOccurrenceTopologyV1,
-    FunctionPortV1,
-    PolicyBuilder,
-    ProductAuthoringError,
-    ProductPolicyNode,
-    ProductPolicyV1,
-    ProductFunctionV1,
-    ProductRuleV1,
-    RuleBuilder,
-    WeightedChoiceArmV1,
-    WeightedChoiceHandle,
-    WeightedChoiceTopologyV1,
-    assert_asset_binding_current_v1,
-    asset_meta_for_target,
-    asset_snapshot_v1,
-    build_function,
-    function_builder,
-)
-from .product_scenario_execution import (
-    ExecutionProfileBuilderV2,
-    ProductScenarioExecutionError,
-    ProvenanceLocatorV1,
-    ProvenanceRefV1,
-    ScenarioBuilderV2,
-)
-from .product_evaluation_outcome import (
-    ProductEvaluationOutcomeErrorV2,
-    ProductEvaluationOutcomeV2,
-    outcome_from_run_v2,
+from factgraph.application.evaluation_run_v1_runtime import (
+    EvaluationRunExplanationV1,
+    EvaluationRunPolicyProjectionV1,
+    EvaluationRunReplayV1,
+    PolicyVariantComparisonV1,
+    ScenarioDiffV1,
 )
 from factgraph.application.goal_plan_v1_runtime import (
     GoalPlanFailureV1,
@@ -102,94 +15,75 @@ from factgraph.application.goal_plan_v1_runtime import (
     portable_deterministic_profile_v1,
     provider_binding_slot_v1,
 )
-from factgraph.application.protocol.semantic_candidates import (
-    SEMANTIC_CANDIDATE_RESOLVER_CONTRACT_DIGEST_V1,
-    SEMANTIC_CANDIDATE_RESOLVER_CONTRACT_V1,
-    SemanticCandidateMatchMode,
-    SemanticCandidateScalar,
-    SemanticCandidateShapeError,
-    SemanticValueCandidateBatchRequestV1,
-    SemanticValueCandidateBatchResultV1,
-    SemanticValueCandidateRequestV1,
-    SemanticValueCandidateResultV1,
-)
-from factgraph.application.semantic_candidate_runtime import SemanticCandidateRuntimeError
-from factgraph.application.evaluation_run_v1_runtime import (
-    EvaluationRunExplanationV1,
-    EvaluationRunPolicyProjectionV1,
-    EvaluationRunReplayV1,
-    PolicyVariantComparisonV1,
-    ScenarioDiffV1,
-)
 from factgraph.application.protocol import (
-    ContainsRowExpectationV1,
+    CapturedEvaluationQueryRunExplanationV0,
+    CapturedEvaluationQueryRunV0,
+    CapturedEvaluationQueryRunVerificationV0,
     ConditionDescriptor,
     Const,
+    ContainsRowExpectationV1,
     CountEqExpectationV1,
     DetachedRowError,
+    EntityRef,
+    EvaluateResult,
+    EvaluateRow,
     EvaluationEnginePinV1,
     EvaluationExecutionProfileV1,
     EvaluationRunV1,
     EvidenceScopeV1,
     ExactLocalAbsenceExpectationV1,
     ExactLocalClosureTargetV1,
-    EvaluateResult,
-    EvaluateRow,
     ExistsExpectationV1,
     ExplainTargetV1,
     Explanation,
-    ResultFingerprint,
-    EntityRef,
+    ExplicitBoolError,
     FieldPath,
+    FreeVar,
     GoalPlanV1,
     GoalResultRowV1,
     GoalResultV1,
     GoalRowExpectationV1,
     GoalTechnicalAssessmentV1,
     GoalValueV1,
+    HeadClosure,
+    OccurrenceInspect,
+    PortInspect,
     ProviderMaterializationV1,
     ProviderRelationRowV1,
     ProviderRequestV1,
     RelationProviderV1,
-    CapturedEvaluationQueryRunExplanationV0,
-    CapturedEvaluationQueryRunV0,
-    CapturedEvaluationQueryRunVerificationV0,
-    ScenarioFieldSubstitutionOperationV0,
-    ScenarioFieldSubstitutionSetResolutionV0,
-    ScenarioFieldSubstitutionSetV0,
-    ScenarioFieldSubstitutionV0,
-    ScenarioResolutionV0,
-    ScenarioResultDiffV0,
-    ScenarioPremiseBindingV0,
-    ScenarioRunExplanationV0,
-    ScenarioRunPlanV0,
-    ScenarioRunSideV0,
-    ScenarioRunV0,
-    ScenarioRunVerificationV0,
-    ScenarioCreateEphemeralEntityV1,
-    ScenarioEnsureMemberV1,
-    ScenarioEnsureRelationV1,
-    ScenarioSetEffectiveValueV1,
-    ScenarioSetExactMembersV1,
-    ScenarioSpecV1,
-    ScenarioValueV1,
-    ScenarioWithoutEntityV1,
-    ScenarioWithoutAssertionV1,
-    ScenarioWithoutFieldV1,
-    ScenarioWithoutRelationV1,
-    ScenarioWithoutValueV1,
-    SetEqualsExpectationV1,
-    ExplicitBoolError,
-    FreeVar,
-    HeadClosure,
-    OccurrenceInspect,
-    PortInspect,
+    ResultFingerprint,
     Rule,
     RuleExpr,
     RuleExprError,
     RuleExprInspect,
     RuleJoinConstraint,
     RuleStructure,
+    ScenarioCreateEphemeralEntityV1,
+    ScenarioEnsureMemberV1,
+    ScenarioEnsureRelationV1,
+    ScenarioFieldSubstitutionOperationV0,
+    ScenarioFieldSubstitutionSetResolutionV0,
+    ScenarioFieldSubstitutionSetV0,
+    ScenarioFieldSubstitutionV0,
+    ScenarioPremiseBindingV0,
+    ScenarioResolutionV0,
+    ScenarioResultDiffV0,
+    ScenarioRunExplanationV0,
+    ScenarioRunPlanV0,
+    ScenarioRunSideV0,
+    ScenarioRunV0,
+    ScenarioRunVerificationV0,
+    ScenarioSetEffectiveValueV1,
+    ScenarioSetExactMembersV1,
+    ScenarioSpecV1,
+    ScenarioValueV1,
+    ScenarioWithoutAssertionV1,
+    ScenarioWithoutEntityV1,
+    ScenarioWithoutFieldV1,
+    ScenarioWithoutRelationV1,
+    ScenarioWithoutValueV1,
+    SetEqualsExpectationV1,
     StructureAtom,
     StructureBranch,
     StructureHeadLink,
@@ -217,9 +111,21 @@ from factgraph.application.protocol.scenario_v2 import (
     ScenarioOperationV2,
     ScenarioSpecV2,
 )
+from factgraph.application.protocol.semantic_candidates import (
+    SEMANTIC_CANDIDATE_RESOLVER_CONTRACT_DIGEST_V1,
+    SEMANTIC_CANDIDATE_RESOLVER_CONTRACT_V1,
+    SemanticCandidateMatchMode,
+    SemanticCandidateScalar,
+    SemanticCandidateShapeError,
+    SemanticValueCandidateBatchRequestV1,
+    SemanticValueCandidateBatchResultV1,
+    SemanticValueCandidateRequestV1,
+    SemanticValueCandidateResultV1,
+)
 from factgraph.application.schema_mutation_runtime import SchemaAddResult
-from factgraph.core.semantics import SemanticsProfile
+from factgraph.application.semantic_candidate_runtime import SemanticCandidateRuntimeError
 from factgraph.core.schema.meta_policy import MetaKeyPolicy
+from factgraph.core.semantics import SemanticsProfile
 from factgraph.core.store import (
     AssertionInput,
     CommitResult,
@@ -232,6 +138,12 @@ from factgraph.core.store.premise_filter import (
     MetaExclusion,
     PredicatePremiseAllowance,
     PredicatePremiseBlock,
+)
+
+from .compile import (
+    build_authoring_schema_from_classes,
+    compile_schema_from_classes,
+    schema_preflight_from_classes,
 )
 from .dsl import (
     Case,
@@ -246,7 +158,96 @@ from .dsl import (
     build_application_rule,
     vars,
 )
+from .error_codes import (
+    INVALID_ROW_FORMAT,
+    QUERY_ALIAS_CONFLICT,
+    QUERY_INVALID_ROW_FORMAT,
+    QUERY_MISSING_REF,
+    QUERY_NOT_IMPLEMENTED,
+    QUERY_TYPE_MISMATCH,
+    QUERY_UNBOUND_VAR,
+)
+from .errors import (
+    CardinalityError,
+    EditorClosedError,
+    EntityAlreadyExistsError,
+    EntityNotFoundError,
+    FrozenSnapshotError,
+    SchemaConflictError,
+    SchemaNonAdditiveError,
+    SchemaNotFoundError,
+    SDKSchemaError,
+    SDKStoreError,
+    SDKValueError,
+)
+from .evaluation_query_builder import (
+    EvaluationQueryBuilderV1,
+    ProviderQueryTargetV1,
+    ScenarioGoalPlanBuilderV1,
+)
 from .ingest import IngestResult, ValidationReport
+from .policy_authoring import (
+    AuthoredPolicyTargetV1,
+    PolicyAuthoringError,
+    PolicyConstraintHandle,
+    PolicyDraft,
+    PolicyEntityPortHandle,
+    PolicyFieldHandle,
+    PolicyNodeHandle,
+    PolicyOccurrenceHandle,
+    PolicyPortHandle,
+    PolicyScalarPortHandle,
+)
+from .product_authoring import (
+    ASSET_META_ABSENT_V1,
+    AssetMeta,
+    AssetMetaAbsentV1,
+    AssetMetaStateV1,
+    FunctionBuilder,
+    FunctionInputBindingV1,
+    FunctionOccurrenceHandleV1,
+    FunctionOccurrenceTopologyV1,
+    FunctionPortV1,
+    PolicyBuilder,
+    ProductAuthoringError,
+    ProductFunctionV1,
+    ProductPolicyNode,
+    ProductPolicyV1,
+    ProductRuleV1,
+    RuleBuilder,
+    WeightedChoiceArmV1,
+    WeightedChoiceHandle,
+    WeightedChoiceTopologyV1,
+    assert_asset_binding_current_v1,
+    asset_meta_for_target,
+    asset_snapshot_v1,
+    build_function,
+    function_builder,
+)
+from .product_evaluation_outcome import (
+    ProductEvaluationOutcomeErrorV2,
+    ProductEvaluationOutcomeV2,
+    outcome_from_run_v2,
+)
+from .product_scenario_execution import (
+    ExecutionProfileBuilderV2,
+    ProductScenarioExecutionError,
+    ProvenanceLocatorV1,
+    ProvenanceRefV1,
+    ScenarioBuilderV2,
+)
+from .rule_program import (
+    EvaluationPremiseScope,
+    RuleProgram,
+    RuleProgramClause,
+    RuleProgramExplanation,
+    RuleProgramFact,
+    RuleProgramGoal,
+    RuleProgramResult,
+)
+from .schema import Entity, Field, Identity, Relationship
+from .semantics import ProbLogConfig, PyReasonConfig
+from .store import FactGraph, SDKStore
 
 ApplicationRule = Rule
 

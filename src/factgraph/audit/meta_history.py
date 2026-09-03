@@ -12,7 +12,7 @@ import json
 from dataclasses import dataclass
 from typing import Any, Mapping, Sequence
 
-from factgraph.core.store.ledger import Ledger, META_KINDS, normalize_event_sequence
+from factgraph.core.store.ledger import META_KINDS, Ledger, normalize_event_sequence
 
 _JSON_BYTES_KEY = "__factgraph_meta_bytes_b64__"
 

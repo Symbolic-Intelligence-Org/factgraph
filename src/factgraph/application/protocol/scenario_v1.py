@@ -16,8 +16,9 @@ from __future__ import annotations
 
 import base64
 import binascii
-from dataclasses import dataclass, field as dc_field
 import json
+from dataclasses import dataclass
+from dataclasses import field as dc_field
 from typing import Any, Literal, TypeAlias
 
 from factgraph.core.protocol.digests import sha256_hex
@@ -25,7 +26,6 @@ from factgraph.core.protocol.tup_v1 import claim_args_from_rest_terms
 
 from .common import ProtocolShapeError, _require_non_empty_str
 from .schema_runtime import EntityRef, FieldPath
-
 
 ScenarioValueTagV1: TypeAlias = Literal[
     "string",

@@ -45,7 +45,6 @@ from .protocol.evaluation_run import _token
 from .protocol.evaluation_run_bundle import EvaluationRunBundleV0
 from .protocol.evaluation_run_verification import EvaluationRunVerificationV0
 
-
 MAX_EVALUATION_RUN_VERIFICATION_WORK = 100_000
 _BOOLEAN_CERTAINTY = ("0x3ff0000000000000", "0x3ff0000000000000", "boolean")
 _BOOLEAN_CERTAINTY_DIGEST = sha256_token(

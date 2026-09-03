@@ -1,32 +1,32 @@
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 import base64
 import binascii
-from dataclasses import dataclass, field, replace
-from datetime import date, datetime
 import json
 import math
-from types import MappingProxyType
-from typing import Any, Literal
 import uuid
 import warnings
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
+from dataclasses import dataclass, field, replace
+from datetime import date, datetime
+from types import MappingProxyType
+from typing import Any, Literal
 
 from factgraph.application.explain.evidence_tree import (
+    LAYOUT_TREE,
     EvidenceGraph,
     EvidenceRule,
     EvidenceTree,
-    LAYOUT_TREE,
 )
-from factgraph.application.protocol.common import ErrorDTO, ProtocolShapeError, WarningDTO
 from factgraph.application.protocol.certainty import BOOLEAN_CERTAINTY, Certainty
+from factgraph.application.protocol.common import ErrorDTO, ProtocolShapeError, WarningDTO
+from factgraph.application.protocol.evaluation_expectation import ExpectationResultV0
 from factgraph.application.protocol.evaluation_run import EvaluationRunAnchorV0
 from factgraph.application.protocol.evaluation_run_bundle import EvaluationRunBundleV0
 from factgraph.application.protocol.evaluation_scenario import (
     ScenarioFieldSubstitutionSetResolutionV0,
     ScenarioResolutionV0,
 )
-from factgraph.application.protocol.evaluation_expectation import ExpectationResultV0
 from factgraph.application.protocol.explanation_render import narrate_evidence, walk_evidence
 from factgraph.application.protocol.rule import Rule, _is_projection_rule
 from factgraph.application.protocol.rule_expr import RuleExprError
@@ -37,12 +37,12 @@ from factgraph.core.protocol.digests import sha256_hex, sha256_token
 from factgraph.core.protocol.tup_v1 import claim_args_from_rest_terms
 from factgraph.core.rules.where_ast import CmpAtom, Const, PredAtom
 from factgraph.core.semantics.profile import SemanticsProfile
-from factgraph.core.store.database import view_digest_for
 from factgraph.core.store._support import (
     SOUFFLE_WITNESS_KIND,
-    ProvenanceEnvelope,
     ProofReceipt,
+    ProvenanceEnvelope,
 )
+from factgraph.core.store.database import view_digest_for
 
 
 class DetachedRowError(RuntimeError):

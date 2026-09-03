@@ -8,8 +8,8 @@ Neither name implies a global ledger or historical snapshot.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 import json
+from dataclasses import dataclass, field
 from typing import Literal
 
 from factgraph.core.protocol.digests import sha256_hex
@@ -17,7 +17,6 @@ from factgraph.core.protocol.digests import sha256_hex
 from .common import ProtocolShapeError, _require_bool, _require_non_empty_str
 from .evaluation_scenario import ScenarioScalarValueV0
 from .schema_runtime import FieldPath
-
 
 QueryEffectiveSnapshotScopeV1 = Literal["query_dependency_relation_v1"]
 QueryEffectiveSnapshotNormalizationProfileV1 = Literal[

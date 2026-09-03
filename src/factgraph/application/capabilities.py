@@ -13,7 +13,6 @@ from typing import Mapping
 
 from factgraph.core.protocol.tup_v1 import CANONICAL_TAGS as _PROTOCOL_TAGS
 
-
 # Value-kind values from `application/schema_runtime.py:34` +
 # `application/protocol/entity_read.py:38` (`Literal["scalar", "entity_ref"]`).
 _VALUE_KINDS: frozenset[str] = frozenset({"scalar", "entity_ref"})

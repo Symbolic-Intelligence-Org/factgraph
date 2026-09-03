@@ -1,23 +1,23 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 import json
 import re
+from dataclasses import dataclass
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, Literal, Mapping, NoReturn
 
 from factgraph.core.protocol.digests import sha256_hex
 from factgraph.core.rules.where_ast import (
-    AndExpr,
     AggregateAtom,
+    AndExpr,
     Atom,
     BuiltinAtom,
     CmpAtom,
     Const,
     InAtom,
     NotAtom,
-    Origin,
     OrExpr,
+    Origin,
     PredAtom,
     RuleRefAtom,
     Term,

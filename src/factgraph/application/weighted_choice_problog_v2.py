@@ -36,7 +36,6 @@ from factgraph.application.policy_runtime import (
     _assert_compiled_policy_current,
     compile_policy,
 )
-from factgraph.application.schema_runtime import SchemaIndex
 from factgraph.application.protocol.derivation import CompiledDerivationPlan
 from factgraph.application.protocol.policy import (
     PolicyAll,
@@ -48,6 +47,7 @@ from factgraph.application.protocol.policy import (
     policy_contains_weighted_choice,
 )
 from factgraph.application.protocol.semantic_address import SemanticPortAddress
+from factgraph.application.schema_runtime import SchemaIndex
 from factgraph.core.rules.where_ast import AndExpr, lower_ast_to_where_ir
 from factgraph.sdk.product_authoring import (
     ProductPolicyV1,

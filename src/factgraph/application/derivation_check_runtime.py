@@ -49,8 +49,8 @@ from factgraph.core.rules.rule_ir import RuleCompileError, RuleRegistry
 from factgraph.core.rules.ruleref_substrate import evaluate_native_where
 from factgraph.core.store._support import (
     BindingItems,
-    ProvenanceEnvelope,
     ProofReceipt,
+    ProvenanceEnvelope,
     compute_support_digest,
     normalize_binding_items,
 )

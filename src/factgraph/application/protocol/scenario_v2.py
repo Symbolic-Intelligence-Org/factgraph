@@ -19,10 +19,10 @@ or modifies a ledger.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from decimal import Decimal, InvalidOperation
 import json
 import math
+from dataclasses import dataclass, field
+from decimal import Decimal, InvalidOperation
 from typing import Literal, Mapping, TypeAlias
 
 from factgraph.core.protocol.digests import sha256_hex
@@ -49,7 +49,6 @@ from .scenario_v1 import (
     ScenarioWithoutValueV1,
 )
 from .schema_runtime import EntityRef, FieldPath
-
 
 ScenarioFactRawKindV2: TypeAlias = Literal["probabilistic"]
 ScenarioFactOriginV2: TypeAlias = Literal["baseline_support", "scenario_synthetic"]

@@ -10,16 +10,16 @@ from __future__ import annotations
 
 import base64
 import binascii
-from dataclasses import dataclass, field
 import json
 import math
+from dataclasses import dataclass, field
 from typing import Any, Literal, TypeAlias
 
-from .common import ProtocolShapeError, _require_bool, _require_non_empty_str
-from .schema_runtime import EntityRef, FieldPath
 from factgraph.core.protocol.digests import sha256_hex
 from factgraph.core.protocol.tup_v1 import claim_args_from_rest_terms
 
+from .common import ProtocolShapeError, _require_bool, _require_non_empty_str
+from .schema_runtime import EntityRef, FieldPath
 
 ScenarioInputValue: TypeAlias = str | int | float | bool | bytes
 ScenarioScalarTag: TypeAlias = Literal[

@@ -8,21 +8,12 @@ from pathlib import Path
 from typing import Any
 
 from factgraph.adapters.souffle.pred_norm import normalize_pred_id
+from factgraph.adapters.souffle.souffle_view_gen import generate_view_dl
 from factgraph.adapters.souffle.tsv_v1 import write_tsv
-from factgraph.core.policy.policy_ir import (
-    build_policy_ir_v1,
-    canonicalize_policy_ir_jcs,
-    policy_digest,
-)
-from factgraph.core.protocol.digests import sha256_token
-from factgraph.core.protocol.tup_v1 import canonical_bytes_tup_v1
 from factgraph.adapters.souffle.where_compile import (
     compile_where_to_query_dl,
     query_rel_for_where,
 )
-from factgraph.core.schema.schema_ir import canonicalize_schema_ir_jcs, schema_digest
-from factgraph.core.store.runtime import Store
-from factgraph.adapters.souffle.souffle_view_gen import generate_view_dl
 
 # The audit ledgers are engine-neutral and store-derived. Their builders live in
 # factgraph.audit.package_export (single source of truth); the audit branch below
@@ -34,6 +25,15 @@ from factgraph.audit.package_export import (
     _protocol_version,
     write_audit_artifacts,
 )
+from factgraph.core.policy.policy_ir import (
+    build_policy_ir_v1,
+    canonicalize_policy_ir_jcs,
+    policy_digest,
+)
+from factgraph.core.protocol.digests import sha256_token
+from factgraph.core.protocol.tup_v1 import canonical_bytes_tup_v1
+from factgraph.core.schema.schema_ir import canonicalize_schema_ir_jcs, schema_digest
+from factgraph.core.store.runtime import Store
 
 _WHERE_ATOM_TAGS = {
     "pred",

@@ -8,18 +8,18 @@ from factgraph.core.annotation._certainty import (
     derive_certainty_summary,
     rank_certainty_conditions,
 )
-from factgraph.core.annotation._min_max import (
-    MinMaxPathConclusion,
-    build_min_max_provenance_entries,
-    derive_min_max_path_confidence,
-    serialize_min_max_conclusions,
-)
 from factgraph.core.annotation._evidence import (
     apply_max_evidence_aggregation,
     build_direct_evidence_candidates_proto,
     build_max_evidence_provenance,
     derive_struct_candidates_proto,
     sort_raw_candidates_proto,
+)
+from factgraph.core.annotation._min_max import (
+    MinMaxPathConclusion,
+    build_min_max_provenance_entries,
+    derive_min_max_path_confidence,
+    serialize_min_max_conclusions,
 )
 
 __all__ = [

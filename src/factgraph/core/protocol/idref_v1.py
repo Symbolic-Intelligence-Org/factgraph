@@ -7,7 +7,6 @@ from typing import Any
 from .digests import b32_nopad_lower
 from .tup_v1 import TAG_CODE_BY_NAME, encode_value_bytes
 
-
 IDREF_V1_PREFIX = b"factpy\x00idref_v1\x00"
 ENTITY_TYPE_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_.-]{0,127}$")
 

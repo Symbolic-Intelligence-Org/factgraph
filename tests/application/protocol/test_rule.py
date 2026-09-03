@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+import unittest
 from dataclasses import FrozenInstanceError
 from types import MappingProxyType
-import unittest
 
 from factgraph.application.protocol import Rule, RuleOccurrence, RulePortRef, RuleValidationError
 from factgraph.application.protocol.rule import PortType

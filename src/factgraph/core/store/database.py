@@ -29,11 +29,17 @@ from factgraph.core.protocol.digests import sha256_hex, sha256_token
 from factgraph.core.protocol.lthash import (
     LTHASH_SCHEME,
     LtHashError,
-    add as lthash_add,
     decode_state,
     empty_state,
     encode_state,
+)
+from factgraph.core.protocol.lthash import (
+    add as lthash_add,
+)
+from factgraph.core.protocol.lthash import (
     from_elements as lthash_from_elements,
+)
+from factgraph.core.protocol.lthash import (
     remove as lthash_remove,
 )
 from factgraph.core.protocol.tup_v1 import canonical_bytes_tup_v1, claim_args_from_rest_terms
@@ -47,9 +53,13 @@ from factgraph.core.schema.schema_ir import (
     canonicalize_schema_ir_identity_jcs,
     canonicalize_schema_ir_jcs,
     ensure_schema_ir,
+)
+from factgraph.core.schema.schema_ir import (
     schema_digest as compute_schema_digest,
 )
 from factgraph.core.store.ledger import (
+    _ANNOTATION_COMPAT_PREFIX,
+    META_KINDS,
     AnnotationRow,
     Claim,
     ClaimArg,
@@ -57,22 +67,19 @@ from factgraph.core.store.ledger import (
     LedgerAssertionWrite,
     LedgerHeadConflictError,
     LedgerRevocationWrite,
-    META_KINDS,
     MetaRow,
     Revokes,
     TxMetaDefault,
-    _ANNOTATION_COMPAT_PREFIX,
-    _AnnotationStorageMetaRow,
-    _MetaTombstone,
-    _annotation_from_storage_key,
     _annotation_compatibility_meta_rows,
+    _annotation_from_storage_key,
+    _AnnotationStorageMetaRow,
     _dec,
+    _dec_rest_terms,
     _decode_claim_terms,
     _decode_meta_value,
-    _dec_rest_terms,
     _is_reserved_annotation_meta_key,
+    _MetaTombstone,
 )
-
 
 DBTX_V1_PREFIX = b"factpy\x00dbtx_v1\x00"
 DBTX_V2_PREFIX = b"factgraph\x00dbtx_v2\x00"

@@ -13,15 +13,14 @@ FactGraph.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 import json
 import re
+from dataclasses import dataclass, field
 from typing import Literal, Mapping, TypeAlias
 
 from factgraph.core.protocol.digests import sha256_hex
 
 from .common import ProtocolShapeError, _require_non_empty_str
-
 
 ProvenanceLocatorKindV1: TypeAlias = Literal["opaque", "line_span", "json_pointer"]
 ProvenanceOriginRoleV1: TypeAlias = Literal[

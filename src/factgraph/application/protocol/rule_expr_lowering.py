@@ -6,8 +6,8 @@ from itertools import product
 from typing import Literal
 
 from factgraph.application.derivation_runtime import evaluate_derivation_plans
-from factgraph.core.protocol.digests import sha256_hex
 from factgraph.core.derivation.candidates import DerivationOutput
+from factgraph.core.protocol.digests import sha256_hex
 from factgraph.core.rules.where_ast import (
     AggregateAtom,
     AndExpr,
@@ -30,12 +30,12 @@ from .rule_expr import (
     RuleExprError,
     RuleJoinConstraint,
     _AndGroup,
-    _OrGroup,
-    _RuleExpr,
-    _RuleOperand,
     _canonical_join_constraint,
     _coerce_rule_expr_operand,
     _normalize_join_constraints,
+    _OrGroup,
+    _RuleExpr,
+    _RuleOperand,
 )
 
 RuleExprAdapterEngine = Literal["native", "souffle", "problog"]

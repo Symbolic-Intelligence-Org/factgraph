@@ -20,15 +20,14 @@ validation and sealing, not compiler lineage expansion or engine execution.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 import json
+from dataclasses import dataclass, field
 from typing import Literal, TypeAlias
 
 from factgraph.core.protocol.digests import sha256_hex
 
 from .common import ProtocolShapeError, _require_non_empty_str
 from .scenario_v2 import FactSemanticsV2
-
 
 EvaluationEngineV2: TypeAlias = Literal["native", "souffle", "problog"]
 EvaluationProfileKindV2: TypeAlias = Literal[

@@ -23,7 +23,6 @@ from .evaluation_run_bundle import EvaluationRunBundleV0
 from .evaluation_run_verification import EvaluationRunVerificationV0
 from .policy_explanation import PolicyExplanationViewV0
 
-
 MAX_CAPTURED_EVALUATION_QUERY_EXPECTATIONS_V0 = 64
 
 

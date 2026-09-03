@@ -29,7 +29,6 @@ from .errors import SDKStoreError
 from .facade import EntitySnapshot, _build_snapshot
 from .schema import Entity, Field
 
-
 _MATCH_VIEW_UNSUPPORTED = (
     "method-level view= is not supported by fg.read.match(); use FactGraph.attach(db, view=view) instead"
 )

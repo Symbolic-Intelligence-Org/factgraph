@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import base64
-from dataclasses import dataclass, field
 import json
+from dataclasses import dataclass, field
 from typing import Any
 
 from factgraph.core.protocol.digests import sha256_hex
@@ -21,12 +21,12 @@ from .protocol.policy import PolicyError
 from .protocol.rule import Rule
 from .protocol.rule_expr import RuleExprError
 from .protocol.rule_expr_lowering import (
-    _RuleExprBodyPlan,
     RuleExprLoweringPlan,
+    _attach_evaluation_query_head,
+    _RuleExprBodyPlan,
     _RuleExprQueryHeadLink,
     _RuleExprQueryNavigationLookup,
     _RuleExprQueryValueBinding,
-    _attach_evaluation_query_head,
 )
 from .protocol.schema_runtime import EntityRef
 from .protocol.semantic_address import SemanticPortAddress

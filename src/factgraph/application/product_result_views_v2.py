@@ -12,8 +12,8 @@ V2 carrier could have captured is explicit about being ``not_captured``.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 import json
+from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import Literal, Mapping, TypeAlias
 
@@ -22,7 +22,6 @@ from .protocol.evaluation_run_v1 import EvaluationRunSideV1, EvaluationRunV1, Ex
 from .protocol.evaluation_run_v2 import EvaluationRunSideV2 as ProtocolEvaluationRunSideV2
 from .protocol.evaluation_run_v2 import EvaluationRunV2, assert_evaluation_run_v2_current
 from .protocol.goal_plan_v1 import GoalResultRowV1, GoalTechnicalAssessmentV1
-
 
 ProductRunSourceProtocolV2: TypeAlias = Literal["evaluation_run_v1", "evaluation_run_v2"]
 ProductRunSideV2: TypeAlias = Literal["baseline", "effective", "candidate_effective"]

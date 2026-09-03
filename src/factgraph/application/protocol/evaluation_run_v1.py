@@ -29,8 +29,8 @@ from __future__ import annotations
 
 import base64
 import binascii
-from dataclasses import dataclass, field
 import json
+from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import Literal, Mapping, TypeAlias
 
@@ -43,7 +43,6 @@ from .goal_plan_v1 import (
     GoalTechnicalAssessmentV1,
     GoalValueV1,
 )
-
 
 EvaluationWorldSideV1: TypeAlias = Literal["baseline", "effective"]
 EvaluationRunSideNameV1: TypeAlias = Literal["baseline", "effective", "candidate_effective"]

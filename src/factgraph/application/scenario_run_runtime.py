@@ -23,9 +23,9 @@ from factgraph.application.evaluation_run_evidence_runtime import (
 from factgraph.application.evaluation_run_verification_runtime import (
     verify_evaluation_run_bundle,
 )
-from factgraph.application.protocol.evaluate_result import canonical_bytes_for_evaluate
 from factgraph.application.policy_explanation_runtime import project_policy_explanation_v0
 from factgraph.application.protocol.common import ProtocolShapeError
+from factgraph.application.protocol.evaluate_result import canonical_bytes_for_evaluate
 from factgraph.application.protocol.evaluation_run_bundle import EvaluationRunBundleV0
 from factgraph.application.protocol.evaluation_scenario import (
     ScenarioResultDiffV0,
@@ -42,7 +42,6 @@ from factgraph.application.protocol.scenario_run import (
 )
 from factgraph.application.protocol.schema_runtime import FieldPath
 from factgraph.core.protocol.digests import sha256_hex, sha256_token
-
 
 # A ScenarioRun carries two opaque, URL-safe-base64 encoded capture frames.
 # Account for the 4/3 binary-to-text expansion of two maximum-size F4 payloads

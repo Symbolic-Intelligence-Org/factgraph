@@ -11,9 +11,9 @@ from __future__ import annotations
 import shutil
 import unittest
 
-from factgraph.sdk import Entity, FactGraph, Field, Identity, build_application_rule, vars
-from factgraph.core.evidence.write_protocol import set_field
 from factgraph.application.explain.evidence_tree import Fact, Fails, Holds, Source
+from factgraph.core.evidence.write_protocol import set_field
+from factgraph.sdk import Entity, FactGraph, Field, Identity, build_application_rule, vars
 
 _PROBLOG = shutil.which("problog") is not None
 

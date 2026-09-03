@@ -7,14 +7,13 @@ turn an empty result into a general closed-world assertion.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 import json
+from dataclasses import dataclass, field
 from typing import Literal
 
 from factgraph.core.protocol.digests import sha256_hex
 
 from .common import ProtocolShapeError, _require_non_empty_str
-
 
 ExpectationStatusV0 = Literal[
     "satisfied",

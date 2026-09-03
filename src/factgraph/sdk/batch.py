@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import json
 import math
-from dataclasses import dataclass, field as dc_field
-from typing import Any, TYPE_CHECKING, Literal
+from dataclasses import dataclass
+from dataclasses import field as dc_field
+from typing import TYPE_CHECKING, Any, Literal
 
 from factgraph.application import (
     apply_write_plan,
@@ -13,7 +14,11 @@ from factgraph.application import (
 )
 from factgraph.application.protocol import (
     EntityRef as AppEntityRef,
+)
+from factgraph.application.protocol import (
     EntitySelector as AppEntitySelector,
+)
+from factgraph.application.protocol import (
     EntityWriteCommand,
     EntityWritePlan,
     FieldMutation,

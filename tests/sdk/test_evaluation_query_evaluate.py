@@ -1,10 +1,10 @@
 from __future__ import annotations
 
+import inspect
+import json
 import unittest
 from dataclasses import asdict, replace
 from datetime import datetime
-import inspect
-import json
 from typing import get_type_hints
 from unittest.mock import patch
 from uuid import UUID
@@ -23,9 +23,9 @@ from factgraph.application import (
     resolve_selector,
 )
 from factgraph.application.protocol import (
+    DetachedRowError,
     EntityRef,
     EntitySelector,
-    DetachedRowError,
     EvaluateResult,
     EvaluationQuery,
     EvaluationQueryBinding,

@@ -13,8 +13,8 @@ from factgraph.core.evidence.write_protocol import (
     retract_by_asrt,
     set_field,
 )
-from factgraph.core.protocol.idref_v1 import encode_idref_v1
 from factgraph.core.protocol.digests import sha256_token
+from factgraph.core.protocol.idref_v1 import encode_idref_v1
 from factgraph.core.store.ledger import Ledger
 
 _META_PRIMARY_KEYS = {

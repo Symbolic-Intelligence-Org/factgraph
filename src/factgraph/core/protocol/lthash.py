@@ -12,7 +12,6 @@ import base64
 import hashlib
 from collections.abc import Iterable
 
-
 # Parameter profile follows Meta's 2019 LtHash engineering deployment:
 # 1024 lanes of 16-bit integers, i.e. a 2048-byte state in
 # (Z / 2^16 Z)^1024.  See:

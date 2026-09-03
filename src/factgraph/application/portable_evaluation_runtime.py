@@ -29,13 +29,13 @@ Scenario resolver, replay format, or product assessment surface.
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, field, replace
 import importlib
 import json
 import math
 import os
 import shutil
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass, field, replace
 from typing import Any, Literal
 
 from factgraph.core.derivation.candidates import DerivationOutput
@@ -53,11 +53,11 @@ from factgraph.core.rules.where_ast import (
     RuleRefAtom,
     Term,
     Var,
+    WhereASTError,
     parse_where_ir_to_ast,
 )
-from factgraph.core.rules.where_ast import WhereASTError
-from factgraph.core.store._builders import coerce_value_for_tag
 from factgraph.core.schema.schema_ir import ensure_schema_ir
+from factgraph.core.store._builders import coerce_value_for_tag
 from factgraph.core.store._support import ProjectedFact
 from factgraph.core.store.ledger import Claim, Ledger
 from factgraph.core.store.runtime import Store
@@ -68,7 +68,6 @@ from .protocol.derivation import (
     CompiledHeadCall,
     DerivationEvaluateRequest,
 )
-
 
 PORTABLE_DETERMINISTIC_V1: Literal["portable_deterministic_v1"] = "portable_deterministic_v1"
 PortableEngineV1 = Literal["native", "souffle", "problog"]

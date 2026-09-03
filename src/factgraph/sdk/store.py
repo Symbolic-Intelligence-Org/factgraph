@@ -1,32 +1,45 @@
 from __future__ import annotations
 
+import os
+import re
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import datetime, timezone
-import os
 from pathlib import Path
-import re
 from typing import TYPE_CHECKING, Any
 from uuid import UUID, uuid4
 
-from factgraph.application import apply_write_plan, is_entity_identity_bundle_active, plan_write_command
-from factgraph.application.entity_write import _revocation_meta_entries
-from factgraph.application.schema_mutation_runtime import (
-    SchemaAddResult,
-    add_schema_classes as app_add_schema_classes,
+from factgraph.adapters.problog.provenance import (
+    ProbLogEvidenceContext,
+    problog_trace_from_dict,
+    problog_trace_to_evidence_graph,
 )
-from factgraph.application.workspace_runtime import resolve_workspace_paths
+from factgraph.adapters.problog.reach_explain import problog_reach_explain_to_evidence_graph
+from factgraph.adapters.pyreason.provenance import (
+    pyreason_trace_from_dict,
+    pyreason_trace_to_evidence_graph,
+)
+from factgraph.adapters.souffle.package import ExportOptions, export_package
+from factgraph.adapters.souffle.reach_explain import souffle_reach_explain_to_evidence_graph
+from factgraph.adapters.souffle.runner import run_package
+from factgraph.application import (
+    apply_write_plan,
+    is_entity_identity_bundle_active,
+    plan_write_command,
+)
+from factgraph.application.captured_evaluation_query_run_runtime import (
+    build_captured_evaluation_query_run_v0,
+)
 from factgraph.application.derivation_runtime import (
-    _evaluate_derivation_plans_with_native_relation_capture,
     _evaluate_derivation_plans_with_native_effective_relation,
     _evaluate_derivation_plans_with_native_effective_relation_capture,
+    _evaluate_derivation_plans_with_native_relation_capture,
     evaluate_derivation_plans,
 )
-from factgraph.application.evaluation_scenario_runtime import (
-    ScenarioResolutionError,
-    assert_resolved_scenario_compatibility_current,
-    resolve_scenario_field_substitution_set_v0,
-    resolve_scenario_field_substitution_v0,
+from factgraph.application.entity_write import _revocation_meta_entries
+from factgraph.application.evaluation_expectation_runtime import (
+    EvaluationExpectationError,
+    evaluate_contains_row_expectations_v0,
 )
 from factgraph.application.evaluation_query_runtime import (
     CompiledEvaluationQueryV0,
@@ -37,70 +50,62 @@ from factgraph.application.evaluation_query_target_runtime import (
     assert_targeted_evaluation_query_current,
     targeted_evaluation_query_wrapper_digest_v0,
 )
-from factgraph.application.evaluation_expectation_runtime import (
-    EvaluationExpectationError,
-    evaluate_contains_row_expectations_v0,
-)
 from factgraph.application.evaluation_run_bundle_runtime import _build_evaluation_run_bundle_v0
-from factgraph.application.captured_evaluation_query_run_runtime import (
-    build_captured_evaluation_query_run_v0,
-)
-from factgraph.application.scenario_run_runtime import build_scenario_run_v0
 from factgraph.application.evaluation_run_runtime import (
     EVALUATION_QUERY_PROJECTION_ADAPTER_VERSION,
     NATIVE_WHERE_SEMANTICS_VERSION,
     build_evaluation_run_anchor_v0,
 )
+from factgraph.application.evaluation_scenario_runtime import (
+    ScenarioResolutionError,
+    assert_resolved_scenario_compatibility_current,
+    resolve_scenario_field_substitution_set_v0,
+    resolve_scenario_field_substitution_v0,
+)
 from factgraph.application.explain import EvidenceGraph, probe_native
 from factgraph.application.explain.evidence_tree import (
+    LAYOUT_TREE,
     Const,
     EvidenceAtom,
     EvidenceRule,
     EvidenceTree,
     Fact,
     Holds,
-    LAYOUT_TREE,
     Source,
 )
-from factgraph.adapters.problog.provenance import (
-    ProbLogEvidenceContext,
-    problog_trace_from_dict,
-    problog_trace_to_evidence_graph,
-)
-from factgraph.adapters.problog.reach_explain import problog_reach_explain_to_evidence_graph
-from factgraph.adapters.pyreason.provenance import pyreason_trace_from_dict, pyreason_trace_to_evidence_graph
-from factgraph.adapters.souffle.reach_explain import souffle_reach_explain_to_evidence_graph
-from factgraph.application.retract_guard import (
-    RetractGuardError,
-    check_retract_allowed,
-)
 from factgraph.application.protocol import (
+    MAX_CAPTURED_EVALUATION_QUERY_EXPECTATIONS_V0,
+    CapturedEvaluationQueryRunV0,
     CompiledDerivationPlan,
     CompiledHeadCall,
     DerivationEvaluateRequest,
     DetachedRowError,
-    EntityRef as AppEntityRef,
-    EntitySelector as AppEntitySelector,
     EntityWriteCommand,
     ErrorDTO,
     Explanation,
     FieldMutation,
     FieldPath,
-    Rule as ApplicationRule,
     RuleExprError,
-    ScenarioFieldSubstitutionV0,
     ScenarioFieldSubstitutionSetV0,
+    ScenarioFieldSubstitutionV0,
     ScenarioResultDiffV0,
     ScenarioRunV0,
-    CapturedEvaluationQueryRunV0,
-    MAX_CAPTURED_EVALUATION_QUERY_EXPECTATIONS_V0,
+)
+from factgraph.application.protocol import (
+    EntityRef as AppEntityRef,
+)
+from factgraph.application.protocol import (
+    EntitySelector as AppEntitySelector,
+)
+from factgraph.application.protocol import (
+    Rule as ApplicationRule,
 )
 from factgraph.application.protocol.certainty import BOOLEAN_CERTAINTY, Certainty
 from factgraph.application.protocol.evaluate_result import (
+    _FORM1_ROW_SUPPORT_KINDS,
     ClaimKind,
     EvaluateResult,
     ResultFingerprint,
-    _FORM1_ROW_SUPPORT_KINDS,
     _build_closed_head_from_row,
     _build_minimal_row_evidence_graph,
     _derivation_output_to_evaluate_row,
@@ -110,16 +115,23 @@ from factgraph.application.protocol.evaluate_result import (
     _scenario_semantic_rows_digest,
     canonical_bytes_for_evaluate,
     closed_head_digest_for,
+    config_digest_for,
     expr_digest_for_payload,
     new_run_id,
     result_digest_for,
     result_id_for,
     rule_set_digest_for_entries,
-    config_digest_for,
     view_snapshot_digest_for_parts,
 )
-from factgraph.application.protocol.rule_expr import _RuleExpr, _coerce_rule_expr_operand, _iter_rule_operands
-from factgraph.application.protocol.rule_expr_inspect import _inspect_closed_head, pin_specs_for_closed_head
+from factgraph.application.protocol.rule_expr import (
+    _coerce_rule_expr_operand,
+    _iter_rule_operands,
+    _RuleExpr,
+)
+from factgraph.application.protocol.rule_expr_inspect import (
+    _inspect_closed_head,
+    pin_specs_for_closed_head,
+)
 from factgraph.application.protocol.rule_expr_lowering import (
     RuleExprAdapterSupport,
     RuleExprLoweringPlan,
@@ -130,43 +142,69 @@ from factgraph.application.protocol.rule_expr_lowering import (
     _validate_rule_expr_head_foundation,
     probe_seed_vars_by_head_port,
 )
-from factgraph.application.schema_runtime import build_schema_index, display_value, entity_type_from_ref
+from factgraph.application.retract_guard import (
+    RetractGuardError,
+    check_retract_allowed,
+)
+from factgraph.application.scenario_run_runtime import build_scenario_run_v0
+from factgraph.application.schema_mutation_runtime import (
+    SchemaAddResult,
+)
+from factgraph.application.schema_mutation_runtime import (
+    add_schema_classes as app_add_schema_classes,
+)
+from factgraph.application.schema_runtime import (
+    build_schema_index,
+    display_value,
+    entity_type_from_ref,
+)
+from factgraph.application.workspace_runtime import resolve_workspace_paths
 from factgraph.authoring.derivations import compile_authoring_derivation_v1
 from factgraph.authoring.rules import compile_authoring_rule_v1
 from factgraph.core.derivation.candidates import DerivationOutput
 from factgraph.core.evidence.write_protocol import WriteProtocolError, retract_by_asrt
 from factgraph.core.protocol.digests import sha256_hex
-from factgraph.core.rules.where_ast import PredAtom, Var
-from factgraph.core.semantics import SemanticsProfile, inspect_semantics_profile
-from factgraph.core.schema.meta_policy import lazy_meta_keys
-from factgraph.core.schema.schema_ir import schema_digest
-from factgraph.adapters.souffle.package import ExportOptions, export_package
 from factgraph.core.protocol.idref_v1 import encode_idref_v1
 from factgraph.core.rules.rule_ir import RuleRegistry, RuleSpec
+from factgraph.core.rules.where_ast import PredAtom, Var
+from factgraph.core.schema.meta_policy import lazy_meta_keys
+from factgraph.core.schema.schema_ir import schema_digest
+from factgraph.core.semantics import SemanticsProfile, inspect_semantics_profile
 from factgraph.core.store._artifact_sidecar import FileArtifactSidecar
 from factgraph.core.store._support import (
     PROBLOG_PROVENANCE_KIND,
     PYREASON_PROVENANCE_KIND,
     SOUFFLE_WITNESS_KIND,
-    ProvenanceEnvelope,
     ProofReceipt,
+    ProvenanceEnvelope,
     binding_dict_from_items,
 )
-from factgraph.adapters.souffle.runner import run_package
 from factgraph.core.store.database import (
+    _RESERVED_ASSERTION_META_KEYS,
     AssertionInput,
     CommitResult,
     Database,
     DatabaseError,
-    FrozenAssertionSet as DatabaseFrozenAssertionSet,
     MetaAppendInput,
     RevocationInput,
     SchemaTransitionInput,
-    _RESERVED_ASSERTION_META_KEYS,
     _read_tx_object,
     schema_object_exists_for_workspace,
     validate_schema_object_for_workspace,
     write_schema_object_for_workspace,
+)
+from factgraph.core.store.database import (
+    FrozenAssertionSet as DatabaseFrozenAssertionSet,
+)
+from factgraph.core.store.ledger import (
+    _ANNOTATION_COMPAT_PREFIX,
+    AnnotationRow,
+    Claim,
+    ClaimArg,
+    Ledger,
+    MetaRow,
+    Revokes,
+    _is_reserved_annotation_meta_key,
 )
 from factgraph.core.store.premise_filter import (
     MetaExclusion,
@@ -175,21 +213,14 @@ from factgraph.core.store.premise_filter import (
     validate_premise_configuration,
 )
 from factgraph.core.store.runtime import Store, premise_scoped_store_view
-from factgraph.core.store.ledger import (
-    AnnotationRow,
-    Claim,
-    ClaimArg,
-    Ledger,
-    MetaRow,
-    Revokes,
-    _ANNOTATION_COMPAT_PREFIX,
-    _is_reserved_annotation_meta_key,
+from factgraph.core.view.projector import (
+    build_args_for_claim,
+    canonical_fact_sort_key,
+    project_view_facts,
 )
-from factgraph.core.view.projector import build_args_for_claim, canonical_fact_sort_key, project_view_facts
 
 from .compile import compile_schema_from_classes
 from .dsl.branch import Case
-from .facade import _ASSERTION_FILTER_MISSING
 from .errors import (
     CardinalityError,
     EntityAlreadyExistsError,
@@ -201,6 +232,7 @@ from .errors import (
     SDKStoreError,
     SDKValueError,
 )
+from .facade import _ASSERTION_FILTER_MISSING
 from .schema import Entity, Field, Identity
 from .semantics import ProbLogConfig, PyReasonConfig
 
@@ -3675,7 +3707,10 @@ class SDKStore:
     def _inspect_rule(self, obj: Any) -> Any:
         from factgraph.application.protocol import Rule as ApplicationRule
         from factgraph.application.protocol.rule_expr import _RuleExpr
-        from factgraph.application.protocol.rule_expr_inspect import _inspect_application_rule, _inspect_rule_expr
+        from factgraph.application.protocol.rule_expr_inspect import (
+            _inspect_application_rule,
+            _inspect_rule_expr,
+        )
 
         if isinstance(obj, ApplicationRule):
             return _inspect_application_rule(obj, schema_index=self._application_schema_index)
@@ -3686,8 +3721,11 @@ class SDKStore:
     def _structure_rule(self, obj: Any, **kwargs: Any) -> Any:
         from factgraph.application.protocol import Rule as ApplicationRule
         from factgraph.application.protocol.rule import _is_projection_rule
-        from factgraph.application.protocol.rule_expr import _RuleExpr, _coerce_rule_expr_operand
-        from factgraph.application.protocol.rule_expr_lowering import _lower_application_rule, _lower_rule_expr
+        from factgraph.application.protocol.rule_expr import _coerce_rule_expr_operand, _RuleExpr
+        from factgraph.application.protocol.rule_expr_lowering import (
+            _lower_application_rule,
+            _lower_rule_expr,
+        )
         from factgraph.application.rule_structure import assemble_static_structure
 
         if isinstance(obj, ApplicationRule):

@@ -4,6 +4,7 @@ from collections.abc import Callable, Mapping, Sequence
 from types import MappingProxyType
 from typing import Any, TypeAlias, cast
 
+from factgraph.core.derivation.candidates import DerivationOutput
 from factgraph.core.rules.ruleref_substrate import evaluate_native_where
 from factgraph.core.rules.where_ast import (
     AggregateAtom,
@@ -21,14 +22,16 @@ from factgraph.core.rules.where_ast import (
     WhereExpr,
     parse_where_ir_to_ast,
 )
+from factgraph.core.rules.where_eval import WhereValidationError
+from factgraph.core.store import builders
 from factgraph.core.store._support import (
     _DEGRADED_SUPPORT_KINDS,
     _PROVENANCE_BEARING_SUPPORT_KINDS,
     _WITNESS_BEARING_SUPPORT_KINDS,
     ENGINE_NO_WITNESS_KIND,
     BindingSupportCapture,
-    ProofReceipt,
     ProjectedFact,
+    ProofReceipt,
     compute_support_digest,
     normalize_binding_items,
 )
@@ -38,13 +41,10 @@ from factgraph.core.store._support_capture import (
     find_matching_case_indexes,
     find_winning_case_index,
 )
-from factgraph.core.derivation.candidates import DerivationOutput
-from factgraph.core.rules.where_eval import WhereValidationError
-from factgraph.core.store import builders
 from factgraph.core.store.premise_filter import premise_scoped_ledger
 from factgraph.core.store.types import (
-    EngineExtBase,
     EngineEvaluatorFn,
+    EngineExtBase,
     EngineOptionsIR,
     EvaluateMode,
     HeadSpecIR,
@@ -52,7 +52,6 @@ from factgraph.core.store.types import (
     WhereIR,
 )
 from factgraph.core.view.projector import project_view_facts, project_view_facts_with_witness
-
 
 _NativeEffectiveRelationSnapshot: TypeAlias = Mapping[
     str, tuple[ProjectedFact, ...]

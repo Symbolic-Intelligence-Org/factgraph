@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass, field as dc_field
-from typing import Any, Literal, TypeAlias
+from dataclasses import dataclass
+from dataclasses import field as dc_field
 from types import MappingProxyType
+from typing import Any, Literal, TypeAlias
 
 from factgraph.application.protocol.certainty import BOOLEAN_CERTAINTY, Certainty
-
 
 TreeStatus = Literal["holds", "fails", "not_reached"]
 RuleRole = Literal["head", "body"]

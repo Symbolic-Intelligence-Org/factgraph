@@ -6,6 +6,7 @@ from itertools import combinations, product
 from typing import Iterable, Literal, NoReturn
 
 from factgraph._sdk_errors import SDKDSLError
+
 from .rule import Rule, RuleOccurrence, RulePortRef, RuleValidationError
 
 

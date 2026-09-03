@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from copy import deepcopy
 import unittest
+from copy import deepcopy
 
 from factgraph.application import build_schema_index, entity_info, field_predicate, resolve_selector
 from factgraph.application.protocol.common import ProtocolShapeError
@@ -12,6 +12,7 @@ from factgraph.application.protocol.evaluation_run_v2 import (
     evaluation_replay_payload_v2_from_bytes,
 )
 from factgraph.application.protocol.execution_profile_v2 import (
+    DeterministicSemanticsV2,
     EvaluationEnginePinV2,
     EvaluationExecutionProfileV2,
     EvaluationResourcePolicyV2,
@@ -19,7 +20,6 @@ from factgraph.application.protocol.execution_profile_v2 import (
     ExecutionAttachmentSemanticsV2,
     ExecutionAttachmentV2,
     ProbLogPointSemanticsV2,
-    DeterministicSemanticsV2,
 )
 from factgraph.application.protocol.scenario_v1 import (
     ScenarioEnsureMemberV1,
@@ -45,7 +45,6 @@ from factgraph.application.scenario_v2_runtime import (
 )
 from factgraph.core.store._support import ProjectedFact
 from factgraph.sdk import Entity, Field, Identity, SDKStore
-
 
 _A = "sha256:" + "a" * 64
 _B = "sha256:" + "b" * 64

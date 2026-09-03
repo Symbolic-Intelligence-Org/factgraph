@@ -18,9 +18,9 @@ receipt rather than its callable.
 
 from __future__ import annotations
 
+import json
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-import json
 from typing import TYPE_CHECKING, Any, Literal
 
 from factgraph.core.protocol.digests import sha256_hex, sha256_token
@@ -32,17 +32,17 @@ from .evaluation_query_target_runtime import (
     TargetedCompiledEvaluationQueryV0,
     assert_targeted_evaluation_query_current,
 )
+from .evaluation_run_v1_runtime import (
+    capture_evaluation_replay_payload_v1,
+    capture_evaluation_replay_world_v1,
+)
 from .portable_evaluation_runtime import (
-    PortableEvaluationError,
     PortableEngineObservationFrameV1,
+    PortableEvaluationError,
     PortableSelectedRowV1,
     execute_native_deterministic_v1,
     observe_portable_deterministic_v1,
     portable_dependency_predicate_ids_v1,
-)
-from .evaluation_run_v1_runtime import (
-    capture_evaluation_replay_payload_v1,
-    capture_evaluation_replay_world_v1,
 )
 from .protocol.evaluation_run_v1 import (
     EvaluationEnginePinV1,
@@ -60,10 +60,10 @@ from .protocol.goal_plan_v1 import (
     ExactLocalAbsenceExpectationV1,
     ExactLocalClosureStateV1,
     ExistsExpectationV1,
+    GoalExistsValueV1,
     GoalExpectationOutcomeV1,
     GoalExpectationStatusV1,
     GoalExpectationV1,
-    GoalExistsValueV1,
     GoalPlanV1,
     GoalResultModeV1,
     GoalResultRowV1,
@@ -104,13 +104,14 @@ from .scenario_v1_runtime import (
 )
 
 if TYPE_CHECKING:  # pragma: no cover - prevents SDK/application import cycle.
+    from factgraph.sdk.store import SDKStore
+
     from .evaluation_run_v1_runtime import (
         EvaluationRunExplanationV1,
         EvaluationRunReplayV1,
         PolicyVariantComparisonV1,
         ScenarioDiffV1,
     )
-    from factgraph.sdk.store import SDKStore
 
 
 GOAL_PLAN_V1_COMPILER_DIGEST = sha256_token(b"factgraph.goal_plan_v1.compiler.v1")

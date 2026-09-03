@@ -16,6 +16,7 @@ from factgraph.core.schema.meta_policy import (
     SYSTEM_MANAGED_META_KEYS,
 )
 from factgraph.core.store.ledger import (
+    _ANNOTATION_COMPAT_PREFIX,
     AnnotationRow,
     Claim,
     ClaimArg,
@@ -23,7 +24,6 @@ from factgraph.core.store.ledger import (
     Ledger,
     MetaRow,
     Revokes,
-    _ANNOTATION_COMPAT_PREFIX,
     _is_reserved_annotation_meta_key,
 )
 

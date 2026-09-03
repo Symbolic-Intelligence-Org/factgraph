@@ -4,16 +4,13 @@ from __future__ import annotations
 
 from typing import Any
 
-from factgraph.core.store import Store
-from factgraph.core.view.projector import project_view_facts_with_witness
-
 from factgraph.application.protocol import (
     EntityRef,
     FactOverlay,
     FactOverlayAction,
+    FieldPath,
     RemoveFact,
     ReplaceFact,
-    FieldPath,
 )
 from factgraph.application.schema_runtime import (
     SchemaIndex,
@@ -21,6 +18,8 @@ from factgraph.application.schema_runtime import (
     field_predicate,
     field_value_type,
 )
+from factgraph.core.store import Store
+from factgraph.core.view.projector import project_view_facts_with_witness
 
 from .errors import CapabilityHelperError
 

@@ -28,10 +28,10 @@ from factgraph.application.policy_explanation_runtime import (
     project_policy_explanation_v0,
 )
 from factgraph.application.protocol.captured_evaluation_query_run import (
+    MAX_CAPTURED_EVALUATION_QUERY_EXPECTATIONS_V0,
     CapturedEvaluationQueryRunExplanationV0,
     CapturedEvaluationQueryRunV0,
     CapturedEvaluationQueryRunVerificationV0,
-    MAX_CAPTURED_EVALUATION_QUERY_EXPECTATIONS_V0,
 )
 from factgraph.application.protocol.common import ProtocolShapeError
 from factgraph.application.protocol.evaluation_expectation import (
@@ -40,7 +40,6 @@ from factgraph.application.protocol.evaluation_expectation import (
     ResolvedExpectationValueV0,
 )
 from factgraph.application.protocol.evaluation_run_bundle import EvaluationRunBundleV0
-
 
 MAX_CAPTURED_EVALUATION_QUERY_RUN_BYTES = (
     4 * ((MAX_EVALUATION_RUN_BUNDLE_BYTES + 2) // 3) + 128 * 1024

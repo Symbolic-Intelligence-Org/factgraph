@@ -6,7 +6,6 @@ import re
 import struct
 from typing import Any
 
-
 TUP_V1_PREFIX = b"factpy\x00tup_v1\x00"
 INT64_MIN = -(1 << 63)
 INT64_MAX = (1 << 63) - 1

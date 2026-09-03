@@ -6,6 +6,7 @@ from typing import Any
 
 from factgraph.core.rules.where_ast import WhereASTError, parse_where_ir_to_ast
 from factgraph.core.rules.where_ast_validate import WhereASTValidationError, validate_where_ast
+
 from ..error_codes import QUERY_ALIAS_CONFLICT, QUERY_UNBOUND_VAR
 from .branch import Case
 from .errors import SDKDSLError

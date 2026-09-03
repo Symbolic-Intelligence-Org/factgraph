@@ -19,6 +19,7 @@ from factgraph.application.evaluation_query_target_runtime import (
     compile_targeted_evaluation_query,
     resolve_evaluation_query_target,
 )
+from factgraph.application.protocol.evaluation_expectation import ContainsRowExpectationV0
 from factgraph.application.protocol.evaluation_query import (
     EvaluationQueryBinding,
     EvaluationQueryError,
@@ -27,12 +28,11 @@ from factgraph.application.protocol.evaluation_query import (
     EvaluationQuerySelection,
     EvaluationQuerySelectionItem,
 )
-from factgraph.application.protocol.evaluation_expectation import ContainsRowExpectationV0
+from factgraph.application.protocol.evaluation_run_v1 import EvaluationExecutionProfileV1
 from factgraph.application.protocol.evaluation_scenario import (
     ScenarioFieldSubstitutionSetV0,
     ScenarioFieldSubstitutionV0,
 )
-from factgraph.application.protocol.evaluation_run_v1 import EvaluationExecutionProfileV1
 from factgraph.application.protocol.execution_profile_v2 import EvaluationExecutionProfileV2
 from factgraph.application.protocol.goal_plan_v1 import (
     GoalExpectationV1,

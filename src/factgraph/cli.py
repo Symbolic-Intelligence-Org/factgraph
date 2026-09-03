@@ -36,7 +36,6 @@ from factgraph.core.store.database import (
     write_schema_object_for_workspace,
 )
 
-
 _LEGACY_REGISTRY_DIR = "registry"
 _LEGACY_REGISTRY_SCHEMA_REL = "schema/schema_ir.json"
 _LEGACY_REGISTRY_MANIFEST = "registry_manifest.json"

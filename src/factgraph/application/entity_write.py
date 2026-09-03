@@ -35,6 +35,7 @@ from .protocol import (
     WarningDTO,
     WriteValue,
 )
+from .retract_guard import RetractGuardError, check_retract_allowed
 from .schema_runtime import (
     SchemaIndex,
     SchemaResolutionError,
@@ -44,7 +45,6 @@ from .schema_runtime import (
     field_value_type,
     resolve_selector,
 )
-from .retract_guard import RetractGuardError, check_retract_allowed
 from .value_validation import FieldValueValidationError, validate_field_value
 
 

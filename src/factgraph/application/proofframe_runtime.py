@@ -20,11 +20,11 @@ from factgraph.core.view.projector import project_view_facts_with_witness
 from .protocol import (
     FactOverlay,
     FactOverlayAction,
-    RemoveFact,
-    ReplaceFact,
     ProofFrameConditionVerdict,
     ProofFrameRecheckRequest,
     ProofFrameRecheckResult,
+    RemoveFact,
+    ReplaceFact,
     aggregate_proof_frame_status,
 )
 

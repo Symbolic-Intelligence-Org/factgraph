@@ -24,8 +24,8 @@ Commit 2a parity:
 """
 from __future__ import annotations
 
-from dataclasses import replace
 from collections.abc import Mapping, Sequence
+from dataclasses import replace
 from types import MappingProxyType
 from typing import Any
 
@@ -37,12 +37,12 @@ from factgraph.core.derivation.accept import (
 from factgraph.core.derivation.candidates import CandidateSet, DerivationOutput
 from factgraph.core.store import _accept as _store_accept
 from factgraph.core.store._evaluate import (
+    _evaluate_store,
     _NativeEffectiveRelationObserver,
     _NativeEffectiveRelationSnapshot,
     _NativeEffectiveRelationSupportArtifactObserver,
-    _evaluate_store,
 )
-from factgraph.core.store._support import ProofReceipt, ProjectedFact, compute_support_digest
+from factgraph.core.store._support import ProjectedFact, ProofReceipt, compute_support_digest
 from factgraph.core.store.runtime import Store
 
 from .protocol import (

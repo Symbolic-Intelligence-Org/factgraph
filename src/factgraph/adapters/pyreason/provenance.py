@@ -15,17 +15,18 @@ from typing import Any, Mapping
 
 from factgraph.adapters.pyreason._helpers import _parse_edge_component, _pred_short_name
 from factgraph.application.explain.evidence_tree import (
+    LAYOUT_TIMELINE,
     Const,
     EvidenceAtom,
     EvidenceGraph,
     EvidenceTimeline,
     Fact,
     Holds,
-    LAYOUT_TIMELINE,
     Source,
 )
 from factgraph.application.protocol.certainty import Certainty
 from factgraph.core.store._support import PYREASON_PROVENANCE_KIND
+
 
 @dataclass(frozen=True)
 class PyReasonTraceEventV0:

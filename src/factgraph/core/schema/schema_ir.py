@@ -10,7 +10,6 @@ from factgraph.core.schema.meta_policy import (
     validate_canonical_meta_keys,
 )
 
-
 CANONICAL_TAGS = {
     "entity_ref",
     "string",

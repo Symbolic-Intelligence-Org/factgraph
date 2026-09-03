@@ -2,14 +2,13 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation, localcontext
-import re
 from typing import Any
 
 from factgraph.core.semantics import SemanticsProfile
 from factgraph.core.store.types import EngineExtBase
-
 
 _CANONICAL_DECIMAL_RE = re.compile(r"(?:0|[1-9][0-9]*)(?:\.[0-9]+)?\Z")
 _MAX_WEIGHTED_CHOICE_PROBABILITY_CHARS = 32

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from factgraph.application import apply_ingest_request, entity_type_from_ref, field_value_type
 from factgraph.application.protocol import (

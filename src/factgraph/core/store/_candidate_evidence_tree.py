@@ -3,7 +3,6 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping, Sequence
 from typing import Any
 
-
 AssertionDetailLookup = Callable[[str], dict[str, Any] | None]
 SupportLookup = Callable[[str], dict[str, Any] | None]
 _MAX_RECURSION_DEPTH = 8

@@ -8,8 +8,8 @@ from factgraph.core.rules.where_eval import evaluate_where
 from factgraph.sdk import Entity, Field, Identity
 from factgraph.sdk.dsl import (
     DSLToApplicationRuleError,
-    SDKDSLError,
     Pred,
+    SDKDSLError,
     agg_count,
     agg_max,
     agg_mean,

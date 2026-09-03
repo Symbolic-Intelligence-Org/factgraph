@@ -8,31 +8,31 @@ Policy/EvaluationQuery path, while retaining the source identity that an
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 import json
+from dataclasses import dataclass, field
 
 from factgraph.core.protocol.digests import sha256_hex
 
-from .evaluation_query_runtime import (
-    CompiledEvaluationQueryV0,
-    _assert_compiled_evaluation_query_current,
-    compile_evaluation_query,
-)
 from .evaluation_expectation_runtime import (
     EvaluationExpectationError,
     assert_compiled_contains_row_expectation_current,
     compile_contains_row_expectations_v0,
 )
+from .evaluation_query_runtime import (
+    CompiledEvaluationQueryV0,
+    _assert_compiled_evaluation_query_current,
+    compile_evaluation_query,
+)
+from .evaluation_run_runtime import build_evaluation_run_target_v0
+from .policy_runtime import CompiledPolicyV0, _assert_compiled_policy_current, compile_policy
 from .protocol.evaluation_expectation import (
     CompiledContainsRowExpectationV0,
     ContainsRowExpectationV0,
 )
-from .evaluation_run_runtime import build_evaluation_run_target_v0
-from .policy_runtime import CompiledPolicyV0, _assert_compiled_policy_current, compile_policy
 from .protocol.evaluation_query import (
     EvaluationQuery,
-    EvaluationQueryError,
     EvaluationQueryBinding,
+    EvaluationQueryError,
     EvaluationQuerySelectionItem,
 )
 from .protocol.evaluation_run import EvaluationRunTargetV0
@@ -50,7 +50,6 @@ from .semantic_port_runtime import (
     SemanticPortResolutionError,
     assert_rule_contract_current,
 )
-
 
 _RULE_LIFT_PREFIX = "__factgraph_rule_lift__:"
 
