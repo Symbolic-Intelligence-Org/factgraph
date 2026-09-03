@@ -391,7 +391,7 @@ def _is_legacy_sdk_rule(value: object) -> bool:
 
 __all__ = [
     "ExplicitBoolError",
-    "RuleJoinConstraint",
     "RuleExpr",
     "RuleExprError",
+    "RuleJoinConstraint",
 ]

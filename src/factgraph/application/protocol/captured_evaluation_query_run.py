@@ -251,8 +251,8 @@ class CapturedEvaluationQueryRunVerificationV0:
 
 
 __all__ = [
+    "MAX_CAPTURED_EVALUATION_QUERY_EXPECTATIONS_V0",
     "CapturedEvaluationQueryRunExplanationV0",
     "CapturedEvaluationQueryRunV0",
     "CapturedEvaluationQueryRunVerificationV0",
-    "MAX_CAPTURED_EVALUATION_QUERY_EXPECTATIONS_V0",
 ]

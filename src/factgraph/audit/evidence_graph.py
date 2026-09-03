@@ -31,6 +31,8 @@ from factgraph.application.explain import (
 )
 
 __all__ = [
+    "LAYOUT_TIMELINE",
+    "LAYOUT_TREE",
     "Aggregate",
     "AtomForm",
     "BoundVar",
@@ -47,8 +49,6 @@ __all__ = [
     "Fact",
     "Fails",
     "Holds",
-    "LAYOUT_TIMELINE",
-    "LAYOUT_TREE",
     "LayoutHint",
     "NotReached",
     "PortRef",

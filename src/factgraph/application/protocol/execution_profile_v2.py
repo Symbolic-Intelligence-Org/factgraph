@@ -1143,6 +1143,13 @@ def evaluation_execution_profile_v2_from_bytes(raw: bytes) -> EvaluationExecutio
 
 
 __all__ = [
+    "MAX_EXECUTION_PROFILE_V2_ATTACHMENTS",
+    "MAX_EXECUTION_PROFILE_V2_BYTES",
+    "MAX_EXECUTION_PROFILE_V2_CAPTURE_BYTES",
+    "MAX_EXECUTION_PROFILE_V2_DEPTH",
+    "MAX_EXECUTION_PROFILE_V2_LOWERING_SLOTS",
+    "MAX_EXECUTION_PROFILE_V2_ROWS",
+    "MAX_EXECUTION_PROFILE_V2_TIMEOUT_MS",
     "DeterministicSemanticsV2",
     "EvaluationAttachmentKindV2",
     "EvaluationAttachmentSemanticsKindV2",
@@ -1158,13 +1165,6 @@ __all__ = [
     "EvaluationTargetSideV2",
     "ExecutionAttachmentSemanticsV2",
     "ExecutionAttachmentV2",
-    "MAX_EXECUTION_PROFILE_V2_ATTACHMENTS",
-    "MAX_EXECUTION_PROFILE_V2_BYTES",
-    "MAX_EXECUTION_PROFILE_V2_CAPTURE_BYTES",
-    "MAX_EXECUTION_PROFILE_V2_DEPTH",
-    "MAX_EXECUTION_PROFILE_V2_LOWERING_SLOTS",
-    "MAX_EXECUTION_PROFILE_V2_ROWS",
-    "MAX_EXECUTION_PROFILE_V2_TIMEOUT_MS",
     "ProbLogPointSemanticsV2",
     "ResolvedExecutionAttachmentV2",
     "ResolvedExecutionAttachmentsV2",

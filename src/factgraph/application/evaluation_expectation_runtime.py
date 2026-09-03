@@ -381,6 +381,6 @@ __all__ = [
     "EvaluationExpectationError",
     "assert_compiled_contains_row_expectation_current",
     "compile_contains_row_expectations_v0",
-    "evaluate_contains_row_expectations_v0",
     "evaluate_captured_contains_row_expectations_v0",
+    "evaluate_contains_row_expectations_v0",
 ]

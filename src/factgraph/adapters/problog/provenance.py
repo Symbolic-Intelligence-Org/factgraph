@@ -926,6 +926,6 @@ __all__ = [
     "parse_problog_trace",
     "problog_trace_from_dict",
     "problog_trace_to_candidate_evidence_tree",
-    "problog_trace_to_evidence_graph",
     "problog_trace_to_dict",
+    "problog_trace_to_evidence_graph",
 ]

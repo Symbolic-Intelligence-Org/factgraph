@@ -1652,10 +1652,10 @@ __all__ = [
     "PortableEvaluationResultV1",
     "PortableExecutionContractV1",
     "PortableSelectedRowV1",
-    "portable_dependency_predicate_ids_v1",
-    "observe_portable_deterministic_v1",
-    "execute_portable_deterministic_v1",
     "execute_native_deterministic_v1",
+    "execute_portable_deterministic_v1",
     "materialize_portable_effective_world_v1",
+    "observe_portable_deterministic_v1",
+    "portable_dependency_predicate_ids_v1",
     "validate_portable_deterministic_v1",
 ]

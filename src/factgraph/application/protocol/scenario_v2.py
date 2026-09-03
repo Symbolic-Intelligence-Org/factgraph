@@ -1064,15 +1064,16 @@ class EffectiveWorldV2:
 
 
 __all__ = [
-    "EffectiveWorldFactV2",
-    "EffectiveWorldV2",
-    "FactSemanticsV2",
     "MAX_DECIMAL_V2_CHARS",
     "MAX_DECIMAL_V2_SCALE",
     "MAX_SCENARIO_LABELS_V2",
     "MAX_SCENARIO_LABEL_V2_CHARS",
     "MAX_SCENARIO_NOTE_V2_CHARS",
     "MAX_SCENARIO_V2_OPERATIONS",
+    "EffectiveWorldFactV2",
+    "EffectiveWorldV2",
+    "FactSemanticsV2",
+    "ResolvedScenarioOperationEvidenceV2",
     "ScenarioDisplayV2",
     "ScenarioFactOriginV2",
     "ScenarioFactRawKindV2",
@@ -1080,7 +1081,6 @@ __all__ = [
     "ScenarioOperationMetaBindingV2",
     "ScenarioOperationV2",
     "ScenarioSpecV2",
-    "ResolvedScenarioOperationEvidenceV2",
     "canonical_decimal_v2",
     "lower_scenario_meta_v2",
     "scenario_operation_kind_v2",

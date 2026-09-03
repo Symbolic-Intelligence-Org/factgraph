@@ -109,15 +109,15 @@ if _missing_kind_map_keys:
 _SHARED_ANNOTATION_WHITELIST = SHARED_ANNOTATION_KEYS
 
 __all__ = [
-    "WriteProtocolError",
-    "PolicyNonDeterminismError",
     "_SYSTEM_MANAGED_META_KEYS",
+    "PolicyNonDeterminismError",
+    "WriteProtocolError",
+    "add_field",
     "new_assertion_id",
     "now_epoch_nanos",
-    "set_field",
-    "add_field",
-    "retract_by_asrt",
     "replace_field",
+    "retract_by_asrt",
+    "set_field",
 ]
 
 

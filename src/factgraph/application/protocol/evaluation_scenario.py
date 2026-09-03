@@ -426,10 +426,10 @@ def _token(label: str, payload: object) -> str:
 
 
 __all__ = [
-    "ScenarioFieldSubstitutionV0",
-    "ScenarioFieldSubstitutionSetV0",
     "ScenarioFieldSubstitutionOperationV0",
     "ScenarioFieldSubstitutionSetResolutionV0",
+    "ScenarioFieldSubstitutionSetV0",
+    "ScenarioFieldSubstitutionV0",
     "ScenarioInputValue",
     "ScenarioResolutionV0",
     "ScenarioResultDiffV0",

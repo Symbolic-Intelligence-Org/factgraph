@@ -449,11 +449,11 @@ def _reject_conflicting_carriers(carriers: list[tuple[str, tuple[float, ...]]]) 
 
 
 __all__ = [
+    "ProbLogRuleExt",
     "ProbLogWeightedChoiceArm",
     "ProbLogWeightedChoiceBranch",
     "ProbLogWeightedChoiceError",
     "ProbLogWeightedChoiceExt",
-    "ProbLogRuleExt",
     "branch_count_for_where",
     "materialize_problog_case_probabilities",
     "normalize_problog_case_probabilities",

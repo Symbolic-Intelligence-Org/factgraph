@@ -39,7 +39,7 @@ def initial_meta_annotation_v1(key: str) -> InitialMetaAnnotationV1 | None:
 
 
 __all__ = [
-    "InitialMetaAnnotationV1",
     "SHARED_ANNOTATION_KEYS",
+    "InitialMetaAnnotationV1",
     "initial_meta_annotation_v1",
 ]

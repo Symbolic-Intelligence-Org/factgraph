@@ -416,6 +416,10 @@ def invoke_relation_provider_v1(
 
 
 __all__ = [
+    "MAX_PROVIDER_BINDINGS_V1",
+    "MAX_PROVIDER_PREDICATES_V1",
+    "MAX_PROVIDER_ROWS_V1",
+    "MAX_PROVIDER_ROW_VALUES_V1",
     "ProviderMaterializationError",
     "ProviderMaterializationV1",
     "ProviderMaterializerV1",
@@ -423,9 +427,5 @@ __all__ = [
     "ProviderRequestV1",
     "RelationProviderKindV1",
     "RelationProviderV1",
-    "MAX_PROVIDER_BINDINGS_V1",
-    "MAX_PROVIDER_PREDICATES_V1",
-    "MAX_PROVIDER_ROWS_V1",
-    "MAX_PROVIDER_ROW_VALUES_V1",
     "invoke_relation_provider_v1",
 ]

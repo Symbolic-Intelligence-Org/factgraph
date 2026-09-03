@@ -306,8 +306,8 @@ CandidateSet: TypeAlias = DerivationOutput
 make_candidate = make_derivation_output
 
 __all__ = [
-    "CandidateSet",
     "CONFIDENCE_KINDS",
+    "CandidateSet",
     "DerivationOutput",
     "canonical_candidate_content",
     "compute_candidate_id_v2",

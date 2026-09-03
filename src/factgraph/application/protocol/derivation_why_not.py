@@ -339,8 +339,8 @@ class WhyNotUniverseResult:
 __all__ = [
     "WhyNotConditionLocator",
     "WhyNotEngine",
-    "WhyNotFailureKind",
     "WhyNotFailedRow",
+    "WhyNotFailureKind",
     "WhyNotRowDiagnostic",
     "WhyNotRowGranularity",
     "WhyNotRowStatus",

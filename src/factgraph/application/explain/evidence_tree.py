@@ -752,9 +752,11 @@ def _require_certainty_kind(value: Any) -> Literal["boolean", "probabilistic", "
 
 
 __all__ = [
+    "BOOLEAN_CERTAINTY",
+    "LAYOUT_TIMELINE",
+    "LAYOUT_TREE",
     "Aggregate",
     "AtomForm",
-    "BOOLEAN_CERTAINTY",
     "BoundVar",
     "Builtin",
     "Certainty",
@@ -772,12 +774,10 @@ __all__ = [
     "Fact",
     "Fails",
     "Holds",
-    "LAYOUT_TIMELINE",
-    "LAYOUT_TREE",
     "LayoutHint",
     "NotReached",
-    "PortRef",
     "PolicyConditionRole",
+    "PortRef",
     "RuleRole",
     "Source",
     "TreeStatus",

@@ -770,7 +770,7 @@ def _relationship_pred_ids(schema_ir: dict[str, Any]) -> set[str]:
 
 
 __all__ = [
+    "_materialize_edb_session",
     "pyreason_engine_eval",
     "resolve_pyreason_run_config",
-    "_materialize_edb_session",
 ]

@@ -494,8 +494,8 @@ __all__ = [
     "SouffleProofTreeV0",
     "SouffleProvenanceError",
     "parse_souffle_proof_json",
-    "run_provenance_explain",
     "run_package_provenance",
+    "run_provenance_explain",
     "souffle_proof_tree_from_dict",
     "souffle_proof_tree_to_evidence_graph",
 ]

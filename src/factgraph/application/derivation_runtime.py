@@ -417,8 +417,8 @@ def accept_derivation_candidate_sets(
 
 __all__ = [
     "DerivationRuntimeError",
+    "_evaluate_derivation_plans_with_native_effective_relation_capture",
     "accept_derivation_candidate_set",
     "accept_derivation_candidate_sets",
     "evaluate_derivation_plans",
-    "_evaluate_derivation_plans_with_native_effective_relation_capture",
 ]

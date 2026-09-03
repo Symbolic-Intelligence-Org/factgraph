@@ -623,7 +623,7 @@ def premise_scoped_store_view(store: Store) -> Store:
 
 __all__ = [
     "Store",
+    "get_engine_evaluator",
     "premise_scoped_store_view",
     "register_engine_evaluator",
-    "get_engine_evaluator",
 ]

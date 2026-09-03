@@ -162,6 +162,6 @@ def check_retract_allowed(
 __all__ = [
     "RetractClassification",
     "RetractGuardError",
-    "classify_retract_target",
     "check_retract_allowed",
+    "classify_retract_target",
 ]
