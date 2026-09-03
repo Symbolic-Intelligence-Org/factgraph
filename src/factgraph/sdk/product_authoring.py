@@ -63,7 +63,7 @@ from .dsl.application_rule import build_application_rule
 from .errors import SDKStoreError
 from .policy_authoring import (
     AuthoredPolicyTargetV1,
-    PolicyAuthoringError as PolicyAuthoringError,
+    PolicyAuthoringError,
     PolicyConstraintHandle,
     PolicyEntityPortHandle,
     PolicyFieldHandle,
@@ -2577,7 +2577,10 @@ class PolicyBuilder:
                 else PolicyAll((node, *constraints))
             )
             raw = PolicyNodeHandle(self._draft._owner, node)
-        target = self._draft.build(raw)
+        try:
+            target = self._draft.build(raw)
+        except PolicyAuthoringError:
+            raise
         # Q19 creates the private deterministic skeleton needed for existing
         # handle ownership and address-space checks.  Before publication,
         # replace every recorded skeleton with an intrinsic PolicyWeightedChoice
