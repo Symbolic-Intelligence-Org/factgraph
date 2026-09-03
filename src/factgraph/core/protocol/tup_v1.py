@@ -46,7 +46,7 @@ def _u32be(number: int) -> bytes:
 
 def _require_int64(value: Any, *, field: str) -> int:
     if isinstance(value, bool) or not isinstance(value, int):
-        raise ValueError(f"{field} must be int64")
+        raise ValueError(f"{field} must be int64")  # noqa: TRY004 - Integer/time encoding failures are wrapped by write_protocol.
     if value < INT64_MIN or value > INT64_MAX:
         raise ValueError(f"{field} is out of int64 range")
     return value
@@ -54,7 +54,7 @@ def _require_int64(value: Any, *, field: str) -> int:
 
 def _encode_string(value: Any) -> bytes:
     if not isinstance(value, str):
-        raise ValueError("string value must be str")
+        raise ValueError("string value must be str")  # noqa: TRY004 - String encoding failures are wrapped by write_protocol.
     try:
         return value.encode("utf-8")
     except UnicodeEncodeError as exc:
@@ -63,7 +63,7 @@ def _encode_string(value: Any) -> bytes:
 
 def _encode_entity_ref(value: Any) -> bytes:
     if not isinstance(value, str):
-        raise ValueError("entity_ref value must be str")
+        raise ValueError("entity_ref value must be str")  # noqa: TRY004 - Reference encoding failures are wrapped by write_protocol.
     if not value.startswith(ENTITY_REF_PREFIX):
         raise ValueError("entity_ref must start with idref_v1:")
     return _encode_string(value)
@@ -84,9 +84,10 @@ def _float64_bits(value: Any) -> int:
     elif isinstance(value, str):
         if not FLOAT64_HEX_RE.fullmatch(value):
             raise ValueError("float64 hex form must be 0x + 16 lowercase hex digits")
-        bits = int(value[2:], 16)
+        bits = int(value, 0)
     else:
-        raise ValueError("float64 value must be float or 0x<16hex> string")
+        # The write boundary translates all canonical float input failures.
+        raise ValueError("float64 value must be float or 0x<16hex> string")  # noqa: TRY004
 
     if bits == 0x8000000000000000:
         bits = 0
@@ -107,7 +108,7 @@ def display_float64_value(value: Any) -> str:
 
 def _encode_bool(value: Any) -> bytes:
     if not isinstance(value, bool):
-        raise ValueError("bool value must be bool")
+        raise ValueError("bool value must be bool")  # noqa: TRY004 - Boolean encoding failures are wrapped by write_protocol.
     return b"\x01" if value else b"\x00"
 
 
@@ -123,7 +124,8 @@ def _to_raw_bytes(value: Any) -> bytes:
 
 def _uuid_bytes(value: Any) -> bytes:
     if not isinstance(value, str):
-        raise ValueError("uuid value must be canonical lowercase string")
+        # UUID type and syntax failures share the canonical encoding error.
+        raise ValueError("uuid value must be canonical lowercase string")  # noqa: TRY004
     if not UUID_CANONICAL_RE.fullmatch(value):
         raise ValueError("uuid must match lowercase 8-4-4-4-12 form")
     return bytes.fromhex(value.replace("-", ""))
@@ -131,7 +133,7 @@ def _uuid_bytes(value: Any) -> bytes:
 
 def _normalize_tag(tag: Any) -> str:
     if not isinstance(tag, str):
-        raise ValueError("tag must be str")
+        raise ValueError("tag must be str")  # noqa: TRY004 - Invalid tags share the tuple codec's ValueError boundary.
     if tag not in TAG_CODE_BY_NAME:
         raise ValueError(f"unknown tag: {tag}")
     return tag
