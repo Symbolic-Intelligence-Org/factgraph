@@ -708,6 +708,11 @@ cached. `row_format="tuple"` still works but emits `DeprecationWarning`.
 SDK path. Evaluation is read-only; explicit writes go through `fg.fields.*`,
 `fg.assertions.retract(...)`, `fg.entities.edit(...)`, or `fg.batch(...)`.
 
+Captured predicate witnesses can be inspected without another evaluation through
+`fg.audit.support_witnesses(support_digest)`; see the
+[V1 support witness contract](21_support_witnesses.en.md). Classification and
+material availability are independent; old evidence is never backfilled.
+
 `fg.eval.evaluate_candidates(...)` remains only as temporary cross-repository
 compatibility debt for shipped Meander code. It returns the internal
 `DerivationOutput` class (also reachable under the legacy `CandidateSet` alias),

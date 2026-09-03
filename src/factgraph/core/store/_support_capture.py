@@ -20,6 +20,7 @@ from factgraph.core.store._support import (
     ProjectedFact,
     ProofReceipt,
     RuleRefEdge,
+    WitnessCapture,
     make_non_fact_step_key,
     make_pred_condition_key,
     normalize_asrt_ids,
@@ -36,7 +37,10 @@ def build_support_artifact_for_binding(
     root_result_kind: str,
     selected_case_index: int,
     rule_ref_edges: tuple[RuleRefEdge, ...] = (),
+    capture_witness_metadata: bool = False,
 ) -> ProofReceipt:
+    if not isinstance(capture_witness_metadata, bool):
+        raise TypeError("capture_witness_metadata must be bool")
     pred_witnesses: list[PredWitness] = []
     non_fact_steps: list[NonFactStep] = []
 
@@ -58,6 +62,7 @@ def build_support_artifact_for_binding(
                     atom=atom,
                     binding=binding,
                     witness_facts=witness_facts,
+                    capture_witness_metadata=capture_witness_metadata,
                 )
             )
             continue
@@ -71,6 +76,7 @@ def build_support_artifact_for_binding(
         )
 
     return ProofReceipt(
+        witness_capture_version=1 if capture_witness_metadata else None,
         kind="native_binding_v1",
         root_result_kind=_validate_root_result_kind(root_result_kind),
         binding_items=normalize_binding_items(binding),
@@ -210,6 +216,7 @@ def _build_pred_witness(
     atom: tuple[Any, ...],
     binding: dict[str, Any],
     witness_facts: dict[str, list[ProjectedFact]],
+    capture_witness_metadata: bool,
 ) -> PredWitness:
     _, pred_id, terms = atom
     if not isinstance(pred_id, str) or not pred_id:
@@ -218,16 +225,25 @@ def _build_pred_witness(
     if grounded_terms is None:
         raise WhereValidationError(f"selected branch contains ungroundable pred atom: {pred_id}")
 
-    matches: list[str] = []
+    matches: dict[str, WitnessCapture] = {}
     for projected in witness_facts.get(pred_id, []):
         if tuple(projected.fact_tuple) == grounded_terms:
-            matches.append(projected.asrt_id)
+            item = WitnessCapture(
+                witness_ref=projected.asrt_id,
+                kind=projected.witness_kind,
+                predicate_id=pred_id,
+                terms=tuple(projected.fact_tuple),
+            )
+            previous = matches.setdefault(projected.asrt_id, item)
+            if previous != item:
+                raise WhereValidationError("conflicting captured witness metadata")
     if not matches:
         raise WhereValidationError(f"selected branch lacks predicate witness for {pred_id}")
 
     return PredWitness(
         pred_condition_key=make_pred_condition_key(case_index, condition_index, pred_id),
         asrt_ids=normalize_asrt_ids(matches),
+        witnesses=tuple(matches[ref] for ref in sorted(matches)) if capture_witness_metadata else None,
     )
 
 

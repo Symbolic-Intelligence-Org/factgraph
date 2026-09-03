@@ -227,6 +227,7 @@ if TYPE_CHECKING:
         _SDKExecutionManagerV2,
         _SDKProbLogManagerV2,
     )
+    from .support_witnesses import SupportWitnessReportV1
 
 
 @dataclass(frozen=True)
@@ -1934,6 +1935,16 @@ class _SDKEvalManager:
 
 
 class _SDKAuditManager:
+    def support_witnesses(self, support_digest: str) -> SupportWitnessReportV1:
+        """Read original support witness kinds and material availability (V1).
+
+        Does not evaluate, reclassify historical evidence or write data. See
+        ``sdk.support_witnesses`` for availability and digest semantics.
+        """
+        from .support_witnesses import read_support_witnesses
+
+        return read_support_witnesses(self._sdk._store, support_digest)
+
     """Read-only namespace manager for the `audit` taxonomy group.
 
     Per §5.2 §5.2.1 placement #2, ``diff_proof_frames`` (G5) lives here
@@ -4186,6 +4197,7 @@ class SDKStore:
             request,
             store=self._store,
             registry=registry,
+            _capture_witness_metadata=True,
         )
 
     def _evaluate_compiled_evaluation_query_input(
@@ -5059,6 +5071,7 @@ class SDKStore:
             ),
             store=self._store,
             registry=None,
+            _capture_witness_metadata=True,
         )
         return outputs, compiled, plan, rules_by_id, engine, semantics_profile
 

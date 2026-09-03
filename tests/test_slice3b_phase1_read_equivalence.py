@@ -14,7 +14,7 @@ from unittest.mock import patch
 from factgraph.application.protocol.evaluate_result import view_snapshot_digest_for_parts
 from factgraph.core.policy.chosen import compute_chosen_for_predicate
 from factgraph.core.protocol.tup_v1 import claim_args_from_rest_terms
-from factgraph.core.store._support import PredWitness, ProofReceipt, compute_support_digest
+from factgraph.core.store._support import PredWitness, ProjectedFact, ProofReceipt, compute_support_digest
 from factgraph.core.store.database import (
     AssertionInput,
     Database,
@@ -640,6 +640,13 @@ def _schema_ir(*, version: int) -> dict[str, Any]:
 
 
 def _jsonable(value: Any) -> Any:
+    if isinstance(value, ProjectedFact):
+        # This golden freezes the pre-flip ledger read, not the later optional
+        # support capture extension. Preserve every historical field/byte and
+        # separately assert the origin of these ledger-only fixtures.
+        if value.witness_kind != "assertion":
+            raise AssertionError("ledger read lost its assertion classification")
+        return {"asrt_id": value.asrt_id, "fact_tuple": _jsonable(value.fact_tuple)}
     if dataclasses.is_dataclass(value):
         return _jsonable(dataclasses.asdict(value))
     if isinstance(value, bytes):

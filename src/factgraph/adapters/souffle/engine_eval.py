@@ -535,6 +535,7 @@ def _build_souffle_support_artifact(
         witness_facts_by_condition=witness_facts_by_condition,
     )
     native_like = build_support_artifact_for_binding(
+        capture_witness_metadata=True,
         where=where,
         binding=support_binding,
         witness_facts=witness_facts,
@@ -550,6 +551,7 @@ def _build_souffle_support_artifact(
         non_fact_steps=native_like.non_fact_steps,
         rule_refs=native_like.rule_refs,
         rule_ref_edges=native_like.rule_ref_edges,
+        witness_capture_version=native_like.witness_capture_version,
     )
 
 
@@ -570,6 +572,15 @@ def _build_synthetic_witness_facts_by_condition(
         ) from exc
 
     witness_facts_by_condition: dict[str, list[ProjectedFact]] = {}
+    # Resolve origin from the actual projected inventory, not ID syntax. The
+    # inventory is read during capture; the public report never reprojects it.
+    from factgraph.core.store import Store
+    from factgraph.core.view.projector import project_view_facts_with_witness
+
+    projected_inventory = (
+        project_view_facts_with_witness(store.ledger, store.schema_ir)
+        if isinstance(store, Store) else {}
+    )
     for condition_index, atom in enumerate(branch):
         if not isinstance(atom, tuple) or not atom or atom[0] != "pred":
             continue
@@ -583,6 +594,11 @@ def _build_synthetic_witness_facts_by_condition(
         facts: list[ProjectedFact] = []
         for asrt_id in sorted(asrt_ids):
             projected = _projected_fact_from_claim(store, pred_id=pred_id, asrt_id=asrt_id)
+            if projected is None:
+                projected = next(
+                    (fact for fact in projected_inventory.get(pred_id, ()) if fact.asrt_id == asrt_id),
+                    None,
+                )
             if projected is None:
                 projected = ProjectedFact(
                     asrt_id=asrt_id,
@@ -697,7 +713,7 @@ def _projected_fact_from_claim(store: Any, *, pred_id: str, asrt_id: str) -> Pro
         if not isinstance(term, tuple) or len(term) != 2:
             raise WhereValidationError(f"malformed rest term for witness claim: {asrt_id}")
         values.append(term[1])
-    return ProjectedFact(asrt_id=asrt_id, fact_tuple=tuple(values))
+    return ProjectedFact(asrt_id=asrt_id, fact_tuple=tuple(values), witness_kind="assertion")
 
 
 def _normalize_where_branches(where: list[Any]) -> list[list[tuple[Any, ...]]]:

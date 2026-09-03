@@ -170,6 +170,7 @@ def project_view_facts_with_witness(
                         support_asrt_ids=support,
                     ),
                     fact_tuple=fact,
+                    witness_kind="virtual",
                 )
                 for fact, support in virtual_exists.get(pred_id, ())
             ]
@@ -184,6 +185,7 @@ def project_view_facts_with_witness(
             ProjectedFact(
                 asrt_id=claim.asrt_id,
                 fact_tuple=build_args_for_claim(ledger, claim),
+                witness_kind="assertion",
             )
             for claim in selected_claims
         ]

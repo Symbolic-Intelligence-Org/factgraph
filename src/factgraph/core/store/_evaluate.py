@@ -121,6 +121,7 @@ def _evaluate_store(
     _native_effective_relation_observer: _NativeEffectiveRelationObserver | None = None,
     _native_effective_relation_override: _NativeEffectiveRelationSnapshot | None = None,
     _record_support_artifacts: bool = True,
+    _capture_witness_metadata: bool = False,
     _native_effective_relation_support_artifact_observer: (
         _NativeEffectiveRelationSupportArtifactObserver | None
     ) = None,
@@ -241,6 +242,7 @@ def _evaluate_store(
             store,
             where,
             root_result_kind="entity",
+            _capture_witness_metadata=_capture_witness_metadata,
             registry=registry,
             _native_effective_relation_observer=_native_effective_relation_observer,
             _native_effective_relation_override=_native_effective_relation_override,
@@ -300,6 +302,7 @@ def _evaluate_store(
         store,
         where,
         root_result_kind="fact",
+        _capture_witness_metadata=_capture_witness_metadata,
         registry=registry,
         _native_effective_relation_observer=_native_effective_relation_observer,
         _native_effective_relation_override=_native_effective_relation_override,
@@ -387,6 +390,7 @@ def _evaluate_where_over_view_with_support(
     _native_effective_relation_observer: _NativeEffectiveRelationObserver | None = None,
     _native_effective_relation_override: _NativeEffectiveRelationSnapshot | None = None,
     _record_support_artifacts: bool = True,
+    _capture_witness_metadata: bool = False,
     _native_effective_relation_support_artifact_observer: (
         _NativeEffectiveRelationSupportArtifactObserver | None
     ) = None,
@@ -524,6 +528,7 @@ def _evaluate_where_over_view_with_support(
                 selected_case_index=selected_case_index,
             )
             artifact = build_support_artifact_for_binding(
+                capture_witness_metadata=_capture_witness_metadata,
                 where=where,
                 binding=binding,
                 witness_facts=cast(Any, witness_facts),

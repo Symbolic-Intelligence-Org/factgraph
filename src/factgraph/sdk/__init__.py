@@ -39,6 +39,12 @@ from .rule_program import (
     RuleProgramResult,
 )
 from .store import FactGraph, SDKStore
+from .support_witnesses import (
+    SUPPORT_WITNESS_CONTRACT_V1,
+    SupportWitnessError,
+    SupportWitnessReportV1,
+    SupportWitnessV1,
+)
 from .evaluation_query_builder import (
     EvaluationQueryBuilderV1,
     ProviderQueryTargetV1,
@@ -251,6 +257,10 @@ from .ingest import IngestResult, ValidationReport
 ApplicationRule = Rule
 
 __all__ = [
+    "SUPPORT_WITNESS_CONTRACT_V1",
+    "SupportWitnessError",
+    "SupportWitnessReportV1",
+    "SupportWitnessV1",
     "SEMANTIC_CANDIDATE_RESOLVER_CONTRACT_DIGEST_V1",
     "SEMANTIC_CANDIDATE_RESOLVER_CONTRACT_V1",
     "SemanticCandidateMatchMode",

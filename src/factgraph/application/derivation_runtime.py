@@ -81,6 +81,7 @@ def evaluate_derivation_plans(
     *,
     store: Store,
     registry: Any | None = None,
+    _capture_witness_metadata: bool = False,
 ) -> list[DerivationOutput]:
     """Evaluate compiled derivation plans against the store.
 
@@ -94,6 +95,7 @@ def evaluate_derivation_plans(
         store=store,
         registry=registry,
         _native_effective_relation_observer=None,
+        _capture_witness_metadata=_capture_witness_metadata,
     )
 
 
@@ -225,6 +227,7 @@ def _evaluate_derivation_plans(
     _native_effective_relation_observer: _NativeEffectiveRelationObserver | None,
     _native_effective_relation_override: Mapping[str, Sequence[ProjectedFact]] | None = None,
     _record_support_artifacts: bool = True,
+    _capture_witness_metadata: bool = False,
     _native_effective_relation_support_artifact_observer: (
         _NativeEffectiveRelationSupportArtifactObserver | None
     ) = None,
@@ -240,6 +243,7 @@ def _evaluate_derivation_plans(
                 _native_effective_relation_observer=_native_effective_relation_observer,
                 _native_effective_relation_override=_native_effective_relation_override,
                 _record_support_artifacts=_record_support_artifacts,
+                _capture_witness_metadata=_capture_witness_metadata,
                 _native_effective_relation_support_artifact_observer=(
                     _native_effective_relation_support_artifact_observer
                 ),
@@ -259,6 +263,7 @@ def _evaluate_plan(
     _native_effective_relation_observer: _NativeEffectiveRelationObserver | None,
     _native_effective_relation_override: Mapping[str, Sequence[ProjectedFact]] | None,
     _record_support_artifacts: bool,
+    _capture_witness_metadata: bool,
     _native_effective_relation_support_artifact_observer: (
         _NativeEffectiveRelationSupportArtifactObserver | None
     ),
@@ -286,6 +291,7 @@ def _evaluate_plan(
                 _native_effective_relation_observer=_native_effective_relation_observer,
                 _native_effective_relation_override=_native_effective_relation_override,
                 _record_support_artifacts=_record_support_artifacts,
+                _capture_witness_metadata=_capture_witness_metadata,
                 _native_effective_relation_support_artifact_observer=(
                     _native_effective_relation_support_artifact_observer
                 ),
@@ -310,6 +316,7 @@ def _evaluate_plan(
             _native_effective_relation_observer=_native_effective_relation_observer,
             _native_effective_relation_override=_native_effective_relation_override,
             _record_support_artifacts=_record_support_artifacts,
+            _capture_witness_metadata=_capture_witness_metadata,
             _native_effective_relation_support_artifact_observer=(
                 _native_effective_relation_support_artifact_observer
             ),
