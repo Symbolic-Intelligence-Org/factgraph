@@ -152,7 +152,7 @@ def project_view_facts_with_witness(
     if not isinstance(predicates, list):
         raise ViewProjectionError("schema_ir.predicates must be list")
 
-    virtual_exists = _virtual_entity_exists_rows(ledger, schema_ir)
+    virtual_exists = _project_entity_domains_with_witness(ledger, schema_ir)
     output: dict[str, list[ProjectedFact]] = {}
     for schema_pred in predicates:
         if not isinstance(schema_pred, dict):
@@ -162,22 +162,7 @@ def project_view_facts_with_witness(
             raise ViewProjectionError("predicate pred_id must be non-empty string")
 
         if bool(schema_pred.get("is_entity_exists", False)):
-            projected = [
-                ProjectedFact(
-                    asrt_id=_virtual_exists_witness_id(
-                        pred_id=pred_id,
-                        e_ref=fact[0],
-                        support_asrt_ids=support,
-                    ),
-                    fact_tuple=fact,
-                    witness_kind="virtual",
-                )
-                for fact, support in virtual_exists.get(pred_id, ())
-            ]
-            output[pred_id] = sorted(
-                projected,
-                key=lambda row: canonical_fact_sort_key(row.fact_tuple),
-            )
+            output[pred_id] = virtual_exists.get(pred_id, [])
             continue
 
         selected_claims = _select_view_claims(ledger, schema_pred)
@@ -234,6 +219,33 @@ def _select_view_claims(
     if cardinality == "multi":
         return active_claims
     raise ViewProjectionError(f"unsupported cardinality: {cardinality}")
+
+
+def _project_entity_domains_with_witness(
+    ledger: Ledger,
+    schema_ir: dict[str, Any],
+) -> dict[str, list[ProjectedFact]]:
+    """Internal domain-only projection; ordinary fields are not projected.
+
+    The opaque witness commits to chosen Identity supports, not a ledger
+    assertion. Adapters must not treat it as an annotation/citation capability.
+    """
+    return {
+        pred_id: sorted(
+            [
+                ProjectedFact(
+                    asrt_id=_virtual_exists_witness_id(
+                        pred_id=pred_id, e_ref=fact[0], support_asrt_ids=support,
+                    ),
+                    fact_tuple=fact,
+                    witness_kind="virtual",
+                )
+                for fact, support in rows
+            ],
+            key=lambda row: canonical_fact_sort_key(row.fact_tuple),
+        )
+        for pred_id, rows in _virtual_entity_exists_rows(ledger, schema_ir).items()
+    }
 
 
 def _virtual_entity_exists_rows(
@@ -309,9 +321,9 @@ def _virtual_entity_exists_rows(
                 values[claim.e_ref] = (fact[1], claim.asrt_id)
             selected_by_field.append((field_name, type_domain, values))
 
-        candidates: set[str] = set()
-        for _field_name, _type_domain, values in selected_by_field:
-            candidates = set(values) if not candidates else candidates & set(values)
+        candidates = set(selected_by_field[0][2]) if selected_by_field else set()
+        for _field_name, _type_domain, values in selected_by_field[1:]:
+            candidates.intersection_update(values)
 
         rows: list[tuple[tuple[Any, ...], tuple[str, ...]]] = []
         for e_ref in sorted(candidates, key=lambda item: item.encode("utf-8")):
