@@ -61,7 +61,7 @@ def _canonical_choice_probability(value: object, *, field_name: str) -> str:
             f"{field_name} is not a decimal",
             code="PROBLOG_WEIGHTED_CHOICE_INVALID_PROBABILITY",
         ) from exc
-    if not (Decimal("0") < decimal <= Decimal("1")):
+    if not (Decimal(0) < decimal <= Decimal(1)):
         raise ProbLogWeightedChoiceError(
             f"{field_name} must be in (0, 1]",
             code="PROBLOG_WEIGHTED_CHOICE_INVALID_PROBABILITY",
@@ -157,8 +157,8 @@ class ProbLogWeightedChoiceExt:
             )
         with localcontext() as context:
             context.prec = 128
-            total = sum((Decimal(arm.probability) for arm in ordered_arms), Decimal("0"))
-        if total != Decimal("1"):
+            total = sum((Decimal(arm.probability) for arm in ordered_arms), Decimal(0))
+        if total != Decimal(1):
             raise ProbLogWeightedChoiceError(
                 "exclusive annotated-disjunction arm probabilities must sum exactly to 1",
                 code="PROBLOG_WEIGHTED_CHOICE_PROBABILITY_TOTAL",

@@ -2116,7 +2116,7 @@ class Ledger:
         if not selected_keys:
             return ()
         placeholders = ",".join("?" for _ in selected_keys)
-        params: list[Any] = list(sorted(selected_keys))
+        params: list[Any] = sorted(selected_keys)
         where = f"key IN ({placeholders})"
         if asrt_id is not None:
             where += " AND asrt_id = ?"

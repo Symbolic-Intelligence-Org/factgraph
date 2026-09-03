@@ -442,8 +442,8 @@ class PolicyWeightedChoice:
             )
         with localcontext() as context:
             context.prec = 128
-            total = sum((Decimal(item.probability) for item in arms), Decimal("0"))
-        if total != Decimal("1"):
+            total = sum((Decimal(item.probability) for item in arms), Decimal(0))
+        if total != Decimal(1):
             raise _shape(
                 "exclusive WeightedChoice probabilities must sum exactly to 1",
                 "INVALID_POLICY_WEIGHTED_CHOICE",
@@ -912,7 +912,7 @@ def _canonical_weighted_choice_probability(value: object) -> str:
             "WeightedChoice probability is not a decimal",
             "INVALID_POLICY_WEIGHTED_CHOICE",
         ) from exc
-    if not Decimal("0") < numeric <= Decimal("1"):
+    if not Decimal(0) < numeric <= Decimal(1):
         raise _shape(
             "WeightedChoice probability must lie in (0, 1]",
             "INVALID_POLICY_WEIGHTED_CHOICE",

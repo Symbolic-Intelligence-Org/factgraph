@@ -1026,7 +1026,7 @@ def _canonical_probability(value: object) -> str:
             "WeightedChoice probability is not a decimal",
             code="WEIGHTED_CHOICE_INVALID_PROBABILITY",
         ) from exc
-    if not (Decimal("0") < decimal <= Decimal("1")):
+    if not (Decimal(0) < decimal <= Decimal(1)):
         raise ProductAuthoringError(
             "WeightedChoice probability must be greater than zero and at most one",
             code="WEIGHTED_CHOICE_INVALID_PROBABILITY",
@@ -1137,8 +1137,8 @@ class WeightedChoiceTopologyV1:
             )
         with localcontext() as context:
             context.prec = 128
-            total = sum((Decimal(arm.probability) for arm in ordered_arms), Decimal("0"))
-        if total != Decimal("1"):
+            total = sum((Decimal(arm.probability) for arm in ordered_arms), Decimal(0))
+        if total != Decimal(1):
             raise ProductAuthoringError(
                 "exclusive WeightedChoice arm probabilities must sum exactly to 1",
                 code="WEIGHTED_CHOICE_PROBABILITY_TOTAL",
