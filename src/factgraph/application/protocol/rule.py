@@ -610,11 +610,14 @@ def _find_entity_ref_type(var: Var, atoms: tuple[Atom, ...]) -> str | None:
 
 
 def _find_entity_ref_type_in_atom(var: Var, atom: Atom) -> str | None:
-    if isinstance(atom, PredAtom) and atom.pred_id.endswith(":exists"):
-        if any(term == var for term in atom.terms):
-            entity_type = atom.pred_id[: -len(":exists")]
-            if entity_type:
-                return entity_type
+    if (
+        isinstance(atom, PredAtom)
+        and atom.pred_id.endswith(":exists")
+        and any(term == var for term in atom.terms)
+    ):
+        entity_type = atom.pred_id[: -len(":exists")]
+        if entity_type:
+            return entity_type
     if isinstance(atom, NotAtom):
         return _find_entity_ref_type_in_expr(var, atom.body)
     return None

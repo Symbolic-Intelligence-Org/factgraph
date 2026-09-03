@@ -1023,9 +1023,12 @@ def _aggregate_target_label(target: Any, filter_atoms: Any) -> str:
             terms = atom[2]
             if not isinstance(terms, Sequence) or isinstance(terms, (str, bytes)):
                 continue
-            if target_vars & set(vars_in_atom_tuple(terms)):
-                if isinstance(pred_id, str) and ":" in pred_id:
-                    return pred_id.rsplit(":", 1)[1]
+            if (
+                target_vars & set(vars_in_atom_tuple(terms))
+                and isinstance(pred_id, str)
+                and ":" in pred_id
+            ):
+                return pred_id.rsplit(":", 1)[1]
     if target_vars:
         return _clean_var_label(sorted(target_vars)[0])
     return "value"

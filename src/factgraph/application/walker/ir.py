@@ -235,23 +235,21 @@ def _snapshot_atom(atom: object) -> tuple[Any, ...]:
     kind = frozen[0]
     if not isinstance(kind, str) or not kind:
         raise WalkerSnapshotError("IR atom kind must be non-empty string")
-    if kind == "pred":
-        if (
-            len(frozen) != 3
-            or not isinstance(frozen[1], str)
-            or not frozen[1]
-            or not isinstance(frozen[2], tuple)
-        ):
-            raise WalkerSnapshotError("pred atom must be ('pred', pred_id, [terms...])")
-    if kind == "ruleref":
-        if (
-            len(frozen) != 4
-            or not isinstance(frozen[1], str)
-            or not frozen[1]
-            or not (frozen[2] is None or (isinstance(frozen[2], str) and bool(frozen[2])))
-            or not isinstance(frozen[3], tuple)
-        ):
-            raise WalkerSnapshotError("ruleref atom must be ('ruleref', rule_id, version, [terms...])")
+    if kind == "pred" and (
+        len(frozen) != 3
+        or not isinstance(frozen[1], str)
+        or not frozen[1]
+        or not isinstance(frozen[2], tuple)
+    ):
+        raise WalkerSnapshotError("pred atom must be ('pred', pred_id, [terms...])")
+    if kind == "ruleref" and (
+        len(frozen) != 4
+        or not isinstance(frozen[1], str)
+        or not frozen[1]
+        or not (frozen[2] is None or (isinstance(frozen[2], str) and bool(frozen[2])))
+        or not isinstance(frozen[3], tuple)
+    ):
+        raise WalkerSnapshotError("ruleref atom must be ('ruleref', rule_id, version, [terms...])")
     return frozen
 
 

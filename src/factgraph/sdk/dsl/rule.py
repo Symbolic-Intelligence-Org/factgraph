@@ -464,14 +464,14 @@ def _validate_query_where_branch_wrapper(node: Any, *, path: str) -> None:
         for idx, item in enumerate(node):
             _validate_query_where_branch_wrapper(item, path=f"{path}[{idx}]")
         return
-    if isinstance(node, tuple):
-        if (
-            len(node) == 3
-            and node[0] == "__body__"
-            and isinstance(node[1], list)
-        ):
-            for idx, atom in enumerate(node[1]):
-                _validate_query_where_branch_wrapper(atom, path=f"{path}[1][{idx}]")
+    if (
+        isinstance(node, tuple)
+        and len(node) == 3
+        and node[0] == "__body__"
+        and isinstance(node[1], list)
+    ):
+        for idx, atom in enumerate(node[1]):
+            _validate_query_where_branch_wrapper(atom, path=f"{path}[1][{idx}]")
 
 
 def _normalize_derivation_head_items(head: Any) -> tuple[HeadCall, ...]:

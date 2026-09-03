@@ -151,17 +151,20 @@ def sdk_validate_provenance(
 
     # Optional but semantically meaningful if present.
     for key in ("schema_digest", "policy_digest"):
-        if key in source_obj and source_obj.get(key) is not None:
-            if not _is_sha256_token(source_obj.get(key)):
-                warnings.append(
-                    _diag(
-                        code="provenance_optional_digest_malformed",
-                        severity="warning",
-                        path=f"$.provenance.{key}",
-                        message=f"{key} should be 'sha256:<hex>' when provided",
-                        data={"key": key},
-                    )
+        if (
+            key in source_obj
+            and source_obj.get(key) is not None
+            and not _is_sha256_token(source_obj.get(key))
+        ):
+            warnings.append(
+                _diag(
+                    code="provenance_optional_digest_malformed",
+                    severity="warning",
+                    path=f"$.provenance.{key}",
+                    message=f"{key} should be 'sha256:<hex>' when provided",
+                    data={"key": key},
                 )
+            )
 
     return ValidationReport(ok=not errors, warnings=warnings, errors=errors)
 

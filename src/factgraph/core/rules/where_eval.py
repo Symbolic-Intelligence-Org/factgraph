@@ -667,11 +667,10 @@ def _eval_not_atom(
 
     out: list[dict[str, Any]] = []
     for env in envs:
-        if not any(var in env for var in vars_in_not_body):
-            if not ast_gate_on:
-                raise WhereValidationError(
-                    "not body must reference at least one outer bound variable"
-                )
+        if not any(var in env for var in vars_in_not_body) and not ast_gate_on:
+            raise WhereValidationError(
+                "not body must reference at least one outer bound variable"
+            )
         correlated_vars = sorted(var for var in vars_in_not_body if var in env)
         if len(not_branches) > 1 and correlated_vars:
             for branch in not_branches:

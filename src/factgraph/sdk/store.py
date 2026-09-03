@@ -843,9 +843,10 @@ class AssertionsManager:
                 claim_tag = claim.rest_terms[-1][0] if claim.rest_terms else None
                 if claim_tag != value_tag:
                     continue
-            if _meta is not _ASSERTION_FILTER_MISSING:
-                if any(record.meta.raw.get(key) != expected for key, expected in _meta.items()):
-                    continue
+            if _meta is not _ASSERTION_FILTER_MISSING and any(
+                record.meta.raw.get(key) != expected for key, expected in _meta.items()
+            ):
+                continue
             records.append(record)
         return AssertionRecordSet(records)
 
