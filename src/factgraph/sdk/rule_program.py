@@ -25,6 +25,7 @@ from factgraph.core.store.premise_filter import (
 )
 
 from .errors import SDKValueError
+from .program_witnesses import RuleProgramWitnessReportV1
 
 
 @dataclass(frozen=True)
@@ -165,6 +166,7 @@ class RuleProgramExplanation:
     steps: tuple[dict[str, Any], ...]
     checked_scope: dict[str, Any]
     evidence: EvidenceGraph
+    witness_report: RuleProgramWitnessReportV1 | None = None
 
     @property
     def repr(self) -> tuple[str, ...]:
@@ -219,6 +221,7 @@ class RuleProgramResult:
         compare=False,
         default=(),
     )
+    _witness_report: RuleProgramWitnessReportV1 | None = field(default=None, repr=False, compare=False)
 
     def explain(self) -> RuleProgramExplanation:
         """Return immutable evidence and support captured by this evaluation.
@@ -235,6 +238,11 @@ class RuleProgramResult:
 
         if self._evidence is None:
             raise SDKValueError("RuleProgramResult has no canonical EvidenceGraph")
+        # New native results read only the sealed result-owned capture. Earlier
+        # mutable projections and live Store/cache state cannot alter Explain.
+        captured = self._witness_report.to_dict() if self._witness_report is not None else None
+        evidence = self._witness_report.evidence if self._witness_report is not None else self._evidence
+        steps = tuple(captured["support_steps"]) if captured is not None else self._support_steps
         checked_scope = {
             "engine": self.engine,
             "effective_rule_ids": list(self.effective_rule_ids),
@@ -249,16 +257,18 @@ class RuleProgramResult:
                 root_support_digest=None,
                 steps=(),
                 checked_scope=checked_scope,
-                evidence=self._evidence,
+                evidence=evidence,
+                witness_report=self._witness_report,
             )
 
         return RuleProgramExplanation(
             status="passed",
             failure_class=None,
             root_support_digest=self.support_digest,
-            steps=self._support_steps,
+            steps=steps,
             checked_scope=checked_scope,
-            evidence=self._evidence,
+            evidence=evidence,
+            witness_report=self._witness_report,
         )
 
 

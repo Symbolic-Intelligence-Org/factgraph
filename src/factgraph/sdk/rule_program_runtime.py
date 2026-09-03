@@ -51,6 +51,7 @@ from factgraph.core.store.premise_filter import validate_premise_configuration
 from factgraph.core.view.projector import project_view_facts_with_witness
 
 from .errors import SDKStoreError
+from .program_witnesses import ProgramWitnessCapture
 from .rule_program import (
     EvaluationPremiseScope,
     RuleProgram,
@@ -153,7 +154,8 @@ def evaluate_rule_program(
         blocks,
     )
     witness_facts = project_view_facts_with_witness(scoped_ledger, sdk.store.schema_ir)
-    _merge_program_facts(sdk, witness_facts, program)
+    witness_capture = ProgramWitnessCapture(sdk.store.schema_ir, witness_facts)
+    _merge_program_facts(sdk, witness_facts, program, witness_capture)
     view_facts = {
         pred_id: [row.fact_tuple for row in rows]
         for pred_id, rows in witness_facts.items()
@@ -224,6 +226,7 @@ def evaluate_rule_program(
     support_steps = _support_steps(sdk, support_digest)
     evidence = _program_evidence_graph(
         sdk,
+        witness_capture=witness_capture,
         program=program,
         goal=goal,
         compiled=compiled,
@@ -249,6 +252,11 @@ def evaluate_rule_program(
         support_digest=support_digest,
         _evidence=evidence,
         _support_steps=support_steps,
+        _witness_report=witness_capture.freeze(
+            goal=goal, engine=engine, rule_set_digest=rule_set_digest,
+            view_snapshot_digest=view_snapshot_digest, premise_scope_digest=premise_scope_digest,
+            root_support_digest=support_digest, steps=support_steps, evidence=evidence,
+        ),
     )
 
 
@@ -328,6 +336,7 @@ def _merge_program_facts(
     sdk: Any,
     witness_facts: dict[str, list[ProjectedFact]],
     program: RuleProgram,
+    witness_capture: ProgramWitnessCapture,
 ) -> None:
     """Overlay explicit program axioms on the premise-scoped customer view."""
 
@@ -350,6 +359,7 @@ def _merge_program_facts(
         rows = witness_facts.setdefault(fact.predicate, [])
         if any(row.fact_tuple == fact.terms for row in rows):
             continue
+        witness_capture.program_inserted(fact)
         rows.append(ProjectedFact(asrt_id=fact.fact_id, fact_tuple=fact.terms))
         rows.sort(key=lambda row: tuple(str(part) for part in row.fact_tuple))
 
@@ -602,6 +612,7 @@ def _support_steps(
 def _program_evidence_graph(
     sdk: Any,
     *,
+    witness_capture: ProgramWitnessCapture,
     program: RuleProgram,
     goal: RuleProgramGoal,
     compiled: list[Any],
@@ -673,6 +684,8 @@ def _program_evidence_graph(
             body_rules.append(
                 _evidence_rule_for_program_clause(
                     sdk,
+                    witness_capture=witness_capture,
+                    support_digest=digest,
                     clause=clause,
                     plan=plan,
                     receipt=receipt,
@@ -788,6 +801,8 @@ def _failed_program_evidence_graph(
 def _evidence_rule_for_program_clause(
     sdk: Any,
     *,
+    witness_capture: ProgramWitnessCapture,
+    support_digest: str,
     clause: Any,
     plan: Any,
     receipt: dict[str, Any],
@@ -799,6 +814,7 @@ def _evidence_rule_for_program_clause(
     body_ir = tuple(getattr(plan, "body_ir", ()))
     body_condition_count = len(getattr(clause.body, "when", ()))
     atoms_by_index: dict[int, EvidenceAtom] = {}
+    source_coordinates: dict[int, list[dict[str, str]]] = {}
 
     for witness in receipt.get("pred_witnesses", ()) or ():
         index = _condition_index(witness.get("pred_condition_key"))
@@ -806,6 +822,7 @@ def _evidence_rule_for_program_clause(
             continue
         atom = body_ir[index]
         sources: list[Source] = []
+        coordinates: list[dict[str, str]] = []
         for assertion_id in witness.get("asrt_ids", ()) or ():
             fact = witness_by_assertion.get(assertion_id)
             if fact is None:
@@ -818,6 +835,11 @@ def _evidence_rule_for_program_clause(
                     value=terms,
                 )
             )
+            coordinates.append({
+                "support_digest": support_digest,
+                "condition_key": witness["pred_condition_key"], "witness_ref": assertion_id,
+            })
+        source_coordinates[index] = coordinates
         form = _atom_form(atom, (ProbeEnv.from_bindings(binding),))
         repr_text = _bake_repr_text(
             form,
@@ -864,6 +886,12 @@ def _evidence_rule_for_program_clause(
         )
 
     ports = _clause_body_ports(sdk, clause, binding=binding)
+    for atom_index, condition_index in enumerate(sorted(atoms_by_index)):
+        for source_index, coordinate in enumerate(source_coordinates.get(condition_index, ())):
+            witness_capture.source_rendered(
+                f"/paths/0/rules/{occurrence_index + 1}/atoms/{atom_index}/verdict/support/{source_index}",
+                [coordinate],
+            )
     render_repr = getattr(clause.body, "render_repr", None)
     repr_text = (
         render_repr(ports)

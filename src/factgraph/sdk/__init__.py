@@ -29,6 +29,11 @@ from .error_codes import (
 )
 from .schema import Entity, Field, Identity, Relationship
 from .semantics import ProbLogConfig, PyReasonConfig
+from .program_witnesses import (
+    RULE_PROGRAM_WITNESS_CONTRACT_V1,
+    RuleProgramWitnessError,
+    RuleProgramWitnessReportV1,
+)
 from .rule_program import (
     EvaluationPremiseScope,
     RuleProgram,
@@ -325,6 +330,9 @@ __all__ = [
     "PyReasonConfig",
     "EvaluationPremiseScope",
     "RuleProgram",
+    "RULE_PROGRAM_WITNESS_CONTRACT_V1",
+    "RuleProgramWitnessError",
+    "RuleProgramWitnessReportV1",
     "RuleProgramClause",
     "RuleProgramExplanation",
     "RuleProgramFact",
