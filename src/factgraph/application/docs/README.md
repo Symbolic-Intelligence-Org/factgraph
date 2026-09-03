@@ -101,6 +101,16 @@ process-control exceptions such as `KeyboardInterrupt` or `SystemExit`.
 `tests/application/test_goal_plan_v2_runtime.py` covers these guarantees through
 the public replay, WeightedChoice capture, and Function capture readers.
 
+The separate WeightedChoice-to-ProbLog lowerer raises
+`ProductWeightedChoiceProbLogV2Error` directly at its rejection sites; there is
+no private pass-through raising helper. Its five dependency guards intentionally
+catch `Exception` to reject unexpected seal, compiler and canonical-IR failures
+with stable codes and `cause_type` details. Their historical implicit
+`__context__` (and absent explicit `__cause__`) is retained, so these specific
+guards have local `BLE001` exceptions rather than changing exception chaining
+for lint. `tests/application/test_weighted_choice_problog_v2.py` covers each
+guard and verifies that process-control exceptions still escape unchanged.
+
 - Documents in this directory reflect current implementation
   behavior, not standalone design drafts.
 - When adding or adjusting public `application` entry points, update

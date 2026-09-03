@@ -23,7 +23,7 @@ semantic bug, not a useful fallback.
 from __future__ import annotations
 
 from dataclasses import replace
-from typing import Any, NoReturn
+from typing import Any
 
 from factgraph.adapters.problog.rule_ext import (
     ProbLogRuleExt,
@@ -89,19 +89,19 @@ def _compile_product_policy_v2_skeleton_for_lowering(
     """
 
     if not isinstance(target, ProductPolicyV1):
-        _fail(
+        raise ProductWeightedChoiceProbLogV2Error(
             "V2 skeleton compilation requires ProductPolicyV1",
             code="WEIGHTED_CHOICE_V2_INVALID_TARGET",
         )
     if not target.requires_v2_profile or not policy_contains_weighted_choice(target.policy):
-        _fail(
+        raise ProductWeightedChoiceProbLogV2Error(
             "V2 skeleton compilation requires an intrinsic WeightedChoice Policy",
             code="WEIGHTED_CHOICE_V2_MARKER_REQUIRED",
         )
     try:
         assert_asset_binding_current_v1(target)
-    except Exception as exc:
-        _fail(
+    except Exception as exc:  # noqa: BLE001 - Seal failures retain typed details and implicit context.
+        raise ProductWeightedChoiceProbLogV2Error(
             "product Policy asset/topology seal is not current",
             code="WEIGHTED_CHOICE_V2_TARGET_SEAL_MISMATCH",
             details={"cause_type": type(exc).__name__},
@@ -115,8 +115,8 @@ def _compile_product_policy_v2_skeleton_for_lowering(
             address_space=target.address_space,
             schema_index=schema_index,
         )
-    except Exception as exc:
-        _fail(
+    except Exception as exc:  # noqa: BLE001 - Compiler faults must fail closed without changing context.
+        raise ProductWeightedChoiceProbLogV2Error(
             "V2 structural Policy skeleton could not be compiled",
             code="WEIGHTED_CHOICE_V2_SKELETON_COMPILE_FAILED",
             details={"cause_type": type(exc).__name__},
@@ -139,38 +139,38 @@ def lower_product_policy_weighted_choice_to_problog_v2(
     """
 
     if not isinstance(target, ProductPolicyV1):
-        _fail(
+        raise ProductWeightedChoiceProbLogV2Error(
             "weighted choice V2 lowering requires ProductPolicyV1",
             code="WEIGHTED_CHOICE_V2_INVALID_TARGET",
         )
     if not isinstance(compiled_policy, CompiledPolicyV0):
-        _fail(
+        raise ProductWeightedChoiceProbLogV2Error(
             "weighted choice V2 lowering requires CompiledPolicyV0",
             code="WEIGHTED_CHOICE_V2_INVALID_COMPILED_POLICY",
         )
     if not isinstance(plan, CompiledDerivationPlan):
-        _fail(
+        raise ProductWeightedChoiceProbLogV2Error(
             "weighted choice V2 lowering requires CompiledDerivationPlan",
             code="WEIGHTED_CHOICE_V2_INVALID_PLAN",
         )
     if plan.engine_ext is not None:
-        _fail(
+        raise ProductWeightedChoiceProbLogV2Error(
             "weighted choice V2 lowering cannot replace an existing engine extension",
             code="WEIGHTED_CHOICE_V2_PLAN_ENGINE_EXT_CONFLICT",
         )
 
     try:
         assert_asset_binding_current_v1(target)
-    except Exception as exc:
-        _fail(
+    except Exception as exc:  # noqa: BLE001 - Seal failures retain typed details and implicit context.
+        raise ProductWeightedChoiceProbLogV2Error(
             "product Policy asset/topology seal is not current",
             code="WEIGHTED_CHOICE_V2_TARGET_SEAL_MISMATCH",
             details={"cause_type": type(exc).__name__},
         )
     try:
         _assert_compiled_policy_current(compiled_policy)
-    except Exception as exc:
-        _fail(
+    except Exception as exc:  # noqa: BLE001 - Integrity faults retain typed details and implicit context.
+        raise ProductWeightedChoiceProbLogV2Error(
             "compiled Policy integrity check failed",
             code="WEIGHTED_CHOICE_V2_COMPILED_POLICY_STALE",
             details={"cause_type": type(exc).__name__},
@@ -187,7 +187,7 @@ def lower_product_policy_weighted_choice_to_problog_v2(
     }
     choice_branch_ids = _lineage_branch_ids(compiled_policy, choice.skeleton_node_id)
     if choice_branch_ids != set(branch_index_by_id):
-        _fail(
+        raise ProductWeightedChoiceProbLogV2Error(
             "choice skeleton lineage does not cover every compiled Policy branch",
             code="WEIGHTED_CHOICE_V2_UNMAPPED_SKELETON",
             details={
@@ -200,7 +200,7 @@ def lower_product_policy_weighted_choice_to_problog_v2(
     for arm in choice.arms:
         branch_ids = _lineage_branch_ids(compiled_policy, arm.condition_node_id)
         if len(branch_ids) != 1:
-            _fail(
+            raise ProductWeightedChoiceProbLogV2Error(
                 "each exclusive WeightedChoice arm must map to exactly one compiled branch",
                 code="WEIGHTED_CHOICE_V2_NESTED_OR_UNSUPPORTED",
                 details={"arm_id": arm.arm_id, "branch_ids": sorted(branch_ids)},
@@ -208,7 +208,7 @@ def lower_product_policy_weighted_choice_to_problog_v2(
         branch_id = next(iter(branch_ids))
         branch_index = branch_index_by_id.get(branch_id)
         if branch_index is None or branch_id not in choice_branch_ids:
-            _fail(
+            raise ProductWeightedChoiceProbLogV2Error(
                 "WeightedChoice arm lineage points outside the choice skeleton",
                 code="WEIGHTED_CHOICE_V2_UNMAPPED_ARM",
                 details={"arm_id": arm.arm_id, "branch_id": branch_id},
@@ -218,7 +218,7 @@ def lower_product_policy_weighted_choice_to_problog_v2(
     if len({index for index, _arm_id in mapped}) != len(mapped) or {
         index for index, _arm_id in mapped
     } != set(range(len(compiled_policy.branches))):
-        _fail(
+        raise ProductWeightedChoiceProbLogV2Error(
             "WeightedChoice arms must cover every compiled branch exactly once",
             code="WEIGHTED_CHOICE_V2_UNMAPPED_ARM",
             details={"mapped_branch_indexes": sorted(index for index, _ in mapped)},
@@ -252,18 +252,9 @@ def lower_product_policy_weighted_choice_to_problog_v2(
     return replace(plan, engine_ext=ProbLogRuleExt(weighted_choice=extension))
 
 
-def _fail(
-    message: str,
-    *,
-    code: str,
-    details: dict[str, object] | None = None,
-) -> NoReturn:
-    raise ProductWeightedChoiceProbLogV2Error(message, code=code, details=details)
-
-
 def _single_choice(target: ProductPolicyV1) -> WeightedChoiceTopologyV1:
     if len(target.weighted_choices) != 1:
-        _fail(
+        raise ProductWeightedChoiceProbLogV2Error(
             "this V2 ProbLog seam supports exactly one WeightedChoice sidecar",
             code="WEIGHTED_CHOICE_V2_MULTIPLE_UNSUPPORTED",
             details={"choice_count": len(target.weighted_choices)},
@@ -292,7 +283,7 @@ def _raw_kind(node: PolicyNode) -> str:
         return "unify"
     if isinstance(node, PolicyCompare):
         return "compare"
-    _fail(
+    raise ProductWeightedChoiceProbLogV2Error(
         "product Policy contains an unsupported raw node", code="WEIGHTED_CHOICE_V2_TARGET_TOPOLOGY"
     )
 
@@ -306,7 +297,7 @@ def _assert_target_matches_compiled_policy(
         or compiled_policy.policy_version != target.policy.version
         or compiled_policy.address_space_digest != target.address_space.address_space_digest
     ):
-        _fail(
+        raise ProductWeightedChoiceProbLogV2Error(
             "compiled Policy identity does not match the product Policy target",
             code="WEIGHTED_CHOICE_V2_COMPILED_POLICY_TARGET_MISMATCH",
         )
@@ -314,7 +305,7 @@ def _assert_target_matches_compiled_policy(
     raw = {node.node_id: _raw_kind(node) for node in _raw_nodes(skeleton.when)}
     compiled = {node.node_id: node.kind for node in compiled_policy.policy_structure.nodes}
     if compiled_policy.policy_structure.root_node_id != skeleton.when.node_id or raw != compiled:
-        _fail(
+        raise ProductWeightedChoiceProbLogV2Error(
             "compiled Policy topology does not match the product Policy target",
             code="WEIGHTED_CHOICE_V2_COMPILED_POLICY_TARGET_MISMATCH",
         )
@@ -328,7 +319,7 @@ def _assert_supported_raw_shape(
     intrinsic = [node for node in authored_nodes if isinstance(node, PolicyWeightedChoice)]
     ordinary_any = [node for node in authored_nodes if isinstance(node, PolicyAny)]
     if len(intrinsic) != 1 or intrinsic[0].choice_id != choice.choice_id or ordinary_any:
-        _fail(
+        raise ProductWeightedChoiceProbLogV2Error(
             "V2 ProbLog choice supports one intrinsic choice and no nested ordinary PolicyAny",
             code="WEIGHTED_CHOICE_V2_NESTED_OR_UNSUPPORTED",
             details={
@@ -339,7 +330,7 @@ def _assert_supported_raw_shape(
     skeleton = _lower_policy_weighted_choices_to_any_skeleton(target.policy)
     any_nodes = [node for node in _raw_nodes(skeleton.when) if isinstance(node, PolicyAny)]
     if len(any_nodes) != 1 or any_nodes[0].node_id != choice.skeleton_node_id:
-        _fail(
+        raise ProductWeightedChoiceProbLogV2Error(
             "V2 ProbLog intrinsic choice did not lower to its canonical PolicyAny skeleton",
             code="WEIGHTED_CHOICE_V2_UNMAPPED_SKELETON",
         )
@@ -351,7 +342,7 @@ def _lineage_branch_ids(compiled_policy: CompiledPolicyV0, node_id: str) -> set[
         None,
     )
     if node is None:
-        _fail(
+        raise ProductWeightedChoiceProbLogV2Error(
             "WeightedChoice topology node is absent from compiled Policy lineage",
             code="WEIGHTED_CHOICE_V2_UNMAPPED_ARM",
             details={"node_id": node_id},
@@ -362,7 +353,7 @@ def _lineage_branch_ids(compiled_policy: CompiledPolicyV0, node_id: str) -> set[
         if isinstance(ref, PolicyLoweredRef) and ref.kind == "branch"
     }
     if not refs:
-        _fail(
+        raise ProductWeightedChoiceProbLogV2Error(
             "WeightedChoice topology node has no compiled branch lineage",
             code="WEIGHTED_CHOICE_V2_UNMAPPED_ARM",
             details={"node_id": node_id},
@@ -373,12 +364,12 @@ def _lineage_branch_ids(compiled_policy: CompiledPolicyV0, node_id: str) -> set[
 def _plan_branches(plan: CompiledDerivationPlan) -> tuple[tuple[Any, ...], ...]:
     body = plan.body_ir
     if not isinstance(body, list) or not body:
-        _fail("compiled plan body must be a non-empty list", code="WEIGHTED_CHOICE_V2_INVALID_PLAN")
+        raise ProductWeightedChoiceProbLogV2Error("compiled plan body must be a non-empty list", code="WEIGHTED_CHOICE_V2_INVALID_PLAN")
     if all(isinstance(item, tuple) for item in body):
         return (tuple(body),)
     if all(isinstance(item, list) and item for item in body):
         return tuple(tuple(item) for item in body)
-    _fail(
+    raise ProductWeightedChoiceProbLogV2Error(
         "compiled plan body must be one AND branch or canonical DNF branch lists",
         code="WEIGHTED_CHOICE_V2_INVALID_PLAN",
     )
@@ -389,7 +380,7 @@ def _assert_plan_matches_compiled_policy(
     compiled_policy: CompiledPolicyV0,
 ) -> None:
     if len(plan_branches) != len(compiled_policy.branches):
-        _fail(
+        raise ProductWeightedChoiceProbLogV2Error(
             "compiled plan DNF branch count does not match compiled Policy lineage",
             code="WEIGHTED_CHOICE_V2_PLAN_BRANCH_MISMATCH",
             details={
@@ -401,20 +392,20 @@ def _assert_plan_matches_compiled_policy(
     for index, policy_branch in enumerate(compiled_policy.branches):
         source = body_by_id.get(policy_branch.branch_id)
         if source is None:
-            _fail(
+            raise ProductWeightedChoiceProbLogV2Error(
                 "compiled Policy branch is absent from its lowering plan",
                 code="WEIGHTED_CHOICE_V2_COMPILED_POLICY_STALE",
             )
         try:
             prefix = tuple(lower_ast_to_where_ir(AndExpr(list(source.body_atoms))))
-        except Exception as exc:
-            _fail(
+        except Exception as exc:  # noqa: BLE001 - Lowerer faults retain typed details and implicit context.
+            raise ProductWeightedChoiceProbLogV2Error(
                 "compiled Policy branch cannot be converted to canonical where IR",
                 code="WEIGHTED_CHOICE_V2_COMPILED_POLICY_STALE",
                 details={"cause_type": type(exc).__name__},
             )
         if plan_branches[index][: len(prefix)] != prefix:
-            _fail(
+            raise ProductWeightedChoiceProbLogV2Error(
                 "compiled plan is not rooted in the supplied compiled Policy branch order",
                 code="WEIGHTED_CHOICE_V2_PLAN_POLICY_MISMATCH",
                 details={"branch_index": index, "branch_id": policy_branch.branch_id},
@@ -436,7 +427,7 @@ def _branch_key_variables(
             lowered_alias = branch.lowered_occurrence_aliases[occurrence_index]
             occurrence = bindings[lowered_alias]
         except (IndexError, KeyError, ValueError) as exc:
-            _fail(
+            raise ProductWeightedChoiceProbLogV2Error(
                 "selection key is not present in one compiled Policy branch",
                 code="WEIGHTED_CHOICE_V2_UNMAPPED_SELECTION_KEY",
                 details={
@@ -451,7 +442,7 @@ def _branch_key_variables(
             if binding.port_name == address.port_name
         ]
         if len(candidates) != 1 or not candidates[0].startswith("$"):
-            _fail(
+            raise ProductWeightedChoiceProbLogV2Error(
                 "selection key does not have exactly one compiled execution variable",
                 code="WEIGHTED_CHOICE_V2_UNMAPPED_SELECTION_KEY",
                 details={
@@ -490,12 +481,12 @@ def _choice_domain(
     body_plan_by_id = {item.branch_id: item for item in compiled_policy._body_plan.branches}
     source = body_plan_by_id.get(branch.branch_id)
     if source is None:
-        _fail(
+        raise ProductWeightedChoiceProbLogV2Error(
             "compiled Policy branch is absent from its source lowering plan",
             code="WEIGHTED_CHOICE_V2_COMPILED_POLICY_STALE",
         )
     if branch_index >= len(plan_branches):
-        _fail(
+        raise ProductWeightedChoiceProbLogV2Error(
             "compiled plan is missing the choice source branch",
             code="WEIGHTED_CHOICE_V2_PLAN_BRANCH_MISMATCH",
         )
@@ -516,14 +507,14 @@ def _choice_domain(
             None,
         )
         if binding is None:
-            _fail(
+            raise ProductWeightedChoiceProbLogV2Error(
                 "compiled Policy occurrence is missing its source binding",
                 code="WEIGHTED_CHOICE_V2_COMPILED_POLICY_STALE",
             )
         authored_alias = binding.authored_alias or lowered_alias
         rule = rule_by_alias.get(authored_alias)
         if rule is None:
-            _fail(
+            raise ProductWeightedChoiceProbLogV2Error(
                 "selection-key occurrence is absent from the product address space",
                 code="WEIGHTED_CHOICE_V2_UNMAPPED_SELECTION_KEY",
                 details={"occurrence_alias": authored_alias},
@@ -532,7 +523,7 @@ def _choice_domain(
         if authored_alias in selected_aliases:
             fragment = plan_branches[branch_index][offset : offset + atom_count]
             if len(fragment) != atom_count:
-                _fail(
+                raise ProductWeightedChoiceProbLogV2Error(
                     "compiled plan truncates a selection-key source occurrence",
                     code="WEIGHTED_CHOICE_V2_PLAN_POLICY_MISMATCH",
                     details={"occurrence_alias": authored_alias},
@@ -540,7 +531,7 @@ def _choice_domain(
             fragments.extend(fragment)
         offset += atom_count
     if not fragments:
-        _fail(
+        raise ProductWeightedChoiceProbLogV2Error(
             "WeightedChoice selection key has no source Rule witnesses",
             code="WEIGHTED_CHOICE_V2_UNMAPPED_SELECTION_KEY",
         )
