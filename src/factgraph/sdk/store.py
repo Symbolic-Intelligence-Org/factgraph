@@ -205,6 +205,10 @@ from .schema import Entity, Field, Identity
 from .semantics import ProbLogConfig, PyReasonConfig
 
 if TYPE_CHECKING:
+    from factgraph.application.protocol.semantic_candidates import (
+        SemanticValueCandidateBatchRequestV1,
+        SemanticValueCandidateBatchResultV1,
+    )
     from factgraph.audit.proof_frame_diff import ProofFrameDiff
 
     from .evaluation_query_builder import EvaluationQueryBuilderV1
@@ -3035,6 +3039,16 @@ class SDKStore:
         from .policy_authoring import policy_draft
 
         return policy_draft(self, policy_id, version=version)
+
+    def resolve_semantic_candidates(
+        self, request: "SemanticValueCandidateBatchRequestV1"
+    ) -> "SemanticValueCandidateBatchResultV1":
+        """Return a product-neutral candidate batch from one guarded view."""
+        from factgraph.application.semantic_candidate_runtime import (
+            resolve_semantic_value_candidates_v1,
+        )
+
+        return resolve_semantic_value_candidates_v1(self, request)
 
     def query(
         self,

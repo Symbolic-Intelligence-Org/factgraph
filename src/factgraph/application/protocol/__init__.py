@@ -1,6 +1,15 @@
 from __future__ import annotations
 
 from .common import ErrorDTO, JSONValue, ProtocolShapeError, WarningDTO
+from .semantic_candidates import (
+    SemanticCandidateMatchMode,
+    SemanticCandidateScalar,
+    SemanticCandidateShapeError,
+    SemanticValueCandidateBatchRequestV1,
+    SemanticValueCandidateBatchResultV1,
+    SemanticValueCandidateRequestV1,
+    SemanticValueCandidateResultV1,
+)
 from .certainty import BOOLEAN_CERTAINTY, Certainty
 from .derivation import (
     CompiledDerivationPlan,
@@ -427,6 +436,13 @@ from .relation_query import (
 from .schema_runtime import EntityRef, EntitySelector, FieldPath, IdentityValue, SchemaCapability
 
 __all__ = [
+    "SemanticCandidateMatchMode",
+    "SemanticCandidateScalar",
+    "SemanticCandidateShapeError",
+    "SemanticValueCandidateBatchRequestV1",
+    "SemanticValueCandidateBatchResultV1",
+    "SemanticValueCandidateRequestV1",
+    "SemanticValueCandidateResultV1",
     "AppliedOpResultDTO",
     "AssertionRecordDTO",
     "BOOLEAN_CERTAINTY",

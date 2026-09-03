@@ -340,6 +340,7 @@ class ProductEvaluationInvocationV2:
     candidate: TargetedCompiledEvaluationQueryV0 | None = None
     candidate_product_target: _ProductTarget | None = None
     aggregate_limits: ProductInvocationAggregateLimitsV2 | None = None
+    expected_view_snapshot_digest: str | None = None
 
     def run(self) -> EvaluationRunV2:
         """Capture one graph view and execute this Product V2 invocation.
@@ -416,6 +417,7 @@ def build_product_evaluation_invocation_v2(
     candidate: TargetedCompiledEvaluationQueryV0 | None = None,
     candidate_product_target: _ProductTarget | None = None,
     aggregate_limits: ProductInvocationAggregateLimitsV2 | None = None,
+    expected_view_snapshot_digest: str | None = None,
 ) -> ProductEvaluationInvocationV2:
     """Seal V2 intent without reading a live ledger or invoking an engine.
 
@@ -461,6 +463,12 @@ def build_product_evaluation_invocation_v2(
             "BRANCH_WITNESS_ENGINE_UNSUPPORTED",
         )
 
+    if expected_view_snapshot_digest is not None and (
+        not isinstance(expected_view_snapshot_digest, str)
+        or len(expected_view_snapshot_digest) != 71
+        or not expected_view_snapshot_digest.startswith("sha256:")
+    ):
+        _fail("expected_view_snapshot_digest must be sha256:<64 hex>", "V2_EXPECTED_VIEW_INVALID")
     _assert_profile_compiler(profile)
     _assert_targeted_product_match(primary, product_target, side="primary")
     _assert_profile_target_inventory(
@@ -488,6 +496,7 @@ def build_product_evaluation_invocation_v2(
         candidate,
         candidate_product_target,
         aggregate_limits,
+        expected_view_snapshot_digest,
     )
 
 
@@ -555,6 +564,14 @@ def execute_product_evaluation_invocation_v2(
     # Capture once.  Everything after this point consumes only immutable
     # ProjectedFact tuples / V2 worlds; it does not reopen the caller ledger.
     base_view_digest = graph._view_snapshot_digest(query_typed_values=True)
+    if (
+        invocation.expected_view_snapshot_digest is not None
+        and base_view_digest != invocation.expected_view_snapshot_digest
+    ):
+        _fail(
+            "FactGraph view no longer matches the admitted source revision",
+            "V2_EXPECTED_VIEW_MISMATCH",
+        )
     full_relation = project_view_facts_with_witness(graph.ledger, base_schema_ir)
     if graph._view_snapshot_digest(query_typed_values=True) != base_view_digest:
         _fail("FactGraph view changed during V2 capture", "V2_VIEW_CHANGED_DURING_CAPTURE")
@@ -989,6 +1006,12 @@ def function_capture_from_evaluation_run_v2(
 
 
 def _assert_invocation_current(invocation: ProductEvaluationInvocationV2) -> None:
+    if invocation.expected_view_snapshot_digest is not None and (
+        not isinstance(invocation.expected_view_snapshot_digest, str)
+        or len(invocation.expected_view_snapshot_digest) != 71
+        or not invocation.expected_view_snapshot_digest.startswith("sha256:")
+    ):
+        _fail("expected_view_snapshot_digest is malformed", "V2_EXPECTED_VIEW_INVALID")
     _assert_profile_compiler(invocation.profile)
     _assert_targeted_product_match(invocation.primary, invocation.product_target, side="primary")
     _assert_profile_target_inventory(

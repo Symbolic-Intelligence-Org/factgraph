@@ -1,5 +1,22 @@
 # Complete Product V2 workflow
 
+## Guarded semantic candidate resolution
+
+Product owners that must canonicalize an existing scalar before constructing a
+Product invocation can call `fg.resolve_semantic_candidates(...)` with one
+`SemanticValueCandidateBatchRequestV1`. The batch accepts only public
+`EntityIdentityEndpoint` or `FieldEndpoint` values and returns exact matches,
+optional `unicode_casefold_v1` matches, bounded prefix suggestions, an evidence
+digest, and one `view_snapshot_digest` for the whole projected view. It is a
+read-only semantic lookup: it does not know a caller, Operation, Policy, or
+authorization scope, and suggestions are never executable selections.
+
+Pass the returned view digest to Product V2 planning as
+`expected_view_snapshot_digest`. `run()` checks it before capturing the world
+and raises `V2_EXPECTED_VIEW_MISMATCH` if the live view changed. The existing
+during-capture checks remain in force. This contract is a revision guard; it
+does not claim that lookup and execution share one database snapshot.
+
 This is the recommended quickstart for new FactGraph product code. It uses only
 the public `factgraph.sdk` authoring/runtime surface and keeps logical assets,
 run-local facts, execution semantics, structured results and evidence claims

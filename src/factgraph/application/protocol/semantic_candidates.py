@@ -1,0 +1,144 @@
+from __future__ import annotations
+
+from dataclasses import asdict, dataclass, field, is_dataclass
+from typing import Any, Literal, TypeAlias
+
+from factgraph.core.protocol.digests import sha256_hex
+
+from .evaluate_result import canonical_bytes_for_evaluate
+from .semantic_port import EntityIdentityEndpoint, FieldEndpoint
+
+SemanticCandidateScalar: TypeAlias = str | int | float | bool
+SemanticCandidateMatchMode: TypeAlias = Literal["exact", "unicode_casefold_v1"]
+
+
+class SemanticCandidateShapeError(ValueError):
+    """One semantic-candidate protocol value violates the closed contract."""
+
+
+def _scalar(value: Any, label: str) -> SemanticCandidateScalar:
+    if type(value) not in {str, int, float, bool}:
+        raise SemanticCandidateShapeError(f"{label} must be string/int/float/bool")
+    canonical_bytes_for_evaluate("semantic_candidate_scalar_v1", value)
+    return value
+
+
+def _token(value: object, label: str) -> str:
+    if not isinstance(value, str) or not value or len(value) > 256:
+        raise SemanticCandidateShapeError(f"{label} must be non-empty text <= 256 chars")
+    return value
+
+
+def _digest(payload: object) -> str:
+    return "sha256:" + sha256_hex(
+        canonical_bytes_for_evaluate("semantic_value_candidate_batch_v1", _payload(payload))
+    )
+
+
+def _payload(value: object) -> object:
+    if is_dataclass(value) and not isinstance(value, type):
+        return _payload(asdict(value))
+    if isinstance(value, dict):
+        return {str(key): _payload(item) for key, item in value.items()}
+    if isinstance(value, (tuple, list)):
+        return tuple(_payload(item) for item in value)
+    return value
+
+
+@dataclass(frozen=True)
+class SemanticValueCandidateRequestV1:
+    correlation_key: str
+    endpoint: EntityIdentityEndpoint | FieldEndpoint
+    supplied_value: SemanticCandidateScalar
+    match_mode: SemanticCandidateMatchMode
+    suggestion_limit: int = 5
+
+    def __post_init__(self) -> None:
+        _token(self.correlation_key, "correlation_key")
+        if not isinstance(self.endpoint, (EntityIdentityEndpoint, FieldEndpoint)):
+            raise SemanticCandidateShapeError("endpoint must be an identity or field endpoint")
+        _scalar(self.supplied_value, "supplied_value")
+        if self.match_mode not in {"exact", "unicode_casefold_v1"}:
+            raise SemanticCandidateShapeError("match_mode is unsupported")
+        if self.match_mode == "unicode_casefold_v1" and not isinstance(self.supplied_value, str):
+            raise SemanticCandidateShapeError("unicode_casefold_v1 requires string")
+        if (
+            isinstance(self.suggestion_limit, bool)
+            or not isinstance(self.suggestion_limit, int)
+            or not 0 <= self.suggestion_limit <= 5
+        ):
+            raise SemanticCandidateShapeError("suggestion_limit must be 0..5")
+
+
+@dataclass(frozen=True)
+class SemanticValueCandidateBatchRequestV1:
+    items: tuple[SemanticValueCandidateRequestV1, ...]
+    request_digest: str = field(init=False)
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.items, tuple) or not 1 <= len(self.items) <= 128:
+            raise SemanticCandidateShapeError("items must contain 1..128 requests")
+        if any(not isinstance(item, SemanticValueCandidateRequestV1) for item in self.items):
+            raise SemanticCandidateShapeError("items contain invalid request")
+        if len({item.correlation_key for item in self.items}) != len(self.items):
+            raise SemanticCandidateShapeError("correlation keys must be unique")
+        object.__setattr__(self, "request_digest", _digest(self.items))
+
+
+@dataclass(frozen=True)
+class SemanticValueCandidateResultV1:
+    correlation_key: str
+    exact_matches: tuple[SemanticCandidateScalar, ...] = ()
+    normalized_matches: tuple[SemanticCandidateScalar, ...] = ()
+    matches_truncated: bool = False
+    suggestions: tuple[SemanticCandidateScalar, ...] = ()
+    suggestions_truncated: bool = False
+
+    def __post_init__(self) -> None:
+        _token(self.correlation_key, "correlation_key")
+        for name in ("exact_matches", "normalized_matches", "suggestions"):
+            values = getattr(self, name)
+            if not isinstance(values, tuple) or len(values) > 5:
+                raise SemanticCandidateShapeError(f"{name} must contain <= 5 values")
+            for value in values:
+                _scalar(value, name)
+        if not isinstance(self.matches_truncated, bool) or not isinstance(
+            self.suggestions_truncated, bool
+        ):
+            raise SemanticCandidateShapeError("truncation fields must be bool")
+
+
+@dataclass(frozen=True)
+class SemanticValueCandidateBatchResultV1:
+    request_digest: str
+    view_snapshot_digest: str
+    items: tuple[SemanticValueCandidateResultV1, ...]
+    evidence_digest: str = field(init=False)
+
+    def __post_init__(self) -> None:
+        for value, label in (
+            (self.request_digest, "request_digest"),
+            (self.view_snapshot_digest, "view_snapshot_digest"),
+        ):
+            if not isinstance(value, str) or len(value) != 71 or not value.startswith("sha256:"):
+                raise SemanticCandidateShapeError(f"{label} must be sha256:<64 hex>")
+        if not isinstance(self.items, tuple) or not self.items:
+            raise SemanticCandidateShapeError("items must be non-empty")
+        if len({item.correlation_key for item in self.items}) != len(self.items):
+            raise SemanticCandidateShapeError("result correlation keys must be unique")
+        object.__setattr__(
+            self,
+            "evidence_digest",
+            _digest((self.request_digest, self.view_snapshot_digest, self.items)),
+        )
+
+
+__all__ = [
+    "SemanticCandidateMatchMode",
+    "SemanticCandidateScalar",
+    "SemanticCandidateShapeError",
+    "SemanticValueCandidateBatchRequestV1",
+    "SemanticValueCandidateBatchResultV1",
+    "SemanticValueCandidateRequestV1",
+    "SemanticValueCandidateResultV1",
+]

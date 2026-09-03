@@ -102,6 +102,16 @@ from factgraph.application.goal_plan_v1_runtime import (
     portable_deterministic_profile_v1,
     provider_binding_slot_v1,
 )
+from factgraph.application.protocol.semantic_candidates import (
+    SemanticCandidateMatchMode,
+    SemanticCandidateScalar,
+    SemanticCandidateShapeError,
+    SemanticValueCandidateBatchRequestV1,
+    SemanticValueCandidateBatchResultV1,
+    SemanticValueCandidateRequestV1,
+    SemanticValueCandidateResultV1,
+)
+from factgraph.application.semantic_candidate_runtime import SemanticCandidateRuntimeError
 from factgraph.application.evaluation_run_v1_runtime import (
     EvaluationRunExplanationV1,
     EvaluationRunPolicyProjectionV1,
@@ -239,6 +249,14 @@ from .ingest import IngestResult, ValidationReport
 ApplicationRule = Rule
 
 __all__ = [
+    "SemanticCandidateMatchMode",
+    "SemanticCandidateScalar",
+    "SemanticCandidateShapeError",
+    "SemanticCandidateRuntimeError",
+    "SemanticValueCandidateBatchRequestV1",
+    "SemanticValueCandidateBatchResultV1",
+    "SemanticValueCandidateRequestV1",
+    "SemanticValueCandidateResultV1",
     "SDKSchemaError",
     "SDKStoreError",
     "SDKValueError",

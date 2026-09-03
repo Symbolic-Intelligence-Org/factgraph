@@ -295,6 +295,7 @@ class EvaluationQueryBuilderV1:
             | None
         ) = None,
         candidate_address_space: SemanticAddressSpace | None = None,
+        expected_view_snapshot_digest: str | None = None,
     ) -> GoalPlanInvocationV1 | ProductEvaluationInvocationV2:
         """Create an immutable V1 or Product V2 execution invocation.
 
@@ -348,6 +349,13 @@ class EvaluationQueryBuilderV1:
                 profile=profile,
                 candidate=candidate,
                 candidate_address_space=candidate_address_space,
+                expected_view_snapshot_digest=expected_view_snapshot_digest,
+            )
+
+        if expected_view_snapshot_digest is not None:
+            raise SDKStoreError(
+                "expected_view_snapshot_digest requires Product V2",
+                code="V2_EXPECTED_VIEW_REQUIRES_V2",
             )
 
         if self._expectations:
@@ -425,6 +433,7 @@ class EvaluationQueryBuilderV1:
             | None
         ),
         candidate_address_space: SemanticAddressSpace | None,
+        expected_view_snapshot_digest: str | None,
     ) -> ProductEvaluationInvocationV2:
         """Create a V2 invocation without widening the V1 GoalPlan contract."""
 
@@ -504,6 +513,7 @@ class EvaluationQueryBuilderV1:
                 scenario=scenario,
                 candidate=compiled_candidate,
                 candidate_product_target=candidate_product_target,
+                expected_view_snapshot_digest=expected_view_snapshot_digest,
             )
         except (TypeError, ValueError) as exc:
             code = getattr(exc, "code", None)
@@ -522,6 +532,7 @@ class EvaluationQueryBuilderV1:
             | None
         ) = None,
         candidate_address_space: SemanticAddressSpace | None = None,
+        expected_view_snapshot_digest: str | None = None,
     ) -> ProductEvaluationInvocationV2:
         """Create an explicit Product V2 execution invocation.
 
@@ -552,6 +563,7 @@ class EvaluationQueryBuilderV1:
             profile=profile,
             candidate=candidate,
             candidate_address_space=candidate_address_space,
+            expected_view_snapshot_digest=expected_view_snapshot_digest,
         )
 
     def compile(self) -> TargetedCompiledEvaluationQueryV0:
