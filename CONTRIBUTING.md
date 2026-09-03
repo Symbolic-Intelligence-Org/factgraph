@@ -21,6 +21,12 @@ Run the test suite from the repository root:
 PYTHONPATH=src python -m pytest
 ```
 
+Cross-module test helpers use the repository-root `tests.*` namespace. A relative
+import in a directory without a package marker has no parent under default
+pytest collection. Keep the default import mode and the same fixture imports
+working for both pytest and unittest; do not hide collection failures with an
+import-mode override.
+
 ## Quality Checks
 
 The `dev` extra pins Ruff to `0.16.5` so local and CI lint checks use the same

@@ -25,7 +25,7 @@ from factgraph.application.goal_plan_v2_runtime import (
 from factgraph.application.protocol.schema_runtime import EntityRef
 from factgraph.sdk import SDKStore
 
-from .test_branch_input_case_runtime import Person, _fixture
+from tests.application.test_branch_input_case_runtime import Person, _fixture
 
 
 def _canonical_bytes(value: object) -> bytes:
