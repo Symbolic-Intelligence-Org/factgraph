@@ -270,7 +270,7 @@ def make_non_fact_step_key(
 
 def support_artifact_to_dict(artifact: ProofReceipt) -> dict[str, Any]:
     # This shape is optimized for canonical digest/round-trip stability, not display formatting.
-    result = {
+    result: dict[str, Any] = {
         "kind": artifact.kind,
         "root_result_kind": artifact.root_result_kind,
         "binding": [[key, _to_jsonable(value)] for key, value in artifact.binding_items],

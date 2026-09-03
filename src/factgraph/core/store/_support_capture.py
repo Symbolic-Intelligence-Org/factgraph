@@ -242,7 +242,7 @@ def _build_pred_witness(
 
     return PredWitness(
         pred_condition_key=make_pred_condition_key(case_index, condition_index, pred_id),
-        asrt_ids=normalize_asrt_ids(matches),
+        asrt_ids=normalize_asrt_ids(tuple(matches)),
         witnesses=tuple(matches[ref] for ref in sorted(matches)) if capture_witness_metadata else None,
     )
 

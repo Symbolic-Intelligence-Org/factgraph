@@ -1935,6 +1935,13 @@ class _SDKEvalManager:
 
 
 class _SDKAuditManager:
+    """Read-only namespace manager for the `audit` taxonomy group.
+
+    Per §5.2 §5.2.1 placement #2, ``diff_proof_frames`` (G5) lives here
+    because it consumes recorded round events and compares persisted
+    proof-frame outcomes — post-hoc audit, not hypothetical evaluation.
+    """
+
     def support_witnesses(self, support_digest: str) -> SupportWitnessReportV1:
         """Read original support witness kinds and material availability (V1).
 
@@ -1943,14 +1950,8 @@ class _SDKAuditManager:
         """
         from .support_witnesses import read_support_witnesses
 
-        return read_support_witnesses(self._sdk._store, support_digest)
-
-    """Read-only namespace manager for the `audit` taxonomy group.
-
-    Per §5.2 §5.2.1 placement #2, ``diff_proof_frames`` (G5) lives here
-    because it consumes recorded round events and compares persisted
-    proof-frame outcomes — post-hoc audit, not hypothetical evaluation.
-    """
+        sdk: SDKStore = object.__getattribute__(self, "_sdk")
+        return read_support_witnesses(sdk._store, support_digest)
 
     def __init__(self, sdk: "SDKStore") -> None:
         object.__setattr__(self, "_sdk", sdk)
