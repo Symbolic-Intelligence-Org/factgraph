@@ -10,6 +10,10 @@ from .semantic_port import EntityIdentityEndpoint, FieldEndpoint
 
 SemanticCandidateScalar: TypeAlias = str | int | float | bool
 SemanticCandidateMatchMode: TypeAlias = Literal["exact", "unicode_casefold_v1"]
+SEMANTIC_CANDIDATE_RESOLVER_CONTRACT_V1 = (
+    "factgraph.semantic-value-candidates.v1:"
+    "typed-exact,unicode-nfc-trim-casefold,prefix-suggestions,revision-guard"
+)
 
 
 class SemanticCandidateShapeError(ValueError):
@@ -35,6 +39,17 @@ def _digest(payload: object) -> str:
     )
 
 
+def _sha256_digest(value: object, label: str) -> str:
+    if (
+        not isinstance(value, str)
+        or len(value) != 71
+        or not value.startswith("sha256:")
+        or any(char not in "0123456789abcdef" for char in value[7:])
+    ):
+        raise SemanticCandidateShapeError(f"{label} must be sha256:<64 lowercase hex>")
+    return value
+
+
 def _payload(value: object) -> object:
     if is_dataclass(value) and not isinstance(value, type):
         return _payload(asdict(value))
@@ -43,6 +58,11 @@ def _payload(value: object) -> object:
     if isinstance(value, (tuple, list)):
         return tuple(_payload(item) for item in value)
     return value
+
+
+SEMANTIC_CANDIDATE_RESOLVER_CONTRACT_DIGEST_V1 = _digest(
+    SEMANTIC_CANDIDATE_RESOLVER_CONTRACT_V1
+)
 
 
 @dataclass(frozen=True)
@@ -120,10 +140,11 @@ class SemanticValueCandidateBatchResultV1:
             (self.request_digest, "request_digest"),
             (self.view_snapshot_digest, "view_snapshot_digest"),
         ):
-            if not isinstance(value, str) or len(value) != 71 or not value.startswith("sha256:"):
-                raise SemanticCandidateShapeError(f"{label} must be sha256:<64 hex>")
-        if not isinstance(self.items, tuple) or not self.items:
-            raise SemanticCandidateShapeError("items must be non-empty")
+            _sha256_digest(value, label)
+        if not isinstance(self.items, tuple) or not 1 <= len(self.items) <= 128:
+            raise SemanticCandidateShapeError("items must contain 1..128 results")
+        if any(not isinstance(item, SemanticValueCandidateResultV1) for item in self.items):
+            raise SemanticCandidateShapeError("items contain invalid result")
         if len({item.correlation_key for item in self.items}) != len(self.items):
             raise SemanticCandidateShapeError("result correlation keys must be unique")
         object.__setattr__(
@@ -134,6 +155,8 @@ class SemanticValueCandidateBatchResultV1:
 
 
 __all__ = [
+    "SEMANTIC_CANDIDATE_RESOLVER_CONTRACT_DIGEST_V1",
+    "SEMANTIC_CANDIDATE_RESOLVER_CONTRACT_V1",
     "SemanticCandidateMatchMode",
     "SemanticCandidateScalar",
     "SemanticCandidateShapeError",

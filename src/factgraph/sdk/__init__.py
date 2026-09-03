@@ -103,6 +103,8 @@ from factgraph.application.goal_plan_v1_runtime import (
     provider_binding_slot_v1,
 )
 from factgraph.application.protocol.semantic_candidates import (
+    SEMANTIC_CANDIDATE_RESOLVER_CONTRACT_DIGEST_V1,
+    SEMANTIC_CANDIDATE_RESOLVER_CONTRACT_V1,
     SemanticCandidateMatchMode,
     SemanticCandidateScalar,
     SemanticCandidateShapeError,
@@ -249,6 +251,8 @@ from .ingest import IngestResult, ValidationReport
 ApplicationRule = Rule
 
 __all__ = [
+    "SEMANTIC_CANDIDATE_RESOLVER_CONTRACT_DIGEST_V1",
+    "SEMANTIC_CANDIDATE_RESOLVER_CONTRACT_V1",
     "SemanticCandidateMatchMode",
     "SemanticCandidateScalar",
     "SemanticCandidateShapeError",

@@ -3041,8 +3041,8 @@ class SDKStore:
         return policy_draft(self, policy_id, version=version)
 
     def resolve_semantic_candidates(
-        self, request: "SemanticValueCandidateBatchRequestV1"
-    ) -> "SemanticValueCandidateBatchResultV1":
+        self, request: "SemanticValueCandidateBatchRequestV1"  # noqa: UP037
+    ) -> "SemanticValueCandidateBatchResultV1":  # noqa: UP037
         """Return a product-neutral candidate batch from one guarded view."""
         from factgraph.application.semantic_candidate_runtime import (
             resolve_semantic_value_candidates_v1,

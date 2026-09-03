@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from .common import ErrorDTO, JSONValue, ProtocolShapeError, WarningDTO
 from .semantic_candidates import (
+    SEMANTIC_CANDIDATE_RESOLVER_CONTRACT_DIGEST_V1,
+    SEMANTIC_CANDIDATE_RESOLVER_CONTRACT_V1,
     SemanticCandidateMatchMode,
     SemanticCandidateScalar,
     SemanticCandidateShapeError,
@@ -436,6 +438,8 @@ from .relation_query import (
 from .schema_runtime import EntityRef, EntitySelector, FieldPath, IdentityValue, SchemaCapability
 
 __all__ = [
+    "SEMANTIC_CANDIDATE_RESOLVER_CONTRACT_DIGEST_V1",
+    "SEMANTIC_CANDIDATE_RESOLVER_CONTRACT_V1",
     "SemanticCandidateMatchMode",
     "SemanticCandidateScalar",
     "SemanticCandidateShapeError",

@@ -10,6 +10,7 @@ from factgraph.application.protocol.semantic_port import entity_identity, field_
 from factgraph.core.evidence.write_protocol import set_field
 from factgraph.core.rules.where_ast import PredAtom, Var
 from factgraph.sdk import (
+    SEMANTIC_CANDIDATE_RESOLVER_CONTRACT_DIGEST_V1,
     AssetMeta,
     Entity,
     Field,
@@ -60,6 +61,15 @@ def _request(value="alice", endpoint=None, mode="unicode_casefold_v1"):
 
 
 class SemanticCandidateTests(unittest.TestCase):
+    def test_public_contract_digest_is_stable_and_validated(self):
+        self.assertRegex(
+            SEMANTIC_CANDIDATE_RESOLVER_CONTRACT_DIGEST_V1,
+            r"^sha256:[0-9a-f]{64}$",
+        )
+        result = _graph()[0].resolve_semantic_candidates(_request())
+        with self.assertRaises(SemanticCandidateShapeError):
+            type(result)("sha256:" + "z" * 64, result.view_snapshot_digest, result.items)
+
     def test_exact_and_normalized_and_evidence_are_deterministic(self):
         graph, _ = _graph()
         request = _request("  ALICE  ")
