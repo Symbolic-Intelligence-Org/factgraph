@@ -303,9 +303,9 @@ def _compile_compare(
     if kind == "eq":
         if lhs_var and lhs not in bound_vars and not rhs_var:
             next_bound_vars.append(lhs)
-        elif rhs_var and rhs not in bound_vars and not lhs_var:
-            next_bound_vars.append(rhs)
-        elif lhs_var and rhs_var and lhs in bound_vars and rhs not in bound_vars:
+        elif (rhs_var and rhs not in bound_vars and not lhs_var) or (
+            lhs_var and rhs_var and lhs in bound_vars and rhs not in bound_vars
+        ):
             next_bound_vars.append(rhs)
         elif lhs_var and rhs_var and rhs in bound_vars and lhs not in bound_vars:
             next_bound_vars.append(lhs)

@@ -1615,10 +1615,7 @@ class _SDKEntitiesManager:
         # shipped _ref path. SDKStore._ref raises SDKStoreError for missing
         # identity fields("missing identity field: <EC>.<name>")— the
         # canonical "complete identity bundle" check per ADR-IC §4.2.1。
-        try:
-            e_ref = self._sdk._ref(entity_cls, **identity)
-        except SDKStoreError:
-            raise
+        e_ref = self._sdk._ref(entity_cls, **identity)
 
         # Step 3: application layer call(per PF-S3 INV-6 application-first)。
         from factgraph.application import apply_create_plan, plan_create_command

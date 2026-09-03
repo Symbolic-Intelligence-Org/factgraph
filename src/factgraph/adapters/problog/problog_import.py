@@ -156,7 +156,7 @@ def _parse_rows(
         line = raw_line.strip()
         if not line:
             continue
-        if line.startswith("%") or line.startswith("#"):
+        if line.startswith(("%", "#")):
             continue
 
         split = _split_result_line(line)

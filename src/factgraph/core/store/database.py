@@ -3028,7 +3028,7 @@ def _require_token(value: str, *, prefix: str, field: str) -> str:
 
 
 def _require_db_id(value: str) -> str:
-    if not isinstance(value, str) or not (value.startswith("db:") or value.startswith("mem:")):
+    if not isinstance(value, str) or not value.startswith(("db:", "mem:")):
         raise DatabaseError("db_id must start with 'db:' or 'mem:'")
     return value
 

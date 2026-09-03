@@ -111,10 +111,7 @@ def _require_target(value: object, *, field_name: str) -> _Target:
             "build the Rule/Policy through fg.build_rule(...) or fg.policy_builder(...)",
             code="V2_PROFILE_PRODUCT_TARGET_REQUIRED",
         )
-    try:
-        assert_asset_binding_current_v1(value)
-    except SDKStoreError:
-        raise
+    assert_asset_binding_current_v1(value)
     return value
 
 
@@ -185,10 +182,7 @@ def _field_context(
             f"scenario.{action}(...) requires an SDK Field descriptor",
             code="SCENARIO_V2_FIELD_REQUIRED",
         )
-    try:
-        predicate = graph._schema_pred_for_field(field)
-    except SDKStoreError:
-        raise
+    predicate = graph._schema_pred_for_field(field)
     entity_type = predicate.get("owner_type")
     field_name = predicate.get("py_field_name")
     if (

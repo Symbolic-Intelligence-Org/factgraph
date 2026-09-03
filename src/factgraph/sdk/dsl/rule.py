@@ -619,9 +619,7 @@ def _is_query_unbound_error(exc: Exception) -> bool:
         return True
     if "requires at least one bound/constant side" in msg:
         return True
-    if "used in path comparison before" in msg:
-        return True
-    return False
+    return "used in path comparison before" in msg
 
 
 def _query_head_item_to_payload(item: Any) -> dict[str, Any]:

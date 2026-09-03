@@ -1142,9 +1142,7 @@ def _is_literal(value: Any) -> bool:
         return True
     if isinstance(value, int):
         return True
-    if isinstance(value, str) and not value.startswith("$"):
-        return True
-    return False
+    return isinstance(value, str) and not value.startswith("$")
 
 
 def _is_aggregate_term(value: Any) -> bool:

@@ -188,10 +188,7 @@ def evaluate_captured_contains_row_expectations_v0(
     selection_types = {item.alias: item.value_type for item in anchor.selections}
     outcomes: list[ExpectationResultV0] = []
     for expectation in expectations:
-        try:
-            assert_compiled_contains_row_expectation_current(expectation)
-        except EvaluationExpectationError:
-            raise
+        assert_compiled_contains_row_expectation_current(expectation)
         if expectation.query_digest != bundle.query_digest:
             raise EvaluationExpectationError(
                 "compiled expectation does not match captured Query",

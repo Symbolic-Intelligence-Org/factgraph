@@ -501,11 +501,9 @@ class _PremiseExcludedLedger(Ledger):
             self._base, asrt_id, self._allowances_by_pred
         ):
             return False
-        if is_predicate_premise_blocked(
+        return not is_predicate_premise_blocked(
             self._base, asrt_id, self._blocks_by_pred
-        ):
-            return False
-        return True
+        )
 
     def _filter_claims(self, claims: Iterable[Claim]) -> list[Claim]:
         return [claim for claim in claims if self._is_visible(claim.asrt_id)]

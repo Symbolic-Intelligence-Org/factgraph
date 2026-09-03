@@ -1306,15 +1306,16 @@ def _failure(invocation: GoalPlanInvocationV1, code: str, detail: str) -> GoalPl
     }
     scenario_conflict = code == "SCENARIO_OPERATION_CONFLICT"
     contract_invalid = (
-        code.startswith("GOAL_INVOCATION_")
-        or code.startswith("GOAL_PRIMARY_INVALID")
-        or code.startswith("GOAL_PROFILE_INVALID")
-        or code.startswith("GOAL_SCOPE_INVALID")
-        or code.startswith("GOAL_SCENARIO_INVALID")
-        or code.startswith("GOAL_EXPECTATIONS_INVALID")
-        or code.startswith("GOAL_PROVIDER_INVALID")
-        or code.endswith("_SPLICE")
-        or code.endswith("_PROTOCOL_INVALID")
+        code.startswith((
+            "GOAL_INVOCATION_",
+            "GOAL_PRIMARY_INVALID",
+            "GOAL_PROFILE_INVALID",
+            "GOAL_SCOPE_INVALID",
+            "GOAL_SCENARIO_INVALID",
+            "GOAL_EXPECTATIONS_INVALID",
+            "GOAL_PROVIDER_INVALID",
+        ))
+        or code.endswith(("_SPLICE", "_PROTOCOL_INVALID"))
     )
     scenario_resolution: ScenarioResolutionStateV1
     if invocation.scenario is None:

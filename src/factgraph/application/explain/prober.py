@@ -741,7 +741,7 @@ def _repr_not_atom(
     )
     if len(branch_texts) == 1:
         text = branch_texts[0]
-        return f"!{text}" if not text.startswith("(") else f"!{text}"
+        return f"!{text}"
     return "!(" + " || ".join(branch_texts) + ")"
 
 
@@ -1163,7 +1163,7 @@ def _canonical_aggregate_filter_bound_vars(
 
 
 def _is_lowered_aggregate_local_var(var_name: str) -> bool:
-    return var_name.startswith("$agg") or var_name.startswith("$_agg") or "__" in var_name
+    return var_name.startswith(("$agg", "$_agg")) or "__" in var_name
 
 
 def _normalize_compiled_body(body_ir: object) -> list[list[tuple[Any, ...]]]:

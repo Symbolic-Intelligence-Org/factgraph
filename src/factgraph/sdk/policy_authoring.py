@@ -702,9 +702,7 @@ class PolicyDraft:
         result: list[PolicyNode] = []
         for item in items:
             self._require_owned(item, label=label)
-            if isinstance(item, PolicyNodeHandle):
-                result.append(item._node)
-            elif isinstance(item, PolicyConstraintHandle):
+            if isinstance(item, (PolicyNodeHandle, PolicyConstraintHandle)):
                 result.append(item._node)
             else:  # pragma: no cover - _require_owned gives the public error.
                 raise AssertionError("unreachable")
