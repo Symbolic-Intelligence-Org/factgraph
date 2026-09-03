@@ -3,7 +3,7 @@ from __future__ import annotations
 import shutil
 import unittest
 
-import factgraph.sdk as sdk
+from factgraph import sdk
 from factgraph.adapters.souffle.runner import find_souffle_binary
 from factgraph.core.evidence.write_protocol import set_field
 from factgraph.sdk import Entity, Field, Identity

@@ -2,8 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-import factgraph.sdk as sdk
-import factgraph.sdk.dsl as dsl
+from factgraph import sdk
 from factgraph.application.protocol import (
     DetachedRowError,
     EvaluateResult,
@@ -12,6 +11,7 @@ from factgraph.application.protocol import (
     ResultFingerprint,
     Rule,
 )
+from factgraph.sdk import dsl
 
 
 class EvaluateResultSDKExportTests(unittest.TestCase):

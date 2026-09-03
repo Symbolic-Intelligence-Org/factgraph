@@ -3,8 +3,7 @@ from __future__ import annotations
 import unittest
 from dataclasses import FrozenInstanceError
 
-import factgraph.sdk as sdk
-import factgraph.sdk.dsl as dsl
+from factgraph import sdk
 from factgraph.application.protocol import (
     ConditionDescriptor,
     OccurrenceInspect,
@@ -25,6 +24,7 @@ from factgraph.core.rules.where_ast import (
     PredAtom,
     Var,
 )
+from factgraph.sdk import dsl
 from factgraph.sdk.schema import Entity, Field, Identity
 from factgraph.sdk.store import SDKStoreError
 

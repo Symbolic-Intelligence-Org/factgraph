@@ -2,10 +2,9 @@ from __future__ import annotations
 
 import unittest
 
-import factgraph.sdk as sdk
-import factgraph.sdk.dsl as dsl
+from factgraph import sdk
 from factgraph.application.protocol import Rule, RuleValidationError
-from factgraph.sdk import Entity, Field, Identity
+from factgraph.sdk import Entity, Field, Identity, dsl
 
 
 class User(Entity):

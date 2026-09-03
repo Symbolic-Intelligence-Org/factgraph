@@ -8,8 +8,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
-import factgraph.sdk as sdk
-import factgraph.sdk.dsl as dsl
+from factgraph import sdk
 from factgraph.adapters.problog.provenance import parse_problog_trace, problog_trace_to_dict
 from factgraph.adapters.pyreason.provenance import (
     PyReasonTraceEventV0,
@@ -54,7 +53,7 @@ from factgraph.core.store._support import (
     ProvenanceEnvelope,
 )
 from factgraph.core.store.ledger import AnnotationRow
-from factgraph.sdk import Entity, Field, Identity
+from factgraph.sdk import Entity, Field, Identity, dsl
 from factgraph.sdk.store import SDKStoreError, _initial_probe_bindings_for_row
 
 

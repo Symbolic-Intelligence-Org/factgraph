@@ -4,7 +4,7 @@ import unittest
 from dataclasses import FrozenInstanceError
 from typing import get_type_hints
 
-import factgraph.sdk as sdk
+from factgraph import sdk
 from factgraph.application.protocol import (
     ExplicitBoolError,
     Rule,

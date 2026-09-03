@@ -307,7 +307,7 @@ class EvaluationQueryNativeEvaluateTests(unittest.TestCase):
             graph.eval.evaluate({"derivation_id": "not-a-query"}, capture="run_bundle_v0")
 
     def test_non_query_evaluate_and_candidate_paths_reject_scenario_keyword(self) -> None:
-        import factgraph.sdk as sdk
+        from factgraph import sdk
 
         graph = SDKStore([Person])
         _seed_person(graph, "alice", age=22, score=9)

@@ -88,8 +88,8 @@ class RuleExprLoweringPlanTests(unittest.TestCase):
         with self.assertRaises(FrozenInstanceError):
             plan.source_kind = "other"  # type: ignore[misc]
 
-        import factgraph.application.protocol as protocol
-        import factgraph.sdk as sdk
+        from factgraph import sdk
+        from factgraph.application import protocol
 
         self.assertFalse(hasattr(protocol, "RuleExprLoweringPlan"))
         self.assertFalse(hasattr(sdk, "RuleExprLoweringPlan"))
