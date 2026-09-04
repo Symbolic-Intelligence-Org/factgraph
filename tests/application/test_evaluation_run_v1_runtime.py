@@ -78,10 +78,12 @@ class EvaluationRunV1RuntimeTests(unittest.TestCase):
         )
         baseline_relation = {
             "Person:exists": (ProjectedFact("base:exists:alice", (alice,)),),
+            "person:employee_id": (ProjectedFact("base:employee_id:alice", (alice, "alice")),),
             "person:age": (ProjectedFact("base:age:alice", (alice, 35)),),
         }
         effective_relation = {
             "Person:exists": (ProjectedFact("effective:exists:alice", (alice,)),),
+            "person:employee_id": (ProjectedFact("base:employee_id:alice", (alice, "alice")),),
             "person:age": (ProjectedFact("effective:age:alice", (alice, 22)),),
         }
         compiled = CompiledDerivationPlan(

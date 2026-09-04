@@ -132,13 +132,16 @@ def _components(
     schema_index = build_schema_index(schema_ir)
     alice = encode_entity_ref(EntityRef("Person", {"employee_id": "alice"}), index=schema_index)
     exists_rows = [ProjectedFact("base:exists:alice", (alice,))]
+    identity_rows = [ProjectedFact("base:employee_id:alice", (alice, "alice"))]
     age_rows = [ProjectedFact("base:age:alice", (alice, 35))]
     if two_people:
         bob = encode_entity_ref(EntityRef("Person", {"employee_id": "bob"}), index=schema_index)
         exists_rows.append(ProjectedFact("base:exists:bob", (bob,)))
+        identity_rows.append(ProjectedFact("base:employee_id:bob", (bob, "bob")))
         age_rows.append(ProjectedFact("base:age:bob", (bob, 41)))
     relation = {
         "Person:exists": tuple(exists_rows),
+        "person:employee_id": tuple(identity_rows),
         "person:age": tuple(age_rows),
     }
     pins = EvaluationWorldInputPinsV1(_token("4"), _token("5"))
@@ -239,7 +242,7 @@ def _components(
             provider_digest=_token("7"),
             query_digest=plan.query_digest,
             schema_digest=schema.schema_digest,
-            dependency_predicate_ids=("Person:exists", "person:age"),
+            dependency_predicate_ids=("Person:exists", "person:age", "person:employee_id"),
             supplied_predicate_ids=("person:age",),
             bindings=(),
         )

@@ -122,6 +122,7 @@ def _request(*, with_context: bool = True) -> SealedEvaluationRequestV1:
     ref = encode_entity_ref(EntityRef("Person", {"employee_id": "alice"}), index=schema_index)
     relation = {
         "Person:exists": (ProjectedFact("base:exists:alice", (ref,)),),
+        "person:employee_id": (ProjectedFact("base:employee_id:alice", (ref, "alice")),),
         "person:age": (ProjectedFact("base:age:alice", (ref, 35)),),
     }
     world_pins = EvaluationWorldInputPinsV1(_token("4"), _token("5"))
