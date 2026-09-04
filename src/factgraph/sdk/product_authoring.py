@@ -572,7 +572,7 @@ class FunctionBuilder:
         or write to a FactGraph ledger.
     """
 
-    __slots__ = ("_id", "_version", "_meta")
+    __slots__ = ("_id", "_meta", "_version")
 
     def __init__(
         self,
@@ -902,7 +902,7 @@ class FunctionOccurrenceTopologyV1:
 class FunctionOccurrenceHandleV1(PolicyOccurrenceHandle):
     """Represent one owner-bound Product Function call site in a Policy."""
 
-    __slots__ = ("function", "_input_bindings", "_function_occurrences")
+    __slots__ = ("_function_occurrences", "_input_bindings", "function")
 
     def __init__(
         self,
@@ -980,7 +980,7 @@ class FunctionOccurrenceHandleV1(PolicyOccurrenceHandle):
 
 
 class _PendingPolicyUseV1:
-    __slots__ = ("_builder", "_asset")
+    __slots__ = ("_asset", "_builder")
 
     def __init__(
         self, builder: PolicyBuilder, asset: ResolvedRuleBundle | ProductFunctionV1
@@ -2077,7 +2077,7 @@ class RuleBuilder:
         Rule by id, execute it, or write to the ledger.
     """
 
-    __slots__ = ("_graph", "_id", "_version", "_meta")
+    __slots__ = ("_graph", "_id", "_meta", "_version")
 
     def __init__(
         self,
@@ -2259,13 +2259,13 @@ class PolicyBuilder:
     """
 
     __slots__ = (
-        "_graph",
+        "_choice_conditions",
+        "_choices",
         "_draft",
+        "_functions",
+        "_graph",
         "_meta",
         "_owner",
-        "_choices",
-        "_choice_conditions",
-        "_functions",
     )
 
     def __init__(

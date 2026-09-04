@@ -377,8 +377,8 @@ class ProofFrameDiffView:
     """Frozen wrapper view over `ProofFrameDiff`."""
 
     __slots__ = (
-        "_frame_deltas",
         "_frame_delta_surface",
+        "_frame_deltas",
         "_frozen",
         "_round_a_id",
         "_round_b_id",

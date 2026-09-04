@@ -133,7 +133,7 @@ def _generate_annotation_templates(
 class PyReasonFieldHandle:
     """Proxy for field mutations on a managed entity."""
 
-    __slots__ = ("_tx", "_entity_handle", "_field_name", "_pred_id")
+    __slots__ = ("_entity_handle", "_field_name", "_pred_id", "_tx")
 
     def __init__(
         self,
@@ -173,14 +173,14 @@ class PyReasonEntityHandle:
     """Managed handle for an entity in a batch transaction."""
 
     __slots__ = (
-        "_tx",
         "_entity_cls",
         "_entity_type",
-        "_node_ref",
-        "_owner_prefix",
+        "_field_handles",
         "_field_pred_ids",
         "_identity_values",
-        "_field_handles",
+        "_node_ref",
+        "_owner_prefix",
+        "_tx",
     )
 
     def __init__(
@@ -222,7 +222,7 @@ class PyReasonEntityHandle:
 class PyReasonBatchTx:
     """Batch transaction for entity-level fact writing."""
 
-    __slots__ = ("_session", "_entity_handles")
+    __slots__ = ("_entity_handles", "_session")
 
     def __init__(self, session: PyReasonSession) -> None:
         self._session = session

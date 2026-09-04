@@ -270,7 +270,7 @@ class PolicyPortHandle(_PolicyHandle):
 class PolicyEntityPortHandle(PolicyPortHandle):
     """One entity-identity port that may navigate to an owned scalar field."""
 
-    __slots__ = ("entity_type", "_schema_index")
+    __slots__ = ("_schema_index", "entity_type")
     __hash__ = _PolicyHandle.__hash__
 
     def __init__(
@@ -499,7 +499,7 @@ class PolicyFieldHandle(_PolicyScalarHandle):
 class PolicyDraft:
     """Mutable authoring session that owns one future immutable Policy."""
 
-    __slots__ = ("_graph", "_id", "_version", "_owner", "_occurrences")
+    __slots__ = ("_graph", "_id", "_occurrences", "_owner", "_version")
 
     def __init__(self, graph: SDKStore, policy_id: str, *, version: str | None = None) -> None:
         if not isinstance(policy_id, str) or not policy_id:

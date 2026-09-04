@@ -16,8 +16,8 @@ class ConditionKeyView:
     """Frozen parsed view over a `c{case}.c{condition}:{payload}` condition key."""
 
     __slots__ = (
-        "_condition_index",
         "_case_index",
+        "_condition_index",
         "_frozen",
         "_key",
         "_kind",

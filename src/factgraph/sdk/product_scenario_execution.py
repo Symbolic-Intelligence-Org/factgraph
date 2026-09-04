@@ -310,7 +310,7 @@ class ScenarioBuilderV2:
         references and display annotations when each operation is added.
     """
 
-    __slots__ = ("_graph", "_builder", "_next_premise", "_premise_ids")
+    __slots__ = ("_builder", "_graph", "_next_premise", "_premise_ids")
 
     def __init__(self, graph: SDKStore) -> None:
         self._graph = graph
@@ -639,16 +639,16 @@ class ExecutionProfileBuilderV2:
     """
 
     __slots__ = (
-        "_default_target",
+        "_attachments",
+        "_capture",
         "_default_side",
+        "_default_target",
+        "_engines",
         "_kind",
         "_name",
-        "_engines",
         "_resources",
-        "_capture",
         "_semantics",
         "_target_pins",
-        "_attachments",
     )
 
     def __init__(

@@ -20,8 +20,8 @@ class IRAtomView:
 
     __slots__ = (
         "_args",
-        "_condition_index",
         "_case_index",
+        "_condition_index",
         "_frozen",
         "_key",
         "_kind",
