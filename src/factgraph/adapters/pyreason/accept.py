@@ -40,7 +40,7 @@ def persist_pyreason_annotations(
 ) -> int:
     """Persist pending ``pyreason/*`` annotations after shared ``Store.accept()``."""
     if not isinstance(ledger, Ledger):
-        raise ValueError("ledger must be a Ledger instance")
+        raise ValueError("ledger must be a Ledger instance")  # noqa: TRY004 - Documented post-accept binder keeps the adapter ValueError argument contract.
     if not isinstance(run_id, str) or not run_id:
         raise ValueError("run_id must be non-empty string")
 
@@ -94,9 +94,9 @@ def persist_pyreason_annotations(
 def accept_pyreason_session(ledger: Ledger, session: PyReasonSession) -> AcceptResult:
     """Accept all buffered facts from *session* into *ledger*."""
     if not isinstance(ledger, Ledger):
-        raise ValueError("ledger must be a Ledger instance")
+        raise ValueError("ledger must be a Ledger instance")  # noqa: TRY004 - Documented accept helper argument rejection pinned as ValueError by test_pyreason_accept.
     if not isinstance(session, PyReasonSession):
-        raise ValueError("session must be a PyReasonSession instance")
+        raise ValueError("session must be a PyReasonSession instance")  # noqa: TRY004 - Documented accept helper argument rejection pinned as ValueError by test_pyreason_accept.
 
     pred_specs = _predicate_specs_by_id(session)
     asrt_id_map: dict[tuple[str, int], str] = {}
@@ -163,7 +163,7 @@ def accept_pyreason_session(ledger: Ledger, session: PyReasonSession) -> AcceptR
 def _predicate_specs_by_id(session: PyReasonSession) -> dict[str, dict[str, Any]]:
     predicates = session._schema_ir.get("predicates", [])
     if not isinstance(predicates, list):
-        raise ValueError("session schema_ir.predicates must be list")
+        raise ValueError("session schema_ir.predicates must be list")  # noqa: TRY004 - Mirrors PyReasonSession's schema_ir.predicates ValueError shape contract.
     result: dict[str, dict[str, Any]] = {}
     for pred in predicates:
         if isinstance(pred, dict) and isinstance(pred.get("pred_id"), str):
@@ -177,7 +177,7 @@ def _node_rest_terms(fact: dict[str, Any], pred_spec: dict[str, Any]) -> list[tu
         raise ValueError(f"node predicate arg_specs invalid for {pred_spec.get('pred_id')}")
     value_spec = arg_specs[1]
     if not isinstance(value_spec, dict):
-        raise ValueError(f"node value arg_spec invalid for {pred_spec.get('pred_id')}")
+        raise ValueError(f"node value arg_spec invalid for {pred_spec.get('pred_id')}")  # noqa: TRY004 - schema_ir arg_specs shape rejections share one ValueError family with sibling checks.
     value_tag = value_spec.get("type_domain")
     if not isinstance(value_tag, str) or not value_tag:
         raise ValueError(f"node value type_domain missing for {pred_spec.get('pred_id')}")
@@ -191,7 +191,7 @@ def _edge_rest_terms(fact: dict[str, Any], pred_spec: dict[str, Any]) -> list[tu
     to_ref_spec = arg_specs[1]
     value_spec = arg_specs[2]
     if not isinstance(to_ref_spec, dict) or not isinstance(value_spec, dict):
-        raise ValueError(f"edge arg_specs invalid for {pred_spec.get('pred_id')}")
+        raise ValueError(f"edge arg_specs invalid for {pred_spec.get('pred_id')}")  # noqa: TRY004 - schema_ir arg_specs shape rejections share one ValueError family with sibling checks.
 
     to_ref_value = _edge_to_ref_value(str(fact["to_ref"]), pred_spec, to_ref_spec.get("type_domain"))
     to_ref_tag = "entity_ref" if isinstance(to_ref_value, str) and to_ref_value.startswith(ENTITY_REF_PREFIX) else "string"
