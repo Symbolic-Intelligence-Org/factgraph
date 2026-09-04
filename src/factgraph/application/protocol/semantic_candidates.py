@@ -67,6 +67,14 @@ SEMANTIC_CANDIDATE_RESOLVER_CONTRACT_DIGEST_V1 = _digest(
 
 @dataclass(frozen=True)
 class SemanticValueCandidateRequestV1:
+    """One read-only candidate lookup at an explicit semantic endpoint.
+
+    ``supplied_value`` preserves its scalar type. ``match_mode`` selects typed
+    equality or the frozen Unicode string matching policy; suggestions are
+    bounded hints, never authoritative replacements for an equality match.
+    ``correlation_key`` associates the result with this request, not a database ID.
+    """
+
     correlation_key: str
     endpoint: EntityIdentityEndpoint | FieldEndpoint
     supplied_value: SemanticCandidateScalar
@@ -92,6 +100,12 @@ class SemanticValueCandidateRequestV1:
 
 @dataclass(frozen=True)
 class SemanticValueCandidateBatchRequestV1:
+    """A nonempty batch of uniquely correlated lookups over one projected view.
+
+    The canonical ``request_digest`` binds all items, including endpoint,
+    supplied scalar type/value, matching mode and suggestion limit.
+    """
+
     items: tuple[SemanticValueCandidateRequestV1, ...]
     request_digest: str = field(init=False)
 
@@ -107,6 +121,13 @@ class SemanticValueCandidateBatchRequestV1:
 
 @dataclass(frozen=True)
 class SemanticValueCandidateResultV1:
+    """Bounded canonical values for one correlated lookup, without internal IDs.
+
+    Exact and normalized equality matches are separate from prefix suggestions.
+    The truncation flags prohibit interpreting a bounded response as an exhaustive
+    inventory when more values exist. The consumer owns selection and admission.
+    """
+
     correlation_key: str
     exact_matches: tuple[SemanticCandidateScalar, ...] = ()
     normalized_matches: tuple[SemanticCandidateScalar, ...] = ()
@@ -130,6 +151,13 @@ class SemanticValueCandidateResultV1:
 
 @dataclass(frozen=True)
 class SemanticValueCandidateBatchResultV1:
+    """Candidate evidence bound to one request and one guarded projected view.
+
+    ``view_snapshot_digest`` identifies the view used for the whole batch.
+    ``evidence_digest`` seals the request pin, view pin and every item. This
+    revision guard does not claim a shared transaction with later execution.
+    """
+
     request_digest: str
     view_snapshot_digest: str
     items: tuple[SemanticValueCandidateResultV1, ...]

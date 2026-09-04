@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import json
 import unittest
+from pathlib import Path
+from unittest.mock import patch
 
 import factgraph.sdk as sdk_module
 from factgraph.application import execute_read_request
@@ -167,7 +170,16 @@ class SDKFindPartialIdentityTests(unittest.TestCase):
         # eight Product Function asset/builder/occurrence/binding names,
         # bringing the explicit total to 208.
         # Intent unchanged: no ACCIDENTAL name creep.
-        self.assertEqual(len(sdk_module.__all__), 208)
+        # The retained 8d7e6b8f producer deliberately adds 17 candidate/Store
+        # witness/RuleProgram witness names to eb36a76d's exact 208-name set.
+        # Freeze names, not just a count: replacing a public name with a private
+        # helper must fail even when the total remains unchanged.
+        expected = json.loads(
+            (Path(__file__).parent / "fixtures" / "public_sdk_exports.json").read_text()
+        )
+        self.assertEqual(len(expected), 225)
+        self.assertEqual(len(set(expected)), len(expected))
+        self.assertEqual(sorted(sdk_module.__all__), expected)
         self.assertIn("compile_derivation_plan", sdk_module.__all__)
         self.assertIn("RuleProgram", sdk_module.__all__)
         self.assertIn("RuleProgramFact", sdk_module.__all__)
@@ -183,6 +195,19 @@ class SDKFindPartialIdentityTests(unittest.TestCase):
         self.assertIn("AuthoredPolicyTargetV1", sdk_module.__all__)
         self.assertNotIn("EntityDomainSet", sdk_module.__all__)
         self.assertFalse(hasattr(sdk, "read"))
+
+    def test_export_inventory_rejects_unknown_duplicate_and_same_count_substitution(self) -> None:
+        original = list(sdk_module.__all__)
+        cases = (
+            [*original, "ThirdPartyHelper"],
+            [*original, original[0]],
+            ["PrivateStoreReader", *original[1:]],
+            original[1:],
+        )
+        for altered in cases:
+            with self.subTest(exports=altered[:1], count=len(altered)):
+                with patch.object(sdk_module, "__all__", altered), self.assertRaises(AssertionError):
+                    self.test_no_new_public_sdk_names_or_read_helpers_are_added()
 
 
 if __name__ == "__main__":
