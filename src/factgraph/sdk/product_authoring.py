@@ -73,7 +73,7 @@ from .policy_authoring import (
     policy_draft,
 )
 from .policy_authoring import (
-    PolicyAuthoringError as PolicyAuthoringError,
+    PolicyAuthoringError as PolicyAuthoringError,  # noqa: PLC0414 - retain the existing module re-export without a runtime catch.
 )
 from .schema import Entity, Field
 
