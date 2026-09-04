@@ -233,7 +233,6 @@ def _localize_failed_atom(
         if requested_vars and branch_vars.isdisjoint(requested_vars):
             continue
         envs = [dict(requested_env)]
-        atoms_satisfied = 0
         for condition_index, atom in enumerate(branch):
             next_envs: list[dict[str, Any]] = []
             for env in envs:
@@ -243,13 +242,12 @@ def _localize_failed_atom(
                     _FailedAtomCandidate(
                         case_index=case_index,
                         failed_atom_index=condition_index,
-                        atoms_satisfied=atoms_satisfied,
+                        atoms_satisfied=condition_index,
                         attempted_env=_primary_env(envs),
                     )
                 )
                 break
             envs = _dedupe_envs(next_envs)
-            atoms_satisfied += 1
 
     if not candidates:
         return None

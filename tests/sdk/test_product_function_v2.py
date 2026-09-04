@@ -332,8 +332,10 @@ class ProductFunctionV2Tests(unittest.TestCase):
         altered = replace(call, output=(call.output[0], replace(call.output[1], value=9)))
         object.__setattr__(materialization, "calls", (altered,))
 
-        with self.assertRaises(Exception):
+        with self.assertRaises(ProductEvaluationRuntimeErrorV2) as error:
             replay_evaluation_run_v2(run)
+        self.assertEqual(error.exception.code, "V2_REPLAY_PROTOCOL_INVALID")
+        self.assertIn("Function materialization seal is stale", str(error.exception))
 
     def test_replay_rejects_function_definition_capture_tamper(self) -> None:
         graph = SDKStore([Person])
