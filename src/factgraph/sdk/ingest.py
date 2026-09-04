@@ -568,7 +568,7 @@ def _prepare_single_ingest_item(
         schema_pred = None
         try:
             schema_pred = sdk._schema_pred_for_field(field)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - schema/field resolution boundary: the failure is recorded as an ingest_item_field_invalid diagnostic carrying the original message
             diagnostics.append(
                 _diag(
                     code="ingest_item_field_invalid",
@@ -623,7 +623,7 @@ def _prepare_single_ingest_item(
         if schema_pred is not None and value is not _MISSING:
             try:
                 sdk._rest_terms_for_field(schema_pred, value=value)
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001 - value lowering boundary: the failure is recorded as an ingest_item_field_value_invalid diagnostic carrying the original message
                 diagnostics.append(
                     _diag(
                         code="ingest_item_field_value_invalid",

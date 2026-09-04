@@ -5474,7 +5474,7 @@ class SDKStore:
                         metadata=metadata,
                         graph_certainty=row.certainty,
                     )
-                except Exception:
+                except Exception:  # noqa: BLE001,S110 - souffle reach-explain adapter boundary: any explainer/lowering failure degrades to the witness-artifact or labelled minimal evidence graph, never to a changed row outcome
                     pass
             artifact = row_support_artifacts.get(row.row_id)
             if artifact is None or artifact.kind != SOUFFLE_WITNESS_KIND:
@@ -5486,7 +5486,7 @@ class SDKStore:
                     result=result,
                     metadata=metadata,
                 )
-            except Exception:
+            except Exception:  # noqa: BLE001 - souffle witness-artifact decode boundary: a malformed adapter payload degrades to the labelled minimal evidence graph
                 return _build_minimal_row_evidence_graph(row, result, metadata)
 
         return _builder
@@ -5519,7 +5519,7 @@ class SDKStore:
                         engine_options=None if semantics_profile is None else dict(semantics_profile.engine_options),
                         input_certainty_for_goal=self._problog_input_certainty_for_goal,
                     )
-                except Exception:
+                except Exception:  # noqa: BLE001,S110 - problog reach-explain adapter boundary: any explainer/lowering failure degrades to the provenance envelope or labelled minimal evidence graph
                     pass
             envelope = row_provenance_envelopes.get(row.row_id)
             if envelope is None or envelope.engine != "problog" or envelope.payload_type != "proof_trace":
@@ -5549,7 +5549,7 @@ class SDKStore:
                     certainty=graph.certainty,
                     metadata=dict(metadata),
                 )
-            except Exception:
+            except Exception:  # noqa: BLE001 - problog provenance-trace decode boundary: a malformed engine payload degrades to the labelled minimal evidence graph
                 return _build_minimal_row_evidence_graph(row, result, metadata)
 
         return _builder
@@ -5615,7 +5615,7 @@ class SDKStore:
                     certainty=graph.certainty,
                     metadata=dict(metadata),
                 )
-            except Exception:
+            except Exception:  # noqa: BLE001 - pyreason provenance-trace decode boundary: a malformed engine payload degrades to the labelled minimal evidence graph
                 return _build_minimal_row_evidence_graph(row, result, metadata)
 
         return _builder
@@ -5740,7 +5740,7 @@ class SDKStore:
                     metadata=metadata,
                     graph_certainty=BOOLEAN_CERTAINTY,
                 )
-            except Exception:
+            except Exception:  # noqa: BLE001,S110 - souffle closed-head probe boundary: explainer failure falls through to the structural lowering-plan probe
                 pass
         elif engine == "problog":
             try:
@@ -5759,7 +5759,7 @@ class SDKStore:
                     engine_options=None,
                     input_certainty_for_goal=self._problog_input_certainty_for_goal,
                 )
-            except Exception:
+            except Exception:  # noqa: BLE001,S110 - problog closed-head probe boundary: explainer failure falls through to the structural lowering-plan probe
                 pass
         return self._probe_evidence_graph_for_lowering_plan(
             plan,
@@ -6186,7 +6186,7 @@ class SDKStore:
             return
         try:
             candidate_spec = entity_cls.sdk_entity_spec()
-        except Exception:
+        except Exception:  # noqa: BLE001 - user-defined entity class boundary: sdk_entity_spec() is application code, and a class with no usable spec cannot supersede anything
             return
         entity_type = candidate_spec.get("entity_type")
         if not isinstance(entity_type, str):
@@ -6201,7 +6201,7 @@ class SDKStore:
         for cls in self._classes:
             try:
                 spec = cls.sdk_entity_spec()
-            except Exception:
+            except Exception:  # noqa: BLE001,S112 - user-defined entity class boundary: a class whose sdk_entity_spec() is unusable cannot claim the active binding for this entity type
                 continue
             if spec.get("entity_type") == entity_type:
                 return cls

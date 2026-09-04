@@ -493,7 +493,7 @@ def _validate_member_repr_for_sdk(member: _DataMember, *, field_name: str) -> No
 def _is_sdk_dsl_value(value: Any) -> bool:
     try:
         from .dsl.expr import is_dsl_head_kwarg_value
-    except Exception:
+    except Exception:  # noqa: BLE001 - optional DSL module import boundary: an unimportable dsl.expr means the value cannot be a DSL head kwarg
         return False
     return bool(is_dsl_head_kwarg_value(value))
 
@@ -705,6 +705,6 @@ def _ast_literal_value(node: ast.AST) -> Any:
 def _typing_union_origin() -> Any:
     try:
         from typing import Union
-    except Exception:
+    except Exception:  # noqa: BLE001 - typing import boundary: without typing.Union there is no union origin to compare against
         return None
     return Union

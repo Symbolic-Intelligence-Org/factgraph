@@ -529,7 +529,7 @@ def _first_unrepresentable_batch_op(plan: BatchPlan, sdk: SDKStore) -> tuple[str
             try:
                 schema_pred = sdk._schema_pred_for_field(op.field)
                 rest_terms = sdk._rest_terms_for_field(schema_pred, value=op.value)
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001 - schema/field lowering boundary: any lowering failure is surfaced as a typed staged-plan validation message
                 return path, str(exc)
             if len(rest_terms) != 1:
                 return path, "field value does not lower to exactly one canonical term"
@@ -1765,7 +1765,7 @@ class SDKBatchTx:
         schema_pred = self._sdk._schema_pred_for_field(op.field)
         try:
             rest_terms = self._sdk._rest_terms_for_field(schema_pred, value=op.value)
-        except Exception:
+        except Exception:  # noqa: BLE001 - schema/field lowering boundary: a value that does not lower makes the application-delegated write command unavailable, so preview falls back to the native path
             return None
         if len(rest_terms) != 1:
             return None
