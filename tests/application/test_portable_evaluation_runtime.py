@@ -658,6 +658,36 @@ def _compiled_cross_entity_navigation_comparison_query_and_relation() -> tuple[
 class PortableObservationFrameContractTests(unittest.TestCase):
     """Observation framing must be testable even where external CLIs are absent."""
 
+    def test_unexpected_adapter_fault_keeps_failed_frame_and_other_engines(self) -> None:
+        plan, schema_ir, relation = _compiled_query_and_relation()
+        for stage in ("availability", "execution"):
+            with self.subTest(stage=stage):
+                calls = []
+
+                def available(engine):
+                    if stage == "availability" and engine == "problog":
+                        raise LookupError("adapter capability fault")
+
+                def evaluate(request, *, store):
+                    calls.append(request.engine)
+                    if stage == "execution" and request.engine == "problog":
+                        raise LookupError("adapter evaluation fault")
+                    return []
+
+                with (
+                    patch.object(portable_evaluation_runtime, "_assert_portable_engine_available_v1", available),
+                    patch.object(portable_evaluation_runtime, "evaluate_derivation_plans", evaluate),
+                ):
+                    result = observe_portable_deterministic_v1(
+                        plan, schema_ir=schema_ir, effective_relations=relation,
+                    )
+                self.assertEqual(tuple(frame.status for frame in result.frames), ("succeeded", "succeeded", "failed"))
+                failed = result.frames[2]
+                self.assertIsNone(failed.evaluation)
+                self.assertEqual(failed.diagnostic.code, "PORTABLE_ENGINE_EXECUTION_FAILED")
+                self.assertIn('"cause_type":"LookupError"', failed.diagnostic.details_json)
+                self.assertEqual(calls, ["native", "souffle"] + (["problog"] if stage == "execution" else []))
+
     def test_observation_returns_all_terminal_frames_over_one_isolated_store(self) -> None:
         plan, schema_ir, relation = _compiled_query_and_relation()
         observed_store_ids: list[int] = []

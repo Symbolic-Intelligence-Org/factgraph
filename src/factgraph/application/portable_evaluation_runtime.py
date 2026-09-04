@@ -1272,7 +1272,7 @@ def _observe_portable_engine_v1(
 
     try:
         _assert_portable_engine_available_v1(engine)
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - Capability faults seal a failed/unsupported frame; other engines must remain observable.
         return _engine_observation_failure_frame_v1(
             engine,
             exc,
@@ -1281,7 +1281,7 @@ def _observe_portable_engine_v1(
     try:
         branch_outputs = _execute_portable_branch_plans(engine, validated=validated, store=store)
         evaluation = _normalize_engine_outputs(engine, branch_outputs, validated.contract)
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - Adapter faults seal a typed failed frame, never a successful empty evaluation.
         return _engine_observation_failure_frame_v1(
             engine,
             exc,
