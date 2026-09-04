@@ -704,8 +704,8 @@ class PolicyDraft:
             self._require_owned(item, label=label)
             if isinstance(item, (PolicyNodeHandle, PolicyConstraintHandle)):
                 result.append(item._node)
-            else:  # pragma: no cover - _require_owned gives the public error.
-                raise AssertionError("unreachable")  # noqa: TRY004 - Unreachable defensive branch; public rejection is PolicyAuthoringError.
+            else:
+                raise AssertionError("unreachable")  # noqa: TRY004 - Preserve existing rejection of same-draft port/field handles, which are invalid all() children.
         return tuple(result)
 
     def _require_owned(self, value: object, *, label: str) -> _PolicyHandle:

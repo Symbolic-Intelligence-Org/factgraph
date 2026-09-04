@@ -1,12 +1,12 @@
-"""``PolicyDraft.all(...)`` rejects wrong-typed children as ``PolicyAuthoringError``.
+"""Characterize current ``PolicyDraft.all(...)`` input rejection.
 
-``PolicyDraft.all`` documents ``Raises: PolicyAuthoringError: If the group is
-empty or crosses drafts``.  ``_owned_nodes`` calls ``_require_owned`` first, so
-any non-handle argument leaves through that typed SDK rejection; the trailing
-``raise AssertionError("unreachable")`` is a defensive invariant marker for a
-branch ``_require_owned`` already forecloses (it is marked ``# pragma: no
-cover``).  Turning it into ``TypeError`` would advertise a public exception
-class the façade never raises.  These tests pin the reachable contract.
+The signature and Args accept owned nodes or constraints, not bare port/field
+handles. Non-handles and foreign handles raise ``PolicyAuthoringError``. Owned
+port/field handles pass the ownership check but are invalid children; they
+currently reach ``AssertionError("unreachable")``. Recording that inherited
+behavior does not endorse it as the correct public error contract or make
+those inputs supported. Valid use composes a constraint before passing it to
+``all``; changing the rejection behavior requires a separate decision.
 """
 
 from __future__ import annotations
@@ -68,3 +68,39 @@ def test_policy_all_accepts_owned_handle():
     node = draft.all(people)
     assert node is not None
     assert type(node).__name__ == "PolicyNodeHandle"
+
+
+@pytest.mark.parametrize("kind", ["entity_port", "field"])
+def test_policy_all_owned_non_node_input_retains_existing_assertion_error(kind):
+    graph = SDKStore([Person])
+    draft = graph.policy("owned-invalid-child", version="1")
+    people = draft.use(_identity_bundle(graph), as_="people")
+    port = people.port("person")
+    child = port if kind == "entity_port" else port.field("age")
+
+    with pytest.raises(AssertionError) as caught:
+        draft.all(child)
+
+    assert type(caught.value) is AssertionError
+    assert str(caught.value) == "unreachable"
+    assert caught.value.args == ("unreachable",)
+    # Rejection does not prevent building the same draft with valid children.
+    target = draft.build(draft.all(people, port.field("age") >= 18))
+    assert target.policy.id == "owned-invalid-child"
+
+
+@pytest.mark.parametrize("kind", ["entity_port", "field"])
+def test_policy_all_foreign_non_node_input_is_rejected_by_ownership_first(kind):
+    graph = SDKStore([Person])
+    other = graph.policy("foreign-child", version="1")
+    people = other.use(_identity_bundle(graph), as_="people")
+    port = people.port("person")
+    child = port if kind == "entity_port" else port.field("age")
+    draft = graph.policy("owning-draft", version="1")
+
+    with pytest.raises(PolicyAuthoringError) as caught:
+        draft.all(child)
+
+    assert type(caught.value) is PolicyAuthoringError
+    assert caught.value.code == "POLICY_CROSS_DRAFT_HANDLE"
+    assert str(caught.value) == "Policy all must use values from this Policy draft"
