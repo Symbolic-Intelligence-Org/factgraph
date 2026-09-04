@@ -74,11 +74,13 @@ schema = EvaluationSchemaCaptureV1(canonicalize_schema_ir_jcs(schema_ir))
 alice = encode_entity_ref(EntityRef("Person", {"employee_id": "alice"}), index=schema_index)
 world_pins = EvaluationWorldInputPinsV1(_token("4"), _token("5"))
 empty_scenario = ScenarioSpecV1(())
+# Current capture closure includes the selected entity's Identity relation;
+# replay must contain that same dependency even though the query selects age.
 effective_world = EffectiveWorldV1(
     schema_digest=schema.schema_digest,
     base_view_digest=world_pins.base_view_digest,
     admissibility_digest=world_pins.admissibility_digest,
-    dependency_predicate_ids=("Person:exists", "person:age"),
+    dependency_predicate_ids=("Person:exists", "person:age", "person:employee_id"),
     facts=(
         EffectiveWorldFactV1(
             "Person:exists",
@@ -92,6 +94,15 @@ effective_world = EffectiveWorldV1(
             (
                 ScenarioValueV1.from_raw("entity_ref", alice),
                 ScenarioValueV1.from_raw("int", 35),
+            ),
+            "baseline",
+        ),
+        EffectiveWorldFactV1(
+            "person:employee_id",
+            "base:identity:alice",
+            (
+                ScenarioValueV1.from_raw("entity_ref", alice),
+                ScenarioValueV1.from_raw("string", "alice"),
             ),
             "baseline",
         ),
@@ -121,6 +132,16 @@ baseline_world = EvaluationReplayWorldV1(
                 EvaluationReplayFactV1(
                     "base:age:alice",
                     (GoalValueV1("entity_ref", alice), GoalValueV1("int", 35)),
+                ),
+            ),
+        ),
+        EvaluationReplayRelationV1(
+            "person:employee_id",
+            ("entity_ref", "string"),
+            (
+                EvaluationReplayFactV1(
+                    "base:identity:alice",
+                    (GoalValueV1("entity_ref", alice), GoalValueV1("string", "alice")),
                 ),
             ),
         ),
