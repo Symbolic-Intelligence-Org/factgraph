@@ -316,6 +316,8 @@ def _resolve_baseline_context_v1(
     # identity requirements named by this Scenario before the relation
     # projection, then make no further live Store reads while resolving
     # individual Scenario targets.
+    # This active-claim prerequisite never overrides the separate entity
+    # visibility check against the chosen, canonical Identity projection.
     active_identity_requirements = _capture_active_identity_requirements(
         store=store,
         schema_index=schema_index,

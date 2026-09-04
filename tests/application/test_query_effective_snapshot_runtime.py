@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import replace
 import unittest
+from dataclasses import replace
 from unittest.mock import patch
 
 from factgraph.application import (
@@ -14,10 +14,6 @@ from factgraph.application import (
     field_predicate,
     manage_rule_occurrence,
     resolve_selector,
-)
-from factgraph.application.query_effective_snapshot_runtime import (
-    assert_resolved_query_effective_snapshot_current,
-    resolve_query_effective_snapshot_v1,
 )
 from factgraph.application.protocol import (
     EntityRef,
@@ -39,6 +35,11 @@ from factgraph.application.protocol import (
     field_endpoint,
 )
 from factgraph.application.protocol.rule_expr_lowering import _materialize_adapter_derivation_plan
+from factgraph.application.query_effective_snapshot_runtime import (
+    QueryEffectiveSnapshotResolutionError,
+    assert_resolved_query_effective_snapshot_current,
+    resolve_query_effective_snapshot_v1,
+)
 from factgraph.core.evidence.write_protocol import set_field
 from factgraph.core.rules.where_ast import PredAtom, Var
 from factgraph.core.view.projector import project_view_facts_with_witness
@@ -378,10 +379,52 @@ class QueryEffectiveSnapshotRuntimeTests(unittest.TestCase):
         encoded = _seed(graph, "alice", age=22, score=9)
         index = build_schema_index(graph.schema_ir)
         identity_predicate = index.entities["Person"].identity_predicates["employee_id"].pred_id
-        # This remains active but loses the single-cardinality chosen projection.
-        # Q7 admitted the matching active claim, so P2 must preserve that fact.
+        # A matching active claim is necessary, but cannot override visibility:
+        # the chosen Identity no longer agrees with this entity's coordinates.
         set_field(graph.ledger, identity_predicate, encoded, [("string", "other")])
+        with self.assertRaises(QueryEffectiveSnapshotResolutionError) as error:
+            _resolve(graph, self._single(35))
+        self.assertEqual(error.exception.code, "SCENARIO_ENTITY_NOT_VISIBLE")
+
+    def test_q7_valid_chosen_identity_admits_without_mutating_the_source(self) -> None:
+        graph = SDKStore([Person])
+        encoded = _seed(graph, "alice", age=22, score=9)
+        before = graph._view_snapshot_digest(query_typed_values=True)
         resolved = _resolve(graph, self._single(35))
+        self.assertEqual(resolved.snapshot.operations[0].entity_ref, encoded)
+        self.assertEqual(resolved.snapshot.operations[0].baseline_value.value, 22)
+        self.assertEqual(resolved.snapshot.operations[0].effective_value.value, 35)
+        self.assertEqual(graph._view_snapshot_digest(query_typed_values=True), before)
+
+    def test_q7_identity_capture_precedes_the_real_projection(self) -> None:
+        from factgraph.application import query_effective_snapshot_runtime as runtime
+
+        graph = SDKStore([Person])
+        encoded = _seed(graph, "alice", age=22, score=9)
+        compiled, body = _compiled(graph)
+        base_view_digest = graph._view_snapshot_digest(query_typed_values=True)
+        stages: list[str] = []
+        capture = runtime._capture_active_identity_requirements
+
+        def traced_capture(**kwargs):
+            stages.append("identity")
+            return capture(**kwargs)
+
+        def traced_projector(ledger, schema):
+            stages.append("projection")
+            return project_view_facts_with_witness(ledger, schema)
+
+        with patch.object(runtime, "_capture_active_identity_requirements", side_effect=traced_capture):
+            resolved = resolve_query_effective_snapshot_v1(
+                self._single(35),
+                compiled_query=compiled,
+                materialized_body=body,
+                store=graph._store,
+                schema_index=graph._application_schema_index,
+                base_view_digest=base_view_digest,
+                _projector=traced_projector,
+            )
+        self.assertEqual(stages, ["identity", "projection"])
         self.assertEqual(resolved.snapshot.operations[0].entity_ref, encoded)
 
     def test_q7_float_identity_admission_retains_stored_term_semantics(self) -> None:
