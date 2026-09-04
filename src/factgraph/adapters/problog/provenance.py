@@ -180,7 +180,7 @@ def problog_trace_to_dict(trace: ProbLogTraceV0) -> dict[str, Any]:
 
 def problog_trace_from_dict(row: Mapping[str, Any]) -> ProbLogTraceV0:
     if not isinstance(row, Mapping):
-        raise ValueError("row must be Mapping[str, Any]")
+        raise ValueError("row must be Mapping[str, Any]")  # noqa: TRY004 - preserve serialized trace rejection contract.
     if row.get("engine") != "problog":
         raise ValueError("row.engine must be 'problog'")
     if row.get("trace_type") != "proof_trace":
@@ -188,9 +188,9 @@ def problog_trace_from_dict(row: Mapping[str, Any]) -> ProbLogTraceV0:
     raw_events = row.get("events")
     raw_answers = row.get("answers")
     if not isinstance(raw_events, list):
-        raise ValueError("row.events must be list")
+        raise ValueError("row.events must be list")  # noqa: TRY004 - malformed event collection remains ValueError.
     if not isinstance(raw_answers, list):
-        raise ValueError("row.answers must be list")
+        raise ValueError("row.answers must be list")  # noqa: TRY004 - malformed answer collection remains ValueError.
     return ProbLogTraceV0(
         events=tuple(_trace_event_from_dict(event) for event in raw_events),
         answers=tuple(_answer_from_dict(answer) for answer in raw_answers),
@@ -509,10 +509,10 @@ def _normalize_depth(indent: str) -> int:
 
 def _trace_event_from_dict(row: Any) -> ProbLogTraceEventV0:
     if not isinstance(row, Mapping):
-        raise ValueError("trace event row must be Mapping[str, Any]")
+        raise ValueError("trace event row must be Mapping[str, Any]")  # noqa: TRY004 - retain nested trace decode contract.
     result_terms = row.get("result_terms", [])
     if not isinstance(result_terms, list):
-        raise ValueError("trace event result_terms must be list")
+        raise ValueError("trace event result_terms must be list")  # noqa: TRY004 - retain nested term decode contract.
     elapsed_seconds = row.get("elapsed_seconds")
     if elapsed_seconds is not None:
         elapsed_seconds = float(elapsed_seconds)
@@ -536,7 +536,7 @@ def _trace_event_from_dict(row: Any) -> ProbLogTraceEventV0:
 
 def _answer_from_dict(row: Any) -> ProbLogAnswerV0:
     if not isinstance(row, Mapping):
-        raise ValueError("answer row must be Mapping[str, Any]")
+        raise ValueError("answer row must be Mapping[str, Any]")  # noqa: TRY004 - retain nested answer decode contract.
     return ProbLogAnswerV0(
         query=str(row.get("query", "")),
         probability=float(row.get("probability", 0.0)),
@@ -638,7 +638,7 @@ def _resolve_candidate_info(candidate_payload: Mapping[str, Any]) -> dict[str, A
         raise ValueError("candidate_payload.pred_id must be non-empty string")
     terms = candidate_payload.get("terms")
     if not isinstance(terms, list):
-        raise ValueError("candidate_payload.terms must be list")
+        raise ValueError("candidate_payload.terms must be list")  # noqa: TRY004 - candidate evidence rejection stays ValueError.
 
     normalized_terms: list[str] = []
     entity_refs: list[str] = []
@@ -905,7 +905,7 @@ def _pred_short_name(pred_id: str) -> str:
 def _candidate_binding_from_payload(candidate_payload: Mapping[str, Any]) -> dict[str, Any]:
     terms = candidate_payload.get("terms")
     if not isinstance(terms, list):
-        raise ValueError("candidate_payload.terms must be list")
+        raise ValueError("candidate_payload.terms must be list")  # noqa: TRY004 - candidate binding rejection stays ValueError.
     binding: dict[str, Any] = {}
     for idx, term in enumerate(terms):
         if not isinstance(term, Mapping):
