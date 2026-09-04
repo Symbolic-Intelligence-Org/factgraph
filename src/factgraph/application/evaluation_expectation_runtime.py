@@ -4,12 +4,15 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 
+from factgraph.core.protocol.tup_v1 import claim_args_from_rest_terms
+
 from .evaluation_query_runtime import (
     CompiledEvaluationQueryV0,
     ResolvedEvaluationQueryNavigationSelectionV0,
     ResolvedEvaluationQuerySelection,
     _canonical_value,
 )
+from .protocol.evaluate_result import EvaluateResult, EvaluateRow, _public_term_value
 from .protocol.evaluation_expectation import (
     CompiledContainsRowExpectationV0,
     ContainsRowExpectationV0,
@@ -17,7 +20,8 @@ from .protocol.evaluation_expectation import (
     ResolvedExpectationValueV0,
 )
 from .protocol.evaluation_run_bundle import EvaluationRunBundleV0
-from .protocol.evaluate_result import EvaluateResult, EvaluateRow, _public_term_value
+from .protocol.schema_runtime import EntityRef
+from .protocol.semantic_port import EntityIdentityEndpoint, FieldEndpoint
 from .schema_runtime import (
     SchemaIndex,
     SchemaResolutionError,
@@ -26,10 +30,7 @@ from .schema_runtime import (
     materialize_identity,
 )
 from .semantic_address_runtime import SemanticAddressSpace
-from .protocol.schema_runtime import EntityRef
-from .protocol.semantic_port import EntityIdentityEndpoint, FieldEndpoint
 from .value_validation import FieldValueValidationError, validate_field_value
-from factgraph.core.protocol.tup_v1 import claim_args_from_rest_terms
 
 
 class EvaluationExpectationError(ValueError):
@@ -187,10 +188,7 @@ def evaluate_captured_contains_row_expectations_v0(
     selection_types = {item.alias: item.value_type for item in anchor.selections}
     outcomes: list[ExpectationResultV0] = []
     for expectation in expectations:
-        try:
-            assert_compiled_contains_row_expectation_current(expectation)
-        except EvaluationExpectationError:
-            raise
+        assert_compiled_contains_row_expectation_current(expectation)
         if expectation.query_digest != bundle.query_digest:
             raise EvaluationExpectationError(
                 "compiled expectation does not match captured Query",
@@ -380,6 +378,6 @@ __all__ = [
     "EvaluationExpectationError",
     "assert_compiled_contains_row_expectation_current",
     "compile_contains_row_expectations_v0",
-    "evaluate_contains_row_expectations_v0",
     "evaluate_captured_contains_row_expectations_v0",
+    "evaluate_contains_row_expectations_v0",
 ]

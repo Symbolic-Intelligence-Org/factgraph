@@ -6,8 +6,8 @@ from typing import Any, Iterable, Literal
 from factgraph.core.rules.backend_profile import BackendProfile
 from factgraph.core.rules.where_ast import (
     _AGGREGATE_KINDS,
-    AndExpr,
     AggregateAtom,
+    AndExpr,
     Atom,
     BuiltinAtom,
     CmpAtom,
@@ -20,8 +20,8 @@ from factgraph.core.rules.where_ast import (
     RuleRefAtom,
     Term,
     Var,
-    WhereExpr,
     WhereASTError,
+    WhereExpr,
     parse_where_ir_to_ast,
 )
 

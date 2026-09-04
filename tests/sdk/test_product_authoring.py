@@ -1,20 +1,20 @@
 from __future__ import annotations
 
+import unittest
+
 import factgraph.application as factgraph_application
 import factgraph.application.protocol as factgraph_protocol
 import factgraph.application.protocol.policy as policy_protocol
 import factgraph.sdk as factgraph_sdk
-import unittest
-
-from factgraph.application.protocol.semantic_port import entity_identity, field_endpoint
 from factgraph.application.policy_runtime import compile_policy
-from factgraph.application.protocol.semantic_address import SemanticPortAddress
 from factgraph.application.protocol.policy import (
     Policy,
     PolicyError,
     PolicyV2Only,
     policy_contains_weighted_choice,
 )
+from factgraph.application.protocol.semantic_address import SemanticPortAddress
+from factgraph.application.protocol.semantic_port import entity_identity, field_endpoint
 from factgraph.application.semantic_port_runtime import ResolvedRuleBundle
 from factgraph.core.rules.where_ast import PredAtom, Var
 from factgraph.sdk import (

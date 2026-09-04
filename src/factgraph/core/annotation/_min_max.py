@@ -4,6 +4,7 @@ import heapq
 import re
 from collections import deque
 from dataclasses import dataclass
+from itertools import pairwise
 from typing import Any, Mapping, Sequence
 
 from factgraph.core.annotation.types import ConfidenceValue, NodeId, PathEdge, SupportStep
@@ -99,7 +100,7 @@ def validate_support_path(
         return False, "broken_support_path"
     if parsed[-1][1] != candidate[1]:
         return False, "broken_support_path"
-    for left, right in zip(parsed, parsed[1:]):
+    for left, right in pairwise(parsed):
         if left[1] != right[0]:
             return False, "broken_support_path"
     return True, ""

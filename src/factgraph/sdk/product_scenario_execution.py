@@ -111,10 +111,7 @@ def _require_target(value: object, *, field_name: str) -> _Target:
             "build the Rule/Policy through fg.build_rule(...) or fg.policy_builder(...)",
             code="V2_PROFILE_PRODUCT_TARGET_REQUIRED",
         )
-    try:
-        assert_asset_binding_current_v1(value)
-    except SDKStoreError:
-        raise
+    assert_asset_binding_current_v1(value)
     return value
 
 
@@ -178,17 +175,14 @@ def _rule_is_occurrence_of_policy(rule: ProductRuleV1, target: ProductPolicyV1) 
 
 
 def _field_context(
-    graph: "SDKStore", field: object, *, action: str
+    graph: SDKStore, field: object, *, action: str
 ) -> tuple[dict[str, Any], FieldPath]:
     if not isinstance(field, Field):
         raise ProductScenarioExecutionError(
             f"scenario.{action}(...) requires an SDK Field descriptor",
             code="SCENARIO_V2_FIELD_REQUIRED",
         )
-    try:
-        predicate = graph._schema_pred_for_field(field)
-    except SDKStoreError:
-        raise
+    predicate = graph._schema_pred_for_field(field)
     entity_type = predicate.get("owner_type")
     field_name = predicate.get("py_field_name")
     if (
@@ -205,7 +199,7 @@ def _field_context(
 
 
 def _entity_ref_for_field(
-    graph: "SDKStore",
+    graph: SDKStore,
     entity: object,
     *,
     field: FieldPath,
@@ -318,7 +312,7 @@ class ScenarioBuilderV2:
 
     __slots__ = ("_graph", "_builder", "_next_premise", "_premise_ids")
 
-    def __init__(self, graph: "SDKStore") -> None:
+    def __init__(self, graph: SDKStore) -> None:
         self._graph = graph
         self._builder = _ApplicationScenarioBuilderV2()
         self._next_premise = 1
@@ -354,7 +348,7 @@ class ScenarioBuilderV2:
         premise_id: str,
         meta: ScenarioMetaV2,
         member_meta: tuple[ScenarioMetaV2, ...] = (),
-    ) -> "ScenarioBuilderV2":
+    ) -> ScenarioBuilderV2:
         try:
             self._builder.add_operation(operation, meta=meta, member_meta=member_meta)
         except (TypeError, ValueError, ProtocolShapeError) as exc:
@@ -382,7 +376,7 @@ class ScenarioBuilderV2:
         *,
         meta: object = None,
         premise_id: str | None = None,
-    ) -> "ScenarioBuilderV2":
+    ) -> ScenarioBuilderV2:
         """Replace one single-value field in the effective world.
 
         Args:
@@ -428,7 +422,7 @@ class ScenarioBuilderV2:
         *,
         meta: object = None,
         premise_id: str | None = None,
-    ) -> "ScenarioBuilderV2":
+    ) -> ScenarioBuilderV2:
         """Ensure one member of a multi-value field in the effective world.
 
         Args:
@@ -470,7 +464,7 @@ class ScenarioBuilderV2:
         *,
         member_meta: Sequence[object] | None = None,
         premise_id: str | None = None,
-    ) -> "ScenarioBuilderV2":
+    ) -> ScenarioBuilderV2:
         """Set the complete member set of one multi-value field.
 
         If values carry provenance/display/semantic metadata, pass exactly one
@@ -560,7 +554,7 @@ class ScenarioBuilderV2:
         *,
         meta: object = None,
         premise_id: str | None = None,
-    ) -> "ScenarioBuilderV2":
+    ) -> ScenarioBuilderV2:
         """Mask a whole field or one multi-value member.
 
         Args:
@@ -690,7 +684,7 @@ class ExecutionProfileBuilderV2:
 
         return self._default_target
 
-    def fact_semantics(self, *, identity_probability: bool = True) -> "ExecutionProfileBuilderV2":
+    def fact_semantics(self, *, identity_probability: bool = True) -> ExecutionProfileBuilderV2:
         """Select the Product V2 point-probability fact model.
 
         Args:
@@ -723,7 +717,7 @@ class ExecutionProfileBuilderV2:
         target: _Target,
         *,
         side: _TargetSide,
-    ) -> "ExecutionProfileBuilderV2":
+    ) -> ExecutionProfileBuilderV2:
         """Pin an additional primary or candidate target.
 
         Deterministic V2 profiles have no attachments, but a candidate Query
@@ -751,7 +745,7 @@ class ExecutionProfileBuilderV2:
         target: _Target,
         *,
         side: _TargetSide,
-    ) -> "ExecutionProfileBuilderV2":
+    ) -> ExecutionProfileBuilderV2:
         """Add an exact target pin using fluent profile spelling.
 
         Args:
@@ -844,7 +838,7 @@ class ExecutionProfileBuilderV2:
         *,
         target: _Target | None = None,
         side: _TargetSide | None = None,
-    ) -> "ExecutionProfileBuilderV2":
+    ) -> ExecutionProfileBuilderV2:
         """Attach ProbLog semantics to one Product Rule asset.
 
         Args:
@@ -918,7 +912,7 @@ class ExecutionProfileBuilderV2:
         *,
         target: ProductPolicyV1 | None = None,
         side: _TargetSide | None = None,
-    ) -> "ExecutionProfileBuilderV2":
+    ) -> ExecutionProfileBuilderV2:
         """Attach ProbLog semantics to one Policy occurrence.
 
         Args:
@@ -1002,7 +996,7 @@ class ExecutionProfileBuilderV2:
         *,
         target: ProductPolicyV1 | None = None,
         side: _TargetSide | None = None,
-    ) -> "ExecutionProfileBuilderV2":
+    ) -> ExecutionProfileBuilderV2:
         """Activate one authored WeightedChoice for ProbLog execution.
 
         Args:
@@ -1118,7 +1112,7 @@ class _SDKExecutionManagerV2:
 
     __slots__ = ("_graph",)
 
-    def __init__(self, graph: "SDKStore") -> None:
+    def __init__(self, graph: SDKStore) -> None:
         object.__setattr__(self, "_graph", graph)
 
     def __setattr__(self, name: str, value: object) -> None:
@@ -1321,7 +1315,7 @@ class _SDKProbLogManagerV2:
 
     __slots__ = ("_graph",)
 
-    def __init__(self, graph: "SDKStore") -> None:
+    def __init__(self, graph: SDKStore) -> None:
         object.__setattr__(self, "_graph", graph)
 
     def __setattr__(self, name: str, value: object) -> None:
@@ -1355,7 +1349,7 @@ class _SDKProbLogManagerV2:
         return ExecutionAttachmentSemanticsV2("problog_choice_activation_v1")
 
 
-def scenario_builder_v2(graph: "SDKStore") -> ScenarioBuilderV2:
+def scenario_builder_v2(graph: SDKStore) -> ScenarioBuilderV2:
     """Return the public SDK Scenario V2 builder for one graph."""
 
     return ScenarioBuilderV2(graph)

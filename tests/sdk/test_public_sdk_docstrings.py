@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import inspect
-from typing import Any
 import unittest
+from typing import Any
 
-import factgraph.sdk as sdk
+from factgraph import sdk
 from factgraph.application.goal_plan_v2_runtime import ProductEvaluationInvocationV2
 from factgraph.application.product_result_views_v2 import EvaluationRunV2RowView
 from factgraph.sdk import (

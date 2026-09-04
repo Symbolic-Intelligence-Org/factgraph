@@ -20,7 +20,9 @@ from factgraph.adapters.problog.problog_export import (
     _to_problog_literal,
     _to_problog_var,
 )
-from factgraph.application.explain.diagnostic_assemble import diagnostic_problog_result_to_evidence_graph
+from factgraph.application.explain.diagnostic_assemble import (
+    diagnostic_problog_result_to_evidence_graph,
+)
 from factgraph.application.explain.diagnostic_projection import BranchCompanion, CompanionProgram
 from factgraph.application.explain.evidence_tree import EvidenceGraph
 from factgraph.application.protocol.certainty import Certainty
@@ -287,9 +289,9 @@ def _compile_compare(
     if kind == "eq":
         if lhs_var and lhs not in bound_vars and not rhs_var:
             next_bound_vars.append(lhs)
-        elif rhs_var and rhs not in bound_vars and not lhs_var:
-            next_bound_vars.append(rhs)
-        elif lhs_var and rhs_var and lhs in bound_vars and rhs not in bound_vars:
+        elif (rhs_var and rhs not in bound_vars and not lhs_var) or (
+            lhs_var and rhs_var and lhs in bound_vars and rhs not in bound_vars
+        ):
             next_bound_vars.append(rhs)
         elif lhs_var and rhs_var and rhs in bound_vars and lhs not in bound_vars:
             next_bound_vars.append(lhs)
@@ -688,7 +690,7 @@ def _resolve_term(term: Any, row: Mapping[str, Any]) -> Any:
 
 
 def _safe_suffix(value: str) -> str:
-    raw = value[1:] if value.startswith("$") else value
+    raw = value.removeprefix("$")
     safe = re.sub(r"[^A-Za-z0-9_]", "_", raw).strip("_") or "x"
     if safe[0].isdigit():
         safe = f"v_{safe}"

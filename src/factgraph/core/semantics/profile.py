@@ -4,7 +4,6 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
-
 SUPPORTED_ENGINES = frozenset({"native", "souffle", "problog", "pyreason"})
 SUPPORTED_VERSION = "1.0"
 UNCERTAINTY_POLICIES = frozenset(

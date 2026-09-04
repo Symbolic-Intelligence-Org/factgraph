@@ -18,9 +18,9 @@ receipt rather than its callable.
 
 from __future__ import annotations
 
+import json
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-import json
 from typing import TYPE_CHECKING, Any, Literal
 
 from factgraph.core.protocol.digests import sha256_hex, sha256_token
@@ -32,17 +32,17 @@ from .evaluation_query_target_runtime import (
     TargetedCompiledEvaluationQueryV0,
     assert_targeted_evaluation_query_current,
 )
+from .evaluation_run_v1_runtime import (
+    capture_evaluation_replay_payload_v1,
+    capture_evaluation_replay_world_v1,
+)
 from .portable_evaluation_runtime import (
-    PortableEvaluationError,
     PortableEngineObservationFrameV1,
+    PortableEvaluationError,
     PortableSelectedRowV1,
     execute_native_deterministic_v1,
     observe_portable_deterministic_v1,
     portable_dependency_predicate_ids_v1,
-)
-from .evaluation_run_v1_runtime import (
-    capture_evaluation_replay_payload_v1,
-    capture_evaluation_replay_world_v1,
 )
 from .protocol.evaluation_run_v1 import (
     EvaluationEnginePinV1,
@@ -60,10 +60,10 @@ from .protocol.goal_plan_v1 import (
     ExactLocalAbsenceExpectationV1,
     ExactLocalClosureStateV1,
     ExistsExpectationV1,
+    GoalExistsValueV1,
     GoalExpectationOutcomeV1,
     GoalExpectationStatusV1,
     GoalExpectationV1,
-    GoalExistsValueV1,
     GoalPlanV1,
     GoalResultModeV1,
     GoalResultRowV1,
@@ -104,13 +104,14 @@ from .scenario_v1_runtime import (
 )
 
 if TYPE_CHECKING:  # pragma: no cover - prevents SDK/application import cycle.
+    from factgraph.sdk.store import SDKStore
+
     from .evaluation_run_v1_runtime import (
         EvaluationRunExplanationV1,
         EvaluationRunReplayV1,
         PolicyVariantComparisonV1,
         ScenarioDiffV1,
     )
-    from factgraph.sdk.store import SDKStore
 
 
 GOAL_PLAN_V1_COMPILER_DIGEST = sha256_token(b"factgraph.goal_plan_v1.compiler.v1")
@@ -193,7 +194,7 @@ class GoalPlanInvocationV1:
     on detached immutable relations only.
     """
 
-    _graph: "SDKStore"
+    _graph: SDKStore
     plan: GoalPlanV1
     primary: TargetedCompiledEvaluationQueryV0
     profile: EvaluationExecutionProfileV1
@@ -280,7 +281,7 @@ def portable_deterministic_profile_v1(
 
 def build_goal_plan_invocation_v1(
     *,
-    graph: "SDKStore",
+    graph: SDKStore,
     primary: TargetedCompiledEvaluationQueryV0,
     result_mode: GoalResultModeV1,
     expectations: tuple[GoalExpectationV1, ...],
@@ -1305,15 +1306,16 @@ def _failure(invocation: GoalPlanInvocationV1, code: str, detail: str) -> GoalPl
     }
     scenario_conflict = code == "SCENARIO_OPERATION_CONFLICT"
     contract_invalid = (
-        code.startswith("GOAL_INVOCATION_")
-        or code.startswith("GOAL_PRIMARY_INVALID")
-        or code.startswith("GOAL_PROFILE_INVALID")
-        or code.startswith("GOAL_SCOPE_INVALID")
-        or code.startswith("GOAL_SCENARIO_INVALID")
-        or code.startswith("GOAL_EXPECTATIONS_INVALID")
-        or code.startswith("GOAL_PROVIDER_INVALID")
-        or code.endswith("_SPLICE")
-        or code.endswith("_PROTOCOL_INVALID")
+        code.startswith((
+            "GOAL_INVOCATION_",
+            "GOAL_PRIMARY_INVALID",
+            "GOAL_PROFILE_INVALID",
+            "GOAL_SCOPE_INVALID",
+            "GOAL_SCENARIO_INVALID",
+            "GOAL_EXPECTATIONS_INVALID",
+            "GOAL_PROVIDER_INVALID",
+        ))
+        or code.endswith(("_SPLICE", "_PROTOCOL_INVALID"))
     )
     scenario_resolution: ScenarioResolutionStateV1
     if invocation.scenario is None:

@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass, field as dc_field
-from typing import Any, Literal, TypeAlias
+from dataclasses import dataclass
+from dataclasses import field as dc_field
 from types import MappingProxyType
+from typing import Any, Literal, TypeAlias
 
 from factgraph.application.protocol.certainty import BOOLEAN_CERTAINTY, Certainty
-
 
 TreeStatus = Literal["holds", "fails", "not_reached"]
 RuleRole = Literal["head", "body"]
@@ -137,7 +137,7 @@ class EvidencePolicyCondition:
         if self.role not in {"left_field", "right_field", "compare"}:
             raise ValueError("policy condition role is invalid")
         if not isinstance(self.atom, EvidenceAtom):
-            raise ValueError("policy condition atom must be EvidenceAtom")
+            raise ValueError("policy condition atom must be EvidenceAtom")  # noqa: TRY004 - DTO shape error contract.
 
     @property
     def status(self) -> TreeStatus:
@@ -234,11 +234,11 @@ class EvidenceProbeBranchTerminalBindings:
         if not isinstance(self.branch_id, str) or not self.branch_id:
             raise ValueError("branch_id must be a non-empty string")
         if not isinstance(self.environments, tuple):
-            raise ValueError("environments must be a tuple")
+            raise ValueError("environments must be a tuple")  # noqa: TRY004 - Terminal-inventory shape contract.
         frozen: list[Mapping[str, Any]] = []
         for environment in self.environments:
             if not isinstance(environment, Mapping):
-                raise ValueError("environment must be a mapping")
+                raise ValueError("environment must be a mapping")  # noqa: TRY004 - Terminal-inventory shape contract.
             if not all(isinstance(name, str) for name in environment):
                 raise ValueError("environment keys must be strings")
             frozen.append(MappingProxyType(dict(sorted(environment.items()))))
@@ -270,7 +270,7 @@ class EvidenceProbeResult:
 
 def evidence_graph_to_dict(graph: EvidenceGraph) -> dict[str, Any]:
     if not isinstance(graph, EvidenceGraph):
-        raise ValueError("graph must be EvidenceGraph")
+        raise ValueError("graph must be EvidenceGraph")  # noqa: TRY004 - Public evidence encoder contract.
     return {
         "graph_id": graph.graph_id,
         "engine": graph.engine,
@@ -284,10 +284,10 @@ def evidence_graph_to_dict(graph: EvidenceGraph) -> dict[str, Any]:
 
 def evidence_graph_from_dict(row: Mapping[str, Any]) -> EvidenceGraph:
     if not isinstance(row, Mapping):
-        raise ValueError("row must be Mapping[str, Any]")
+        raise ValueError("row must be Mapping[str, Any]")  # noqa: TRY004 - Public evidence decoder contract.
     raw_paths = row.get("paths")
     if not isinstance(raw_paths, list):
-        raise ValueError("row.paths must be list")
+        raise ValueError("row.paths must be list")  # noqa: TRY004 - Audit reader wraps codec ValueError.
     return EvidenceGraph(
         graph_id=_require_str(row.get("graph_id"), "row.graph_id"),
         engine=_require_str(row.get("engine"), "row.engine"),
@@ -333,7 +333,7 @@ def _path_to_dict(path: EvidenceTree | EvidenceTimeline) -> dict[str, Any]:
 
 def _path_from_dict(row: Any) -> EvidenceTree | EvidenceTimeline:
     if not isinstance(row, Mapping):
-        raise ValueError("path row must be Mapping[str, Any]")
+        raise ValueError("path row must be Mapping[str, Any]")  # noqa: TRY004 - Audit reader wraps codec ValueError.
     kind = row.get("kind")
     if kind == "tree":
         raw_rules = row.get("rules")
@@ -384,10 +384,10 @@ def _rule_to_dict(rule: EvidenceRule) -> dict[str, Any]:
 
 def _rule_from_dict(row: Any) -> EvidenceRule:
     if not isinstance(row, Mapping):
-        raise ValueError("rule row must be Mapping[str, Any]")
+        raise ValueError("rule row must be Mapping[str, Any]")  # noqa: TRY004 - Audit reader wraps codec ValueError.
     raw_atoms = row.get("atoms", [])
     if not isinstance(raw_atoms, list):
-        raise ValueError("rule.atoms must be list")
+        raise ValueError("rule.atoms must be list")  # noqa: TRY004 - Audit reader wraps codec ValueError.
     return EvidenceRule(
         occurrence_alias=_require_str(row.get("occurrence_alias"), "rule.occurrence_alias"),
         rule_id=_require_str(row.get("rule_id"), "rule.rule_id"),
@@ -410,7 +410,7 @@ def _join_to_dict(join: EvidenceJoin) -> dict[str, Any]:
 
 def _join_from_dict(row: Any) -> EvidenceJoin:
     if not isinstance(row, Mapping):
-        raise ValueError("join row must be Mapping[str, Any]")
+        raise ValueError("join row must be Mapping[str, Any]")  # noqa: TRY004 - Audit reader wraps codec ValueError.
     return EvidenceJoin(
         left=_port_ref_from_dict(row.get("left")),
         right=_port_ref_from_dict(row.get("right")),
@@ -430,7 +430,7 @@ def _policy_condition_to_dict(condition: EvidencePolicyCondition) -> dict[str, A
 
 def _policy_condition_from_dict(row: Any) -> EvidencePolicyCondition:
     if not isinstance(row, Mapping):
-        raise ValueError("policy condition row must be Mapping[str, Any]")
+        raise ValueError("policy condition row must be Mapping[str, Any]")  # noqa: TRY004 - Audit reader wraps codec ValueError.
     return EvidencePolicyCondition(
         policy_node_id=_require_str(row.get("policy_node_id"), "policy_condition.policy_node_id"),
         condition_id=_require_str(row.get("condition_id"), "policy_condition.condition_id"),
@@ -445,7 +445,7 @@ def _port_ref_to_dict(port: PortRef) -> dict[str, Any]:
 
 def _port_ref_from_dict(row: Any) -> PortRef:
     if not isinstance(row, Mapping):
-        raise ValueError("port ref row must be Mapping[str, Any]")
+        raise ValueError("port ref row must be Mapping[str, Any]")  # noqa: TRY004 - Audit reader wraps codec ValueError.
     return PortRef(
         rule_occurrence_alias=_require_str(
             row.get("rule_occurrence_alias"), "port.rule_occurrence_alias"
@@ -467,7 +467,7 @@ def _atom_to_dict(atom: EvidenceAtom) -> dict[str, Any]:
 
 def _atom_from_dict(row: Any) -> EvidenceAtom:
     if not isinstance(row, Mapping):
-        raise ValueError("atom row must be Mapping[str, Any]")
+        raise ValueError("atom row must be Mapping[str, Any]")  # noqa: TRY004 - Audit reader wraps codec ValueError.
     return EvidenceAtom(
         form=_form_from_dict(row.get("form")),
         verdict=_verdict_from_dict(row.get("verdict")),
@@ -510,7 +510,7 @@ def _form_to_dict(form: AtomForm) -> dict[str, Any]:
 
 def _form_from_dict(row: Any) -> AtomForm:
     if not isinstance(row, Mapping):
-        raise ValueError("atom form row must be Mapping[str, Any]")
+        raise ValueError("atom form row must be Mapping[str, Any]")  # noqa: TRY004 - Audit reader wraps codec ValueError.
     kind = row.get("kind")
     if kind == "fact":
         return Fact(
@@ -563,7 +563,7 @@ def _term_to_dict(term: BoundVar | Const) -> dict[str, Any]:
 
 def _term_from_dict(row: Any) -> BoundVar | Const:
     if not isinstance(row, Mapping):
-        raise ValueError("term row must be Mapping[str, Any]")
+        raise ValueError("term row must be Mapping[str, Any]")  # noqa: TRY004 - Audit reader wraps codec ValueError.
     kind = row.get("kind")
     if kind == "bound_var":
         return BoundVar(
@@ -596,7 +596,7 @@ def _verdict_to_dict(verdict: Verdict) -> dict[str, Any]:
 
 def _verdict_from_dict(row: Any) -> Verdict:
     if not isinstance(row, Mapping):
-        raise ValueError("verdict row must be Mapping[str, Any]")
+        raise ValueError("verdict row must be Mapping[str, Any]")  # noqa: TRY004 - Audit reader wraps codec ValueError.
     kind = row.get("kind")
     if kind == "holds":
         return Holds(
@@ -630,7 +630,7 @@ def _source_to_dict(source: Source) -> dict[str, Any]:
 
 def _source_from_dict(row: Any) -> Source:
     if not isinstance(row, Mapping):
-        raise ValueError("source row must be Mapping[str, Any]")
+        raise ValueError("source row must be Mapping[str, Any]")  # noqa: TRY004 - Audit reader wraps codec ValueError.
     return Source(
         ref=_require_str(row.get("ref"), "source.ref"),
         field=_optional_str(row.get("field"), "source.field"),
@@ -649,7 +649,7 @@ def _certainty_from_dict(row: Any) -> Certainty | None:
     if row is None:
         return None
     if not isinstance(row, Mapping):
-        raise ValueError("certainty row must be Mapping[str, Any] or None")
+        raise ValueError("certainty row must be Mapping[str, Any] or None")  # noqa: TRY004 - Audit reader wraps codec ValueError.
     return Certainty(
         lo=_require_float(row.get("lo"), "certainty.lo"),
         hi=_require_float(row.get("hi"), "certainty.hi"),
@@ -677,13 +677,13 @@ def _from_jsonable(value: Any) -> Any:
 
 def _require_mapping(value: Any, field_name: str) -> Mapping[str, Any]:
     if not isinstance(value, Mapping):
-        raise ValueError(f"{field_name} must be Mapping[str, Any]")
+        raise ValueError(f"{field_name} must be Mapping[str, Any]")  # noqa: TRY004 - Audit reader wraps codec ValueError.
     return _from_jsonable(value)
 
 
 def _require_list(value: Any, field_name: str) -> list[Any]:
     if not isinstance(value, list):
-        raise ValueError(f"{field_name} must be list")
+        raise ValueError(f"{field_name} must be list")  # noqa: TRY004 - Audit reader wraps codec ValueError.
     return value
 
 
@@ -703,13 +703,13 @@ def _optional_int(value: Any, field_name: str) -> int | None:
     if value is None:
         return None
     if isinstance(value, bool) or not isinstance(value, int):
-        raise ValueError(f"{field_name} must be int or None")
+        raise ValueError(f"{field_name} must be int or None")  # noqa: TRY004 - Audit reader wraps codec ValueError.
     return value
 
 
 def _require_float(value: Any, field_name: str) -> float:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
-        raise ValueError(f"{field_name} must be number")
+        raise ValueError(f"{field_name} must be number")  # noqa: TRY004 - Audit reader wraps codec ValueError.
     return float(value)
 
 
@@ -752,9 +752,11 @@ def _require_certainty_kind(value: Any) -> Literal["boolean", "probabilistic", "
 
 
 __all__ = [
+    "BOOLEAN_CERTAINTY",
+    "LAYOUT_TIMELINE",
+    "LAYOUT_TREE",
     "Aggregate",
     "AtomForm",
-    "BOOLEAN_CERTAINTY",
     "BoundVar",
     "Builtin",
     "Certainty",
@@ -772,12 +774,10 @@ __all__ = [
     "Fact",
     "Fails",
     "Holds",
-    "LAYOUT_TIMELINE",
-    "LAYOUT_TREE",
     "LayoutHint",
     "NotReached",
-    "PortRef",
     "PolicyConditionRole",
+    "PortRef",
     "RuleRole",
     "Source",
     "TreeStatus",

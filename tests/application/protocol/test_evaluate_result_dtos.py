@@ -1,8 +1,14 @@
 from __future__ import annotations
 
-from dataclasses import fields, replace
 import unittest
+from dataclasses import fields, replace
 
+from factgraph.application.explain.evidence_tree import (
+    LAYOUT_TREE,
+    EvidenceGraph,
+    EvidenceRule,
+    EvidenceTree,
+)
 from factgraph.application.protocol import (
     BOOLEAN_CERTAINTY,
     Certainty,
@@ -31,12 +37,6 @@ from factgraph.application.protocol.evaluate_result import (
     result_id_for,
     row_id_for,
 )
-from factgraph.application.explain.evidence_tree import (
-    EvidenceGraph,
-    EvidenceRule,
-    EvidenceTree,
-    LAYOUT_TREE,
-)
 from factgraph.core.derivation.candidates import CandidateSet
 from factgraph.core.protocol.digests import sha256_token
 from factgraph.core.rules.where_ast import CmpAtom, Const, PredAtom, Var
@@ -44,8 +44,8 @@ from factgraph.core.store._support import (
     SOUFFLE_WITNESS_KIND,
     NonFactStep,
     PredWitness,
-    ProvenanceEnvelope,
     ProofReceipt,
+    ProvenanceEnvelope,
 )
 
 
@@ -504,7 +504,11 @@ class EvaluateResultDTOTests(unittest.TestCase):
         self.assertIs(result[0]._require_live_result(), result)
 
     def test_scenario_result_cannot_carry_run_anchor_or_bundle(self) -> None:
-        from factgraph.application.protocol import FieldPath, ScenarioResultDiffV0, ScenarioScalarValueV0
+        from factgraph.application.protocol import (
+            FieldPath,
+            ScenarioResultDiffV0,
+            ScenarioScalarValueV0,
+        )
 
         result = _single_row_result()
         effective_digest = result.fingerprint.view_snapshot_digest
@@ -575,7 +579,11 @@ class EvaluateResultDTOTests(unittest.TestCase):
             )
 
     def test_set_scenario_resolution_cannot_be_spliced_after_result_seal(self) -> None:
-        from factgraph.application.protocol import FieldPath, ScenarioResultDiffV0, ScenarioScalarValueV0
+        from factgraph.application.protocol import (
+            FieldPath,
+            ScenarioResultDiffV0,
+            ScenarioScalarValueV0,
+        )
 
         result = _single_row_result()
         effective_digest = result.fingerprint.view_snapshot_digest
@@ -672,7 +680,7 @@ class EvaluateResultDTOTests(unittest.TestCase):
             _single_row_result(provenance_envelope=bad_envelope)
 
     def test_detached_row_live_helper_raises(self) -> None:
-        run_id, result_id, _expr, _rules, _view, _semantics, closed_head_digest, *_rest, head = _result_parts()
+        run_id, result_id, _expr, _rules, _view, _semantics, closed_head_digest, *_rest, _head = _result_parts()
         row = _row(result_id, run_id, closed_head_digest, {"person": "p1"})
 
         with self.assertRaises(DetachedRowError):
@@ -921,7 +929,7 @@ class EvaluateResultDTOTests(unittest.TestCase):
         self.assertFalse(hasattr(explanation.evidence, "edges"))
 
     def test_explanation_status_matrix_is_enforced(self) -> None:
-        run_id, result_id, _expr, _rules, _view, _semantics, closed_head_digest, *_rest, head = _result_parts()
+        run_id, result_id, _expr, _rules, _view, _semantics, closed_head_digest, *_rest, _head = _result_parts()
         row = _row(result_id, run_id, closed_head_digest, {"person": "p1"})
 
         with self.assertRaisesRegex(ProtocolShapeError, "iff"):

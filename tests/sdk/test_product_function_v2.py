@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from dataclasses import replace
 import json
 import shutil
 import unittest
+from dataclasses import replace
 
 from factgraph.application.goal_plan_v2_runtime import (
     ProductEvaluationRuntimeErrorV2,

@@ -250,7 +250,7 @@ def normalize_premise_exclusions(
 
 
 def normalize_premise_allowances(
-    allowances: "PredicatePremiseAllowance | Iterable[PredicatePremiseAllowance] | None",
+    allowances: PredicatePremiseAllowance | Iterable[PredicatePremiseAllowance] | None,
 ) -> tuple[PredicatePremiseAllowance, ...]:
     """Normalize the per-predicate allowance input to a validated tuple (empty = disabled).
 
@@ -282,7 +282,7 @@ def normalize_premise_allowances(
 
 
 def normalize_premise_blocks(
-    blocks: "PredicatePremiseBlock | Iterable[PredicatePremiseBlock] | None",
+    blocks: PredicatePremiseBlock | Iterable[PredicatePremiseBlock] | None,
 ) -> tuple[PredicatePremiseBlock, ...]:
     """Normalize the per-predicate blocklist input to a validated tuple (empty = disabled).
 
@@ -435,8 +435,8 @@ def is_predicate_premise_blocked(
 def premise_scoped_ledger(
     ledger: Ledger,
     exclusions: MetaExclusion | Iterable[MetaExclusion] | None,
-    allowances: "PredicatePremiseAllowance | Iterable[PredicatePremiseAllowance] | None" = None,
-    blocks: "PredicatePremiseBlock | Iterable[PredicatePremiseBlock] | None" = None,
+    allowances: PredicatePremiseAllowance | Iterable[PredicatePremiseAllowance] | None = None,
+    blocks: PredicatePremiseBlock | Iterable[PredicatePremiseBlock] | None = None,
 ) -> Ledger:
     """Return ``ledger`` unchanged when nothing is configured, else a live filtered view.
 
@@ -501,11 +501,9 @@ class _PremiseExcludedLedger(Ledger):
             self._base, asrt_id, self._allowances_by_pred
         ):
             return False
-        if is_predicate_premise_blocked(
+        return not is_predicate_premise_blocked(
             self._base, asrt_id, self._blocks_by_pred
-        ):
-            return False
-        return True
+        )
 
     def _filter_claims(self, claims: Iterable[Claim]) -> list[Claim]:
         return [claim for claim in claims if self._is_visible(claim.asrt_id)]
@@ -676,12 +674,12 @@ __all__ = [
     "MetaExclusion",
     "PredicatePremiseAllowance",
     "PredicatePremiseBlock",
-    "is_premise_excluded",
-    "is_predicate_premise_excluded",
     "is_predicate_premise_blocked",
-    "normalize_premise_exclusions",
+    "is_predicate_premise_excluded",
+    "is_premise_excluded",
     "normalize_premise_allowances",
     "normalize_premise_blocks",
-    "validate_premise_configuration",
+    "normalize_premise_exclusions",
     "premise_scoped_ledger",
+    "validate_premise_configuration",
 ]

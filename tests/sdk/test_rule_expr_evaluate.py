@@ -1,15 +1,21 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
+import shutil
 import unittest
 import warnings
-import shutil
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
-import factgraph.sdk as sdk
-import factgraph.sdk.dsl as dsl
+from factgraph import sdk
+from factgraph.adapters.problog.provenance import parse_problog_trace, problog_trace_to_dict
+from factgraph.adapters.pyreason.provenance import (
+    PyReasonTraceEventV0,
+    PyReasonTraceV0,
+    pyreason_trace_to_dict,
+)
+from factgraph.adapters.souffle.runner import find_souffle_binary
 from factgraph.application import build_schema_index, entity_info, field_predicate, resolve_selector
 from factgraph.application.protocol import (
     DetachedRowError,
@@ -20,30 +26,34 @@ from factgraph.application.protocol import (
     RuleExprError,
     RuleExprInspect,
 )
-from factgraph.application.protocol.rule_expr_inspect import _inspect_closed_head
 from factgraph.application.protocol.evaluate_result import closed_head_digest_for
-from factgraph.application.protocol.rule_expr_lowering import _lower_application_rule, _lower_rule_expr
-from factgraph.adapters.problog.provenance import parse_problog_trace, problog_trace_to_dict
-from factgraph.adapters.souffle.runner import find_souffle_binary
-from factgraph.adapters.pyreason.provenance import (
-    PyReasonTraceEventV0,
-    PyReasonTraceV0,
-    pyreason_trace_to_dict,
+from factgraph.application.protocol.rule_expr_inspect import _inspect_closed_head
+from factgraph.application.protocol.rule_expr_lowering import (
+    _lower_application_rule,
+    _lower_rule_expr,
 )
 from factgraph.core.derivation.candidates import CandidateSet
 from factgraph.core.evidence.write_protocol import set_field
-from factgraph.core.rules.where_ast import AggregateAtom, AndExpr, CmpAtom, Const, NotAtom, PredAtom, Var
+from factgraph.core.rules.where_ast import (
+    AggregateAtom,
+    AndExpr,
+    CmpAtom,
+    Const,
+    NotAtom,
+    PredAtom,
+    Var,
+)
 from factgraph.core.rules.where_eval import WhereValidationError
-from factgraph.core.store.ledger import AnnotationRow
 from factgraph.core.store._support import (
     PROBLOG_PROVENANCE_KIND,
     PYREASON_PROVENANCE_KIND,
+    SOUFFLE_WITNESS_KIND,
     PredWitness,
     ProofReceipt,
     ProvenanceEnvelope,
-    SOUFFLE_WITNESS_KIND,
 )
-from factgraph.sdk import Entity, Field, Identity
+from factgraph.core.store.ledger import AnnotationRow
+from factgraph.sdk import Entity, Field, Identity, dsl
 from factgraph.sdk.store import SDKStoreError, _initial_probe_bindings_for_row
 
 
@@ -423,9 +433,11 @@ class RuleExprEvaluatePublicDispatchTests(unittest.TestCase):
         inspected = RuleExprInspect(ast=(), occurrences=(), joins=(), unjoined_same_name_ports=())
 
         for invalid in (legacy_rule, inference, {"head": "dict"}, "Person:exists", inspected):
-            with self.subTest(invalid=type(invalid).__name__):
-                with self.assertRaisesRegex(SDKStoreError, "head= must be Rule"):
-                    graph.eval.evaluate(rule, head=invalid)
+            with (
+                self.subTest(invalid=type(invalid).__name__),
+                self.assertRaisesRegex(SDKStoreError, "head= must be Rule"),
+            ):
+                graph.eval.evaluate(rule, head=invalid)
 
     def test_external_head_filters_rows_and_evaluates(self) -> None:
         graph = _store()
@@ -685,9 +697,11 @@ class RuleExprEvaluatePublicDispatchTests(unittest.TestCase):
             ),
         )
 
-        with patch("factgraph.sdk.store.evaluate_derivation_plans", return_value=[candidate]):
-            with patch.object(graph._store, "_lookup_support_artifact", return_value=artifact):
-                result = graph.eval.evaluate(rule, head=rule, engine="souffle")
+        with (
+            patch("factgraph.sdk.store.evaluate_derivation_plans", return_value=[candidate]),
+            patch.object(graph._store, "_lookup_support_artifact", return_value=artifact),
+        ):
+            result = graph.eval.evaluate(rule, head=rule, engine="souffle")
 
         explanation = result[0].explain()
 
@@ -1060,13 +1074,17 @@ class RuleExprEvaluatePublicDispatchTests(unittest.TestCase):
             ),
         )
 
-        with patch("factgraph.sdk.store.evaluate_derivation_plans", return_value=[candidate]):
-            with patch.object(graph._store, "_lookup_support_artifact", return_value=artifact):
-                result = graph.eval.evaluate(rule, head=rule, engine="souffle")
+        with (
+            patch("factgraph.sdk.store.evaluate_derivation_plans", return_value=[candidate]),
+            patch.object(graph._store, "_lookup_support_artifact", return_value=artifact),
+        ):
+            result = graph.eval.evaluate(rule, head=rule, engine="souffle")
 
-        with patch("factgraph.sdk.store.souffle_reach_explain_to_evidence_graph", side_effect=ValueError("reach bad")):
-            with patch("factgraph.sdk.store._souffle_support_artifact_to_evidence_graph", side_effect=ValueError("bad")):
-                explanation = result[0].explain()
+        with (
+            patch("factgraph.sdk.store.souffle_reach_explain_to_evidence_graph", side_effect=ValueError("reach bad")),
+            patch("factgraph.sdk.store._souffle_support_artifact_to_evidence_graph", side_effect=ValueError("bad")),
+        ):
+            explanation = result[0].explain()
 
         self.assertEqual(explanation.status, "passed")
         assert explanation.evidence is not None
@@ -1140,9 +1158,11 @@ Person:exists({encoded}):\t0.73
             payload=problog_trace_to_dict(trace),
         )
 
-        with patch("factgraph.sdk.store.evaluate_derivation_plans", return_value=[candidate]):
-            with patch.object(graph._store, "_lookup_provenance_envelope", return_value=envelope):
-                result = graph.eval.evaluate(rule, head=rule, engine="problog")
+        with (
+            patch("factgraph.sdk.store.evaluate_derivation_plans", return_value=[candidate]),
+            patch.object(graph._store, "_lookup_provenance_envelope", return_value=envelope),
+        ):
+            result = graph.eval.evaluate(rule, head=rule, engine="problog")
 
         explanation = result[0].explain()
 
@@ -1202,9 +1222,11 @@ Person:exists({encoded}):\t0.73
             payload={"engine": "problog", "trace_type": "proof_trace", "events": [], "answers": []},
         )
 
-        with patch("factgraph.sdk.store.evaluate_derivation_plans", return_value=[candidate]):
-            with patch.object(graph._store, "_lookup_provenance_envelope", return_value=envelope):
-                result = graph.eval.evaluate(rule, head=rule, engine="problog")
+        with (
+            patch("factgraph.sdk.store.evaluate_derivation_plans", return_value=[candidate]),
+            patch.object(graph._store, "_lookup_provenance_envelope", return_value=envelope),
+        ):
+            result = graph.eval.evaluate(rule, head=rule, engine="problog")
 
         with patch("factgraph.sdk.store.problog_reach_explain_to_evidence_graph", side_effect=ValueError("reach bad")):
             explanation = result[0].explain()
@@ -1263,9 +1285,11 @@ Person:exists({encoded}):\t0.73
             payload={"engine": "problog", "trace_type": "proof_trace", "events": [], "answers": []},
         )
 
-        with patch("factgraph.sdk.store.evaluate_derivation_plans", return_value=[candidate]):
-            with patch.object(graph._store, "_lookup_provenance_envelope", return_value=envelope):
-                result = graph.eval.evaluate(rule, head=rule, engine="problog")
+        with (
+            patch("factgraph.sdk.store.evaluate_derivation_plans", return_value=[candidate]),
+            patch.object(graph._store, "_lookup_provenance_envelope", return_value=envelope),
+        ):
+            result = graph.eval.evaluate(rule, head=rule, engine="problog")
 
         with patch("factgraph.sdk.store.problog_trace_to_evidence_graph", side_effect=AssertionError("trace should not run")):
             explanation = result[0].explain()
@@ -1364,7 +1388,10 @@ Person:exists({encoded}):\t0.73
 
     @unittest.skipIf(shutil.which("problog") is None, "problog CLI is not available")
     def test_problog_reach_chain_guard_handles_zero_fact_program(self) -> None:
-        from factgraph.adapters.problog.reach_explain import _build_reach_program, _run_reach_program
+        from factgraph.adapters.problog.reach_explain import (
+            _build_reach_program,
+            _run_reach_program,
+        )
 
         graph = _store()
         rule = _person_exists_rule("person_exists_guard")
@@ -1426,9 +1453,11 @@ Person:exists({encoded}):\t0.73
             payload=pyreason_trace_to_dict(trace),
         )
 
-        with patch("factgraph.sdk.store.evaluate_derivation_plans", return_value=[candidate]):
-            with patch.object(graph._store, "_lookup_provenance_envelope", return_value=envelope):
-                result = graph.eval.evaluate(rule, head=rule, engine="pyreason")
+        with (
+            patch("factgraph.sdk.store.evaluate_derivation_plans", return_value=[candidate]),
+            patch.object(graph._store, "_lookup_provenance_envelope", return_value=envelope),
+        ):
+            result = graph.eval.evaluate(rule, head=rule, engine="pyreason")
 
         explanation = result[0].explain()
 
@@ -1469,9 +1498,11 @@ Person:exists({encoded}):\t0.73
             payload={"engine": "pyreason", "trace_type": "event_log", "timesteps": 0, "node_events": [], "edge_events": []},
         )
 
-        with patch("factgraph.sdk.store.evaluate_derivation_plans", return_value=[candidate]):
-            with patch.object(graph._store, "_lookup_provenance_envelope", return_value=envelope):
-                result = graph.eval.evaluate(rule, head=rule, engine="pyreason")
+        with (
+            patch("factgraph.sdk.store.evaluate_derivation_plans", return_value=[candidate]),
+            patch.object(graph._store, "_lookup_provenance_envelope", return_value=envelope),
+        ):
+            result = graph.eval.evaluate(rule, head=rule, engine="pyreason")
 
         explanation = result[0].explain()
 

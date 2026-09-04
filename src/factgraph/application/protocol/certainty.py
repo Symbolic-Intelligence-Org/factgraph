@@ -1,11 +1,10 @@
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from typing import Literal
-import math
 
 from factgraph.application.protocol.common import ProtocolShapeError
-
 
 CertaintyKind = Literal["boolean", "probabilistic", "possibilistic"]
 _CERTAINTY_KINDS = frozenset({"boolean", "probabilistic", "possibilistic"})

@@ -86,12 +86,7 @@ def _traverse_evidence_tree_node(
         data["witness_count"] = _count_assertion_facts(node)
         data["rule_ref_ids"] = _normalize_rule_ref_ids(node.get("rule_ref_ids"))
 
-    elif node_kind == "proof_goal":
-        data["goal"] = str(node.get("goal", ""))
-        data["goal_args"] = list(node.get("goal_args", []))
-        data["pred_id"] = str(node.get("pred_id", ""))
-
-    elif node_kind == "proof_leaf":
+    elif node_kind in {"proof_goal", "proof_leaf"}:
         data["goal"] = str(node.get("goal", ""))
         data["goal_args"] = list(node.get("goal_args", []))
         data["pred_id"] = str(node.get("pred_id", ""))

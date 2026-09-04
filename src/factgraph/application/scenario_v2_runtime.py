@@ -31,7 +31,6 @@ from .protocol.scenario_v1 import (
     ScenarioWithoutFieldV1,
     ScenarioWithoutValueV1,
 )
-from .protocol.schema_runtime import EntityRef, FieldPath
 from .protocol.scenario_v2 import (
     EffectiveWorldFactV2,
     EffectiveWorldV2,
@@ -44,6 +43,7 @@ from .protocol.scenario_v2 import (
     _token,
     lower_scenario_meta_v2,
 )
+from .protocol.schema_runtime import EntityRef, FieldPath
 
 
 class ScenarioResolutionErrorV2(ValueError):
@@ -599,7 +599,7 @@ class ScenarioBuilderV2:
         *,
         meta: object = None,
         member_meta: tuple[object, ...] = (),
-    ) -> "ScenarioBuilderV2":
+    ) -> ScenarioBuilderV2:
         if not isinstance(member_meta, tuple):
             raise ScenarioResolutionErrorV2(
                 "member_meta must be tuple", code="SCENARIO_V2_MEMBER_METADATA_INVALID"
@@ -622,7 +622,7 @@ class ScenarioBuilderV2:
         value: ScenarioValueV1,
         meta: object = None,
         origin_refs: tuple[str, ...] = (),
-    ) -> "ScenarioBuilderV2":
+    ) -> ScenarioBuilderV2:
         return self.add_operation(
             ScenarioSetEffectiveValueV1(
                 premise_id=premise_id,
@@ -643,7 +643,7 @@ class ScenarioBuilderV2:
         value: ScenarioValueV1,
         meta: object = None,
         origin_refs: tuple[str, ...] = (),
-    ) -> "ScenarioBuilderV2":
+    ) -> ScenarioBuilderV2:
         return self.add_operation(
             ScenarioEnsureMemberV1(
                 premise_id=premise_id,
@@ -663,7 +663,7 @@ class ScenarioBuilderV2:
         field: FieldPath,
         meta: object = None,
         origin_refs: tuple[str, ...] = (),
-    ) -> "ScenarioBuilderV2":
+    ) -> ScenarioBuilderV2:
         return self.add_operation(
             ScenarioWithoutFieldV1(
                 premise_id=premise_id,
@@ -683,7 +683,7 @@ class ScenarioBuilderV2:
         value: ScenarioValueV1,
         meta: object = None,
         origin_refs: tuple[str, ...] = (),
-    ) -> "ScenarioBuilderV2":
+    ) -> ScenarioBuilderV2:
         return self.add_operation(
             ScenarioWithoutValueV1(
                 premise_id=premise_id,
@@ -705,7 +705,7 @@ class ScenarioBuilderV2:
         meta: object = None,
         member_meta: tuple[object, ...] = (),
         origin_refs: tuple[str, ...] = (),
-    ) -> "ScenarioBuilderV2":
+    ) -> ScenarioBuilderV2:
         if not isinstance(member_meta, tuple):
             raise ScenarioResolutionErrorV2(
                 "member_meta must be tuple", code="SCENARIO_V2_MEMBER_METADATA_INVALID"

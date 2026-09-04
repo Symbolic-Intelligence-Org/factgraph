@@ -17,7 +17,6 @@ from typing import Any, Callable, Iterator, Literal, Mapping, Sequence
 from factgraph.core.protocol.annotation_v1 import initial_meta_annotation_v1
 from factgraph.core.protocol.tup_v1 import claim_args_from_rest_terms
 
-
 META_KINDS = {"str", "int", "float", "bool", "time", "json"}
 ANNOTATION_ORIGINS = {"observed", "derived"}
 ANNOTATION_CATEGORIES = {"source", "semantic", "derived", "operational"}
@@ -206,7 +205,7 @@ def _is_reserved_annotation_meta_key(key: str) -> bool:
 
 
 class _MetaRowsProxy(list[MetaRow]):
-    def __init__(self, ledger: "Ledger") -> None:
+    def __init__(self, ledger: Ledger) -> None:
         self._ledger = ledger
         super().__init__(ledger.meta_rows)
 
@@ -1745,12 +1744,11 @@ class Ledger:
         """No-op for API compatibility; write-through cache updates eagerly."""
 
     def close(self) -> None:
-        with self._write_lock:
-            with self._connections_lock:
-                if self._closed:
-                    return
-                self._closed = True
-                self._all_connections.clear()
+        with self._write_lock, self._connections_lock:
+            if self._closed:
+                return
+            self._closed = True
+            self._all_connections.clear()
 
         current_conn = getattr(self._local, "conn", None)
         if current_conn is not None:
@@ -2117,7 +2115,7 @@ class Ledger:
         if not selected_keys:
             return ()
         placeholders = ",".join("?" for _ in selected_keys)
-        params: list[Any] = list(sorted(selected_keys))
+        params: list[Any] = sorted(selected_keys)
         where = f"key IN ({placeholders})"
         if asrt_id is not None:
             where += " AND asrt_id = ?"

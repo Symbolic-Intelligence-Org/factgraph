@@ -12,8 +12,9 @@ the outer record but are not exposed as an ``EvaluationRunBundleV0`` API.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field as dataclass_field
 import json
+from dataclasses import dataclass
+from dataclasses import field as dataclass_field
 from typing import Any, Literal, TypeAlias
 
 from factgraph.core.protocol.digests import sha256_hex
@@ -24,7 +25,6 @@ from .evaluation_run_verification import EvaluationRunVerificationV0
 from .evaluation_scenario import ScenarioResultDiffV0, ScenarioScalarValueV0
 from .policy_explanation import PolicyExplanationViewV0
 from .schema_runtime import FieldPath
-
 
 ScenarioRunSide: TypeAlias = Literal["baseline", "effective"]
 ScenarioOriginKind: TypeAlias = Literal[
@@ -464,7 +464,7 @@ class ScenarioRunV0:
         *,
         side: Literal["baseline", "effective"],
         row_capture_digest: str,
-    ) -> "ScenarioRunExplanationV0":
+    ) -> ScenarioRunExplanationV0:
         """Explain one positive row from a captured Scenario side.
 
         Args:
@@ -478,7 +478,7 @@ class ScenarioRunV0:
 
         return explain_scenario_run_v0(self, side=side, row_capture_digest=row_capture_digest)
 
-    def verify(self) -> "ScenarioRunVerificationV0":
+    def verify(self) -> ScenarioRunVerificationV0:
         """Verify both sides against their isolated captured relations.
 
         Returns:
@@ -499,7 +499,7 @@ class ScenarioRunV0:
         return scenario_run_bytes(self)
 
     @classmethod
-    def from_bytes(cls, raw: bytes) -> "ScenarioRunV0":
+    def from_bytes(cls, raw: bytes) -> ScenarioRunV0:
         """Decode a detached ScenarioRun without consulting a live Store.
 
         Args:

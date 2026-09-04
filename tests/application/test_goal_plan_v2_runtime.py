@@ -6,11 +6,14 @@ import json
 import shutil
 import unittest
 from dataclasses import replace
+from unittest.mock import patch
 
 from factgraph.application.goal_plan_v2_runtime import (
     ProductEvaluationRuntimeErrorV2,
     _decode_structural,
     _encode_structural,
+    choice_capture_from_evaluation_run_v2,
+    function_capture_from_evaluation_run_v2,
     replay_evaluation_run_v2,
 )
 from factgraph.application.product_result_views_v2 import result_view_v2_from_evaluation_run_v2
@@ -59,6 +62,53 @@ def _graph_and_rule() -> tuple[SDKStore, object, str]:
 
 
 class GoalPlanV2RuntimeTests(unittest.TestCase):
+    def test_public_read_failure_translation_preserves_code_message_and_cause(self) -> None:
+        graph, rule, _alice = _graph_and_rule()
+        self.addCleanup(graph.close)
+        profile = graph.execution.native_deterministic(target=rule).build()
+        run = graph.query(rule).select("age", SemanticPortAddress("target", "age")).plan(profile=profile).run()
+        readers = (
+            (replay_evaluation_run_v2, "V2 run"),
+            (choice_capture_from_evaluation_run_v2, "V2 choice capture run"),
+            (function_capture_from_evaluation_run_v2, "V2 Function capture run"),
+        )
+        failures = (
+            (ValueError("invalid seal"), "V2_REPLAY_PROTOCOL_INVALID"),
+            (RuntimeError("validator failed"), "V2_REPLAY_PROTOCOL_INVALID"),
+            (ProductEvaluationRuntimeErrorV2("upstream failed", code="UPSTREAM_FAILURE"), "UPSTREAM_FAILURE"),
+        )
+        for reader, prefix in readers:
+            for failure, expected_code in failures:
+                with (
+                    self.subTest(reader=reader.__name__, failure=type(failure).__name__),
+                    patch("factgraph.application.goal_plan_v2_runtime.assert_evaluation_run_v2_current",
+                          side_effect=failure),
+                    patch("factgraph.application.goal_plan_v2_runtime._decode_program_envelope") as decode,
+                ):
+                    with self.assertRaises(ProductEvaluationRuntimeErrorV2) as caught:
+                        reader(run)
+                    self.assertEqual(caught.exception.code, expected_code)
+                    self.assertEqual(str(caught.exception), f"{prefix} rejected: {failure}")
+                    self.assertIs(caught.exception.__cause__, failure)
+                    decode.assert_not_called()
+
+    def test_public_read_does_not_translate_process_control_exceptions(self) -> None:
+        graph, rule, _alice = _graph_and_rule()
+        self.addCleanup(graph.close)
+        profile = graph.execution.native_deterministic(target=rule).build()
+        run = graph.query(rule).select("age", SemanticPortAddress("target", "age")).plan(profile=profile).run()
+        for reader in (replay_evaluation_run_v2, choice_capture_from_evaluation_run_v2,
+                       function_capture_from_evaluation_run_v2):
+            for failure in (KeyboardInterrupt(), SystemExit()):
+                with (
+                    self.subTest(reader=reader.__name__, failure=type(failure).__name__),
+                    patch("factgraph.application.goal_plan_v2_runtime.assert_evaluation_run_v2_current",
+                          side_effect=failure),
+                ):
+                    with self.assertRaises(type(failure)) as caught:
+                        reader(run)
+                    self.assertIs(caught.exception, failure)
+
     def test_replay_structural_codec_preserves_typed_rule_material(self) -> None:
         value = {
             "entity": Var("$entity", Origin("authoring", "query.nodes.case")),

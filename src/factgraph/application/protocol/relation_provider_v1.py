@@ -15,8 +15,8 @@ that FactGraph has inspected or proved the provider implementation.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 import json
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Callable, Literal, TypeAlias
 
 from factgraph.core.protocol.digests import sha256_hex
@@ -257,7 +257,7 @@ class ProviderMaterializationV1:
             ),
         )
 
-    def to_receipt_ref_v1(self) -> "ProviderReceiptRefV1":
+    def to_receipt_ref_v1(self) -> ProviderReceiptRefV1:
         """Build the replay-safe opaque receipt bridge for this snapshot.
 
         The import is deliberately lazy: the relation-provider declaration is
@@ -416,6 +416,10 @@ def invoke_relation_provider_v1(
 
 
 __all__ = [
+    "MAX_PROVIDER_BINDINGS_V1",
+    "MAX_PROVIDER_PREDICATES_V1",
+    "MAX_PROVIDER_ROWS_V1",
+    "MAX_PROVIDER_ROW_VALUES_V1",
     "ProviderMaterializationError",
     "ProviderMaterializationV1",
     "ProviderMaterializerV1",
@@ -423,9 +427,5 @@ __all__ = [
     "ProviderRequestV1",
     "RelationProviderKindV1",
     "RelationProviderV1",
-    "MAX_PROVIDER_BINDINGS_V1",
-    "MAX_PROVIDER_PREDICATES_V1",
-    "MAX_PROVIDER_ROWS_V1",
-    "MAX_PROVIDER_ROW_VALUES_V1",
     "invoke_relation_provider_v1",
 ]

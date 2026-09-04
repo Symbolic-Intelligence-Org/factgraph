@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Any, Literal, TypedDict, TypeAlias
+from typing import Any, Literal, TypeAlias, TypedDict
 
 from factgraph.core.derivation.candidates import DerivationOutput
 

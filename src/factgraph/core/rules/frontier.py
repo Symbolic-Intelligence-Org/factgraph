@@ -16,6 +16,7 @@ from factgraph.core.rules.where_ast_validate import (
 )
 from factgraph.core.rules.where_eval import (
     _ARITH_KINDS,
+    WhereValidationError,
     _adapt_where_ast_error,
     _eval_arith_atom,
     _eval_cmp_atom,
@@ -27,7 +28,6 @@ from factgraph.core.rules.where_eval import (
     _normalize_where,
     _plan_body_atoms,
     _where_ast_gate_enabled,
-    WhereValidationError,
 )
 
 NativeWhereFrontierFailureKind = Literal["empty_input", "atom_filter_empty"]

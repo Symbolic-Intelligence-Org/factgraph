@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from typing import Any, Callable, Protocol
 
-from factgraph.core.store._support import RuleRefEdge, ProofReceipt
+from factgraph.core.store._support import ProofReceipt, RuleRefEdge
 
 
 class RuleSpecReader(Protocol):

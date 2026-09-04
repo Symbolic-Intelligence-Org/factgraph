@@ -19,10 +19,10 @@ or modifies a ledger.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from decimal import Decimal, InvalidOperation
 import json
 import math
+from dataclasses import dataclass, field
+from decimal import Decimal, InvalidOperation
 from typing import Literal, Mapping, TypeAlias
 
 from factgraph.core.protocol.digests import sha256_hex
@@ -49,7 +49,6 @@ from .scenario_v1 import (
     ScenarioWithoutValueV1,
 )
 from .schema_runtime import EntityRef, FieldPath
-
 
 ScenarioFactRawKindV2: TypeAlias = Literal["probabilistic"]
 ScenarioFactOriginV2: TypeAlias = Literal["baseline_support", "scenario_synthetic"]
@@ -188,7 +187,7 @@ class FactSemanticsV2:
         )
 
     @classmethod
-    def probabilistic_point(cls, value: object) -> "FactSemanticsV2":
+    def probabilistic_point(cls, value: object) -> FactSemanticsV2:
         """Create exact declared point-probability semantics.
 
         Args:
@@ -1065,15 +1064,16 @@ class EffectiveWorldV2:
 
 
 __all__ = [
-    "EffectiveWorldFactV2",
-    "EffectiveWorldV2",
-    "FactSemanticsV2",
     "MAX_DECIMAL_V2_CHARS",
     "MAX_DECIMAL_V2_SCALE",
     "MAX_SCENARIO_LABELS_V2",
     "MAX_SCENARIO_LABEL_V2_CHARS",
     "MAX_SCENARIO_NOTE_V2_CHARS",
     "MAX_SCENARIO_V2_OPERATIONS",
+    "EffectiveWorldFactV2",
+    "EffectiveWorldV2",
+    "FactSemanticsV2",
+    "ResolvedScenarioOperationEvidenceV2",
     "ScenarioDisplayV2",
     "ScenarioFactOriginV2",
     "ScenarioFactRawKindV2",
@@ -1081,7 +1081,6 @@ __all__ = [
     "ScenarioOperationMetaBindingV2",
     "ScenarioOperationV2",
     "ScenarioSpecV2",
-    "ResolvedScenarioOperationEvidenceV2",
     "canonical_decimal_v2",
     "lower_scenario_meta_v2",
     "scenario_operation_kind_v2",

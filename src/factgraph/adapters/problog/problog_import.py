@@ -1,16 +1,16 @@
 from __future__ import annotations
 
-from dataclasses import replace
 import math
 import re
+from dataclasses import replace
 from typing import Any
 
 from factgraph.adapters.problog._parsing import _split_top_level_args
 from factgraph.core.derivation.candidates import DerivationOutput
+from factgraph.core.rules.where_eval import WhereValidationError
 from factgraph.core.store import builders as store_builders
 from factgraph.core.store.ledger import Ledger
 from factgraph.core.store.runtime import Store
-from factgraph.core.rules.where_eval import WhereValidationError
 
 _INT_RE = re.compile(r"^[+-]?\d+$")
 _FLOAT_RE = re.compile(r"^[+-]?(?:\d+\.\d*|\d*\.\d+|\d+)(?:[eE][+-]?\d+)?$")
@@ -162,7 +162,7 @@ def _parse_rows(
         line = raw_line.strip()
         if not line:
             continue
-        if line.startswith("%") or line.startswith("#"):
+        if line.startswith(("%", "#")):
             continue
 
         split = _split_result_line(line)

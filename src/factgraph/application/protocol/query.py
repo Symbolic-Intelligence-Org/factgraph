@@ -30,9 +30,8 @@ class QueryReturnSlot:
         _require_non_empty_str(self.alias, field_name="alias")
         _require_literal(self.kind, field_name="kind", allowed=("entity", "scalar"))
         _require_non_empty_str(self.var, field_name="var")
-        if self.kind == "entity":
-            if self.field_path is not None:
-                raise ProtocolShapeError("field_path must be None when kind='entity'")
+        if self.kind == "entity" and self.field_path is not None:
+            raise ProtocolShapeError("field_path must be None when kind='entity'")
         if self.kind == "scalar":
             if self.field_path is None:
                 raise ProtocolShapeError("field_path is required when kind='scalar'")

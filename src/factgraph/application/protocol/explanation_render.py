@@ -9,8 +9,8 @@ from factgraph.application.explain.evidence_tree import (
     EvidenceGraph,
     EvidenceJoin,
     EvidenceRule,
-    EvidenceTree,
     EvidenceTimeline,
+    EvidenceTree,
 )
 from factgraph.application.protocol.certainty import Certainty
 from factgraph.application.protocol.rule import _PROJECTION_ID_PREFIX

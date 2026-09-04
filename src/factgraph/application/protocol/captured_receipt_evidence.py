@@ -21,14 +21,13 @@ FactGraph Contract:
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import json
+from dataclasses import dataclass
 from typing import Literal
 
 from factgraph.core.protocol.digests import sha256_hex
 
 from .common import ProtocolShapeError
-
 
 _MAX_BRANCH_CONDITIONS = 1_024
 _MAX_ASSERTION_IDS_PER_CONDITION = 20_000

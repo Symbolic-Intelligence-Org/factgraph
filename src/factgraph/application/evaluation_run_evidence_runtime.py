@@ -7,6 +7,7 @@ from typing import Any
 
 from factgraph.application.explain.evidence_tree import (
     BOOLEAN_CERTAINTY,
+    LAYOUT_TREE,
     Certainty,
     EvidenceAtom,
     EvidenceGraph,
@@ -15,7 +16,6 @@ from factgraph.application.explain.evidence_tree import (
     EvidenceRule,
     EvidenceTree,
     Holds,
-    LAYOUT_TREE,
     PortRef,
     Source,
 )
@@ -72,7 +72,7 @@ def _evaluation_run_bundle_evidence(
     """
     if not isinstance(row_capture_digest, str) or not row_capture_digest:
         raise ProtocolShapeError("row_capture_digest must be a non-empty string")
-    where, relation, view = _materialize_evaluation_run_bundle_input(bundle)
+    where, _relation, view = _materialize_evaluation_run_bundle_input(bundle)
     matches = tuple(row for row in bundle.rows if row.row_capture_digest == row_capture_digest)
     if not matches:
         raise ProtocolShapeError("EvaluationRun row_capture_digest was not found")
@@ -226,7 +226,7 @@ def _evaluation_run_bundle_evidence(
     )
     selected_anchor = bundle.run_anchor.row_anchors[row.ordinal]
     certainty = _certainty(row)
-    outside_ids = tuple((*query_atom_ids, *query_navigation_atom_ids, *head_atom_ids))
+    outside_ids = (*query_atom_ids, *query_navigation_atom_ids, *head_atom_ids)
     metadata = {
         "evidence_mode": "detached_receipt_playback_v0",
         "logical_verification": "not_performed",

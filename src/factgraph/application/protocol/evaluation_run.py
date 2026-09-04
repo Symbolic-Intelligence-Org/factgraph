@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, is_dataclass
 import json
+from dataclasses import asdict, dataclass, is_dataclass
 from typing import Literal, TypeAlias
 
 from factgraph.core.protocol.digests import sha256_hex

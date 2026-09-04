@@ -7,7 +7,6 @@ from typing import Any
 from .digests import b32_nopad_lower
 from .tup_v1 import TAG_CODE_BY_NAME, encode_value_bytes
 
-
 IDREF_V1_PREFIX = b"factpy\x00idref_v1\x00"
 ENTITY_TYPE_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_.-]{0,127}$")
 
@@ -18,7 +17,7 @@ def _u32be(number: int) -> bytes:
 
 def _validate_entity_type(entity_type: str) -> None:
     if not isinstance(entity_type, str):
-        raise ValueError("entity_type must be str")
+        raise ValueError("entity_type must be str")  # noqa: TRY004 - idref_v1 rejects invalid identity input as ValueError.
     if not ENTITY_TYPE_RE.fullmatch(entity_type):
         raise ValueError("entity_type must match [A-Za-z][A-Za-z0-9_.-]{0,127}")
 

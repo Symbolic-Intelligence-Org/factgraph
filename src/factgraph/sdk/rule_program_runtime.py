@@ -6,6 +6,23 @@ from dataclasses import replace
 from datetime import datetime, timezone
 from typing import Any
 
+from factgraph.application.explain.evidence_tree import (
+    LAYOUT_TREE,
+    EvidenceAtom,
+    EvidenceGraph,
+    EvidenceRule,
+    EvidenceTree,
+    Holds,
+    Source,
+)
+from factgraph.application.explain.prober import (
+    ProbeEnv,
+    _atom_form,
+    _bake_repr_text,
+    _is_not_atom,
+    _repr_not_atom,
+    probe_native,
+)
 from factgraph.application.protocol import Rule as ApplicationRule
 from factgraph.application.protocol.evaluate_result import (
     rule_set_digest_for_entries,
@@ -19,23 +36,6 @@ from factgraph.application.protocol.rule_expr_lowering import (
     _validate_rule_expr_head_foundation,
     probe_seed_vars_by_head_port,
 )
-from factgraph.application.explain.evidence_tree import (
-    EvidenceAtom,
-    EvidenceGraph,
-    EvidenceRule,
-    EvidenceTree,
-    Holds,
-    LAYOUT_TREE,
-    Source,
-)
-from factgraph.application.explain.prober import (
-    ProbeEnv,
-    _atom_form,
-    _bake_repr_text,
-    _is_not_atom,
-    _repr_not_atom,
-    probe_native,
-)
 from factgraph.core.protocol.digests import sha256_hex, sha256_token
 from factgraph.core.protocol.tup_v1 import canonical_bytes_tup_v1
 from factgraph.core.rules.rule_ir import RuleRegistry, RuleSpec
@@ -46,8 +46,10 @@ from factgraph.core.store._support_capture import (
     derive_rule_ref_edges_for_binding,
     find_winning_case_index,
 )
-from factgraph.core.store.premise_filter import premise_scoped_ledger
-from factgraph.core.store.premise_filter import validate_premise_configuration
+from factgraph.core.store.premise_filter import (
+    premise_scoped_ledger,
+    validate_premise_configuration,
+)
 from factgraph.core.view.projector import project_view_facts_with_witness
 
 from .errors import SDKStoreError
@@ -181,10 +183,10 @@ def evaluate_rule_program(
     )
     support_digest: str | None = None
     if evaluation.bindings:
-        binding = sorted(
+        binding = min(
             evaluation.bindings,
             key=lambda row: tuple(sorted((str(key), repr(value)) for key, value in row.items())),
-        )[0]
+        )
         case_index = find_winning_case_index(
             where=root_where,
             binding=binding,

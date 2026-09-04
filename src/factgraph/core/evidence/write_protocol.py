@@ -16,6 +16,7 @@ from factgraph.core.schema.meta_policy import (
     SYSTEM_MANAGED_META_KEYS,
 )
 from factgraph.core.store.ledger import (
+    _ANNOTATION_COMPAT_PREFIX,
     AnnotationRow,
     Claim,
     ClaimArg,
@@ -23,7 +24,6 @@ from factgraph.core.store.ledger import (
     Ledger,
     MetaRow,
     Revokes,
-    _ANNOTATION_COMPAT_PREFIX,
     _is_reserved_annotation_meta_key,
 )
 
@@ -109,15 +109,15 @@ if _missing_kind_map_keys:
 _SHARED_ANNOTATION_WHITELIST = SHARED_ANNOTATION_KEYS
 
 __all__ = [
-    "WriteProtocolError",
-    "PolicyNonDeterminismError",
     "_SYSTEM_MANAGED_META_KEYS",
+    "PolicyNonDeterminismError",
+    "WriteProtocolError",
+    "add_field",
     "new_assertion_id",
     "now_epoch_nanos",
-    "set_field",
-    "add_field",
-    "retract_by_asrt",
     "replace_field",
+    "retract_by_asrt",
+    "set_field",
 ]
 
 

@@ -25,9 +25,9 @@ from .protocol.policy import (
     PolicyLineage,
     PolicyLoweredRef,
     PolicyNodeLineage,
-    PolicyStructureV0,
     PolicyStructureNode,
     PolicyStructureNodeV0,
+    PolicyStructureV0,
 )
 from .protocol.policy_explanation import (
     PolicyBranchEvaluationV0,

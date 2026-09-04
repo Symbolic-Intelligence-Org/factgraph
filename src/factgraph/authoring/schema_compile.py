@@ -1,20 +1,19 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
 import re
+from datetime import datetime, timezone
 from typing import Any
 
-from factgraph.core.schema.schema_ir import CANONICAL_TAGS, ensure_schema_ir
 from factgraph.core.schema.meta_policy import (
     MetaKeyPolicyError,
     normalize_authoring_meta_keys,
 )
+from factgraph.core.schema.schema_ir import CANONICAL_TAGS, ensure_schema_ir
 from factgraph.core.schema.schema_repr import (
     SchemaReprTemplateError,
     validate_member_repr_template,
     validate_meta_repr_template,
 )
-
 
 _IDENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 

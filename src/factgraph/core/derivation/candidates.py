@@ -52,9 +52,10 @@ class DerivationOutput:
             raise ValueError("run_id must be non-empty string")
         if not isinstance(self.key_tuple_digest, str) or not self.key_tuple_digest.startswith("sha256:"):
             raise ValueError("key_tuple_digest must be sha256 token")
-        if self.confidence is not None:
-            if isinstance(self.confidence, bool) or not isinstance(self.confidence, float):
-                raise ValueError("confidence must be float or None")
+        if self.confidence is not None and (
+            isinstance(self.confidence, bool) or not isinstance(self.confidence, float)
+        ):
+            raise ValueError("confidence must be float or None")
         if not isinstance(self.confidence_kind, str) or self.confidence_kind not in CONFIDENCE_KINDS:
             raise ValueError("confidence_kind must be one of: none, probability, certainty")
         key = self.candidate_key or compute_candidate_key_v2(
@@ -306,8 +307,8 @@ CandidateSet: TypeAlias = DerivationOutput
 make_candidate = make_derivation_output
 
 __all__ = [
-    "CandidateSet",
     "CONFIDENCE_KINDS",
+    "CandidateSet",
     "DerivationOutput",
     "canonical_candidate_content",
     "compute_candidate_id_v2",

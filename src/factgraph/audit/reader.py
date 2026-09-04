@@ -5,6 +5,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from factgraph.application.protocol.common import WarningDTO
+
 from .authoring_events import load_authoring_apply_events
 from .evidence_graph import EvidenceGraph, evidence_graph_from_dict
 from .round_events import (
@@ -14,7 +16,6 @@ from .round_events import (
     make_warning,
     round_event_from_row,
 )
-from factgraph.application.protocol.common import WarningDTO
 
 
 class AuditReadError(Exception):

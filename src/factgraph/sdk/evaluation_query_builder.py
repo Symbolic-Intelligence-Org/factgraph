@@ -19,6 +19,7 @@ from factgraph.application.evaluation_query_target_runtime import (
     compile_targeted_evaluation_query,
     resolve_evaluation_query_target,
 )
+from factgraph.application.protocol.evaluation_expectation import ContainsRowExpectationV0
 from factgraph.application.protocol.evaluation_query import (
     EvaluationQueryBinding,
     EvaluationQueryError,
@@ -27,12 +28,11 @@ from factgraph.application.protocol.evaluation_query import (
     EvaluationQuerySelection,
     EvaluationQuerySelectionItem,
 )
-from factgraph.application.protocol.evaluation_expectation import ContainsRowExpectationV0
+from factgraph.application.protocol.evaluation_run_v1 import EvaluationExecutionProfileV1
 from factgraph.application.protocol.evaluation_scenario import (
     ScenarioFieldSubstitutionSetV0,
     ScenarioFieldSubstitutionV0,
 )
-from factgraph.application.protocol.evaluation_run_v1 import EvaluationExecutionProfileV1
 from factgraph.application.protocol.execution_profile_v2 import EvaluationExecutionProfileV2
 from factgraph.application.protocol.goal_plan_v1 import (
     GoalExpectationV1,
@@ -91,7 +91,7 @@ class EvaluationQueryBuilderV1:
     intent under its explicit V0, V1, or Product V2 contract.
     """
 
-    _graph: "SDKStore"
+    _graph: SDKStore
     _target: ResolvedEvaluationQueryTargetV1
     _bindings: tuple[EvaluationQueryBinding, ...] = ()
     _selections: tuple[EvaluationQuerySelectionItem, ...] = ()
@@ -110,7 +110,7 @@ class EvaluationQueryBuilderV1:
         self,
         address: SemanticPortAddress | PolicyPortHandle,
         value: Any,
-    ) -> "EvaluationQueryBuilderV1":
+    ) -> EvaluationQueryBuilderV1:
         """Bind one direct input port to a typed value.
 
         Args:
@@ -153,7 +153,7 @@ class EvaluationQueryBuilderV1:
             | PolicyPortHandle
             | PolicyFieldHandle
         ),
-    ) -> "EvaluationQueryBuilderV1":
+    ) -> EvaluationQueryBuilderV1:
         """Add one ordered output projection.
 
         Args:
@@ -222,7 +222,7 @@ class EvaluationQueryBuilderV1:
         expectation_id: str,
         /,
         **selected_values: Any,
-    ) -> "EvaluationQueryBuilderV1":
+    ) -> EvaluationQueryBuilderV1:
         """Observe whether a completed result contains a matching selected row.
 
         This does not modify the Policy or the Query projection.  Exact aliases
@@ -253,7 +253,7 @@ class EvaluationQueryBuilderV1:
             raise SDKStoreError(f"query expectation rejected: {exc}") from exc
         return replace(self, _expectations=(*self._expectations, expectation))
 
-    def using(self, provider: RelationProviderV1) -> "EvaluationQueryBuilderV1":
+    def using(self, provider: RelationProviderV1) -> EvaluationQueryBuilderV1:
         """Attach one restricted pre-engine provider to a V1 GoalPlan.
 
         This is intentionally unavailable to the legacy terminal methods:
@@ -695,7 +695,7 @@ class EvaluationQueryBuilderV1:
     def what_if(
         self,
         scenario: ScenarioFieldSubstitutionV0 | ScenarioFieldSubstitutionSetV0 | ScenarioSpecV1,
-    ) -> "ScenarioQueryBuilderV0 | ScenarioGoalPlanBuilderV1":
+    ) -> ScenarioQueryBuilderV0 | ScenarioGoalPlanBuilderV1:
         """Freeze Query intent and enter the bounded ScenarioRun lifecycle.
 
         This is terminal by design: binding, projection and expectation intent
@@ -769,7 +769,7 @@ class ScenarioGoalPlanBuilderV1:
     _query: EvaluationQueryBuilderV1
     _scenario: ScenarioSpecV1
 
-    def plan(self, **kwargs: Any) -> "GoalPlanInvocationV1":
+    def plan(self, **kwargs: Any) -> GoalPlanInvocationV1:
         """Build a V1 GoalPlan with this Scenario already fixed.
 
         Args:
@@ -803,7 +803,7 @@ class ScenarioGoalPlanBuilderV1:
 
 
 def build_evaluation_query_builder(
-    graph: "SDKStore",
+    graph: SDKStore,
     target: (
         ResolvedRuleBundle
         | Policy
@@ -898,7 +898,7 @@ def _query_resolution_policy_for_authored_target(
 __all__ = [
     "EvaluationQueryBuilderV1",
     "ProviderQueryTargetV1",
-    "ScenarioQueryBuilderV0",
     "ScenarioGoalPlanBuilderV1",
+    "ScenarioQueryBuilderV0",
     "build_evaluation_query_builder",
 ]

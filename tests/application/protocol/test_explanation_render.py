@@ -3,24 +3,24 @@ from __future__ import annotations
 import inspect
 import unittest
 
-from factgraph.application.protocol import BOOLEAN_CERTAINTY, ErrorDTO, EvaluateRow, Explanation
-from factgraph.application.protocol.certainty import Certainty
-from factgraph.application.protocol.explanation_render import narrate_evidence
-from factgraph.application.protocol.rule import _PROJECTION_ID_PREFIX
 from factgraph.application.explain.evidence_tree import (
+    LAYOUT_TREE,
     Const,
     EvidenceAtom,
     EvidenceGraph,
     EvidenceJoin,
     EvidenceRule,
-    EvidenceTree,
     EvidenceTimeline,
-    Fails,
+    EvidenceTree,
     Fact,
+    Fails,
     Holds,
-    LAYOUT_TREE,
     PortRef,
 )
+from factgraph.application.protocol import BOOLEAN_CERTAINTY, ErrorDTO, EvaluateRow, Explanation
+from factgraph.application.protocol.certainty import Certainty
+from factgraph.application.protocol.explanation_render import narrate_evidence
+from factgraph.application.protocol.rule import _PROJECTION_ID_PREFIX
 from factgraph.core.protocol.digests import sha256_token
 
 

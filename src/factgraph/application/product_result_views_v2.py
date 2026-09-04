@@ -12,8 +12,8 @@ V2 carrier could have captured is explicit about being ``not_captured``.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 import json
+from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import Literal, Mapping, TypeAlias
 
@@ -22,7 +22,6 @@ from .protocol.evaluation_run_v1 import EvaluationRunSideV1, EvaluationRunV1, Ex
 from .protocol.evaluation_run_v2 import EvaluationRunSideV2 as ProtocolEvaluationRunSideV2
 from .protocol.evaluation_run_v2 import EvaluationRunV2, assert_evaluation_run_v2_current
 from .protocol.goal_plan_v1 import GoalResultRowV1, GoalTechnicalAssessmentV1
-
 
 ProductRunSourceProtocolV2: TypeAlias = Literal["evaluation_run_v1", "evaluation_run_v2"]
 ProductRunSideV2: TypeAlias = Literal["baseline", "effective", "candidate_effective"]
@@ -916,46 +915,46 @@ def _scenario_capture_view_v2(
 
 
 def _scenario_fact_view_v2(fact: object) -> ScenarioFactViewV2:
-    semantics = getattr(fact, "fact_semantics")
-    display = getattr(fact, "display")
+    semantics = fact.fact_semantics
+    display = fact.display
     return ScenarioFactViewV2(
-        predicate_id=getattr(fact, "predicate_id"),
-        witness_id=getattr(fact, "witness_id"),
-        values=tuple((value.tag, value.value) for value in getattr(fact, "values")),
-        origin=getattr(fact, "origin"),
+        predicate_id=fact.predicate_id,
+        witness_id=fact.witness_id,
+        values=tuple((value.tag, value.value) for value in fact.values),
+        origin=fact.origin,
         fact_semantics=_scenario_fact_semantics_view_v2(semantics),
         provenance=tuple(
-            _scenario_provenance_reference_view_v2(item) for item in getattr(fact, "provenance")
+            _scenario_provenance_reference_view_v2(item) for item in fact.provenance
         ),
         note=display.note,
         labels=display.labels,
-        premise_ids=getattr(fact, "premise_ids"),
-        scenario_operation_digests=getattr(fact, "scenario_operation_digests"),
-        semantic_fact_digest=getattr(fact, "semantic_fact_digest"),
-        evidence_fact_digest=getattr(fact, "evidence_fact_digest"),
+        premise_ids=fact.premise_ids,
+        scenario_operation_digests=fact.scenario_operation_digests,
+        semantic_fact_digest=fact.semantic_fact_digest,
+        evidence_fact_digest=fact.evidence_fact_digest,
     )
 
 
 def _scenario_operation_evidence_view_v2(item: object) -> ScenarioOperationEvidenceViewV2:
     return ScenarioOperationEvidenceViewV2(
-        kind=getattr(item, "kind"),
-        resolved_operation_digest=getattr(item, "resolved_operation_digest"),
+        kind=item.kind,
+        resolved_operation_digest=item.resolved_operation_digest,
         metadata_bindings=tuple(
             _scenario_operation_metadata_view_v2(binding)
-            for binding in getattr(item, "metadata_bindings")
+            for binding in item.metadata_bindings
         ),
-        masked_witness_ids=getattr(item, "masked_witness_ids"),
-        synthetic_witness_ids=getattr(item, "synthetic_witness_ids"),
-        operation_evidence_digest=getattr(item, "operation_evidence_digest"),
+        masked_witness_ids=item.masked_witness_ids,
+        synthetic_witness_ids=item.synthetic_witness_ids,
+        operation_evidence_digest=item.operation_evidence_digest,
     )
 
 
 def _scenario_operation_metadata_view_v2(item: object) -> ScenarioOperationMetadataViewV2:
-    meta = getattr(item, "meta")
+    meta = item.meta
     return ScenarioOperationMetadataViewV2(
-        premise_id=getattr(item, "premise_id"),
-        source_operation_digest=getattr(item, "source_operation_digest"),
-        member_value_digest=getattr(item, "member_value_digest"),
+        premise_id=item.premise_id,
+        source_operation_digest=item.source_operation_digest,
+        member_value_digest=item.member_value_digest,
         fact_semantics=_scenario_fact_semantics_view_v2(meta.fact_semantics),
         provenance=tuple(
             _scenario_provenance_reference_view_v2(reference) for reference in meta.provenance
@@ -969,23 +968,23 @@ def _scenario_fact_semantics_view_v2(value: object) -> ScenarioFactSemanticsView
     if value is None:
         return None
     return ScenarioFactSemanticsViewV2(
-        raw_kind=getattr(value, "raw_kind"),
-        point_probability=getattr(value, "point_probability"),
-        semantics_digest=getattr(value, "semantics_digest"),
+        raw_kind=value.raw_kind,
+        point_probability=value.point_probability,
+        semantics_digest=value.semantics_digest,
     )
 
 
 def _scenario_provenance_reference_view_v2(
     value: object,
 ) -> ScenarioProvenanceReferenceViewV2:
-    locator = getattr(value, "locator")
+    locator = value.locator
     return ScenarioProvenanceReferenceViewV2(
-        source_ref=getattr(value, "source_ref"),
+        source_ref=value.source_ref,
         locator=locator.to_wire(),
-        origin_role=getattr(value, "origin_role"),
-        content_digest=getattr(value, "content_digest"),
-        admission_ref=getattr(value, "admission_ref"),
-        reference_digest=getattr(value, "reference_digest"),
+        origin_role=value.origin_role,
+        content_digest=value.content_digest,
+        admission_ref=value.admission_ref,
+        reference_digest=value.reference_digest,
     )
 
 
@@ -1030,19 +1029,19 @@ def _probability_materialization_view_v2(
     if value is None:
         return None
     return ProbabilityMaterializationViewV2(
-        model=getattr(value, "model"),
-        materialization_digest=getattr(value, "materialization_digest"),
+        model=value.model,
+        materialization_digest=value.materialization_digest,
         entries=tuple(
             ProbabilityMaterializationEntryViewV2(
-                fact_evidence_digest=getattr(item, "fact_evidence_digest"),
-                declared_point_probability=getattr(item, "declared_point_probability"),
-                float64_hex=getattr(item, "float64_hex"),
-                float64_text=getattr(item, "float64_text"),
-                problog_text=getattr(item, "problog_text"),
-                action=getattr(item, "action"),
-                entry_digest=getattr(item, "entry_digest"),
+                fact_evidence_digest=item.fact_evidence_digest,
+                declared_point_probability=item.declared_point_probability,
+                float64_hex=item.float64_hex,
+                float64_text=item.float64_text,
+                problog_text=item.problog_text,
+                action=item.action,
+                entry_digest=item.entry_digest,
             )
-            for item in getattr(value, "entries")
+            for item in value.entries
         ),
     )
 
@@ -1355,26 +1354,24 @@ __all__ = [
     "EvaluationRunV2ExplainTarget",
     "EvaluationRunV2ResultView",
     "EvaluationRunV2RowView",
-    "ExecutionViewV2",
     "ExecutionAttachmentViewV2",
     "ExecutionProfileViewV2",
+    "ExecutionViewV2",
+    "ExpectationViewV2",
     "FunctionAssetViewV2",
     "FunctionCallViewV2",
     "FunctionCaptureViewV2",
     "FunctionInputBindingViewV2",
     "FunctionOccurrenceViewV2",
     "FunctionPortViewV2",
-    "ExpectationViewV2",
+    "ProbabilityMaterializationEntryViewV2",
+    "ProbabilityMaterializationViewV2",
     "ProductRunSideV2",
     "ProductRunSourceProtocolV2",
     "ProductViewErrorV2",
-    "ProbabilityMaterializationEntryViewV2",
-    "ProbabilityMaterializationViewV2",
     "ResultValueViewV2",
     "ResultViewV2",
     "RowViewV2",
-    "SummaryViewV2",
-    "TargetViewV2",
     "ScenarioCaptureViewV2",
     "ScenarioFactSemanticsViewV2",
     "ScenarioFactViewV2",
@@ -1382,6 +1379,8 @@ __all__ = [
     "ScenarioOperationMetadataViewV2",
     "ScenarioProvenanceReferenceViewV2",
     "ScenarioWorldCaptureViewV2",
+    "SummaryViewV2",
+    "TargetViewV2",
     "result_view_v2_from_evaluation_run_v2",
     "result_view_v2_from_run",
 ]

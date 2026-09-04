@@ -263,32 +263,30 @@ def _build_proof_frame_result(
     synthetic_key = _synthetic_atom_key(action, action_index=action_index)
     old_binding_still_present = artifact.binding_items in set(variant_rows)
     synthetic_verdict = "still_valid" if old_binding_still_present else "invalidated"
-    atom_verdicts = tuple(
-        [
-            *(
-                ProofFrameConditionVerdict(
-                    condition_key=witness.pred_condition_key,
-                    verdict="still_valid",
-                    affected_action_indices=(),
-                )
-                for witness in artifact.pred_witnesses
-            ),
-            *(
-                ProofFrameConditionVerdict(
-                    condition_key=step.step_key,
-                    verdict="still_valid",
-                    affected_action_indices=(),
-                )
-                for step in artifact.non_fact_steps
-            ),
+    atom_verdicts = (
+        *(
             ProofFrameConditionVerdict(
-                condition_key=synthetic_key,
-                verdict=synthetic_verdict,
-                affected_action_indices=(
-                    (action_index,) if synthetic_verdict == "invalidated" else ()
-                ),
+                condition_key=witness.pred_condition_key,
+                verdict="still_valid",
+                affected_action_indices=(),
+            )
+            for witness in artifact.pred_witnesses
+        ),
+        *(
+            ProofFrameConditionVerdict(
+                condition_key=step.step_key,
+                verdict="still_valid",
+                affected_action_indices=(),
+            )
+            for step in artifact.non_fact_steps
+        ),
+        ProofFrameConditionVerdict(
+            condition_key=synthetic_key,
+            verdict=synthetic_verdict,
+            affected_action_indices=(
+                (action_index,) if synthetic_verdict == "invalidated" else ()
             ),
-        ]
+        ),
     )
     return ProofFrameRecheckResult(
         status=aggregate_proof_frame_status(atom_verdicts),

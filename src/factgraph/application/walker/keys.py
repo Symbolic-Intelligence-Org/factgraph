@@ -102,7 +102,7 @@ class ConditionKeyView:
     def underlying(self) -> str:
         return self._underlying
 
-    def as_pred(self) -> "ConditionKeyView":
+    def as_pred(self) -> ConditionKeyView:
         return ConditionKeyView(
             key=self.key,
             case_index=self.case_index,
@@ -114,7 +114,7 @@ class ConditionKeyView:
             underlying=self.underlying,
         )
 
-    def as_step(self) -> "ConditionKeyView":
+    def as_step(self) -> ConditionKeyView:
         return ConditionKeyView(
             key=self.key,
             case_index=self.case_index,

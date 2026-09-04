@@ -6,8 +6,8 @@ from itertools import product
 from typing import Literal
 
 from factgraph.application.derivation_runtime import evaluate_derivation_plans
-from factgraph.core.protocol.digests import sha256_hex
 from factgraph.core.derivation.candidates import DerivationOutput
+from factgraph.core.protocol.digests import sha256_hex
 from factgraph.core.rules.where_ast import (
     AggregateAtom,
     AndExpr,
@@ -30,12 +30,12 @@ from .rule_expr import (
     RuleExprError,
     RuleJoinConstraint,
     _AndGroup,
-    _OrGroup,
-    _RuleExpr,
-    _RuleOperand,
     _canonical_join_constraint,
     _coerce_rule_expr_operand,
     _normalize_join_constraints,
+    _OrGroup,
+    _RuleExpr,
+    _RuleOperand,
 )
 
 RuleExprAdapterEngine = Literal["native", "souffle", "problog"]
@@ -845,7 +845,7 @@ def _branch_declared_port_source_for_name(
     if not _same_name_bindings_are_joined(name, bindings, branch.pending_joins, occurrence_map):
         aliases = ", ".join(sorted(binding.occurrence_alias for binding in bindings))
         raise RuleExprError(f"declared port {name!r} is ambiguous across occurrences: {aliases}")
-    return _branch_source(branch.branch_id, sorted(bindings, key=_binding_sort_key)[0])
+    return _branch_source(branch.branch_id, min(bindings, key=_binding_sort_key))
 
 
 def _declared_port_state_for_rule_expr_plan(
@@ -926,7 +926,7 @@ def _branch_declared_port_sources(
         if not _same_name_bindings_are_joined(name, bindings, branch.pending_joins, occurrence_map):
             aliases = ", ".join(sorted(binding.occurrence_alias for binding in bindings))
             raise RuleExprError(f"declared port {name!r} is ambiguous across occurrences: {aliases}")
-        declared[name] = _branch_source(branch.branch_id, sorted(bindings, key=_binding_sort_key)[0])
+        declared[name] = _branch_source(branch.branch_id, min(bindings, key=_binding_sort_key))
     return declared
 
 
@@ -1736,7 +1736,7 @@ def _alias_var_map(alias: str, atoms: tuple[Atom, ...]) -> dict[Var, Var]:
 
 
 def _alias_var_name(alias: str, var: Var) -> str:
-    source = var.name[1:] if var.name.startswith("$") else var.name
+    source = var.name.removeprefix("$")
     return f"${alias}__{source}"
 
 

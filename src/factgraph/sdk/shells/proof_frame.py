@@ -56,15 +56,15 @@ from __future__ import annotations
 
 from typing import Any
 
+from factgraph.application.proofframe_runtime import recheck_proof_frame
 from factgraph.application.protocol import (
     ProofFrameRecheckRequest,
     ProofFrameRecheckResult,
     ProtocolShapeError,
 )
-from factgraph.application.proofframe_runtime import recheck_proof_frame
 
-from ._validation import validate_evaluation_overlay, validate_support_artifact
 from ..errors import SDKStoreError
+from ._validation import validate_evaluation_overlay, validate_support_artifact
 
 
 def sdk_proof_frame_recheck(

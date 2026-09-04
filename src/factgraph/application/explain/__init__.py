@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from .evidence_tree import (
+    LAYOUT_TIMELINE,
+    LAYOUT_TREE,
     Aggregate,
     AtomForm,
     BoundVar,
@@ -19,12 +21,10 @@ from .evidence_tree import (
     Fact,
     Fails,
     Holds,
-    LAYOUT_TIMELINE,
-    LAYOUT_TREE,
     LayoutHint,
     NotReached,
-    PortRef,
     PolicyConditionRole,
+    PortRef,
     RuleRole,
     Source,
     TreeStatus,
@@ -32,7 +32,10 @@ from .evidence_tree import (
     evidence_graph_from_dict,
     evidence_graph_to_dict,
 )
+
 __all__ = [
+    "LAYOUT_TIMELINE",
+    "LAYOUT_TREE",
     "Aggregate",
     "AtomForm",
     "BoundVar",
@@ -51,12 +54,10 @@ __all__ = [
     "Fact",
     "Fails",
     "Holds",
-    "LAYOUT_TIMELINE",
-    "LAYOUT_TREE",
     "LayoutHint",
     "NotReached",
-    "PortRef",
     "PolicyConditionRole",
+    "PortRef",
     "ProbeEnv",
     "RuleRole",
     "Source",

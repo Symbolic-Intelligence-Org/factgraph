@@ -10,17 +10,17 @@ those captures rather than re-reading the live Store.
 
 from __future__ import annotations
 
+import json
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-import json
 from typing import Any, Callable
 
 from factgraph.core.protocol.digests import sha256_hex
 from factgraph.core.protocol.tup_v1 import claim_args_from_rest_terms
 from factgraph.core.store._evaluate import (
-    _NativeEffectiveRelationSnapshot,
     _immutable_effective_relation_copy,
     _native_where_dependency_predicates,
+    _NativeEffectiveRelationSnapshot,
 )
 from factgraph.core.store._support import ProjectedFact
 from factgraph.core.store.runtime import Store

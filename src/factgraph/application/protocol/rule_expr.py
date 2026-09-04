@@ -6,6 +6,7 @@ from itertools import combinations, product
 from typing import Iterable, Literal, NoReturn
 
 from factgraph._sdk_errors import SDKDSLError
+
 from .rule import Rule, RuleOccurrence, RulePortRef, RuleValidationError
 
 
@@ -380,7 +381,7 @@ def _validate_endpoint_matches_operand(endpoint: RulePortRef, operand: _RuleOper
 
 
 def _rule_identity(rule: object) -> tuple[str, str]:
-    return (str(getattr(rule, "id")), str(getattr(rule, "content_digest")))
+    return (str(rule.id), str(rule.content_digest))
 
 
 def _is_legacy_sdk_rule(value: object) -> bool:
@@ -390,7 +391,7 @@ def _is_legacy_sdk_rule(value: object) -> bool:
 
 __all__ = [
     "ExplicitBoolError",
-    "RuleJoinConstraint",
     "RuleExpr",
     "RuleExprError",
+    "RuleJoinConstraint",
 ]

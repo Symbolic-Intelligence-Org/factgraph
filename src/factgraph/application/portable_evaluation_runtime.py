@@ -29,13 +29,13 @@ Scenario resolver, replay format, or product assessment surface.
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, field, replace
 import importlib
 import json
 import math
 import os
 import shutil
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass, field, replace
 from typing import Any, Literal
 
 from factgraph.core.derivation.candidates import DerivationOutput
@@ -53,11 +53,11 @@ from factgraph.core.rules.where_ast import (
     RuleRefAtom,
     Term,
     Var,
+    WhereASTError,
     parse_where_ir_to_ast,
 )
-from factgraph.core.rules.where_ast import WhereASTError
-from factgraph.core.store._builders import coerce_value_for_tag
 from factgraph.core.schema.schema_ir import ensure_schema_ir
+from factgraph.core.store._builders import coerce_value_for_tag
 from factgraph.core.store._support import ProjectedFact
 from factgraph.core.store.ledger import Claim, Ledger
 from factgraph.core.store.runtime import Store
@@ -68,7 +68,6 @@ from .protocol.derivation import (
     CompiledHeadCall,
     DerivationEvaluateRequest,
 )
-
 
 PORTABLE_DETERMINISTIC_V1: Literal["portable_deterministic_v1"] = "portable_deterministic_v1"
 PortableEngineV1 = Literal["native", "souffle", "problog"]
@@ -549,7 +548,7 @@ def execute_native_deterministic_v1(
 @dataclass(frozen=True)
 class _ValidatedPortableInput:
     plan: CompiledDerivationPlan
-    execution_branches: tuple["_PortableExecutionBranch", ...]
+    execution_branches: tuple["_PortableExecutionBranch", ...]  # noqa: UP037 - Preserve Python 3.10 runtime hint shape.
     schema_ir: dict[str, Any]
     relations: Mapping[str, tuple[ProjectedFact, ...]]
     contract: PortableExecutionContractV1
@@ -1653,10 +1652,10 @@ __all__ = [
     "PortableEvaluationResultV1",
     "PortableExecutionContractV1",
     "PortableSelectedRowV1",
-    "portable_dependency_predicate_ids_v1",
-    "observe_portable_deterministic_v1",
-    "execute_portable_deterministic_v1",
     "execute_native_deterministic_v1",
+    "execute_portable_deterministic_v1",
     "materialize_portable_effective_world_v1",
+    "observe_portable_deterministic_v1",
+    "portable_dependency_predicate_ids_v1",
     "validate_portable_deterministic_v1",
 ]

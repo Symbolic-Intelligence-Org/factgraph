@@ -21,8 +21,8 @@ from __future__ import annotations
 
 import base64
 import binascii
-from dataclasses import asdict, dataclass, field, is_dataclass
 import json
+from dataclasses import asdict, dataclass, field, is_dataclass
 from typing import Literal, TypeAlias
 
 from factgraph.core.protocol.digests import sha256_hex
@@ -30,7 +30,6 @@ from factgraph.core.protocol.tup_v1 import CANONICAL_TAGS, claim_args_from_rest_
 
 from .common import ProtocolShapeError, _require_non_empty_str
 from .scenario_v1 import ExactLocalClosureTargetV1
-
 
 GoalTargetKindV1: TypeAlias = Literal["rule", "policy", "relation_provider"]
 GoalResultModeV1: TypeAlias = Literal["rows", "exists", "count", "set"]
@@ -637,7 +636,7 @@ class GoalResultRowV1:
             if self.anchor.semantic_row_digest != semantic:
                 raise ProtocolShapeError("GoalResultRowV1 anchor does not match values")
 
-    def anchored(self, plan_digest: str) -> "GoalResultRowV1":
+    def anchored(self, plan_digest: str) -> GoalResultRowV1:
         """Return this immutable row with its deterministic plan-bound anchor."""
 
         return GoalResultRowV1(
@@ -987,21 +986,21 @@ class GoalTechnicalAssessmentV1:
 
 
 __all__ = [
-    "ContainsRowExpectationV1",
     "CapabilityStateV1",
+    "ContainsRowExpectationV1",
     "ContractValidityStateV1",
     "CountEqExpectationV1",
-    "ExecutionStateV1",
     "ExactLocalAbsenceExpectationV1",
     "ExactLocalClosureStateV1",
+    "ExecutionStateV1",
     "ExistsExpectationV1",
     "ExplainStateV1",
     "GoalCompletenessV1",
+    "GoalExistsValueV1",
     "GoalExpectationKindV1",
     "GoalExpectationOutcomeV1",
     "GoalExpectationStatusV1",
     "GoalExpectationV1",
-    "GoalExistsValueV1",
     "GoalPlanV1",
     "GoalResultModeV1",
     "GoalResultRowV1",

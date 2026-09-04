@@ -38,16 +38,16 @@ class EvaluationExpectationProtocolTests(unittest.TestCase):
         self.assertNotEqual(one.expectation_digest, two.expectation_digest)
 
     def test_outcome_requires_status_specific_evidence(self) -> None:
-        common = dict(
-            expectation_id="bob_present",
-            kind="contains_row",
-            expectation_digest=_token("expectation"),
-            query_digest=_hex("query"),
-            targeted_query_wrapper_digest=_token("wrapper"),
-            result_id="evalr_v1:" + _hex("result"),
-            result_digest=_token("result-digest"),
-            run_anchor_digest=_token("anchor"),
-        )
+        common = {
+            "expectation_id": "bob_present",
+            "kind": "contains_row",
+            "expectation_digest": _token("expectation"),
+            "query_digest": _hex("query"),
+            "targeted_query_wrapper_digest": _token("wrapper"),
+            "result_id": "evalr_v1:" + _hex("result"),
+            "result_digest": _token("result-digest"),
+            "run_anchor_digest": _token("anchor"),
+        }
         satisfied = ExpectationResultV0(
             **common,
             status="satisfied",

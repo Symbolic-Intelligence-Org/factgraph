@@ -50,21 +50,21 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
+from factgraph.application.fact_overlay_runtime import check_fact_overlay_binding
 from factgraph.application.protocol import (
     FactOverlayCheckRequest,
     FactOverlayCheckResult,
     ProtocolShapeError,
 )
-from factgraph.application.fact_overlay_runtime import check_fact_overlay_binding
 from factgraph.core.store._support import normalize_binding_items
 
+from ..errors import SDKStoreError
 from ._validation import (
+    resolve_derivation_plan,
     resolve_runtime_registry,
     validate_binding,
-    resolve_derivation_plan,
     validate_evaluation_overlay,
 )
-from ..errors import SDKStoreError
 
 
 def sdk_fact_overlay_check(

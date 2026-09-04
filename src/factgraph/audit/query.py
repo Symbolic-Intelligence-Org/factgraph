@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from factgraph.core.rules._trace import summarize_rule_trace_artifact_dict
+from factgraph.core.rules._trace_narrative import render_rule_run_narrative
 from factgraph.core.store._candidate_evidence_tree import (
     build_candidate_evidence_tree,
     build_degraded_candidate_evidence_tree,
@@ -13,16 +15,16 @@ from factgraph.core.store._candidate_evidence_tree_narrative import (
 from factgraph.core.store._candidate_evidence_tree_summary import (
     summarize_candidate_evidence_tree_dict,
 )
-from factgraph.core.store._support import _DEGRADED_SUPPORT_KINDS, _WITNESS_BEARING_SUPPORT_KINDS
-from factgraph.core.store._support import _PROVENANCE_BEARING_SUPPORT_KINDS
-from factgraph.core.rules._trace_narrative import render_rule_run_narrative
-from factgraph.core.rules._trace import summarize_rule_trace_artifact_dict
+from factgraph.core.store._support import (
+    _DEGRADED_SUPPORT_KINDS,
+    _PROVENANCE_BEARING_SUPPORT_KINDS,
+    _WITNESS_BEARING_SUPPORT_KINDS,
+)
 
 from .assertions import AuditAssertionReadError, load_assertion_index
-from .reader import AuditPackageData
 from .proof_frame_diff import ProofFrameDiff, ProofFrameDiffError, build_proof_frame_diff
-from .round_events import RoundEvent, RoundSummary, summarize_round_events
-from .round_events import make_warning
+from .reader import AuditPackageData
+from .round_events import RoundEvent, RoundSummary, make_warning, summarize_round_events
 
 
 class AuditQueryError(Exception):

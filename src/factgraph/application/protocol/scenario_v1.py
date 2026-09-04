@@ -16,8 +16,9 @@ from __future__ import annotations
 
 import base64
 import binascii
-from dataclasses import dataclass, field as dc_field
 import json
+from dataclasses import dataclass
+from dataclasses import field as dc_field
 from typing import Any, Literal, TypeAlias
 
 from factgraph.core.protocol.digests import sha256_hex
@@ -25,7 +26,6 @@ from factgraph.core.protocol.tup_v1 import claim_args_from_rest_terms
 
 from .common import ProtocolShapeError, _require_non_empty_str
 from .schema_runtime import EntityRef, FieldPath
-
 
 ScenarioValueTagV1: TypeAlias = Literal[
     "string",
@@ -150,7 +150,7 @@ class ScenarioValueV1:
             raise ProtocolShapeError("ScenarioValueV1 storage is not canonical")
 
     @classmethod
-    def from_raw(cls, tag: ScenarioValueTagV1, value: Any) -> "ScenarioValueV1":
+    def from_raw(cls, tag: ScenarioValueTagV1, value: Any) -> ScenarioValueV1:
         """Normalize one Python value into canonical Scenario storage.
 
         Args:
@@ -990,9 +990,9 @@ __all__ = [
     "ScenarioValueStorageV1",
     "ScenarioValueTagV1",
     "ScenarioValueV1",
-    "ScenarioWithoutFieldV1",
-    "ScenarioWithoutEntityV1",
     "ScenarioWithoutAssertionV1",
+    "ScenarioWithoutEntityV1",
+    "ScenarioWithoutFieldV1",
     "ScenarioWithoutRelationV1",
     "ScenarioWithoutValueV1",
 ]

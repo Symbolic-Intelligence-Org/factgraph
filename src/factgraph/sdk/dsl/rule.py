@@ -6,6 +6,7 @@ from typing import Any
 
 from factgraph.core.rules.where_ast import WhereASTError, parse_where_ir_to_ast
 from factgraph.core.rules.where_ast_validate import WhereASTValidationError, validate_where_ast
+
 from ..error_codes import QUERY_ALIAS_CONFLICT, QUERY_UNBOUND_VAR
 from .branch import Case
 from .errors import SDKDSLError
@@ -337,7 +338,7 @@ class Query:
 
 def _lower_select_item(item: Any) -> Any:
     if hasattr(item, "token") and isinstance(getattr(item, "token", None), str):
-        return getattr(item, "token")
+        return item.token
     return item
 
 
@@ -463,19 +464,19 @@ def _validate_query_where_branch_wrapper(node: Any, *, path: str) -> None:
         for idx, item in enumerate(node):
             _validate_query_where_branch_wrapper(item, path=f"{path}[{idx}]")
         return
-    if isinstance(node, tuple):
-        if (
-            len(node) == 3
-            and node[0] == "__body__"
-            and isinstance(node[1], list)
-        ):
-            for idx, atom in enumerate(node[1]):
-                _validate_query_where_branch_wrapper(atom, path=f"{path}[1][{idx}]")
+    if (
+        isinstance(node, tuple)
+        and len(node) == 3
+        and node[0] == "__body__"
+        and isinstance(node[1], list)
+    ):
+        for idx, atom in enumerate(node[1]):
+            _validate_query_where_branch_wrapper(atom, path=f"{path}[1][{idx}]")
 
 
 def _normalize_derivation_head_items(head: Any) -> tuple[HeadCall, ...]:
     if head is None:
-        return tuple()
+        return ()
     if isinstance(head, list):
         head_items = list(head)
     else:
@@ -618,9 +619,7 @@ def _is_query_unbound_error(exc: Exception) -> bool:
         return True
     if "requires at least one bound/constant side" in msg:
         return True
-    if "used in path comparison before" in msg:
-        return True
-    return False
+    return "used in path comparison before" in msg
 
 
 def _query_head_item_to_payload(item: Any) -> dict[str, Any]:

@@ -2,14 +2,13 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation, localcontext
-import re
 from typing import Any
 
 from factgraph.core.semantics import SemanticsProfile
 from factgraph.core.store.types import EngineExtBase
-
 
 _CANONICAL_DECIMAL_RE = re.compile(r"(?:0|[1-9][0-9]*)(?:\.[0-9]+)?\Z")
 _MAX_WEIGHTED_CHOICE_PROBABILITY_CHARS = 32
@@ -62,7 +61,7 @@ def _canonical_choice_probability(value: object, *, field_name: str) -> str:
             f"{field_name} is not a decimal",
             code="PROBLOG_WEIGHTED_CHOICE_INVALID_PROBABILITY",
         ) from exc
-    if not (Decimal("0") < decimal <= Decimal("1")):
+    if not (Decimal(0) < decimal <= Decimal(1)):
         raise ProbLogWeightedChoiceError(
             f"{field_name} must be in (0, 1]",
             code="PROBLOG_WEIGHTED_CHOICE_INVALID_PROBABILITY",
@@ -158,8 +157,8 @@ class ProbLogWeightedChoiceExt:
             )
         with localcontext() as context:
             context.prec = 128
-            total = sum((Decimal(arm.probability) for arm in ordered_arms), Decimal("0"))
-        if total != Decimal("1"):
+            total = sum((Decimal(arm.probability) for arm in ordered_arms), Decimal(0))
+        if total != Decimal(1):
             raise ProbLogWeightedChoiceError(
                 "exclusive annotated-disjunction arm probabilities must sum exactly to 1",
                 code="PROBLOG_WEIGHTED_CHOICE_PROBABILITY_TOTAL",
@@ -450,11 +449,11 @@ def _reject_conflicting_carriers(carriers: list[tuple[str, tuple[float, ...]]]) 
 
 
 __all__ = [
+    "ProbLogRuleExt",
     "ProbLogWeightedChoiceArm",
     "ProbLogWeightedChoiceBranch",
     "ProbLogWeightedChoiceError",
     "ProbLogWeightedChoiceExt",
-    "ProbLogRuleExt",
     "branch_count_for_where",
     "materialize_problog_case_probabilities",
     "normalize_problog_case_probabilities",

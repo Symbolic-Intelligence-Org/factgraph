@@ -23,10 +23,14 @@ from factgraph.core.derivation.candidates import CandidateSet
 from factgraph.core.policy.policy_ir import (
     PolicyIRValidationError,
     build_policy_ir_v1,
+)
+from factgraph.core.policy.policy_ir import (
     policy_digest as compute_policy_digest,
 )
 from factgraph.core.schema.schema_ir import (
     SchemaIRValidationError,
+)
+from factgraph.core.schema.schema_ir import (
     schema_digest as compute_schema_digest,
 )
 

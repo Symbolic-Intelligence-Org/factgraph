@@ -6,7 +6,6 @@ from datetime import date, datetime, timedelta, timezone
 from typing import Any
 from uuid import uuid4
 
-from factgraph.core.semantics import SemanticsProfile
 from factgraph.adapters.pyreason.runner import (
     PyReasonRunConfig,
     _bounded_pred_ids,
@@ -17,8 +16,9 @@ from factgraph.adapters.pyreason.session import PyReasonSession
 from factgraph.adapters.pyreason.where_compile import compile_where_ir_to_pyreason
 from factgraph.core.derivation.candidates import DerivationOutput, make_derivation_output
 from factgraph.core.evidence.write_protocol import now_epoch_nanos
-from factgraph.core.protocol.tup_v1 import canonical_bytes_tup_v1
 from factgraph.core.protocol.digests import sha256_token
+from factgraph.core.protocol.tup_v1 import canonical_bytes_tup_v1
+from factgraph.core.semantics import SemanticsProfile
 from factgraph.core.store import builders as store_builders
 from factgraph.core.store._support import (
     ENGINE_NO_WITNESS_KIND,
@@ -770,7 +770,7 @@ def _relationship_pred_ids(schema_ir: dict[str, Any]) -> set[str]:
 
 
 __all__ = [
+    "_materialize_edb_session",
     "pyreason_engine_eval",
     "resolve_pyreason_run_config",
-    "_materialize_edb_session",
 ]

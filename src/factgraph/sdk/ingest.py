@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from factgraph.application import apply_ingest_request, entity_type_from_ref, field_value_type
 from factgraph.application.protocol import (
@@ -105,7 +105,7 @@ class _PreparedIngestItem:
 
 
 def sdk_validate_provenance(
-    sdk: "SDKStore",
+    sdk: SDKStore,
     obj: Any,
     *,
     standard: str = "derivation_v1",
@@ -151,23 +151,26 @@ def sdk_validate_provenance(
 
     # Optional but semantically meaningful if present.
     for key in ("schema_digest", "policy_digest"):
-        if key in source_obj and source_obj.get(key) is not None:
-            if not _is_sha256_token(source_obj.get(key)):
-                warnings.append(
-                    _diag(
-                        code="provenance_optional_digest_malformed",
-                        severity="warning",
-                        path=f"$.provenance.{key}",
-                        message=f"{key} should be 'sha256:<hex>' when provided",
-                        data={"key": key},
-                    )
+        if (
+            key in source_obj
+            and source_obj.get(key) is not None
+            and not _is_sha256_token(source_obj.get(key))
+        ):
+            warnings.append(
+                _diag(
+                    code="provenance_optional_digest_malformed",
+                    severity="warning",
+                    path=f"$.provenance.{key}",
+                    message=f"{key} should be 'sha256:<hex>' when provided",
+                    data={"key": key},
                 )
+            )
 
     return ValidationReport(ok=not errors, warnings=warnings, errors=errors)
 
 
 def sdk_ingest(
-    sdk: "SDKStore",
+    sdk: SDKStore,
     data: Any,
     *,
     meta: dict[str, Any] | None = None,
@@ -282,7 +285,7 @@ def sdk_ingest(
 
 
 def _ingest_set_or_add_prepared(
-    sdk: "SDKStore",
+    sdk: SDKStore,
     item: _PreparedIngestItem,
     *,
     kind: str,
@@ -328,7 +331,7 @@ def _ingest_set_or_add_prepared(
 
 
 def _legacy_ingest_set_or_add(
-    sdk: "SDKStore",
+    sdk: SDKStore,
     item: _PreparedIngestItem,
     *,
     kind: str,
@@ -363,7 +366,7 @@ _MISSING = object()
 _APP_FALLBACK = object()
 
 
-def _identity_dict_for_e_ref(sdk: "SDKStore", e_ref: str, *, owner_type: str) -> dict[str, Any] | None:
+def _identity_dict_for_e_ref(sdk: SDKStore, e_ref: str, *, owner_type: str) -> dict[str, Any] | None:
     if entity_type_from_ref(e_ref) != owner_type:
         return None
     identity = sdk._identity_values_by_e_ref.get(e_ref)
@@ -373,7 +376,7 @@ def _identity_dict_for_e_ref(sdk: "SDKStore", e_ref: str, *, owner_type: str) ->
 
 
 def _app_value_for_ingest(
-    sdk: "SDKStore",
+    sdk: SDKStore,
     value: Any,
     *,
     owner_type: str,
@@ -396,7 +399,7 @@ def _app_value_for_ingest(
 
 
 def _app_ingest_set_or_add(
-    sdk: "SDKStore",
+    sdk: SDKStore,
     item: _PreparedIngestItem,
     *,
     kind: str,
@@ -435,7 +438,7 @@ def _app_ingest_set_or_add(
 
 
 def _app_ingest_retract(
-    sdk: "SDKStore",
+    sdk: SDKStore,
     item: _PreparedIngestItem,
     *,
     path: str,
@@ -495,7 +498,7 @@ def _sdk_path_from_app_path(path: tuple[str, ...], *, fallback_path: str) -> str
 
 
 def _prepare_ingest_items(
-    sdk: "SDKStore",
+    sdk: SDKStore,
     data: list[Any] | tuple[Any, ...],
     *,
     base_meta: dict[str, Any],
@@ -521,7 +524,7 @@ def _prepare_ingest_items(
 
 
 def _prepare_single_ingest_item(
-    sdk: "SDKStore",
+    sdk: SDKStore,
     raw_item: Any,
     *,
     item_path: str,

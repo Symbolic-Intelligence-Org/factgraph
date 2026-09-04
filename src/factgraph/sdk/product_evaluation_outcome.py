@@ -72,7 +72,7 @@ class ProductEvaluationOutcomeV2:
             ) from exc
 
     @classmethod
-    def from_run(cls, run: EvaluationRunV2) -> "ProductEvaluationOutcomeV2":
+    def from_run(cls, run: EvaluationRunV2) -> ProductEvaluationOutcomeV2:
         """Open an already sealed raw run.
 
         Args:
@@ -162,7 +162,7 @@ class ProductEvaluationOutcomeV2:
                 code="PRODUCT_OUTCOME_V2_EXPLAIN_TARGET_INVALID",
             ) from exc
 
-    def replay(self) -> "EvaluationRunReplayV2":
+    def replay(self) -> EvaluationRunReplayV2:
         """Replay the sealed run without live dependencies.
 
         Returns:

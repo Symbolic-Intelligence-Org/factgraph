@@ -2,8 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-import factgraph.sdk.dsl as dsl
-from factgraph.sdk import Entity, Field, Identity, SDKStore
+from factgraph.sdk import Entity, Field, Identity, SDKStore, dsl
 
 
 class HardCutPerson(Entity):

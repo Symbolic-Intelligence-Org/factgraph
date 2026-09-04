@@ -104,49 +104,44 @@ class BuildApplicationRuleUnifiedFormsTests(unittest.TestCase):
 
 class BuildApplicationRuleRejectTests(unittest.TestCase):
     def test_rejects_bare_attr_ref_compare(self) -> None:
-        with vars("u") as (u,):
-            with self.assertRaises(DSLToApplicationRuleError):
-                build_application_rule(
-                    id="legacy_bare_attr",
-                    when=[u.status == "active"],
-                    ports={"user": u},
-                )
+        with vars("u") as (u,), self.assertRaises(DSLToApplicationRuleError):
+            build_application_rule(
+                id="legacy_bare_attr",
+                when=[u.status == "active"],
+                ports={"user": u},
+            )
 
     def test_rejects_two_line_legacy_form(self) -> None:
-        with vars("u") as (u,):
-            with self.assertRaises(DSLToApplicationRuleError):
-                build_application_rule(
-                    id="legacy_two_line",
-                    when=[User(u), u.status == "active"],
-                    ports={"user": u},
-                )
+        with vars("u") as (u,), self.assertRaises(DSLToApplicationRuleError):
+            build_application_rule(
+                id="legacy_two_line",
+                when=[User(u), u.status == "active"],
+                ports={"user": u},
+            )
 
     def test_rejects_raw_pred(self) -> None:
-        with vars("u") as (u,):
-            with self.assertRaises(DSLToApplicationRuleError):
-                build_application_rule(
-                    id="legacy_pred",
-                    when=[Pred("User:exists", u)],
-                    ports={"user": u},
-                )
+        with vars("u") as (u,), self.assertRaises(DSLToApplicationRuleError):
+            build_application_rule(
+                id="legacy_pred",
+                when=[Pred("User:exists", u)],
+                ports={"user": u},
+            )
 
     def test_rejects_rule_ref_atom(self) -> None:
-        with vars("u") as (u,):
-            with self.assertRaises(DSLToApplicationRuleError):
-                build_application_rule(
-                    id="legacy_rule_ref",
-                    when=[RuleRefAtom("other", "v1", (u,))],
-                    ports={"user": u},
-                )
+        with vars("u") as (u,), self.assertRaises(DSLToApplicationRuleError):
+            build_application_rule(
+                id="legacy_rule_ref",
+                when=[RuleRefAtom("other", "v1", (u,))],
+                ports={"user": u},
+            )
 
     def test_rejects_or_shape(self) -> None:
-        with vars("u", "v") as (u, v):
-            with self.assertRaises(DSLToApplicationRuleError):
-                build_application_rule(
-                    id="or_shape",
-                    when=[[User(u)], [User(v)]],
-                    ports={"user": u},
-                )
+        with vars("u", "v") as (u, v), self.assertRaises(DSLToApplicationRuleError):
+            build_application_rule(
+                id="or_shape",
+                when=[[User(u)], [User(v)]],
+                ports={"user": u},
+            )
 
     def test_rejects_anonymous_port(self) -> None:
         anon = User(...).var

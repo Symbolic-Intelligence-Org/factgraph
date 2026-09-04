@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+import json
 from collections import Counter
 from dataclasses import asdict, dataclass, field
-import json
 from itertools import product
 from typing import Any, Literal
 
@@ -14,8 +14,8 @@ from .protocol.policy import (
     PolicyAll,
     PolicyAny,
     PolicyCompare,
-    PolicyComparisonOperand,
     PolicyCompareStructureNodeV0,
+    PolicyComparisonOperand,
     PolicyConditionLoweredRefV0,
     PolicyError,
     PolicyExpression,
@@ -42,15 +42,15 @@ from .protocol.rule_expr import (
     RuleExprError,
     RuleJoinConstraint,
     _AndGroup,
-    _RuleExpr,
     _canonical_join_constraint,
+    _RuleExpr,
 )
 from .protocol.rule_expr_lowering import (
+    _DNF_BRANCH_LIMIT,
     RuleExprLoweringBranch,
     RuleExprPolicyCondition,
-    _DNF_BRANCH_LIMIT,
-    _RuleExprBodyPlan,
     _lower_rule_expr_body,
+    _RuleExprBodyPlan,
     _vars_in_atom,
 )
 from .protocol.semantic_address import SemanticPortAddress

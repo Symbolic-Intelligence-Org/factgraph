@@ -1,14 +1,14 @@
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-import re
 from typing import Any, cast
 
+from factgraph.application import schema_runtime
 from factgraph.application.diagnose_runtime import _extend_env_with_atom
 from factgraph.application.entity_view import _recover_identity_from_predicates
-from factgraph.application import schema_runtime
-from factgraph.application.protocol.schema_runtime import EntityRef
+from factgraph.application.protocol.certainty import BOOLEAN_CERTAINTY
 from factgraph.application.protocol.rule_expr_lowering import (
     RuleExprEvaluationTrace,
     RuleExprLoweringBranch,
@@ -17,9 +17,9 @@ from factgraph.application.protocol.rule_expr_lowering import (
     _materialize_native_derivation_plan,
     transitively_expand_seed,
 )
-from factgraph.application.protocol.certainty import BOOLEAN_CERTAINTY
+from factgraph.application.protocol.schema_runtime import EntityRef
 from factgraph.core.protocol.tup_v1 import ENTITY_REF_PREFIX, display_float64_value
-from factgraph.core.rules.where_ast import _AGGREGATE_KINDS, _parse_term, AggregateAtom
+from factgraph.core.rules.where_ast import _AGGREGATE_KINDS, AggregateAtom, _parse_term
 from factgraph.core.rules.where_ast_validate import _aggregate_filter_bound_vars
 
 from .evidence_tree import (
@@ -741,7 +741,7 @@ def _repr_not_atom(
     )
     if len(branch_texts) == 1:
         text = branch_texts[0]
-        return f"!{text}" if not text.startswith("(") else f"!{text}"
+        return f"!{text}"
     return "!(" + " || ".join(branch_texts) + ")"
 
 
@@ -1023,22 +1023,23 @@ def _aggregate_target_label(target: Any, filter_atoms: Any) -> str:
             terms = atom[2]
             if not isinstance(terms, Sequence) or isinstance(terms, (str, bytes)):
                 continue
-            if target_vars & set(vars_in_atom_tuple(terms)):
-                if isinstance(pred_id, str) and ":" in pred_id:
-                    return pred_id.rsplit(":", 1)[1]
+            if (
+                target_vars & set(vars_in_atom_tuple(terms))
+                and isinstance(pred_id, str)
+                and ":" in pred_id
+            ):
+                return pred_id.rsplit(":", 1)[1]
     if target_vars:
-        return _clean_var_label(sorted(target_vars)[0])
+        return _clean_var_label(min(target_vars))
     return "value"
 
 
 def _clean_var_label(var_name: str) -> str:
-    label = var_name[1:] if var_name.startswith("$") else var_name
+    label = var_name.removeprefix("$")
     if "__" in label:
         label = label.rsplit("__", 1)[1]
-    if label.startswith("_agg"):
-        label = label[4:]
-    if label.startswith("agg"):
-        label = label[3:]
+    label = label.removeprefix("_agg")
+    label = label.removeprefix("agg")
     return label or "value"
 
 
@@ -1165,7 +1166,7 @@ def _canonical_aggregate_filter_bound_vars(
 
 
 def _is_lowered_aggregate_local_var(var_name: str) -> bool:
-    return var_name.startswith("$agg") or var_name.startswith("$_agg") or "__" in var_name
+    return var_name.startswith(("$agg", "$_agg")) or "__" in var_name
 
 
 def _normalize_compiled_body(body_ir: object) -> list[list[tuple[Any, ...]]]:

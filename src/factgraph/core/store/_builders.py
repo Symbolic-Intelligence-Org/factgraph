@@ -12,8 +12,8 @@ from factgraph.core.derivation.candidates import (
     make_derivation_output,
 )
 from factgraph.core.evidence.write_protocol import now_epoch_nanos
-from factgraph.core.protocol.idref_v1 import encode_idref_v1
 from factgraph.core.protocol.digests import sha256_token
+from factgraph.core.protocol.idref_v1 import encode_idref_v1
 from factgraph.core.protocol.tup_v1 import CANONICAL_TAGS, canonical_bytes_tup_v1
 from factgraph.core.rules.where_eval import WhereValidationError
 from factgraph.core.store._support import (

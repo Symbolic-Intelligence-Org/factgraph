@@ -5,9 +5,8 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from typing import Any
 
-from factgraph.core.store._support import BindingItems, normalize_binding_items
-
 from factgraph.application.protocol import CompiledDerivationPlan
+from factgraph.core.store._support import BindingItems, normalize_binding_items
 
 from .errors import CapabilityHelperError
 

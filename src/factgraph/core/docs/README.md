@@ -37,6 +37,22 @@ contributors), not SDK end-users learning the surface.
 
 ## Boundaries
 
+### Canonical codec errors
+
+`protocol/tup_v1.py` rejects the explicitly validated invalid tag and value
+types with `ValueError`, just as it does invalid value syntax or range.
+`evidence/write_protocol.py` relies on that error family to raise
+`WriteProtocolError` with the original cause before appending any assertion.
+`protocol/idref_v1.py` likewise rejects a non-string entity type with
+`ValueError`. These are existing codec contracts, not requests to coerce input.
+Their individual `TRY004` exceptions must not be replaced by `TypeError`
+as a lint-only repair. `tests/test_protocol_v1.py` covers the affected branches,
+canonical float bytes, and the no-write error translation at `set_field` and
+`add_field`. This does not promise to normalize every arbitrary malformed
+Python object into `ValueError`.
+
+### Documentation ownership
+
 - This directory is **not the SDK getting-started guide** — the SDK
   user guide lives at
   [`src/factgraph/sdk/docs/00_user_guide.en.md`](../../sdk/docs/00_user_guide.en.md).

@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+import json
 from collections.abc import Collection
 from dataclasses import dataclass, field
-import json
 from types import MappingProxyType
 from typing import Any, Mapping
 

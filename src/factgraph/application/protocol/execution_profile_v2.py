@@ -20,15 +20,14 @@ validation and sealing, not compiler lineage expansion or engine execution.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 import json
+from dataclasses import dataclass, field
 from typing import Literal, TypeAlias
 
 from factgraph.core.protocol.digests import sha256_hex
 
 from .common import ProtocolShapeError, _require_non_empty_str
 from .scenario_v2 import FactSemanticsV2
-
 
 EvaluationEngineV2: TypeAlias = Literal["native", "souffle", "problog"]
 EvaluationProfileKindV2: TypeAlias = Literal[
@@ -859,7 +858,7 @@ class EvaluationExecutionProfileV2:
         return evaluation_execution_profile_v2_bytes(self)
 
     @classmethod
-    def from_bytes(cls, raw: bytes) -> "EvaluationExecutionProfileV2":
+    def from_bytes(cls, raw: bytes) -> EvaluationExecutionProfileV2:
         """Decode and validate a canonical V2 execution profile.
 
         Args:
@@ -1144,6 +1143,13 @@ def evaluation_execution_profile_v2_from_bytes(raw: bytes) -> EvaluationExecutio
 
 
 __all__ = [
+    "MAX_EXECUTION_PROFILE_V2_ATTACHMENTS",
+    "MAX_EXECUTION_PROFILE_V2_BYTES",
+    "MAX_EXECUTION_PROFILE_V2_CAPTURE_BYTES",
+    "MAX_EXECUTION_PROFILE_V2_DEPTH",
+    "MAX_EXECUTION_PROFILE_V2_LOWERING_SLOTS",
+    "MAX_EXECUTION_PROFILE_V2_ROWS",
+    "MAX_EXECUTION_PROFILE_V2_TIMEOUT_MS",
     "DeterministicSemanticsV2",
     "EvaluationAttachmentKindV2",
     "EvaluationAttachmentSemanticsKindV2",
@@ -1159,13 +1165,6 @@ __all__ = [
     "EvaluationTargetSideV2",
     "ExecutionAttachmentSemanticsV2",
     "ExecutionAttachmentV2",
-    "MAX_EXECUTION_PROFILE_V2_ATTACHMENTS",
-    "MAX_EXECUTION_PROFILE_V2_BYTES",
-    "MAX_EXECUTION_PROFILE_V2_CAPTURE_BYTES",
-    "MAX_EXECUTION_PROFILE_V2_DEPTH",
-    "MAX_EXECUTION_PROFILE_V2_LOWERING_SLOTS",
-    "MAX_EXECUTION_PROFILE_V2_ROWS",
-    "MAX_EXECUTION_PROFILE_V2_TIMEOUT_MS",
     "ProbLogPointSemanticsV2",
     "ResolvedExecutionAttachmentV2",
     "ResolvedExecutionAttachmentsV2",

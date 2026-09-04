@@ -11,8 +11,8 @@ from factgraph.application import (
     compile_evaluation_query,
     compile_policy,
     evaluation_run_bundle_bytes,
-    evaluation_run_bundle_from_bytes,
     evaluation_run_bundle_evidence,
+    evaluation_run_bundle_from_bytes,
     manage_rule_occurrence,
     project_policy_explanation_v0,
     verify_evaluation_run_bundle,
@@ -32,8 +32,8 @@ from factgraph.application.protocol import (
     PolicyFieldNavigation,
     PolicyLiteral,
     PolicyOccurrence,
-    ScenarioFieldSubstitutionV0,
     ScenarioFieldSubstitutionSetV0,
+    ScenarioFieldSubstitutionV0,
     SemanticPortAddress,
     SemanticRulePort,
     entity_identity,
@@ -656,9 +656,11 @@ class UnifiedEvaluationQueryTests(unittest.TestCase):
             .compile()
         )
         object.__setattr__(expected.expectations[0], "query_digest", "0" * 64)
-        with patch("factgraph.sdk.store.evaluate_derivation_plans") as evaluator:
-            with self.assertRaisesRegex(SDKStoreError, "integrity check"):
-                graph.eval.evaluate(expected)
+        with (
+            patch("factgraph.sdk.store.evaluate_derivation_plans") as evaluator,
+            self.assertRaisesRegex(SDKStoreError, "integrity check"),
+        ):
+            graph.eval.evaluate(expected)
         evaluator.assert_not_called()
 
     def test_expectation_wrapper_change_after_initial_guard_fails_before_outcome(self) -> None:
@@ -682,9 +684,8 @@ class UnifiedEvaluationQueryTests(unittest.TestCase):
         with patch(
             "factgraph.sdk.store.evaluate_derivation_plans",
             side_effect=mutate_expectation_after_evaluate,
-        ):
-            with self.assertRaisesRegex(SDKStoreError, "changed during execution"):
-                graph.eval.evaluate(expected)
+        ), self.assertRaisesRegex(SDKStoreError, "changed during execution"):
+            graph.eval.evaluate(expected)
 
     def test_expectation_outcome_splice_is_rejected_by_result_validation(self) -> None:
         graph = SDKStore([Person])
@@ -742,9 +743,11 @@ class UnifiedEvaluationQueryTests(unittest.TestCase):
                     _address("target", "person"), FieldPath("Person", "age"),
                 ),  # type: ignore[arg-type]
             )
-        with patch("factgraph.sdk.store.evaluate_derivation_plans") as evaluator:
-            with self.assertRaisesRegex(SDKStoreError, "compilation rejected"):
-                builder.select("age", _address("target", "missing")).evaluate()
+        with (
+            patch("factgraph.sdk.store.evaluate_derivation_plans") as evaluator,
+            self.assertRaisesRegex(SDKStoreError, "compilation rejected"),
+        ):
+            builder.select("age", _address("target", "missing")).evaluate()
         evaluator.assert_not_called()
 
     def test_query_target_preserves_managed_rule_capability_error(self) -> None:
@@ -778,9 +781,11 @@ class UnifiedEvaluationQueryTests(unittest.TestCase):
             .compile()
         )
         object.__setattr__(compiled, "wrapper_digest", "sha256:" + "0" * 64)
-        with patch("factgraph.sdk.store.evaluate_derivation_plans") as evaluator:
-            with self.assertRaisesRegex(SDKStoreError, "integrity check"):
-                graph.eval.evaluate(compiled)
+        with (
+            patch("factgraph.sdk.store.evaluate_derivation_plans") as evaluator,
+            self.assertRaisesRegex(SDKStoreError, "integrity check"),
+        ):
+            graph.eval.evaluate(compiled)
         evaluator.assert_not_called()
         with self.assertRaisesRegex(SDKStoreError, "does not accept TargetedCompiledEvaluationQueryV0"):
             graph.eval.evaluate_candidates(compiled)

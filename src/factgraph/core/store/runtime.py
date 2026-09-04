@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import warnings
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
 from factgraph.core.derivation.accept import AcceptOptions, AcceptRequest, AcceptResult
-from factgraph.core.derivation.candidates import CandidateSet
-from factgraph.core.derivation.candidates import DerivationOutput, make_derivation_output
+from factgraph.core.derivation.candidates import (
+    CandidateSet,
+    DerivationOutput,
+    make_derivation_output,
+)
 from factgraph.core.evidence.write_protocol import now_epoch_nanos
 from factgraph.core.mapping.canon import MappingResolution
 from factgraph.core.protocol.digests import sha256_token
@@ -21,8 +24,8 @@ from factgraph.core.store._explain_rule_trace import render_rule_trace_artifact
 from factgraph.core.store._explain_support import render_support_artifact
 from factgraph.core.store._support import (
     ENGINE_NO_WITNESS_KIND,
-    ProvenanceEnvelope,
     ProofReceipt,
+    ProvenanceEnvelope,
     provenance_envelope_to_dict,
 )
 from factgraph.core.store.evaluation import evaluate_store
@@ -41,8 +44,8 @@ from factgraph.core.store.queries import conflicts as store_conflicts
 from factgraph.core.store.queries import explain_fact as store_explain_fact
 from factgraph.core.store.queries import resolve_mapping as store_resolve_mapping
 from factgraph.core.store.types import (
-    EngineExtBase,
     EngineEvaluatorFn,
+    EngineExtBase,
     EngineOptionsIR,
     EvaluateMode,
     HeadSpecIR,
@@ -86,9 +89,9 @@ class Store:
         *,
         engine_evaluator: EngineEvaluatorFn | None = None,
         artifact_sidecar: ArtifactSidecar | None = None,
-        premise_exclusions: "MetaExclusion | Iterable[MetaExclusion] | None" = None,
-        premise_allowances: "PredicatePremiseAllowance | Iterable[PredicatePremiseAllowance] | None" = None,
-        premise_blocks: "PredicatePremiseBlock | Iterable[PredicatePremiseBlock] | None" = None,
+        premise_exclusions: MetaExclusion | Iterable[MetaExclusion] | None = None,
+        premise_allowances: PredicatePremiseAllowance | Iterable[PredicatePremiseAllowance] | None = None,
+        premise_blocks: PredicatePremiseBlock | Iterable[PredicatePremiseBlock] | None = None,
     ) -> None:
         if not isinstance(schema_ir, dict):
             raise ValueError("schema_ir must be dict")
@@ -139,7 +142,7 @@ class Store:
 
     def set_premise_exclusions(
         self,
-        exclusions: "MetaExclusion | Iterable[MetaExclusion] | None",
+        exclusions: MetaExclusion | Iterable[MetaExclusion] | None,
     ) -> None:
         """Configure evaluation premise exclusions; see core/store/premise_filter.py.
 
@@ -170,7 +173,7 @@ class Store:
 
     def set_premise_allowances(
         self,
-        allowances: "PredicatePremiseAllowance | Iterable[PredicatePremiseAllowance] | None",
+        allowances: PredicatePremiseAllowance | Iterable[PredicatePremiseAllowance] | None,
     ) -> None:
         """Configure per-predicate evaluation allowances; see core/store/premise_filter.py.
 
@@ -205,7 +208,7 @@ class Store:
 
     def set_premise_blocks(
         self,
-        blocks: "PredicatePremiseBlock | Iterable[PredicatePremiseBlock] | None",
+        blocks: PredicatePremiseBlock | Iterable[PredicatePremiseBlock] | None,
     ) -> None:
         """Configure per-predicate evaluation blocklists; see core/store/premise_filter.py.
 
@@ -394,7 +397,7 @@ class Store:
         where: WhereIR,
         mode: EvaluateMode = "native",
         head: HeadSpecIR | None = None,
-        registry: "RuleRegistry | None" = None,
+        registry: RuleRegistry | None = None,
         confidence_kind_resolver: Any | None = None,
         engine_ext: EngineExtBase | None = None,
         engine_options: EngineOptionsIR = None,
@@ -620,7 +623,7 @@ def premise_scoped_store_view(store: Store) -> Store:
 
 __all__ = [
     "Store",
+    "get_engine_evaluator",
     "premise_scoped_store_view",
     "register_engine_evaluator",
-    "get_engine_evaluator",
 ]

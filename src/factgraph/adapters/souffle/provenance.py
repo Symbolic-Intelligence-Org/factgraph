@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from factgraph.application.explain.evidence_tree import (
+    LAYOUT_TREE,
     Const,
     EvidenceAtom,
     EvidenceGraph,
@@ -16,7 +17,6 @@ from factgraph.application.explain.evidence_tree import (
     EvidenceTree,
     Fact,
     Holds,
-    LAYOUT_TREE,
     Source,
 )
 from factgraph.application.protocol.certainty import BOOLEAN_CERTAINTY
@@ -35,7 +35,7 @@ class SouffleProofNodeV0:
     relation: str
     args: tuple[str, ...]
     rule_number: str | None
-    children: tuple["SouffleProofNodeV0", ...]
+    children: tuple["SouffleProofNodeV0", ...]  # noqa: UP037 - Preserve Python 3.10 runtime hint shape.
 
 
 @dataclass(frozen=True)
@@ -261,7 +261,7 @@ def run_package_provenance(
     with tempfile.TemporaryDirectory() as work_dir:
         program_path = Path(work_dir) / "program.dl"
         program_path.write_text(
-            "\n".join([view_text, policy_text, idb_text]) + "\n",
+            f"{view_text}\n{policy_text}\n{idb_text}\n",
             encoding="utf-8",
         )
 
@@ -494,8 +494,8 @@ __all__ = [
     "SouffleProofTreeV0",
     "SouffleProvenanceError",
     "parse_souffle_proof_json",
-    "run_provenance_explain",
     "run_package_provenance",
+    "run_provenance_explain",
     "souffle_proof_tree_from_dict",
     "souffle_proof_tree_to_evidence_graph",
 ]

@@ -29,8 +29,8 @@ from __future__ import annotations
 
 import base64
 import binascii
-from dataclasses import dataclass, field
 import json
+from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import Literal, Mapping, TypeAlias
 
@@ -43,7 +43,6 @@ from .goal_plan_v1 import (
     GoalTechnicalAssessmentV1,
     GoalValueV1,
 )
-
 
 EvaluationWorldSideV1: TypeAlias = Literal["baseline", "effective"]
 EvaluationRunSideNameV1: TypeAlias = Literal["baseline", "effective", "candidate_effective"]
@@ -517,7 +516,7 @@ class EvaluationReplayProgramEnvelopeV1:
         return evaluation_replay_program_envelope_v1_bytes(self)
 
     @classmethod
-    def from_bytes(cls, raw: bytes) -> "EvaluationReplayProgramEnvelopeV1":
+    def from_bytes(cls, raw: bytes) -> EvaluationReplayProgramEnvelopeV1:
         value = evaluation_replay_program_envelope_v1_from_bytes(raw)
         if not isinstance(value, cls):  # pragma: no cover - defensive boundary
             raise ProtocolShapeError("Evaluation replay program envelope codec returned wrong type")
@@ -639,7 +638,7 @@ class EvaluationReplayPayloadV1:
         return evaluation_replay_payload_v1_bytes(self)
 
     @classmethod
-    def from_bytes(cls, raw: bytes) -> "EvaluationReplayPayloadV1":
+    def from_bytes(cls, raw: bytes) -> EvaluationReplayPayloadV1:
         value = evaluation_replay_payload_v1_from_bytes(raw)
         if not isinstance(value, cls):  # pragma: no cover - defensive import boundary
             raise ProtocolShapeError("Evaluation replay payload codec returned wrong type")
@@ -1545,9 +1544,14 @@ def _receipt_from_wire(value: object) -> ProviderReceiptRefV1:
 
 
 __all__ = [
+    "MAX_EVALUATION_REPLAY_FACTS_V1",
+    "MAX_EVALUATION_REPLAY_PAYLOAD_V1_BYTES",
+    "MAX_EVALUATION_REPLAY_PAYLOAD_V1_DEPTH",
+    "MAX_EVALUATION_REPLAY_RELATIONS_V1",
+    "MAX_EVALUATION_REPLAY_VALUES_V1",
+    "EvaluationEngineFrameStatusV1",
     "EvaluationEnginePinV1",
     "EvaluationEngineResultV1",
-    "EvaluationEngineFrameStatusV1",
     "EvaluationEngineV1",
     "EvaluationExecutionProfileV1",
     "EvaluationProfileKindV1",
@@ -1562,11 +1566,6 @@ __all__ = [
     "EvaluationWorldSideV1",
     "ExplainTargetKindV1",
     "ExplainTargetV1",
-    "MAX_EVALUATION_REPLAY_FACTS_V1",
-    "MAX_EVALUATION_REPLAY_PAYLOAD_V1_BYTES",
-    "MAX_EVALUATION_REPLAY_PAYLOAD_V1_DEPTH",
-    "MAX_EVALUATION_REPLAY_RELATIONS_V1",
-    "MAX_EVALUATION_REPLAY_VALUES_V1",
     "ProviderReceiptRefV1",
     "evaluation_replay_payload_v1_bytes",
     "evaluation_replay_payload_v1_from_bytes",

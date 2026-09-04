@@ -337,7 +337,7 @@ def _session_fact_records(
     """Lower session node facts into PyReason ``add_fact()`` records only."""
     records: list[tuple[str, str, int, int]] = []
     for idx, fact in enumerate(session.node_facts):
-        atom = f"{_pred_short_name(str(fact['pred_id']))}({str(fact['node_ref'])})"
+        atom = f"{_pred_short_name(str(fact['pred_id']))}({fact['node_ref']!s})"
         end_time = int(fact["active_to"]) if fact.get("active_to") is not None else default_end_time
         records.append(
             (

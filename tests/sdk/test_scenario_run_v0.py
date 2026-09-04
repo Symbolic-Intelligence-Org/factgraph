@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from dataclasses import replace
 import json
 import unittest
+from dataclasses import replace
 from unittest.mock import patch
 
 from factgraph.application import (
@@ -28,16 +28,16 @@ from factgraph.application.protocol import (
     entity_identity,
     field_endpoint,
 )
-from factgraph.core.evidence.write_protocol import set_field
-from factgraph.core.rules.where_ast import PredAtom, Var
-from factgraph.core.store.premise_filter import MetaExclusion
-from factgraph.sdk import Entity, Field, Identity, SDKStore
-from factgraph.sdk.errors import SDKStoreError
 from factgraph.application.schema_runtime import (
     entity_info,
     field_predicate,
     resolve_selector,
 )
+from factgraph.core.evidence.write_protocol import set_field
+from factgraph.core.rules.where_ast import PredAtom, Var
+from factgraph.core.store.premise_filter import MetaExclusion
+from factgraph.sdk import Entity, Field, Identity, SDKStore
+from factgraph.sdk.errors import SDKStoreError
 
 
 class Person(Entity):
@@ -116,7 +116,7 @@ def _support_state(graph: SDKStore) -> tuple[object, ...]:
 
 
 def _all_sources(explanation: object) -> list[object]:
-    evidence = getattr(explanation, "evidence")
+    evidence = explanation.evidence
     return [
         source
         for tree in evidence.paths

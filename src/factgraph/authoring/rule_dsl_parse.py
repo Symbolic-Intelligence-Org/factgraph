@@ -3,7 +3,6 @@ from __future__ import annotations
 import ast
 from typing import Any
 
-
 _CASE_MARKER = "__case__"
 
 

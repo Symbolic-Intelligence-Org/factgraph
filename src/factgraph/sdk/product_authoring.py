@@ -17,13 +17,13 @@ terminals reject the intrinsic node before it can be interpreted as ordinary
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, field
-from decimal import Decimal, InvalidOperation, localcontext
 import inspect
 import json
 import re
 import unicodedata
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass, field
+from decimal import Decimal, InvalidOperation, localcontext
 from typing import TYPE_CHECKING, Any, Callable, Literal, TypeAlias, get_type_hints
 
 from factgraph.application.protocol.policy import (
@@ -293,8 +293,8 @@ def _rule_logical_identity(bundle: ResolvedRuleBundle) -> str:
 
 def _policy_logical_identity(
     target: AuthoredPolicyTargetV1,
-    choices: tuple["WeightedChoiceTopologyV1", ...],
-    functions: tuple["FunctionOccurrenceTopologyV1", ...] = (),
+    choices: tuple["WeightedChoiceTopologyV1", ...],  # noqa: UP037 - Preserve Python 3.10 runtime hint shape.
+    functions: tuple["FunctionOccurrenceTopologyV1", ...] = (),  # noqa: UP037 - Preserve Python 3.10 runtime hint shape.
 ) -> str:
     payload: dict[str, object] = {
         "policy_id": target.policy.id,
@@ -906,14 +906,14 @@ class FunctionOccurrenceHandleV1(PolicyOccurrenceHandle):
         self,
         base: PolicyOccurrenceHandle,
         function: ProductFunctionV1,
-        function_occurrences: Mapping[str, "FunctionOccurrenceHandleV1"],
+        function_occurrences: Mapping[str, "FunctionOccurrenceHandleV1"],  # noqa: UP037 - Preserve Python 3.10 runtime hint shape.
     ) -> None:
         super().__init__(base._owner, base._managed, base._schema_index)
         self.function = function
         self._input_bindings: dict[str, PolicyScalarPortHandle] = {}
         self._function_occurrences = function_occurrences
 
-    def inputs(self, **sources: PolicyScalarPortHandle) -> "FunctionOccurrenceHandleV1":
+    def inputs(self, **sources: PolicyScalarPortHandle) -> FunctionOccurrenceHandleV1:
         """Connect every Function input to direct scalar Rule ports.
 
         Args:
@@ -981,7 +981,7 @@ class _PendingPolicyUseV1:
     __slots__ = ("_builder", "_asset")
 
     def __init__(
-        self, builder: "PolicyBuilder", asset: ResolvedRuleBundle | ProductFunctionV1
+        self, builder: PolicyBuilder, asset: ResolvedRuleBundle | ProductFunctionV1
     ) -> None:
         self._builder = builder
         self._asset = asset
@@ -1026,7 +1026,7 @@ def _canonical_probability(value: object) -> str:
             "WeightedChoice probability is not a decimal",
             code="WEIGHTED_CHOICE_INVALID_PROBABILITY",
         ) from exc
-    if not (Decimal("0") < decimal <= Decimal("1")):
+    if not (Decimal(0) < decimal <= Decimal(1)):
         raise ProductAuthoringError(
             "WeightedChoice probability must be greater than zero and at most one",
             code="WEIGHTED_CHOICE_INVALID_PROBABILITY",
@@ -1137,8 +1137,8 @@ class WeightedChoiceTopologyV1:
             )
         with localcontext() as context:
             context.prec = 128
-            total = sum((Decimal(arm.probability) for arm in ordered_arms), Decimal("0"))
-        if total != Decimal("1"):
+            total = sum((Decimal(arm.probability) for arm in ordered_arms), Decimal(0))
+        if total != Decimal(1):
             raise ProductAuthoringError(
                 "exclusive WeightedChoice arm probabilities must sum exactly to 1",
                 code="WEIGHTED_CHOICE_PROBABILITY_TOTAL",
@@ -2079,7 +2079,7 @@ class RuleBuilder:
 
     def __init__(
         self,
-        graph: "SDKStore",
+        graph: SDKStore,
         id: str,
         *,
         version: str | None = None,
@@ -2174,7 +2174,7 @@ class RuleBuilder:
 
 
 def rule_builder(
-    graph: "SDKStore",
+    graph: SDKStore,
     id: str,
     *,
     version: str | None = None,
@@ -2195,7 +2195,7 @@ def rule_builder(
 
 
 def build_rule(
-    graph: "SDKStore",
+    graph: SDKStore,
     *,
     id: str,
     when: Sequence[Any],
@@ -2268,7 +2268,7 @@ class PolicyBuilder:
 
     def __init__(
         self,
-        graph: "SDKStore",
+        graph: SDKStore,
         id: str,
         *,
         version: str | None = None,
@@ -2658,6 +2658,7 @@ class PolicyBuilder:
 __all__ = [
     "ASSET_META_ABSENT_V1",
     "ASSET_META_FORMAT_V1",
+    "WEIGHTED_CHOICE_FORMAT_V1",
     "AssetMeta",
     "AssetMetaAbsentV1",
     "AssetMetaStateV1",
@@ -2668,20 +2669,19 @@ __all__ = [
     "FunctionPortV1",
     "PolicyBuilder",
     "ProductAuthoringError",
+    "ProductFunctionV1",
     "ProductPolicyNode",
     "ProductPolicyV1",
-    "ProductFunctionV1",
     "ProductRuleV1",
     "RuleBuilder",
-    "WEIGHTED_CHOICE_FORMAT_V1",
     "WeightedChoiceArmV1",
     "WeightedChoiceHandle",
     "WeightedChoiceTopologyV1",
     "assert_asset_binding_current_v1",
     "asset_meta_for_target",
     "asset_snapshot_v1",
-    "build_rule",
     "build_function",
+    "build_rule",
     "function_builder",
     "rule_builder",
 ]

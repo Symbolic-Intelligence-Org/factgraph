@@ -9,8 +9,12 @@ from factgraph.application.explain.structure_keys import (
     is_head_atom,
     join_id_for_materialization,
 )
-from factgraph.application.protocol.rule_expr import RuleExprError, RuleJoinConstraint
-from factgraph.application.protocol.rule_expr import _RuleExpr, _iter_rule_operands
+from factgraph.application.protocol.rule_expr import (
+    RuleExprError,
+    RuleJoinConstraint,
+    _iter_rule_operands,
+    _RuleExpr,
+)
 from factgraph.application.protocol.rule_expr_inspect import (
     ConditionDescriptor,
     OccurrenceInspect,
@@ -405,7 +409,7 @@ def _atom_repr_text(form: StructureAtomForm | None, *, schema_index: object | No
                 "%FLD": _term_repr_text(form.terms[1]) if len(form.terms) > 1 else "",
                 "%ENT": _static_entity_repr_for_fact(form, info),
             }
-            rendered = str(getattr(info, "repr"))
+            rendered = str(info.repr)
             for token, value in placeholder_values.items():
                 rendered = rendered.replace(token, value)
             return rendered
@@ -563,7 +567,7 @@ def _var_port_names(plan: RuleExprLoweringPlan) -> dict[str, str]:
     out: dict[str, str] = {}
     for port_name, var in plan.head.ports.items():
         out[var.name] = port_name
-        source = var.name[1:] if var.name.startswith("$") else var.name
+        source = var.name.removeprefix("$")
         out[f"$__head__{source}"] = port_name
     for occurrence in plan.occurrence_map:
         for binding in occurrence.port_bindings:

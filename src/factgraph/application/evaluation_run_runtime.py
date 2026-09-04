@@ -13,12 +13,18 @@ from .evaluation_query_runtime import (
 from .policy_runtime import CompiledPolicyV0, _assert_compiled_policy_current
 from .protocol.evaluate_result import EvaluateResult, canonical_bytes_for_evaluate
 from .protocol.evaluation_run import (
-    EvaluationRunAnchorV0, EvaluationRunBindingV0, EvaluationRunExecutionProfileV0,
-    EvaluationRunNavigationSelectionV0, EvaluationRunRowAnchorV0,
-    EvaluationRunRulePinV0, EvaluationRunSelectionV0, EvaluationRunSummaryAnchorV0,
-    EvaluationRunTargetV0, _plain, _token,
+    EvaluationRunAnchorV0,
+    EvaluationRunBindingV0,
+    EvaluationRunExecutionProfileV0,
+    EvaluationRunNavigationSelectionV0,
+    EvaluationRunRowAnchorV0,
+    EvaluationRunRulePinV0,
+    EvaluationRunSelectionV0,
+    EvaluationRunSummaryAnchorV0,
+    EvaluationRunTargetV0,
+    _plain,
+    _token,
 )
-
 
 NATIVE_WHERE_SEMANTICS_VERSION = "native_where_v1"
 EVALUATION_QUERY_PROJECTION_ADAPTER_VERSION = "evaluation_query_projection_v0"
@@ -216,7 +222,7 @@ def _assert_anchor_target_matches_query(
 def _certainty(value: object) -> object:
     if value is None:
         return None
-    return {"lo": getattr(value, "lo"), "hi": getattr(value, "hi"), "kind": getattr(value, "kind")}
+    return {"lo": value.lo, "hi": value.hi, "kind": value.kind}
 
 
 __all__ = ["build_evaluation_run_anchor_v0", "build_evaluation_run_target_v0"]

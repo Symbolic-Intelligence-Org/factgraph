@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 import re
+from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import Any, Literal, Mapping
 
@@ -23,11 +23,11 @@ from .rule_expr import (
     RuleExprError,
     RuleJoinConstraint,
     _AndGroup,
+    _coerce_rule_expr_operand,
+    _iter_rule_operands,
     _OrGroup,
     _RuleExpr,
     _RuleOperand,
-    _coerce_rule_expr_operand,
-    _iter_rule_operands,
 )
 
 _REPR_PORT_RE = re.compile(r"%([A-Za-z_][A-Za-z0-9_]*)")

@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import re
 import shutil
+import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
-import unittest
+from unittest.mock import patch
 
+import factgraph.application.weighted_choice_problog_v2 as lowering_module
 from factgraph.adapters.problog.problog_engine import run_problog
 from factgraph.adapters.problog.problog_export import export_problog
 from factgraph.adapters.problog.rule_ext import ProbLogRuleExt
@@ -94,6 +96,67 @@ def _compiled_plan(graph: SDKStore, target):
 
 
 class WeightedChoiceProbLogV2Tests(unittest.TestCase):
+    def test_dependency_errors_preserve_typed_code_details_and_context(self) -> None:
+        with SDKStore([Person]) as graph:
+            target = _choice_target(graph)
+            compiled_policy, plan = _compiled_plan(graph, target)
+            cases = (
+                (True, "assert_asset_binding_current_v1", "WEIGHTED_CHOICE_V2_TARGET_SEAL_MISMATCH",
+                 "product Policy asset/topology seal is not current"),
+                (True, "compile_policy", "WEIGHTED_CHOICE_V2_SKELETON_COMPILE_FAILED",
+                 "V2 structural Policy skeleton could not be compiled"),
+                (False, "assert_asset_binding_current_v1", "WEIGHTED_CHOICE_V2_TARGET_SEAL_MISMATCH",
+                 "product Policy asset/topology seal is not current"),
+                (False, "_assert_compiled_policy_current", "WEIGHTED_CHOICE_V2_COMPILED_POLICY_STALE",
+                 "compiled Policy integrity check failed"),
+                (False, "lower_ast_to_where_ir", "WEIGHTED_CHOICE_V2_COMPILED_POLICY_STALE",
+                 "compiled Policy branch cannot be converted to canonical where IR"),
+            )
+            for skeleton, dependency, code, message in cases:
+                for error_type in (ValueError, RuntimeError):
+                    original = error_type("dependency failure")
+                    with (
+                        self.subTest(skeleton=skeleton, dependency=dependency, error=error_type),
+                        patch.object(lowering_module, dependency, side_effect=original),
+                        self.assertRaises(ProductWeightedChoiceProbLogV2Error) as caught,
+                    ):
+                        if skeleton:
+                            _compile_product_policy_v2_skeleton_for_lowering(
+                                target=target, schema_index=graph._application_schema_index,
+                            )
+                        else:
+                            lower_product_policy_weighted_choice_to_problog_v2(
+                                target=target, compiled_policy=compiled_policy, plan=plan,
+                            )
+                    self.assertEqual(str(caught.exception), message)
+                    self.assertEqual(caught.exception.code, code)
+                    self.assertEqual(caught.exception.details, {"cause_type": error_type.__name__})
+                    self.assertIs(caught.exception.__context__, original)
+                    self.assertIsNone(caught.exception.__cause__)
+                    self.assertFalse(caught.exception.__suppress_context__)
+
+    def test_dependency_process_control_exceptions_are_not_translated(self) -> None:
+        with SDKStore([Person]) as graph:
+            target = _choice_target(graph)
+            compiled_policy, plan = _compiled_plan(graph, target)
+            for skeleton in (True, False):
+                for error_type in (KeyboardInterrupt, SystemExit):
+                    original = error_type("stop")
+                    with (
+                        self.subTest(skeleton=skeleton, error=error_type),
+                        patch.object(lowering_module, "assert_asset_binding_current_v1", side_effect=original),
+                        self.assertRaises(error_type) as caught,
+                    ):
+                        if skeleton:
+                            _compile_product_policy_v2_skeleton_for_lowering(
+                                target=target, schema_index=graph._application_schema_index,
+                            )
+                        else:
+                            lower_product_policy_weighted_choice_to_problog_v2(
+                                target=target, compiled_policy=compiled_policy, plan=plan,
+                            )
+                    self.assertIs(caught.exception, original)
+
     def test_helper_maps_lineage_to_branch_local_keys_and_canonical_domain(self) -> None:
         graph = SDKStore([Person])
         target = _choice_target(graph)

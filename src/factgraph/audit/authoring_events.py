@@ -5,7 +5,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-
 # Slice 7C / Q6-A (a.2) note:
 #   The apply-execute write path was retired alongside `FileAuthoringRegistry`.
 #   This module retains the read path for legacy audit-package consumption

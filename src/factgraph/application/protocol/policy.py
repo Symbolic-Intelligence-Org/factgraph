@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from decimal import Decimal, InvalidOperation, localcontext
 import json
 import re
+from dataclasses import dataclass, field
+from decimal import Decimal, InvalidOperation, localcontext
 from typing import Any, Literal, TypeAlias
 
 from factgraph.core.protocol.digests import sha256_hex
@@ -283,27 +283,27 @@ class PolicyCompare:
         )
 
     @classmethod
-    def gt(cls, left: PolicyComparisonOperand, right: PolicyComparisonOperand) -> "PolicyCompare":
+    def gt(cls, left: PolicyComparisonOperand, right: PolicyComparisonOperand) -> PolicyCompare:
         return cls("gt", left, right)
 
     @classmethod
-    def ge(cls, left: PolicyComparisonOperand, right: PolicyComparisonOperand) -> "PolicyCompare":
+    def ge(cls, left: PolicyComparisonOperand, right: PolicyComparisonOperand) -> PolicyCompare:
         return cls("ge", left, right)
 
     @classmethod
-    def lt(cls, left: PolicyComparisonOperand, right: PolicyComparisonOperand) -> "PolicyCompare":
+    def lt(cls, left: PolicyComparisonOperand, right: PolicyComparisonOperand) -> PolicyCompare:
         return cls("lt", left, right)
 
     @classmethod
-    def le(cls, left: PolicyComparisonOperand, right: PolicyComparisonOperand) -> "PolicyCompare":
+    def le(cls, left: PolicyComparisonOperand, right: PolicyComparisonOperand) -> PolicyCompare:
         return cls("le", left, right)
 
     @classmethod
-    def eq(cls, left: PolicyComparisonOperand, right: PolicyComparisonOperand) -> "PolicyCompare":
+    def eq(cls, left: PolicyComparisonOperand, right: PolicyComparisonOperand) -> PolicyCompare:
         return cls("eq", left, right)
 
     @classmethod
-    def ne(cls, left: PolicyComparisonOperand, right: PolicyComparisonOperand) -> "PolicyCompare":
+    def ne(cls, left: PolicyComparisonOperand, right: PolicyComparisonOperand) -> PolicyCompare:
         return cls("ne", left, right)
 
 
@@ -361,7 +361,7 @@ class PolicyWeightedChoiceArm:
 
     arm_id: str
     probability: str
-    condition: "PolicyExpression"
+    condition: PolicyExpression
 
     def __post_init__(self) -> None:
         if (
@@ -442,8 +442,8 @@ class PolicyWeightedChoice:
             )
         with localcontext() as context:
             context.prec = 128
-            total = sum((Decimal(item.probability) for item in arms), Decimal("0"))
-        if total != Decimal("1"):
+            total = sum((Decimal(item.probability) for item in arms), Decimal(0))
+        if total != Decimal(1):
             raise _shape(
                 "exclusive WeightedChoice probabilities must sum exactly to 1",
                 "INVALID_POLICY_WEIGHTED_CHOICE",
@@ -464,7 +464,7 @@ class PolicyWeightedChoice:
         )
 
     @property
-    def children(self) -> tuple["PolicyExpression", ...]:
+    def children(self) -> tuple[PolicyExpression, ...]:
         """Arm conditions for generic structural traversal only."""
 
         return tuple(item.condition for item in self.arms)
@@ -912,7 +912,7 @@ def _canonical_weighted_choice_probability(value: object) -> str:
             "WeightedChoice probability is not a decimal",
             "INVALID_POLICY_WEIGHTED_CHOICE",
         ) from exc
-    if not Decimal("0") < numeric <= Decimal("1"):
+    if not Decimal(0) < numeric <= Decimal(1):
         raise _shape(
             "WeightedChoice probability must lie in (0, 1]",
             "INVALID_POLICY_WEIGHTED_CHOICE",
@@ -1067,11 +1067,8 @@ __all__ = [
     "PolicyAll",
     "PolicyAny",
     "PolicyCompare",
-    "PolicyComparisonOperand",
-    "PolicyV2Only",
-    "PolicyWeightedChoice",
-    "PolicyWeightedChoiceArm",
     "PolicyCompareStructureNodeV0",
+    "PolicyComparisonOperand",
     "PolicyConditionLoweredRefV0",
     "PolicyError",
     "PolicyFieldNavigation",
@@ -1086,6 +1083,9 @@ __all__ = [
     "PolicyStructureNodeV0",
     "PolicyStructureV0",
     "PolicyUnify",
-    "policy_contains_weighted_choice",
+    "PolicyV2Only",
+    "PolicyWeightedChoice",
+    "PolicyWeightedChoiceArm",
     "policy_contains_product_function",
+    "policy_contains_weighted_choice",
 ]

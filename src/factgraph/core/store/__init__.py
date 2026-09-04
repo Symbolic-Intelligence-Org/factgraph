@@ -3,6 +3,7 @@
 from typing import Any
 
 __all__ = [
+    "VIEW_V1_PREFIX",
     "AssertionInput",
     "AssertionRecord",
     "CommitResult",
@@ -22,7 +23,6 @@ __all__ = [
     "RevocationRecord",
     "SchemaTransitionInput",
     "Store",
-    "VIEW_V1_PREFIX",
     "canonical_bytes_view_v1",
     "register_engine_evaluator",
     "resolve_database_workspace_paths",

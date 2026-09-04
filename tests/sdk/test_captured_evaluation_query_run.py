@@ -1,11 +1,18 @@
 from __future__ import annotations
 
-from dataclasses import replace
 import json
 import unittest
+from dataclasses import replace
 from unittest.mock import patch
 
 from factgraph.application import build_resolved_rule, build_schema_index
+from factgraph.application.captured_evaluation_query_run_runtime import (
+    build_captured_evaluation_query_run_v0,
+)
+from factgraph.application.evaluation_query_runtime import _canonical_value
+from factgraph.application.evaluation_query_target_runtime import (
+    targeted_evaluation_query_wrapper_digest_v0,
+)
 from factgraph.application.protocol import (
     CompiledContainsRowExpectationV0,
     EntityRef,
@@ -22,21 +29,14 @@ from factgraph.application.protocol import (
     entity_identity,
     field_endpoint,
 )
-from factgraph.application.evaluation_query_runtime import _canonical_value
-from factgraph.application.evaluation_query_target_runtime import (
-    targeted_evaluation_query_wrapper_digest_v0,
-)
-from factgraph.application.captured_evaluation_query_run_runtime import (
-    build_captured_evaluation_query_run_v0,
-)
-from factgraph.application.semantic_address_runtime import (
-    SemanticAddressSpace,
-    manage_rule_occurrence,
-)
 from factgraph.application.schema_runtime import (
     entity_info,
     field_predicate,
     resolve_selector,
+)
+from factgraph.application.semantic_address_runtime import (
+    SemanticAddressSpace,
+    manage_rule_occurrence,
 )
 from factgraph.core.evidence.write_protocol import set_field
 from factgraph.core.rules.where_ast import PredAtom, Var
@@ -272,9 +272,11 @@ class CapturedEvaluationQueryRunV0Tests(unittest.TestCase):
 
         ordinary = query.evaluate()
         self.assertEqual(len(ordinary.expectation_results), 65)
-        with patch("factgraph.sdk.store.evaluate_derivation_plans", wraps=store_module.evaluate_derivation_plans) as evaluator:
-            with self.assertRaisesRegex(SDKStoreError, "inventory exceeds"):
-                query.capture()
+        with (
+            patch("factgraph.sdk.store.evaluate_derivation_plans", wraps=store_module.evaluate_derivation_plans) as evaluator,
+            self.assertRaisesRegex(SDKStoreError, "inventory exceeds"),
+        ):
+            query.capture()
         evaluator.assert_not_called()
 
     def test_capture_rejects_an_inventory_that_cannot_fit_its_durable_codec(self) -> None:

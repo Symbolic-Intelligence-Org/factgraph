@@ -15,8 +15,8 @@ from types import MappingProxyType
 from typing import Any
 
 from factgraph.core.protocol.tup_v1 import canonical_bytes_tup_v1
-from factgraph.core.store._support import ProjectedFact
 from factgraph.core.schema.schema_ir import ensure_schema_ir
+from factgraph.core.store._support import ProjectedFact
 
 from .protocol.goal_plan_v1 import GoalValueV1
 from .protocol.relation_provider_v1 import (

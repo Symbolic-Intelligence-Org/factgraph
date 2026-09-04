@@ -277,10 +277,28 @@ Known limits / per-engine nuances:
 
 ---
 
-## 8. Test Entry Points
+## 8. Evidence Codec Errors
+
+`evidence_graph_from_dict()` and `evidence_graph_to_dict()` retain their
+`ValueError` shape-validation contract, including wrong Python types. The
+Audit reader catches decoder `ValueError` and wraps it as `AuditReadError`
+with the candidate id and original cause; changing a shape check to `TypeError`
+would bypass that boundary. Retained V2 evidence decoding instead wraps the
+same codec errors as `ProtocolShapeError` with the original cause.
+
+The local, rule-specific `TRY004` exceptions in `evidence_tree.py` preserve
+these existing contracts. They cover the root/path/rule/atom/join/Policy/port/
+term/verdict/source/certainty records, collection and scalar helpers, the
+encoder's graph check, and the Policy-condition and terminal-inventory DTO
+checks. They do not disable type validation or change the accepted data.
+`tests/application/explain/test_evidence_codec_errors.py` checks each boundary
+through the codec and both readers, including exact error messages and causes.
+
+## 9. Test Entry Points
 
 ```bash
 PYTHONPATH=src python -m unittest tests.application.explain.test_prober
+PYTHONPATH=src python -m pytest tests/application/explain/test_evidence_codec_errors.py
 PYTHONPATH=src python -m unittest tests.application.test_rule_structure
 PYTHONPATH=src python -m unittest tests.sdk.test_explain_conformance_native
 PYTHONPATH=src python -m pytest tests/sdk/test_explain_composite_closed_head_false.py

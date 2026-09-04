@@ -3,6 +3,7 @@ from __future__ import annotations
 import unittest
 
 from factgraph.application.explain.evidence_tree import (
+    LAYOUT_TREE,
     BoundVar,
     Const,
     EvidenceAtom,
@@ -11,7 +12,6 @@ from factgraph.application.explain.evidence_tree import (
     EvidenceTree,
     Fact,
     Holds,
-    LAYOUT_TREE,
 )
 from factgraph.application.protocol.certainty import Certainty
 from factgraph.application.protocol.explanation_render import narrate_evidence

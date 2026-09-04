@@ -30,7 +30,7 @@ _PROOF_FRAME_STATUS_PRIORITY = {
 
 
 def aggregate_proof_frame_status(
-    atom_verdicts: tuple["ProofFrameConditionVerdict", ...],
+    atom_verdicts: tuple["ProofFrameConditionVerdict", ...],  # noqa: UP037 - Preserve Python 3.10 runtime hint shape.
 ) -> ProofFrameStatus:
     """Aggregate per-atom verdicts using the scoped Batch 4 priority rule."""
 
@@ -72,7 +72,7 @@ def _validate_action_indices(
 
 def _validate_atom_verdicts(
     value: Any, *, field_name: str
-) -> tuple["ProofFrameConditionVerdict", ...]:
+) -> tuple["ProofFrameConditionVerdict", ...]:  # noqa: UP037 - Preserve Python 3.10 runtime hint shape.
     if not isinstance(value, tuple):
         raise ProtocolShapeError(f"{field_name} must be tuple[ProofFrameConditionVerdict, ...]")
     for idx, item in enumerate(value):

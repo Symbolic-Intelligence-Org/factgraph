@@ -53,6 +53,10 @@ compatibility.
   - Published stored-relation graph admission, typed path bindings and
     selections, virtual entity-domain guards, sealed compiler products,
     native execution, row-limit behavior, and stable error boundaries.
+- `src/factgraph/application/docs/semantic_candidates.md`
+  - Product-neutral read-only scalar candidate batches, exact and normalized
+    matching, bounded suggestions, canonical evidence, and the Product V2
+    optimistic revision guard and typed failure semantics.
 - `src/factgraph/application/docs/product_result_explain_v2.md`
   - Immutable Product read views over sealed V1 and V2 runs: explicit
     row/summary targets, structured Explain data, pure renderers, detached
@@ -85,6 +89,27 @@ compatibility.
     application overview.
 
 ## Conventions
+
+V2 Product execution and detached replay translate dependency/validation
+failures into `ProductEvaluationRuntimeErrorV2` at their existing guarded call
+sites. Translation preserves an upstream `code` when present, otherwise uses
+the site's fallback code, prefixes the original message, and retains the
+original exception as `__cause__`. The private error constructor does not raise:
+each caller explicitly uses `raise ... from exc`. The existing `Exception`
+handlers still contain unexpected dependency failures; they do not intercept
+process-control exceptions such as `KeyboardInterrupt` or `SystemExit`.
+`tests/application/test_goal_plan_v2_runtime.py` covers these guarantees through
+the public replay, WeightedChoice capture, and Function capture readers.
+
+The separate WeightedChoice-to-ProbLog lowerer raises
+`ProductWeightedChoiceProbLogV2Error` directly at its rejection sites; there is
+no private pass-through raising helper. Its five dependency guards intentionally
+catch `Exception` to reject unexpected seal, compiler and canonical-IR failures
+with stable codes and `cause_type` details. Their historical implicit
+`__context__` (and absent explicit `__cause__`) is retained, so these specific
+guards have local `BLE001` exceptions rather than changing exception chaining
+for lint. `tests/application/test_weighted_choice_problog_v2.py` covers each
+guard and verifies that process-control exceptions still escape unchanged.
 
 - Documents in this directory reflect current implementation
   behavior, not standalone design drafts.

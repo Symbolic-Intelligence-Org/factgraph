@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import re
 
-
 _ENCODED_HEX_RE = re.compile(r"^_h([0-9a-f]{2})_")
 
 
