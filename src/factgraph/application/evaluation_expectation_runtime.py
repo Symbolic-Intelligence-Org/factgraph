@@ -271,7 +271,7 @@ def _normalize_expected_value(
     try:
         if isinstance(selection, ResolvedEvaluationQueryNavigationSelectionV0):
             if isinstance(raw_value, EntityRef):
-                raise ValueError("field navigation expects scalar value")
+                raise ValueError("field navigation expects scalar value")  # noqa: TRY004 - Enclosing except wraps ValueError into EXPECTATION_VALUE_TYPE_MISMATCH.
             predicate = field_predicate(
                 schema_index,
                 selection.navigation.field.entity_type,
@@ -300,7 +300,7 @@ def _normalize_expected_value(
             normalized = encode_entity_ref(EntityRef(endpoint.entity_type, identity), index=schema_index)
         elif isinstance(endpoint, FieldEndpoint):
             if isinstance(raw_value, EntityRef):
-                raise ValueError("field endpoint expects scalar value")
+                raise ValueError("field endpoint expects scalar value")  # noqa: TRY004 - Enclosing except wraps ValueError into EXPECTATION_VALUE_TYPE_MISMATCH.
             pred = field_predicate(schema_index, endpoint.entity_type, endpoint.field_name)
             value_type = str(pred.value_type_domain)
             value = raw_value.lower() if value_type == "uuid" and isinstance(raw_value, str) else raw_value
@@ -309,7 +309,7 @@ def _normalize_expected_value(
                 raise ValueError("native lowering cannot preserve a '$'-prefixed string constant")
             validate_field_value(normalized, pred_info=pred)
         else:
-            raise ValueError("unsupported semantic endpoint")
+            raise ValueError("unsupported semantic endpoint")  # noqa: TRY004 - Enclosing except wraps ValueError into EXPECTATION_VALUE_TYPE_MISMATCH.
         canonical, digest = _canonical_value(value_type, normalized)
         return value_type, canonical, digest
     except (

@@ -244,12 +244,12 @@ def assert_resolved_scenario_compatibility_current(
         resolved,
         (ResolvedScenarioFieldSubstitutionV0, ResolvedScenarioFieldSubstitutionSetV0),
     ):
-        raise ValueError("resolved Scenario must be one of the Q7/Q11 compatibility adapters")
+        raise ValueError("resolved Scenario must be one of the Q7/Q11 compatibility adapters")  # noqa: TRY004 - Integrity check; SDK wraps ValueError into SDKStoreError.
     runtime = resolved._effective_snapshot_runtime
     if not isinstance(runtime, ResolvedQueryEffectiveSnapshotV1):
-        raise ValueError("resolved Scenario has invalid private v1 runtime state")
+        raise ValueError("resolved Scenario has invalid private v1 runtime state")  # noqa: TRY004 - Integrity check; SDK wraps ValueError into SDKStoreError.
     if not isinstance(resolved.effective_snapshot, QueryEffectiveSnapshotV1):
-        raise ValueError("resolved Scenario has invalid public v1 snapshot")
+        raise ValueError("resolved Scenario has invalid public v1 snapshot")  # noqa: TRY004 - Integrity check; SDK wraps ValueError into SDKStoreError.
     assert_resolved_query_effective_snapshot_current(runtime)
     snapshot = runtime.snapshot
     if (

@@ -146,7 +146,7 @@ def build_evaluation_run_target_v0(
     """
 
     if not isinstance(compiled_policy, CompiledPolicyV0):
-        raise ValueError("compiled_policy must be trusted CompiledPolicyV0")
+        raise ValueError("compiled_policy must be trusted CompiledPolicyV0")  # noqa: TRY004 - Public builder; query target compile catches only ValueError.
     _assert_compiled_policy_current(compiled_policy)
     if original_target_kind not in {"rule", "policy"}:
         raise ValueError("original_target_kind must be rule or policy")
@@ -197,7 +197,7 @@ def _assert_anchor_target_matches_query(
     compiled_query: CompiledEvaluationQueryV0,
 ) -> None:
     if not isinstance(target, EvaluationRunTargetV0):
-        raise ValueError("EvaluationRun source target is invalid")
+        raise ValueError("EvaluationRun source target is invalid")  # noqa: TRY004 - Anchor seal guard; SDK wraps ValueError into SDKStoreError.
     # This is an internal runtime seam. Re-run the DTO seal before comparing
     # it with the Query so direct callers cannot attach a mutated target.
     EvaluationRunTargetV0.__post_init__(target)

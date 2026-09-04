@@ -111,7 +111,7 @@ class CompiledEvaluationQueryV0:
         if not isinstance(self.compiled_policy, CompiledPolicyV0) or not isinstance(
             self._lowering_plan, RuleExprLoweringPlan
         ):
-            raise ValueError("compiled EvaluationQuery requires trusted Policy and lowering plan")
+            raise ValueError("compiled EvaluationQuery requires trusted Policy and lowering plan")  # noqa: TRY004 - Compiled Query seal; sdk.store catches only ValueError here.
         _assert_compiled_policy_current(self.compiled_policy)
         if (
             self.policy_digest != self.compiled_policy.policy_digest
@@ -183,7 +183,7 @@ class CompiledEvaluationQueryV0:
 
 def _assert_compiled_evaluation_query_current(compiled_query: CompiledEvaluationQueryV0) -> None:
     if not isinstance(compiled_query, CompiledEvaluationQueryV0):
-        raise ValueError("compiled_query must be CompiledEvaluationQueryV0")
+        raise ValueError("compiled_query must be CompiledEvaluationQueryV0")  # noqa: TRY004 - Integrity guard; sdk.store catches only ValueError here.
     CompiledEvaluationQueryV0.__post_init__(compiled_query)
 
 
@@ -503,19 +503,19 @@ def _normalize_binding(
             value_type = "entity_ref"
         elif isinstance(endpoint, FieldEndpoint):
             if isinstance(binding.value, EntityRef):
-                raise ValueError("field endpoint expects scalar value")
+                raise ValueError("field endpoint expects scalar value")  # noqa: TRY004 - Enclosing except wraps ValueError into QUERY_BINDING_TYPE_MISMATCH.
             pred = field_predicate(index, endpoint.entity_type, endpoint.field_name)
             value_type, typed_value = str(pred.value_type_domain), binding.value
             if value_type == "uuid" and isinstance(typed_value, str):
                 typed_value = typed_value.lower()
         elif isinstance(endpoint, FunctionValueEndpointV1):
             if isinstance(binding.value, EntityRef):
-                raise ValueError("function scalar endpoint expects scalar value")
+                raise ValueError("function scalar endpoint expects scalar value")  # noqa: TRY004 - Enclosing except wraps ValueError into QUERY_BINDING_TYPE_MISMATCH.
             value_type, typed_value = endpoint.scalar_domain, binding.value
             if value_type == "uuid" and isinstance(typed_value, str):
                 typed_value = typed_value.lower()
         else:
-            raise ValueError("unsupported semantic endpoint")
+            raise ValueError("unsupported semantic endpoint")  # noqa: TRY004 - Enclosing except wraps ValueError into QUERY_BINDING_TYPE_MISMATCH.
         normalized = claim_args_from_rest_terms([(value_type, typed_value)])[0][1]
         if isinstance(normalized, str) and normalized.startswith("$"):
             raise ValueError("native lowering cannot preserve a '$'-prefixed string constant")

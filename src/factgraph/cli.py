@@ -310,7 +310,7 @@ def _run_migrate_workspace(*, path: str, dry_run: bool, archive: bool) -> int:
 
     try:
         digest = schema_digest(legacy_schema_ir)
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - schema_digest boundary over untrusted legacy JSON; reported as the schema_digest_failed error JSON with exit code 1.
         _print_error_json(
             kind="schema_digest_failed",
             message=f"failed to compute schema_digest: {exc}",
@@ -383,7 +383,7 @@ def _run_migrate_workspace(*, path: str, dry_run: bool, archive: bool) -> int:
             details={"workspace": abs_path, "schema_digest": digest},
         )
         return 1
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - workspace schema object write crosses the Database adapter; reported as the db_schema_object_write_failed error JSON with exit code 1.
         _print_error_json(
             kind="db_schema_object_write_failed",
             message=f"unexpected error writing workspace schema object: {exc}",
@@ -503,7 +503,7 @@ def _run_v02_layout_migration(
             os.replace(backup_sibling, archive_target)
         else:
             shutil.rmtree(backup_sibling)
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - v0.2 workspace filesystem migration boundary (copy/replace/rmtree); reported as workspace_layout_migration_failed with exit code 1 after rollback.
         _print_error_json(
             kind="workspace_layout_migration_failed",
             message=f"failed to migrate v0.2 workspace: {exc}",
@@ -557,9 +557,9 @@ def _load_v02_schema_ir(
     try:
         payload = json.loads(schema_path.read_text(encoding="utf-8"))
         if not isinstance(payload, dict):
-            raise ValueError("schema root must be object")
+            raise ValueError("schema root must be object")  # noqa: TRY004 - Joins json.loads' family at the legacy_schema_unreadable boundary.
         digest = schema_digest(payload)
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - legacy schema object read/digest boundary over untrusted JSON; reported as the legacy_schema_unreadable error JSON and returns None.
         _print_error_json(
             kind="legacy_schema_unreadable",
             message=f"failed to read v0.2 schema object: {exc}",

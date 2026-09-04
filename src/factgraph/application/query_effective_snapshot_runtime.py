@@ -201,10 +201,10 @@ def assert_resolved_query_effective_snapshot_current(
     """
 
     if not isinstance(resolved, ResolvedQueryEffectiveSnapshotV1):
-        raise ValueError("resolved snapshot must be ResolvedQueryEffectiveSnapshotV1")
+        raise ValueError("resolved snapshot must be ResolvedQueryEffectiveSnapshotV1")  # noqa: TRY004 - Integrity check; SDK wraps ValueError into SDKStoreError.
     snapshot = resolved.snapshot
     if not isinstance(snapshot, QueryEffectiveSnapshotV1):
-        raise ValueError("resolved snapshot has invalid public identity")
+        raise ValueError("resolved snapshot has invalid public identity")  # noqa: TRY004 - Integrity check; SDK wraps ValueError into SDKStoreError.
     QueryEffectiveSnapshotV1.__post_init__(snapshot)
     predicate_ids = tuple(sorted(resolved.baseline_relation))
     if predicate_ids != snapshot.dependency_predicate_ids:

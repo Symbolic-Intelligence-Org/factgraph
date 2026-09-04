@@ -25,7 +25,7 @@ def walk_evidence(
 ) -> tuple[str, ...]:
     """Walk a paths-model EvidenceGraph and produce deterministic NL lines."""
     if not isinstance(graph, EvidenceGraph):
-        raise ValueError("graph must be EvidenceGraph")
+        raise ValueError("graph must be EvidenceGraph")  # noqa: TRY004 - Public renderer; shares the evidence codec ValueError contract.
     return _walk_paths_evidence(graph, row=row, status=status, failure_class=failure_class)
 
 
@@ -38,7 +38,7 @@ def narrate_evidence(
 ) -> tuple[str, ...]:
     """Render a human narrative for a paths-model EvidenceGraph."""
     if not isinstance(graph, EvidenceGraph):
-        raise ValueError("graph must be EvidenceGraph")
+        raise ValueError("graph must be EvidenceGraph")  # noqa: TRY004 - Public renderer; shares the evidence codec ValueError contract.
     if not graph.paths:
         return ()
     lines: list[str] = []

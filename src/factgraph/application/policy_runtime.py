@@ -187,7 +187,7 @@ class CompiledPolicyV0:
             or not isinstance(self.lineage, PolicyLineage)
             or not isinstance(self._body_plan, _RuleExprBodyPlan)
         ):
-            raise ValueError("compiled Policy structure has invalid runtime types")
+            raise ValueError("compiled Policy structure has invalid runtime types")  # noqa: TRY004 - Compiled Policy seal; Query/target compilers catch ValueError.
         if not isinstance(self._policy_conditions, tuple) or not all(
             isinstance(item, RuleExprPolicyCondition) for item in self._policy_conditions
         ):

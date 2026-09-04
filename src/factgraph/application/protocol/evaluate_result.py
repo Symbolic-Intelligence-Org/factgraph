@@ -1184,7 +1184,7 @@ def _validate_evidence_metadata_for_row_result(
     result: EvaluateResult,
 ) -> None:
     if not isinstance(metadata, Mapping):
-        raise ValueError("EvidenceGraph.metadata must be a mapping")
+        raise ValueError("EvidenceGraph.metadata must be a mapping")  # noqa: TRY004 - explain_row catches only ValueError -> GRAPH_VALIDATION_FAILED.
     actual_keys = set(metadata)
     if actual_keys != _EVIDENCE_GRAPH_METADATA_KEY_SET:
         missing = tuple(key for key in _EVIDENCE_GRAPH_METADATA_KEYS if key not in actual_keys)
