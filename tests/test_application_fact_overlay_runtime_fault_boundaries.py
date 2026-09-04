@@ -16,10 +16,10 @@ from factgraph.application import (
     build_schema_index,
     check_fact_overlay_binding,
     entity_info,
+    fact_overlay_runtime,
     field_predicate,
     resolve_selector,
 )
-from factgraph.application import fact_overlay_runtime
 from factgraph.application.protocol import (
     CompiledDerivationPlan,
     CompiledHeadCall,
@@ -139,9 +139,8 @@ class FactOverlayPhaseBoundaryTests(unittest.TestCase):
             fact_overlay_runtime,
             "_run_native_overlay_phase",
             side_effect=KeyboardInterrupt,
-        ):
-            with self.assertRaises(KeyboardInterrupt):
-                check_fact_overlay_binding(request, store=store)
+        ), self.assertRaises(KeyboardInterrupt):
+            check_fact_overlay_binding(request, store=store)
 
     def test_happy_path_still_produces_both_phases(self) -> None:
         store, _index, request = _build()

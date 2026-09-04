@@ -139,9 +139,8 @@ class SchemaObjectWriteBoundaryTests(unittest.TestCase):
             workspace = _v03_workspace(Path(tmp))
             with patch.object(
                 cli, "write_schema_object_for_workspace", side_effect=KeyboardInterrupt
-            ):
-                with self.assertRaises(KeyboardInterrupt):
-                    cli._run_migrate_workspace(path=str(workspace), dry_run=False, archive=False)
+            ), self.assertRaises(KeyboardInterrupt):
+                cli._run_migrate_workspace(path=str(workspace), dry_run=False, archive=False)
 
 
 class LegacySchemaLoadBoundaryTests(unittest.TestCase):

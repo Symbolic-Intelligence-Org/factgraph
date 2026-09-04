@@ -20,21 +20,21 @@ class _BoundaryFault(Exception):
 class _ExplodingLocator:
     kind = "opaque"
 
-    def to_wire(self):  # noqa: ANN201 - third-party duck type under test
+    def to_wire(self):
         raise _BoundaryFault("injected to_wire failure")
 
 
 class _InterruptingLocator:
     kind = "opaque"
 
-    def to_wire(self):  # noqa: ANN201 - third-party duck type under test
+    def to_wire(self):
         raise KeyboardInterrupt
 
 
 class _GoodLocator:
     kind = "opaque"
 
-    def to_wire(self):  # noqa: ANN201 - third-party duck type under test
+    def to_wire(self):
         return {"kind": "opaque", "opaque_ref": "ref-1"}
 
 
@@ -49,7 +49,7 @@ class OpaqueLocatorWireBoundaryTests(unittest.TestCase):
         class _WrongType:
             kind = "opaque"
 
-            def to_wire(self):  # noqa: ANN201 - third-party duck type under test
+            def to_wire(self):
                 return "not-a-mapping"
 
         self.assertIsNone(_opaque_locator_wire(_WrongType()))

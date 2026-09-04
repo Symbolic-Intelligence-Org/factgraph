@@ -14,8 +14,8 @@ from unittest.mock import patch
 from factgraph.application import (
     apply_ingest_request,
     build_schema_index,
+    ingest_runtime,
 )
-from factgraph.application import ingest_runtime
 from factgraph.application.protocol import (
     EntitySelector,
     FieldPath,

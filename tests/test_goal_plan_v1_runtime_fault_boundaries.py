@@ -106,9 +106,8 @@ class GoalPlanExecutionBoundaryTests(unittest.TestCase):
 
         with patch.object(
             goal_plan_v1_runtime, "_assert_invocation_matches_plan", side_effect=KeyboardInterrupt
-        ):
-            with self.assertRaises(KeyboardInterrupt):
-                execute_goal_plan_invocation_v1(invocation)
+        ), self.assertRaises(KeyboardInterrupt):
+            execute_goal_plan_invocation_v1(invocation)
 
     def test_non_invocation_input_still_raises_the_contract_error(self) -> None:
         with self.assertRaises(GoalPlanRuntimeError):
