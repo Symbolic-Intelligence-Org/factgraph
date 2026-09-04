@@ -341,7 +341,7 @@ def entity_spec_from_head(
     missing = [name for name in role_names if name not in kwargs]
     if missing:
         raise WhereValidationError(f"entity head missing field kwargs: {missing}")
-    extra = sorted([key for key in kwargs.keys() if key not in set(role_names)])
+    extra = sorted([key for key in kwargs if key not in set(role_names)])
     if extra:
         raise WhereValidationError(f"entity head contains unknown field kwargs: {extra}")
 

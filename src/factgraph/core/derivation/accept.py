@@ -650,17 +650,17 @@ def _accept_entity_candidate_v2(
     if not isinstance(override, dict):
         raise WriteProtocolError("IDENTITY_OVERRIDE_INVALID: identity_override must be object")
 
-    unknown_override_keys = sorted([key for key in override.keys() if key not in set(identity_fields)])
+    unknown_override_keys = sorted([key for key in override if key not in set(identity_fields)])
     if unknown_override_keys:
         raise WriteProtocolError(
             f"IDENTITY_FIELD_UNKNOWN: identity_override contains unknown fields: {unknown_override_keys}"
         )
-    conflict_keys = sorted([key for key in override.keys() if key in resolved_identity])
+    conflict_keys = sorted([key for key in override if key in resolved_identity])
     if conflict_keys:
         raise WriteProtocolError(
             f"IDENTITY_FIELD_CONFLICT: identity_override cannot include resolved fields: {conflict_keys}"
         )
-    non_missing_override = sorted([key for key in override.keys() if key not in missing_identity_fields])
+    non_missing_override = sorted([key for key in override if key not in missing_identity_fields])
     if non_missing_override:
         raise WriteProtocolError(
             f"IDENTITY_FIELD_CONFLICT: identity_override only accepts missing fields: {non_missing_override}"

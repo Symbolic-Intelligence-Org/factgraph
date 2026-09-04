@@ -342,7 +342,7 @@ def _build_support_artifact_rows(store: Store) -> list[dict[str, Any]]:
 
 def _build_rule_trace_artifact_rows(store: Store) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
-    for _rule_run_id, artifact in store._rule_trace_artifacts.items():
+    for artifact in store._rule_trace_artifacts.values():
         rows.append(rule_trace_artifact_to_dict(artifact))
     return sorted(rows, key=lambda row: str(row.get("rule_run_id")))
 

@@ -220,7 +220,7 @@ def _lower_fact_head_with_schema(
         )
 
     identity_fields = _identity_field_names(schema_ir=schema_ir, entity_type=entity_type)
-    forbidden_identity = sorted([name for name in kwargs.keys() if name in set(identity_fields)])
+    forbidden_identity = sorted([name for name in kwargs if name in set(identity_fields)])
     if forbidden_identity:
         raise _compile_error(
             "head must not include Identity fields; they are the immutable entity anchor and must be bound in where: "
@@ -245,7 +245,7 @@ def _lower_fact_head_with_schema(
                     path="$.head.kwargs",
                 )
     allowed = set(value_keys)
-    extra = sorted([key for key in kwargs.keys() if key not in allowed])
+    extra = sorted([key for key in kwargs if key not in allowed])
     if extra:
         raise _compile_error(
             f"head kwargs includes unknown args: {', '.join(extra)}",
@@ -282,7 +282,7 @@ def _lower_entity_head_with_schema(
         raise _compile_error("head.kwargs must be non-empty object", path="$.head.kwargs")
 
     identity_fields = _identity_field_names(schema_ir=schema_ir, entity_type=entity_type)
-    forbidden_identity = sorted([name for name in kwargs.keys() if name in set(identity_fields)])
+    forbidden_identity = sorted([name for name in kwargs if name in set(identity_fields)])
     if forbidden_identity:
         raise _compile_error(
             "head must not include Identity fields; they are the immutable entity anchor and must be bound in where: "
@@ -303,7 +303,7 @@ def _lower_entity_head_with_schema(
             f"head kwargs missing entity fields: {', '.join(missing)}",
             path="$.head.kwargs",
         )
-    extra = sorted([key for key in kwargs.keys() if key not in set(role_names)])
+    extra = sorted([key for key in kwargs if key not in set(role_names)])
     if extra:
         raise _compile_error(
             f"head kwargs includes unknown entity fields: {', '.join(extra)}",

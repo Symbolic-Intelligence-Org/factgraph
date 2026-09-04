@@ -2577,10 +2577,7 @@ class PolicyBuilder:
                 else PolicyAll((node, *constraints))
             )
             raw = PolicyNodeHandle(self._draft._owner, node)
-        try:
-            target = self._draft.build(raw)
-        except PolicyAuthoringError:
-            raise
+        target = self._draft.build(raw)
         # Q19 creates the private deterministic skeleton needed for existing
         # handle ownership and address-space checks.  Before publication,
         # replace every recorded skeleton with an intrinsic PolicyWeightedChoice
