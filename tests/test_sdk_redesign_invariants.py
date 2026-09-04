@@ -159,7 +159,6 @@ class FlatMethodRemovalInvariants(unittest.TestCase):
 # Class 4 — Docs taxonomy-first lint
 
 
-@unittest.skip("Slice 3a Step 12 owns load-bearing docs namespace migration")
 class DocsTaxonomyFirstLintInvariants(unittest.TestCase):
     """Per §5.5 + §5.5.6 lock: taxonomy-first docs reflect the lock.
 
