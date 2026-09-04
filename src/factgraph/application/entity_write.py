@@ -287,7 +287,7 @@ def apply_write_plan(
                     assertion_id=assertion_id,
                 )
             )
-        except (SchemaResolutionError, EntityWriteError, Exception) as exc:
+        except (SchemaResolutionError, EntityWriteError, Exception) as exc:  # noqa: BLE001 - executor boundary: any store/write-protocol fault must become a typed failed AppliedOpResultDTO + ErrorDTO instead of escaping apply_write_plan
             error = _to_error_dto(exc)
             applied.append(AppliedOpResultDTO(op_index=op_index, status="failed"))
             return EntityWriteResult(
@@ -363,7 +363,7 @@ def apply_write_plans(
                 )
             )
         return tuple(results)
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - batch transaction boundary: a Database translate/commit fault must be reported as failed EntityWriteResults for every plan, never re-raised
         return tuple(
             EntityWriteResult(
                 resolved_target=plan.resolved_target,
@@ -583,7 +583,7 @@ def apply_create_plan(
                 applied=applied,
                 warnings=plan.warnings,
             )
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - create commit boundary: any Database translate/commit fault must become a typed failed EntityCreateResult carrying the ErrorDTO
             return EntityCreateResult(
                 resolved_target=plan.resolved_target,
                 applied=(AppliedOpResultDTO(op_index=0, status="failed"),),
@@ -602,7 +602,7 @@ def apply_create_plan(
                     assertion_id=assertion_id,
                 )
             )
-        except (SchemaResolutionError, EntityWriteError, Exception) as exc:
+        except (SchemaResolutionError, EntityWriteError, Exception) as exc:  # noqa: BLE001 - create executor boundary: any per-op store fault must become a typed failed EntityCreateResult carrying the ErrorDTO
             error = _to_error_dto(exc)
             applied.append(AppliedOpResultDTO(op_index=op_index, status="failed"))
             return EntityCreateResult(
@@ -746,7 +746,7 @@ def apply_delete_plan(
                 applied=applied,
                 warnings=plan.warnings,
             )
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - delete commit boundary: any Database translate/commit fault must become a typed failed EntityDeleteResult carrying the ErrorDTO
             return EntityDeleteResult(
                 resolved_target=plan.resolved_target,
                 applied=(AppliedOpResultDTO(op_index=0, status="failed"),),
@@ -765,7 +765,7 @@ def apply_delete_plan(
                     assertion_id=assertion_id,
                 )
             )
-        except (SchemaResolutionError, EntityWriteError, Exception) as exc:
+        except (SchemaResolutionError, EntityWriteError, Exception) as exc:  # noqa: BLE001 - delete executor boundary: any per-op path-bound retract fault must become a typed failed EntityDeleteResult carrying the ErrorDTO
             error = _to_error_dto(exc)
             applied.append(AppliedOpResultDTO(op_index=op_index, status="failed"))
             return EntityDeleteResult(

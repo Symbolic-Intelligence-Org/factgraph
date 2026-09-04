@@ -534,7 +534,7 @@ def _render_rule_repr(rule: Any, bindings: Mapping[str, Any]) -> str | None:
         return None
     try:
         text = render({key: value for key, value in bindings.items() if value is not None})
-    except Exception:
+    except Exception:  # noqa: BLE001 - foreign render_repr callable boundary: a renderer fault degrades the rule to no repr_text, never to a wrong repr
         return None
     return text if isinstance(text, str) and text else None
 
@@ -849,7 +849,7 @@ def _entity_repr_for_fact(
             return schema_runtime.render_entity_repr(
                 schema_index, value.entity_type, value.identity
             )
-        except Exception:
+        except Exception:  # noqa: BLE001 - schema render boundary: an entity-repr fault degrades to the raw term rendering of the same subject
             return _render_term_value(subject, schema_index=schema_index, view_facts=view_facts)
     if schema_index is not None and isinstance(value, Mapping):
         identity = value.get("identity")
@@ -857,7 +857,7 @@ def _entity_repr_for_fact(
         if isinstance(ref_entity_type, str) and isinstance(identity, Mapping):
             try:
                 return schema_runtime.render_entity_repr(schema_index, ref_entity_type, identity)
-            except Exception:
+            except Exception:  # noqa: BLE001 - schema render boundary: an entity-repr fault degrades to the raw term rendering of the same subject
                 return _render_term_value(subject, schema_index=schema_index, view_facts=view_facts)
     if schema_index is not None and isinstance(value, str) and value.startswith(ENTITY_REF_PREFIX):
         try:
@@ -865,7 +865,7 @@ def _entity_repr_for_fact(
                 value, entity_type, view_facts=view_facts, index=schema_index
             )
             return schema_runtime.render_entity_repr(schema_index, entity_type, identity)
-        except Exception:
+        except Exception:  # noqa: BLE001 - identity-recovery/render boundary: a view-fact or repr fault degrades to the raw term rendering of the same subject
             return _render_term_value(subject, schema_index=schema_index, view_facts=view_facts)
     return _render_term_value(subject, schema_index=schema_index, view_facts=view_facts)
 
@@ -974,7 +974,7 @@ def _render_term_value(
                 if schema_index is not None
                 else fallback
             )
-        except Exception:
+        except Exception:  # noqa: BLE001 - schema render boundary: an entity-repr fault degrades to the encoded-ref fallback string
             return fallback
     if schema_index is not None and isinstance(value, Mapping):
         identity = value.get("identity")
@@ -982,7 +982,7 @@ def _render_term_value(
         if isinstance(ref_entity_type, str) and isinstance(identity, Mapping):
             try:
                 return schema_runtime.render_entity_repr(schema_index, ref_entity_type, identity)
-            except Exception:
+            except Exception:  # noqa: BLE001, S110 - schema render boundary: a mapping-ref repr fault falls through to the next rendering strategy, not to a wrong repr
                 pass
     if schema_index is not None and isinstance(value, str) and value.startswith(ENTITY_REF_PREFIX):
         entity_type = _entity_type_from_ref(value)
@@ -992,12 +992,12 @@ def _render_term_value(
                     value, entity_type, view_facts=view_facts, index=schema_index
                 )
                 return schema_runtime.render_entity_repr(schema_index, entity_type, identity)
-            except Exception:
+            except Exception:  # noqa: BLE001, S110 - identity-recovery boundary: a view-fact lookup or repr fault falls through to the next rendering strategy
                 pass
     if decode_float64 and isinstance(value, str):
         try:
             return display_float64_value(value)
-        except Exception:
+        except Exception:  # noqa: BLE001, S110 - float64 decode boundary: an undecodable payload falls through to str(value) rendering
             pass
     if value is None and isinstance(term, BoundVar):
         return "<unbound>"
@@ -1155,13 +1155,13 @@ def _canonical_aggregate_filter_bound_vars(
 ) -> set[str]:
     try:
         parsed = _parse_term(aggregate_term, path="$.aggregate")
-    except Exception:
+    except Exception:  # noqa: BLE001 - where-AST parse boundary: an unparsable aggregate term yields no canonically bound vars
         return set()
     if not isinstance(parsed, AggregateAtom):
         return set()
     try:
         return set(_aggregate_filter_bound_vars(parsed, set(env))) - set(env)
-    except Exception:
+    except Exception:  # noqa: BLE001 - where-AST analysis boundary: a filter-bound-var analysis fault yields no canonically bound vars
         return set()
 
 
