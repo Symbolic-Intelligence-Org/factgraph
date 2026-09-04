@@ -67,10 +67,10 @@ class NativeWhereFrontierEvaluation:
 
     def __post_init__(self) -> None:
         if not isinstance(self.bindings, list):
-            raise ValueError("bindings must be list")
+            raise ValueError("bindings must be list")  # noqa: TRY004 - Frontier evaluation DTO rejects shape drift as ValueError like its value guards.
         for binding in self.bindings:
             if not isinstance(binding, dict):
-                raise ValueError("bindings must contain dict rows")
+                raise ValueError("bindings must contain dict rows")  # noqa: TRY004 - Frontier evaluation DTO rejects shape drift as ValueError like its value guards.
         if not isinstance(self.rule_refs, tuple) or any(
             not isinstance(rule_ref, str) or not rule_ref for rule_ref in self.rule_refs
         ):

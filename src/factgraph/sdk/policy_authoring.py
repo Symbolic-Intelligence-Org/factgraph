@@ -705,7 +705,7 @@ class PolicyDraft:
             if isinstance(item, (PolicyNodeHandle, PolicyConstraintHandle)):
                 result.append(item._node)
             else:  # pragma: no cover - _require_owned gives the public error.
-                raise AssertionError("unreachable")
+                raise AssertionError("unreachable")  # noqa: TRY004 - Unreachable defensive branch; public rejection is PolicyAuthoringError.
         return tuple(result)
 
     def _require_owned(self, value: object, *, label: str) -> _PolicyHandle:

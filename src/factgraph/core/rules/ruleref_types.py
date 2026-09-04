@@ -41,7 +41,7 @@ class NativeRuleRefResolution:
         if not isinstance(self.rule_ref_version, str) or not self.rule_ref_version:
             raise ValueError("rule_ref_version must be non-empty string")
         if not isinstance(self.row_supports, tuple):
-            raise ValueError("row_supports must be tuple")
+            raise ValueError("row_supports must be tuple")  # noqa: TRY004 - RuleRef resolution DTO shares the ValueError family with its sort-order guard.
         expected = tuple(sorted(self.row_supports, key=lambda row: (row.row_terms, row.child_support_digest or "")))
         if self.row_supports != expected:
             raise ValueError("row_supports must be sorted by row_terms")
