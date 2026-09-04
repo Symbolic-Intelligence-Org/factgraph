@@ -110,7 +110,7 @@ def _normalize_iteration_count(value: Any) -> int | None:
     if value is None:
         return None
     if isinstance(value, bool) or not isinstance(value, int):
-        raise ValueError("iteration_count must be int or None")
+        raise ValueError("iteration_count must be int or None")  # noqa: TRY004 - Public profile rejects wrong-type counts as ValueError, including bool.
     if value < 1:
         raise ValueError("iteration_count must be >= 1")
     return value
@@ -122,11 +122,11 @@ def _normalize_rule_projection(value: Any) -> dict[str, list[dict[str, Any]]]:
     for bucket, entries in raw.items():
         bucket_name = _non_empty_str(bucket, path="rule_projection bucket")
         if isinstance(entries, (str, bytes)) or not isinstance(entries, Sequence):
-            raise ValueError(f"rule_projection.{bucket_name} must be list")
+            raise ValueError(f"rule_projection.{bucket_name} must be list")  # noqa: TRY004 - Public rule bucket shape-error contract.
         normalized_entries: list[dict[str, Any]] = []
         for idx, entry in enumerate(entries):
             if not isinstance(entry, Mapping):
-                raise ValueError(f"rule_projection.{bucket_name}[{idx}] must be object")
+                raise ValueError(f"rule_projection.{bucket_name}[{idx}] must be object")  # noqa: TRY004 - Public rule-entry shape errors retain indexed ValueError.
             normalized = dict(entry)
             target = normalized.get("target")
             kind = normalized.get("kind")
@@ -151,7 +151,7 @@ def _normalize_uncertainty_projection(value: Any) -> dict[str, Any]:
             out[key] = config
             continue
         if not isinstance(config, Mapping):
-            raise ValueError(f"uncertainty_projection.{key} must be object")
+            raise ValueError(f"uncertainty_projection.{key} must be object")  # noqa: TRY004 - Public uncertainty bucket shape-error contract.
         normalized = dict(config)
         policy = normalized.get("policy")
         if policy not in UNCERTAINTY_POLICIES:
@@ -261,7 +261,7 @@ def _copy_mapping(value: Any, *, path: str) -> dict[str, Any]:
     if value is None:
         return {}
     if not isinstance(value, Mapping):
-        raise ValueError(f"{path} must be object")
+        raise ValueError(f"{path} must be object")  # noqa: TRY004 - All profile mapping fields share the public ValueError boundary.
     return dict(value)
 
 
