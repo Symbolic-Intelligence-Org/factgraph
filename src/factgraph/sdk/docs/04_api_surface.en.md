@@ -14,22 +14,44 @@ The exact public surface of `factgraph.sdk`. For tutorials see
 `SDKStore` — both names refer to the same class object and accept the
 same calls.
 
-`FactGraph` exposes operations through focused namespaces. T5 keeps the public
-evaluation/evidence path under `fg.eval`.
+`FactGraph` exposes operations through focused namespaces. This self-contained,
+in-memory example uses the current Product V2 Query path. The retained
+`fg.eval` namespace is for the documented live/legacy evaluation surface, not
+a replacement for the Product V2 execution profile and sealed Run.
 
 ```python
-from factgraph.sdk import FactGraph
+from factgraph.sdk import Entity, FactGraph, Field, Identity, outcome_from_run_v2, vars
+
+
+class User(Entity):
+    user_id: str = Identity()
+    age: int = Field()
+
 
 fg = FactGraph.create(schema_classes=[User])
 
 # Canonical namespaces
-alice = fg.entities.ref(User, user_id="u-1")
-fg.fields.add(User.tag, alice, "engineer")
-fg.entities.get(User, user_id="u-1")
-result = fg.eval.evaluate(inference)
-row = result.first()
-explanation = row.explain() if row is not None else None
-fg.audit.diff_proof_frames(round_a_id, round_b_id, round_a_events, round_b_events)
+alice = fg.entities.create(User, user_id="u-1")
+fg.fields.set(User.age, alice, 30)
+snapshot = fg.entities.get(User, user_id="u-1")
+
+# Headless Product Rule and an explicitly named Policy occurrence.
+with vars("user", "age") as (user, age):
+    user_ages = fg.build_rule(
+        id="user_ages", version="1",
+        when=(User(user), User(user).age == age),
+        ports={"user": user, "age": age},
+        semantic_ports={"user": User, "age": User.age},
+    )
+policy = fg.policy_builder("users", version="1")
+users = policy.use(user_ages).as_("users")
+target = policy.build(users)
+profile = fg.execution.native_deterministic(target=target).build()
+run = fg.query(target).select("age", users.age).plan(profile=profile).run()
+outcome = outcome_from_run_v2(run)
+row = outcome.effective.rows[0]  # Explicit row choice for this one-user fixture.
+explanation = outcome.explain(row)
+fg.close()
 ```
 
 | Namespace | Methods |
