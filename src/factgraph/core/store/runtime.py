@@ -94,7 +94,7 @@ class Store:
         premise_blocks: PredicatePremiseBlock | Iterable[PredicatePremiseBlock] | None = None,
     ) -> None:
         if not isinstance(schema_ir, dict):
-            raise ValueError("schema_ir must be dict")
+            raise ValueError("schema_ir must be dict")  # noqa: TRY004 - Store construction rejection is a ValueError the SDK wraps
         self.schema_ir = ensure_schema_ir(schema_ir)
         self.ledger = ledger if ledger is not None else Ledger()
         self.ledger.configure_meta_load_policy(lazy_meta_keys(self.schema_ir))
@@ -243,7 +243,7 @@ class Store:
         if not isinstance(support_digest, str) or not support_digest.startswith("sha256:"):
             raise ValueError("support_digest must be sha256 token")
         if not isinstance(artifact, ProofReceipt):
-            raise ValueError("artifact must be ProofReceipt")
+            raise ValueError("artifact must be ProofReceipt")  # noqa: TRY004 - support registration rejections are one ValueError contract
         existing = self._support_artifacts.get(support_digest)
         if existing is None:
             if self._artifact_sidecar is not None:
@@ -278,7 +278,7 @@ class Store:
         if not isinstance(support_digest, str) or not support_digest.startswith("sha256:"):
             raise ValueError("support_digest must be sha256 token")
         if not isinstance(envelope, ProvenanceEnvelope):
-            raise ValueError("envelope must be ProvenanceEnvelope")
+            raise ValueError("envelope must be ProvenanceEnvelope")  # noqa: TRY004 - support registration rejections are one ValueError contract
         existing = self._provenance_envelopes.get(support_digest)
         if existing is None:
             self._provenance_envelopes[support_digest] = envelope
@@ -312,7 +312,7 @@ class Store:
         if not isinstance(confidence_kind, str) or not confidence_kind:
             raise ValueError("confidence_kind must be non-empty string")
         if not isinstance(target_pred_id, str):
-            raise ValueError("target_pred_id must be string")
+            raise ValueError("target_pred_id must be string")  # noqa: TRY004 - candidate support rejections are one ValueError contract
         if candidate_id in self._candidate_support_index:
             existing_digest = self._candidate_support_index[candidate_id]
             if existing_digest != support_digest:
@@ -361,7 +361,7 @@ class Store:
         if not isinstance(rule_run_id, str) or not rule_run_id:
             raise ValueError("rule_run_id must be non-empty string")
         if not isinstance(artifact, RuleTraceArtifact):
-            raise ValueError("artifact must be RuleTraceArtifact")
+            raise ValueError("artifact must be RuleTraceArtifact")  # noqa: TRY004 - trace registration rejections are one ValueError contract
         existing = self._rule_trace_artifacts.get(rule_run_id)
         if existing is None:
             if self._artifact_sidecar is not None:

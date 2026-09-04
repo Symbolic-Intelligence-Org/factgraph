@@ -41,7 +41,7 @@ class DerivationOutput:
         if self.candidate_kind not in {"fact", "entity"}:
             raise ValueError("candidate_kind must be 'fact' or 'entity'")
         if not isinstance(self.payload, dict):
-            raise ValueError("payload must be object")
+            raise ValueError("payload must be object")  # noqa: TRY004 - DerivationOutput field rejections are one ValueError contract
         if not isinstance(self.target, str) or not self.target:
             raise ValueError("target must be non-empty string")
         if not isinstance(self.derivation_id, str) or not self.derivation_id:
@@ -260,9 +260,9 @@ def make_derivation_output(
     if not isinstance(target, str) or not target:
         raise ValueError("target must be non-empty string")
     if not isinstance(payload, dict):
-        raise ValueError("payload must be dict")
+        raise ValueError("payload must be dict")  # noqa: TRY004 - make_derivation_output rejections are one ValueError contract
     if not isinstance(generated_at, int) or isinstance(generated_at, bool):
-        raise ValueError("generated_at must be epoch-nanos int")
+        raise ValueError("generated_at must be epoch-nanos int")  # noqa: TRY004 - make_derivation_output rejections are one ValueError contract
 
     key_tuple_digest = compute_key_tuple_digest(key_terms)
     candidate_key = compute_candidate_key_v2(

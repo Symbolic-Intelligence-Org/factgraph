@@ -53,9 +53,9 @@ def derive_certainty_summary(
     if confidence_kind != "certainty":
         return None
     if not isinstance(tree_dict, Mapping):
-        raise ValueError("tree_dict must be mapping")
+        raise ValueError("tree_dict must be mapping")  # noqa: TRY004 - certainty summary rejects non-mapping input as ValueError
     if not isinstance(condition_weights, Mapping):
-        raise ValueError("condition_weights must be mapping")
+        raise ValueError("condition_weights must be mapping")  # noqa: TRY004 - certainty summary rejects non-mapping input as ValueError
     if aggregation not in AGGREGATION_STRATEGIES:
         raise ValueError(f"aggregation must be one of {AGGREGATION_STRATEGIES}, got {aggregation!r}")
 
@@ -192,7 +192,7 @@ def _condition_weight(condition_weights: Mapping[str, Any], condition_key: str) 
     if raw is None:
         return None
     if isinstance(raw, bool) or not isinstance(raw, (int, float)):
-        raise ValueError(f'condition_weights["{condition_key}"] must be numeric')
+        raise ValueError(f'condition_weights["{condition_key}"] must be numeric')  # noqa: TRY004 - condition weight domain rejection shares the ValueError contract
     weight = float(raw)
     if not math.isfinite(weight) or weight <= 0:
         raise ValueError(f'condition_weights["{condition_key}"] must be positive finite number')

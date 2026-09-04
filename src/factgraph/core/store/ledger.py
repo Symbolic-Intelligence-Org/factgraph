@@ -517,7 +517,7 @@ def _annotation_from_storage_key(
         )
         payload = json.loads(raw.decode("utf-8"))
         if not isinstance(payload, dict):
-            raise ValueError("annotation compatibility payload must be an object")
+            raise ValueError("annotation compatibility payload must be an object")  # noqa: TRY004 - closed-format decode boundary re-raised as LedgerFormatError
         row = AnnotationRow(
             asrt_id=asrt_id,
             namespace=payload["namespace"],
@@ -659,7 +659,7 @@ class Ledger:
             if not isinstance(key, str) or not key:
                 raise ValueError("ledger metadata keys must be non-empty strings")
             if not isinstance(value, str):
-                raise ValueError("ledger metadata values must be strings")
+                raise ValueError("ledger metadata values must be strings")  # noqa: TRY004 - commit metadata rejection is a ValueError callers wrap
 
         raw_assertion_writes = tuple(assertions)
         raw_revocation_writes = tuple(revocations)
@@ -2439,7 +2439,7 @@ def _validate_meta_rows_for_append_assertion(rows: list[MetaRow]) -> None:
                 f"{_ANNOTATION_COMPAT_PREFIX}"
             )
         if not isinstance(row.asrt_id, str):
-            raise ValueError("meta asrt_id must be str when provided")
+            raise ValueError("meta asrt_id must be str when provided")  # noqa: TRY004 - field rejection; TypeError is reserved for non-MetaRow rows
 
 
 def _reject_duplicate_meta_keys(rows: Sequence[MetaRow], *, context: str) -> None:

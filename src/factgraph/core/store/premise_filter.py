@@ -115,7 +115,7 @@ class MetaExclusion:
         if not isinstance(self.key, str) or not self.key:
             raise ValueError("MetaExclusion.key must be non-empty string")
         if isinstance(self.values, str):
-            raise ValueError(
+            raise ValueError(  # noqa: TRY004 - a str is iterable; this is a value-shape config rejection
                 "MetaExclusion.values must be an iterable of strings, not a single string"
             )
         try:
@@ -156,9 +156,9 @@ class PredicatePremiseAllowance:
         if not isinstance(self.key, str) or not self.key:
             raise ValueError("PredicatePremiseAllowance.key must be non-empty string")
         if not isinstance(self.absent_ok, bool):
-            raise ValueError("PredicatePremiseAllowance.absent_ok must be bool")
+            raise ValueError("PredicatePremiseAllowance.absent_ok must be bool")  # noqa: TRY004 - premise configuration rejections are one ValueError contract
         if isinstance(self.allowed_values, str):
-            raise ValueError(
+            raise ValueError(  # noqa: TRY004 - a str is iterable; this is a value-shape config rejection
                 "PredicatePremiseAllowance.allowed_values must be an iterable of strings, "
                 "not a single string"
             )
@@ -207,7 +207,7 @@ class PredicatePremiseBlock:
         if not isinstance(self.key, str) or not self.key:
             raise ValueError("PredicatePremiseBlock.key must be non-empty string")
         if isinstance(self.blocked_values, str):
-            raise ValueError(
+            raise ValueError(  # noqa: TRY004 - a str is iterable; this is a value-shape config rejection
                 "PredicatePremiseBlock.blocked_values must be an iterable of strings, "
                 "not a single string"
             )
@@ -243,7 +243,7 @@ def normalize_premise_exclusions(
         ) from exc
     for item in normalized:
         if not isinstance(item, MetaExclusion):
-            raise ValueError(
+            raise ValueError(  # noqa: TRY004 - normalizer folds TypeError into its ValueError contract
                 f"premise_exclusions entries must be MetaExclusion, got {type(item).__name__}"
             )
     return normalized
@@ -271,7 +271,7 @@ def normalize_premise_allowances(
     seen: set[str] = set()
     for item in normalized:
         if not isinstance(item, PredicatePremiseAllowance):
-            raise ValueError(
+            raise ValueError(  # noqa: TRY004 - normalizer folds TypeError into its ValueError contract
                 "premise_allowances entries must be PredicatePremiseAllowance, "
                 f"got {type(item).__name__}"
             )
@@ -304,7 +304,7 @@ def normalize_premise_blocks(
     seen: set[str] = set()
     for item in normalized:
         if not isinstance(item, PredicatePremiseBlock):
-            raise ValueError(
+            raise ValueError(  # noqa: TRY004 - normalizer folds TypeError into its ValueError contract
                 "premise_blocks entries must be PredicatePremiseBlock, "
                 f"got {type(item).__name__}"
             )
