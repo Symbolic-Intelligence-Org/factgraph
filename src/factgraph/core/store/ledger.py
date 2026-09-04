@@ -303,7 +303,8 @@ def _encode_claim_value(rest_terms: list[tuple[str, Any]]) -> tuple[str | None, 
     if tag == "bool":
         return "true" if value else "false", tag
     if tag == "float64":
-        bits = int(str(value)[2:], 16)
+        hexadecimal_payload = str(value)[2:]
+        bits = int(hexadecimal_payload, 16)
         number = struct.unpack(">d", bits.to_bytes(8, "big"))[0]
         return repr(0.0 if number == 0.0 else number), tag
     raise ValueError(f"unsupported claim value tag: {tag}")

@@ -443,7 +443,8 @@ def _finite_hex_float(value: object) -> float:
     ):
         raise ProtocolShapeError("EvaluationRun certainty bound must be float64 hex")
     try:
-        number = struct.unpack(">d", int(value[2:], 16).to_bytes(8, "big"))[0]
+        hexadecimal_payload = value[2:]
+        number = struct.unpack(">d", int(hexadecimal_payload, 16).to_bytes(8, "big"))[0]
     except (ValueError, OverflowError) as exc:
         raise ProtocolShapeError("EvaluationRun certainty bound is malformed") from exc
     if not math.isfinite(number):

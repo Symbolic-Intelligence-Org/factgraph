@@ -242,7 +242,8 @@ def _choice_predicate_digest(choice: ProbLogWeightedChoiceExt, arm_id: str) -> s
 
     import hashlib
 
-    raw = "\x1f".join((choice.choice_node_id, choice.topology_digest, arm_id)).encode("utf-8")
+    components = (choice.choice_node_id, choice.topology_digest, arm_id)
+    raw = "\x1f".join(components).encode("utf-8")
     return hashlib.sha256(raw).hexdigest()[:32]
 
 

@@ -1622,15 +1622,14 @@ def _query_navigation_lookup_var(lookup: _RuleExprQueryNavigationLookup) -> Var:
     interface during evidence assembly.
     """
 
-    payload = "\x00".join(
-        (
-            lookup.branch_id,
-            lookup.head_port_name,
-            lookup.occurrence_alias,
-            lookup.port_name,
-            lookup.field_predicate_id,
-        )
-    ).encode("utf-8")
+    components = (
+        lookup.branch_id,
+        lookup.head_port_name,
+        lookup.occurrence_alias,
+        lookup.port_name,
+        lookup.field_predicate_id,
+    )
+    payload = "\x00".join(components).encode("utf-8")
     return Var(f"$__query_navigation__{sha256_hex(payload)[:20]}")
 
 

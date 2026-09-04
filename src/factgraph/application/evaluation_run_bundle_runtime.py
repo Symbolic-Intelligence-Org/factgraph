@@ -907,7 +907,8 @@ def _ir_from_wire(value: object, depth: int) -> object:
             and token != "0x8000000000000000"
         ):
             try:
-                number = struct.unpack(">d", int(token[2:], 16).to_bytes(8, "big"))[0]
+                hexadecimal_payload = token[2:]
+                number = struct.unpack(">d", int(hexadecimal_payload, 16).to_bytes(8, "big"))[0]
             except (ValueError, OverflowError) as exc:
                 raise ProtocolShapeError("native where float is malformed") from exc
             if math.isfinite(number):
