@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import Any, Literal, Mapping, Sequence, TypeAlias
+from typing import Any, Literal, TypeAlias
 
 from factgraph.core.protocol.digests import sha256_token
 

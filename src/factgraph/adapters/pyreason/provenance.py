@@ -10,8 +10,9 @@ Key difference from Souffle provenance:
 """
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any, Mapping
+from typing import Any
 
 from factgraph.adapters.pyreason._helpers import _parse_edge_component, _pred_short_name
 from factgraph.application.explain.evidence_tree import (

@@ -30,9 +30,10 @@ from __future__ import annotations
 import base64
 import binascii
 import json
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from types import MappingProxyType
-from typing import Literal, Mapping, TypeAlias
+from typing import Literal, TypeAlias
 
 from factgraph.core.protocol.digests import sha256_hex
 

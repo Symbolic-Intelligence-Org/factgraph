@@ -19,9 +19,10 @@ import struct
 import time
 import uuid
 import weakref
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import IO, Any, Iterable, Mapping, Sequence
+from typing import IO, Any
 
 from factgraph.core.evidence.write_protocol import _SYSTEM_MANAGED_META_KEYS
 from factgraph.core.protocol.annotation_v1 import initial_meta_annotation_v1

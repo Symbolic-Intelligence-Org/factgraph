@@ -9,7 +9,8 @@ All types are core-internal: no authoring/service imports.
 
 from __future__ import annotations
 
-from typing import Any, Callable, Protocol
+from collections.abc import Callable
+from typing import Any, Protocol
 
 from factgraph.core.store._support import ProofReceipt, RuleRefEdge
 

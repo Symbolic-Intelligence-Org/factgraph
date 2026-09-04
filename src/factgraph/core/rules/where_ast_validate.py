@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Any, Iterable, Literal
+from typing import Any, Literal
 
 from factgraph.core.rules.backend_profile import BackendProfile
 from factgraph.core.rules.where_ast import (

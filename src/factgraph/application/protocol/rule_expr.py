@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from collections.abc import Iterable
 from dataclasses import dataclass
 from itertools import combinations, product
-from typing import Iterable, Literal, NoReturn
+from typing import Literal, NoReturn
 
 from factgraph._sdk_errors import SDKDSLError
 

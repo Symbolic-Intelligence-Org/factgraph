@@ -3,9 +3,10 @@ from __future__ import annotations
 import heapq
 import re
 from collections import deque
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from itertools import pairwise
-from typing import Any, Mapping, Sequence
+from typing import Any
 
 from factgraph.core.annotation.types import ConfidenceValue, NodeId, PathEdge, SupportStep
 

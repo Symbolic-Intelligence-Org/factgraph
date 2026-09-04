@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Any, Literal, Mapping, NoReturn
+from typing import TYPE_CHECKING, Any, Literal, NoReturn
 
 from factgraph.core.protocol.digests import sha256_hex
 from factgraph.core.rules.where_ast import (

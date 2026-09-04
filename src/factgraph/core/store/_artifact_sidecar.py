@@ -6,8 +6,9 @@ import logging
 import os
 import tempfile
 import time
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable, Protocol
+from typing import Protocol
 
 from factgraph.core.rules._trace import (
     RuleTraceArtifact,

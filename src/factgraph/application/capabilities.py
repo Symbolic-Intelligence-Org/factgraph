@@ -8,8 +8,8 @@ already accepts it.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from types import MappingProxyType
-from typing import Mapping
 
 from factgraph.core.protocol.tup_v1 import CANONICAL_TAGS as _PROTOCOL_TAGS
 

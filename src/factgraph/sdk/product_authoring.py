@@ -21,10 +21,10 @@ import inspect
 import json
 import re
 import unicodedata
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from decimal import Decimal, InvalidOperation, localcontext
-from typing import TYPE_CHECKING, Any, Callable, Literal, TypeAlias, get_type_hints
+from typing import TYPE_CHECKING, Any, Literal, TypeAlias, get_type_hints
 
 from factgraph.application.protocol.policy import (
     Policy,

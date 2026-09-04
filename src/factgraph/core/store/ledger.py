@@ -9,10 +9,11 @@ import struct
 import threading
 import uuid
 import warnings
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import contextmanager, suppress
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Iterator, Literal, Mapping, Sequence
+from typing import Any, Literal
 
 from factgraph.core.protocol.annotation_v1 import initial_meta_annotation_v1
 from factgraph.core.protocol.tup_v1 import claim_args_from_rest_terms

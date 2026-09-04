@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Collection
+from collections.abc import Collection, Mapping
 from dataclasses import dataclass, field
 from types import MappingProxyType
-from typing import Any, Mapping
+from typing import Any
 
 from factgraph.core.protocol.digests import sha256_hex
 

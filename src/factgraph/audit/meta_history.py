@@ -9,8 +9,9 @@ from __future__ import annotations
 
 import base64
 import json
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any, Mapping, Sequence
+from typing import Any
 
 from factgraph.core.store.ledger import META_KINDS, Ledger, normalize_event_sequence
 

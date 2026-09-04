@@ -11,9 +11,9 @@ those captures rather than re-reading the live Store.
 from __future__ import annotations
 
 import json
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any, Callable
+from typing import Any
 
 from factgraph.core.protocol.digests import sha256_hex
 from factgraph.core.protocol.tup_v1 import claim_args_from_rest_terms

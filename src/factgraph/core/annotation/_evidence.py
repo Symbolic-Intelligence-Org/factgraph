@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping, Sequence
 from itertools import pairwise
-from typing import Any, Mapping, Sequence
+from typing import Any
 
 _SUPPORT_RE = re.compile(r"^(?P<src>.+?) -\[(?P<rel>.+?)\]-> (?P<dst>.+)$")
 

@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Callable
+from typing import Any
 
 from factgraph.core.rules.ruleref_common import internal_rule_pred_id, resolve_exposed_rule_ref
 from factgraph.core.rules.ruleref_types import NativeRuleRefResolution, NativeRuleRefRowSupport

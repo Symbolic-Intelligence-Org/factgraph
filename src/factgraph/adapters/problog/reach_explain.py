@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import re
 import tempfile
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any
 
 from factgraph.adapters.problog._parsing import _split_top_level_args
 from factgraph.adapters.problog.diagnostic_emit import (

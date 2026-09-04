@@ -21,9 +21,10 @@ from __future__ import annotations
 
 import json
 import math
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from decimal import Decimal, InvalidOperation
-from typing import Literal, Mapping, TypeAlias
+from typing import Literal, TypeAlias
 
 from factgraph.core.protocol.digests import sha256_hex
 

@@ -16,8 +16,9 @@ that FactGraph has inspected or proved the provider implementation.
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Callable, Literal, TypeAlias
+from typing import TYPE_CHECKING, Literal, TypeAlias
 
 from factgraph.core.protocol.digests import sha256_hex
 

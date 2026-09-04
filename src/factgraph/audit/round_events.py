@@ -4,9 +4,10 @@ import json
 import os
 import tempfile
 import time
+from collections.abc import Mapping
 from dataclasses import dataclass, field, fields, is_dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Mapping, TypeAlias
+from typing import TYPE_CHECKING, Any, TypeAlias
 
 from factgraph.core.protocol.digests import sha256_token
 from factgraph.core.store._support import BindingItems, ProofReceipt, compute_support_digest
