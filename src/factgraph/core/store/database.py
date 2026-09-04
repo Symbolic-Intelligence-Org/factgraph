@@ -526,11 +526,11 @@ class Database:
         self._ledger._managed_meta_writer = _managed_meta_writer
         self._ledger._managed_annotation_writer = _managed_annotation_writer
 
-    def __enter__(self) -> Database:
+    def __enter__(self) -> Database:  # noqa: PYI034 - Preserve concrete runtime hints on Python 3.10 without a new dependency.
         return self
 
     def __exit__(
-        self, exc_type: type[BaseException] | None, exc: BaseException | None, tb: Any
+        self, exc_type: type[BaseException] | None, exc: BaseException | None, tb: object
     ) -> None:
         self.close()
 
@@ -2989,7 +2989,7 @@ class _suppress_os_error:
         return None
 
     def __exit__(
-        self, exc_type: type[BaseException] | None, exc: BaseException | None, tb: Any
+        self, exc_type: type[BaseException] | None, exc: BaseException | None, tb: object
     ) -> bool:
         return exc_type is not None and issubclass(exc_type, OSError)
 

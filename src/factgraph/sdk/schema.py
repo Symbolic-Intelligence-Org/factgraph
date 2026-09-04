@@ -420,7 +420,7 @@ class _UnsetFieldValue:
     def __bool__(self) -> bool:
         return False
 
-    def __eq__(self, other: Any) -> bool:
+    def __eq__(self, other: object) -> bool:
         return other is None
 
     def _raise_batch_only(self, method: str) -> None:

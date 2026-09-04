@@ -338,10 +338,10 @@ class PyReasonBatchTx:
     def commit(self) -> None:
         """No-op: facts are staged immediately on each call."""
 
-    def __enter__(self) -> PyReasonBatchTx:
+    def __enter__(self) -> PyReasonBatchTx:  # noqa: PYI034 - Preserve concrete runtime hints on Python 3.10 without a new dependency.
         return self
 
-    def __exit__(self, *exc_info: Any) -> None:
+    def __exit__(self, *exc_info: object) -> None:
         return None
 
 

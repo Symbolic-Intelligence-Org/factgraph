@@ -109,7 +109,7 @@ _ASSERTION_FILTER_MISSING = object()
 
 
 class AssertionRecordSet(tuple):
-    def __new__(cls, records: Any = ()) -> AssertionRecordSet:
+    def __new__(cls, records: Any = ()) -> AssertionRecordSet:  # noqa: PYI034 - Preserve concrete runtime hints on Python 3.10 without a new dependency.
         return super().__new__(cls, tuple(records))
 
     def __call__(self) -> AssertionRecordSet:
@@ -498,7 +498,7 @@ class IdentityEditor:
     def __bool__(self) -> bool:
         return bool(self.value)
 
-    def __eq__(self, other: Any) -> bool:  # type: ignore[override]
+    def __eq__(self, other: object) -> bool:  # type: ignore[override]
         return self.value == other
 
     def set(self, *args: Any, **kwargs: Any) -> None:
@@ -575,7 +575,7 @@ class EntityEditor:
         self._ensure_open()
         self._closed = True
 
-    def __enter__(self) -> EntityEditor:
+    def __enter__(self) -> EntityEditor:  # noqa: PYI034 - Preserve concrete runtime hints on Python 3.10 without a new dependency.
         self._ensure_open()
         return self
 

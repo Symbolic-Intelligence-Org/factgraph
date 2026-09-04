@@ -57,10 +57,10 @@ class LogicVar:
             raise AttributeError(item)
         return AttrRef(self, item)
 
-    def __eq__(self, other: Any) -> CompareExpr:  # type: ignore[override]
+    def __eq__(self, other: object) -> CompareExpr:  # type: ignore[override]
         return CompareExpr("eq", self, other)
 
-    def __ne__(self, other: Any) -> CompareExpr:  # type: ignore[override]
+    def __ne__(self, other: object) -> CompareExpr:  # type: ignore[override]
         return CompareExpr("ne", self, other)
 
     def __gt__(self, other: Any) -> CompareExpr:
@@ -111,10 +111,10 @@ class AttrRef:
         ):
             raise SDKDSLError("AttrRef.entity_type must be non-empty string or None")
 
-    def __eq__(self, other: Any) -> CompareExpr:  # type: ignore[override]
+    def __eq__(self, other: object) -> CompareExpr:  # type: ignore[override]
         return CompareExpr("eq", self, other)
 
-    def __ne__(self, other: Any) -> CompareExpr:  # type: ignore[override]
+    def __ne__(self, other: object) -> CompareExpr:  # type: ignore[override]
         return CompareExpr("ne", self, other)
 
     def __gt__(self, other: Any) -> CompareExpr:
@@ -136,10 +136,10 @@ class BinaryExpr:
     left: Any
     right: Any
 
-    def __eq__(self, other: Any) -> CompareExpr:  # type: ignore[override]
+    def __eq__(self, other: object) -> CompareExpr:  # type: ignore[override]
         return CompareExpr("eq", self, other)
 
-    def __ne__(self, other: Any) -> CompareExpr:  # type: ignore[override]
+    def __ne__(self, other: object) -> CompareExpr:  # type: ignore[override]
         return CompareExpr("ne", self, other)
 
     def __gt__(self, other: Any) -> CompareExpr:
@@ -214,10 +214,10 @@ class _AggregateRef:
     target: Any
     filter: tuple[Any, ...]
 
-    def __eq__(self, other: Any) -> CompareExpr:  # type: ignore[override]
+    def __eq__(self, other: object) -> CompareExpr:  # type: ignore[override]
         return CompareExpr("eq", self, other)
 
-    def __ne__(self, other: Any) -> CompareExpr:  # type: ignore[override]
+    def __ne__(self, other: object) -> CompareExpr:  # type: ignore[override]
         return CompareExpr("ne", self, other)
 
     def __gt__(self, other: Any) -> CompareExpr:

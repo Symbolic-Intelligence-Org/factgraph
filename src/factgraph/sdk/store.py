@@ -2581,14 +2581,14 @@ class SDKStore:
             attached._workspace_path = paths.root
         return attached
 
-    def __enter__(self) -> SDKStore:
+    def __enter__(self) -> SDKStore:  # noqa: PYI034 - Preserve concrete runtime hints on Python 3.10 without a new dependency.
         return self
 
     def __exit__(
         self,
         exc_type: type[BaseException] | None,
         exc: BaseException | None,
-        tb: Any,
+        tb: object,
     ) -> None:
         self.close()
 

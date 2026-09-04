@@ -1303,7 +1303,7 @@ class _IdentityWriteGuard:
     def __bool__(self) -> bool:
         return bool(self.value)
 
-    def __eq__(self, other: Any) -> bool:  # type: ignore[override]
+    def __eq__(self, other: object) -> bool:  # type: ignore[override]
         return self.value == other
 
     def set(self, *args: Any, **kwargs: Any) -> None:
@@ -1398,7 +1398,7 @@ class SDKBatchTx:
         self._next_handle_id = 1
         self._next_op_index = 1
 
-    def __enter__(self) -> SDKBatchTx:
+    def __enter__(self) -> SDKBatchTx:  # noqa: PYI034 - Preserve concrete runtime hints on Python 3.10 without a new dependency.
         return self
 
     def __exit__(self, exc_type, exc, tb) -> None:
