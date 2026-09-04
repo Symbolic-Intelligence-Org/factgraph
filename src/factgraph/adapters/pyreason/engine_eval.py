@@ -136,7 +136,7 @@ def resolve_pyreason_run_config(engine_options: dict[str, Any] | None) -> PyReas
     if engine_options is None:
         return default
     if not isinstance(engine_options, dict):
-        raise ValueError(
+        raise ValueError(  # noqa: TRY004 - mirrors the core evaluate engine_options ValueError boundary (adapter docs 5C.0).
             f"PyReason engine_options must be dict[str, Any] or None, got {type(engine_options).__name__}"
         )
 
@@ -291,7 +291,7 @@ def _resolve_temporal_projection_state(
     if semantics_profile is None:
         return None
     if not isinstance(semantics_profile, SemanticsProfile):
-        raise ValueError(
+        raise ValueError(  # noqa: TRY004 - Profile consumption rejections stay ValueError (adapter docs 5C.0a).
             f"semantics_profile must be SemanticsProfile or None, got {type(semantics_profile).__name__}"
         )
     if semantics_profile.engine != "pyreason":
@@ -385,7 +385,7 @@ def _resolve_iteration_count(semantics_profile: SemanticsProfile | None) -> int 
     if semantics_profile is None:
         return None
     if not isinstance(semantics_profile, SemanticsProfile):
-        raise ValueError(
+        raise ValueError(  # noqa: TRY004 - Profile consumption rejections stay ValueError (adapter docs 5C.0a).
             f"semantics_profile must be SemanticsProfile or None, got {type(semantics_profile).__name__}"
         )
     if semantics_profile.engine != "pyreason":
@@ -604,7 +604,7 @@ def _meta_value_for_key(store: Any, asrt_id: str, key: str) -> str | None:
     if value is None:
         return None
     if not isinstance(value, str):
-        raise ValueError(f"{key} meta must be string for PyReason valid_time_boundaries")
+        raise ValueError(f"{key} meta must be string for PyReason valid_time_boundaries")  # noqa: TRY004 - valid_time_boundaries projection input rejections stay ValueError (docs 5C.0a).
     return value
 
 

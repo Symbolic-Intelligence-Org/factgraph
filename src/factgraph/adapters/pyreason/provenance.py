@@ -90,7 +90,7 @@ def pyreason_trace_to_dict(trace: PyReasonTraceV0) -> dict[str, Any]:
 def pyreason_trace_from_dict(row: Mapping[str, Any]) -> PyReasonTraceV0:
     """Reconstruct ``PyReasonTraceV0`` from a JSON-friendly dict."""
     if not isinstance(row, Mapping):
-        raise ValueError("row must be Mapping[str, Any]")
+        raise ValueError("row must be Mapping[str, Any]")  # noqa: TRY004 - event_log envelope decode keeps the serialized trace rejection contract.
     if row.get("engine") != "pyreason":
         raise ValueError("row.engine must be 'pyreason'")
     if row.get("trace_type") != "event_log":
@@ -98,13 +98,13 @@ def pyreason_trace_from_dict(row: Mapping[str, Any]) -> PyReasonTraceV0:
 
     timesteps = row.get("timesteps")
     if isinstance(timesteps, bool) or not isinstance(timesteps, int):
-        raise ValueError("row.timesteps must be int")
+        raise ValueError("row.timesteps must be int")  # noqa: TRY004 - event_log timesteps shape error stays ValueError, including bool.
     raw_node_events = row.get("node_events")
     raw_edge_events = row.get("edge_events")
     if not isinstance(raw_node_events, list):
-        raise ValueError("row.node_events must be list")
+        raise ValueError("row.node_events must be list")  # noqa: TRY004 - malformed node event collection remains ValueError.
     if not isinstance(raw_edge_events, list):
-        raise ValueError("row.edge_events must be list")
+        raise ValueError("row.edge_events must be list")  # noqa: TRY004 - malformed edge event collection remains ValueError.
 
     return PyReasonTraceV0(
         timesteps=timesteps,
@@ -328,10 +328,10 @@ def _event_to_dict(event: PyReasonTraceEventV0) -> dict[str, Any]:
 
 def _event_from_dict(row: Any) -> PyReasonTraceEventV0:
     if not isinstance(row, Mapping):
-        raise ValueError("trace event row must be Mapping[str, Any]")
+        raise ValueError("trace event row must be Mapping[str, Any]")  # noqa: TRY004 - retain nested trace event decode contract.
     clause_groundings = row.get("clause_groundings")
     if not isinstance(clause_groundings, list):
-        raise ValueError("trace event clause_groundings must be list")
+        raise ValueError("trace event clause_groundings must be list")  # noqa: TRY004 - retain nested grounding decode contract.
     return PyReasonTraceEventV0(
         time=int(row.get("time", 0)),
         fixpoint_op=int(row.get("fixpoint_op", 0)),
@@ -351,7 +351,7 @@ def _resolve_candidate_anchor(candidate_payload: Mapping[str, Any]) -> tuple[str
         raise ValueError("candidate_payload.pred_id must be non-empty string")
     terms = candidate_payload.get("terms")
     if not isinstance(terms, list):
-        raise ValueError("candidate_payload.terms must be list")
+        raise ValueError("candidate_payload.terms must be list")  # noqa: TRY004 - candidate evidence rejection stays ValueError.
 
     entity_refs = [_candidate_term_value(term) for term in terms]
     entity_refs = [term for term in entity_refs if term]
