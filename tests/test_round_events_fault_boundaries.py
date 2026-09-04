@@ -34,9 +34,11 @@ class ReplaceJsonlBoundaryTests(unittest.TestCase):
             directory = Path(tmp)
             target = directory / "round_events.jsonl"
 
-            with patch.object(round_events.json, "dumps", side_effect=_BoundaryFault("boom-jsonl")):
-                with self.assertRaises(_BoundaryFault) as ctx:
-                    _replace_jsonl(target, [{"a": 1}])
+            with (
+                patch.object(round_events.json, "dumps", side_effect=_BoundaryFault("boom-jsonl")),
+                self.assertRaises(_BoundaryFault) as ctx,
+            ):
+                _replace_jsonl(target, [{"a": 1}])
 
             # Preserved cause/detail: the original exception, not a wrapper.
             self.assertEqual(str(ctx.exception), "boom-jsonl")
@@ -50,9 +52,11 @@ class ReplaceJsonlBoundaryTests(unittest.TestCase):
             directory = Path(tmp)
             target = directory / "round_events.jsonl"
 
-            with patch.object(round_events.os, "replace", side_effect=OSError("replace failed")):
-                with self.assertRaises(OSError):
-                    _replace_jsonl(target, [{"a": 1}])
+            with (
+                patch.object(round_events.os, "replace", side_effect=OSError("replace failed")),
+                self.assertRaises(OSError),
+            ):
+                _replace_jsonl(target, [{"a": 1}])
 
             self.assertFalse(target.exists())
             self.assertEqual(_tmp_siblings(directory, target.name), [])
@@ -62,9 +66,11 @@ class ReplaceJsonlBoundaryTests(unittest.TestCase):
             directory = Path(tmp)
             target = directory / "round_events.jsonl"
 
-            with patch.object(round_events.json, "dumps", side_effect=KeyboardInterrupt):
-                with self.assertRaises(KeyboardInterrupt):
-                    _replace_jsonl(target, [{"a": 1}])
+            with (
+                patch.object(round_events.json, "dumps", side_effect=KeyboardInterrupt),
+                self.assertRaises(KeyboardInterrupt),
+            ):
+                _replace_jsonl(target, [{"a": 1}])
 
     def test_happy_path_still_writes_the_rows(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -85,9 +91,11 @@ class ReplaceJsonBoundaryTests(unittest.TestCase):
             target = directory / "manifest.json"
             target.write_text('{"package_kind": "audit"}', encoding="utf-8")
 
-            with patch.object(round_events.json, "dumps", side_effect=_BoundaryFault("boom-json")):
-                with self.assertRaises(_BoundaryFault) as ctx:
-                    _replace_json(target, {"package_kind": "audit", "paths": {}})
+            with (
+                patch.object(round_events.json, "dumps", side_effect=_BoundaryFault("boom-json")),
+                self.assertRaises(_BoundaryFault) as ctx,
+            ):
+                _replace_json(target, {"package_kind": "audit", "paths": {}})
 
             self.assertEqual(str(ctx.exception), "boom-json")
             # Not reported as success: the previous manifest content is unchanged.
@@ -100,9 +108,11 @@ class ReplaceJsonBoundaryTests(unittest.TestCase):
             target = directory / "manifest.json"
             target.write_text("{}", encoding="utf-8")
 
-            with patch.object(round_events.json, "dumps", side_effect=KeyboardInterrupt):
-                with self.assertRaises(KeyboardInterrupt):
-                    _replace_json(target, {"a": 1})
+            with (
+                patch.object(round_events.json, "dumps", side_effect=KeyboardInterrupt),
+                self.assertRaises(KeyboardInterrupt),
+            ):
+                _replace_json(target, {"a": 1})
 
     def test_happy_path_still_replaces_the_payload(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

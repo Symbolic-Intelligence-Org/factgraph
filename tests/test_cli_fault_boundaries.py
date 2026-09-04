@@ -103,9 +103,11 @@ class SchemaDigestBoundaryTests(unittest.TestCase):
     def test_keyboard_interrupt_is_not_swallowed(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             workspace = _v03_workspace(Path(tmp))
-            with patch.object(cli, "schema_digest", side_effect=KeyboardInterrupt):
-                with self.assertRaises(KeyboardInterrupt):
-                    cli._run_migrate_workspace(path=str(workspace), dry_run=False, archive=False)
+            with (
+                patch.object(cli, "schema_digest", side_effect=KeyboardInterrupt),
+                self.assertRaises(KeyboardInterrupt),
+            ):
+                cli._run_migrate_workspace(path=str(workspace), dry_run=False, archive=False)
 
 
 class SchemaObjectWriteBoundaryTests(unittest.TestCase):
@@ -169,13 +171,15 @@ class LegacySchemaLoadBoundaryTests(unittest.TestCase):
     def test_keyboard_interrupt_is_not_swallowed(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             workspace = _v02_workspace(Path(tmp))
-            with patch.object(cli, "schema_digest", side_effect=KeyboardInterrupt):
-                with self.assertRaises(KeyboardInterrupt):
-                    cli._load_v02_schema_ir(
-                        workspace=workspace,
-                        manifest={},
-                        legacy_registry_dir=workspace / "registry",
-                    )
+            with (
+                patch.object(cli, "schema_digest", side_effect=KeyboardInterrupt),
+                self.assertRaises(KeyboardInterrupt),
+            ):
+                cli._load_v02_schema_ir(
+                    workspace=workspace,
+                    manifest={},
+                    legacy_registry_dir=workspace / "registry",
+                )
 
 
 class LayoutMigrationBoundaryTests(unittest.TestCase):

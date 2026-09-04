@@ -9,7 +9,7 @@ mistaken for a resolved mapping with zero decisions.
 from __future__ import annotations
 
 import unittest
-from typing import Any
+from typing import Any, ClassVar
 
 from factgraph.audit.package_export import _build_mapping_audit_payload
 from factgraph.core.mapping.canon import MappingConflictError
@@ -21,7 +21,7 @@ class _BoundaryFault(Exception):
 
 class _Resolution:
     candidates: tuple[Any, ...] = ()
-    chosen_map: dict[Any, Any] = {}
+    chosen_map: ClassVar[dict[Any, Any]] = {}
     decisions: tuple[Any, ...] = ()
 
 

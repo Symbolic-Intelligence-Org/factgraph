@@ -82,9 +82,11 @@ class IngestPlanBoundaryTests(unittest.TestCase):
 
     def test_plan_keyboard_interrupt_is_not_swallowed(self) -> None:
         store, index = _build_store()
-        with patch.object(ingest_runtime, "plan_write_command", side_effect=KeyboardInterrupt):
-            with self.assertRaises(KeyboardInterrupt):
-                apply_ingest_request(_set_request(), store=store, index=index)
+        with (
+            patch.object(ingest_runtime, "plan_write_command", side_effect=KeyboardInterrupt),
+            self.assertRaises(KeyboardInterrupt),
+        ):
+            apply_ingest_request(_set_request(), store=store, index=index)
 
     def test_happy_path_still_writes(self) -> None:
         store, index = _build_store()
@@ -130,13 +132,15 @@ class IngestRetractBoundaryTests(unittest.TestCase):
 
     def test_retract_keyboard_interrupt_is_not_swallowed(self) -> None:
         store, index, asrt_id = self._seed()
-        with patch.object(ingest_runtime, "retract_by_asrt", side_effect=KeyboardInterrupt):
-            with self.assertRaises(KeyboardInterrupt):
-                apply_ingest_request(
-                    IngestRequest(items=(IngestRetractItem(assertion_id=asrt_id),)),
-                    store=store,
-                    index=index,
-                )
+        with (
+            patch.object(ingest_runtime, "retract_by_asrt", side_effect=KeyboardInterrupt),
+            self.assertRaises(KeyboardInterrupt),
+        ):
+            apply_ingest_request(
+                IngestRequest(items=(IngestRetractItem(assertion_id=asrt_id),)),
+                store=store,
+                index=index,
+            )
 
     def test_happy_path_still_revokes(self) -> None:
         store, index, asrt_id = self._seed()

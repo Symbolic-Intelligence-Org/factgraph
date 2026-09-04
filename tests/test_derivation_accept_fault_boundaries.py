@@ -106,9 +106,11 @@ class AcceptManyBoundaryTests(unittest.TestCase):
         ledger = _ledger()
         candidate = _candidate()
 
-        with patch.object(accept_module, "accept_candidate_set", side_effect=KeyboardInterrupt):
-            with self.assertRaises(KeyboardInterrupt):
-                accept_many_candidate_sets(ledger, [candidate], mode="best_effort")
+        with (
+            patch.object(accept_module, "accept_candidate_set", side_effect=KeyboardInterrupt),
+            self.assertRaises(KeyboardInterrupt),
+        ):
+            accept_many_candidate_sets(ledger, [candidate], mode="best_effort")
 
 
 if __name__ == "__main__":

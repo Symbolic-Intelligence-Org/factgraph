@@ -49,16 +49,20 @@ class SouffleProbeBoundaryTests(unittest.TestCase):
                 raise KeyboardInterrupt
             return real_import(name, *args, **kwargs)
 
-        with patch.object(builtins, "__import__", _boom):
-            with self.assertRaises(KeyboardInterrupt):
-                _find_souffle_binary_safe()
+        with (
+            patch.object(builtins, "__import__", _boom),
+            self.assertRaises(KeyboardInterrupt),
+        ):
+            _find_souffle_binary_safe()
 
     def test_probe_keyboard_interrupt_is_not_swallowed(self) -> None:
         from factgraph.adapters.souffle import runner
 
-        with patch.object(runner, "find_souffle_binary", side_effect=KeyboardInterrupt):
-            with self.assertRaises(KeyboardInterrupt):
-                _find_souffle_binary_safe()
+        with (
+            patch.object(runner, "find_souffle_binary", side_effect=KeyboardInterrupt),
+            self.assertRaises(KeyboardInterrupt),
+        ):
+            _find_souffle_binary_safe()
 
     def test_probe_fault_is_reported_as_an_explicit_preflight_warning(self) -> None:
         """A degraded probe surfaces a warning; it is never a silent 'engine is fine'."""
