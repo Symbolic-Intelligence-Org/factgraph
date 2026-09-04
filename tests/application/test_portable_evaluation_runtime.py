@@ -266,7 +266,11 @@ def _compiled_time_literal_query_and_relation() -> tuple[
         engine="native",
     )
     projected = project_view_facts_with_witness(source.ledger, source.schema_ir)
-    dependencies = (info.exists_predicate_id, observed_at_predicate.pred_id)
+    dependencies = (
+        info.exists_predicate_id,
+        info.identity_predicates["employee_id"].pred_id,
+        observed_at_predicate.pred_id,
+    )
     relation = {predicate_id: tuple(projected[predicate_id]) for predicate_id in dependencies}
     return plan, source.schema_ir, relation
 
@@ -389,6 +393,7 @@ def _compiled_equality_literal_query_and_relation(
     projected = project_view_facts_with_witness(source.ledger, source.schema_ir)
     dependencies = (
         info.exists_predicate_id,
+        info.identity_predicates["employee_id"].pred_id,
         label_predicate.pred_id,
         active_predicate.pred_id,
     )
@@ -537,7 +542,7 @@ def _compiled_common_any_query_and_relation() -> tuple[
         engine="native",
     )
     projected = project_view_facts_with_witness(source.ledger, source.schema_ir)
-    dependencies = ("Person:exists", "person:age", "person:score")
+    dependencies = ("Person:exists", "person:age", "person:employee_id", "person:score")
     relation = {predicate_id: tuple(projected[predicate_id]) for predicate_id in dependencies}
     return plan, source.schema_ir, relation
 
@@ -645,7 +650,7 @@ def _compiled_cross_entity_navigation_comparison_query_and_relation() -> tuple[
         engine="native",
     )
     projected = project_view_facts_with_witness(source.ledger, source.schema_ir)
-    dependencies = ("Person:exists", "person:age", "person:score")
+    dependencies = ("Person:exists", "person:age", "person:employee_id", "person:score")
     relation = {predicate_id: tuple(projected[predicate_id]) for predicate_id in dependencies}
     return plan, source.schema_ir, relation
 
@@ -904,9 +909,15 @@ class PortableEvaluationRuntimeTests(unittest.TestCase):
 
         self.assertEqual(
             {claim.pred_id for claim in materialized.ledger.find_claims()},
-            {"Person:exists", "person:age", "person:score"},
+            {"person:employee_id", "person:age", "person:score"},
         )
         self.assertEqual(len(materialized.ledger.find_claims()), 6)
+        projected = project_view_facts_with_witness(materialized.ledger, schema_ir)
+        self.assertEqual(
+            {row.fact_tuple for row in projected["Person:exists"]},
+            {row.fact_tuple for row in relation["Person:exists"]},
+        )
+        self.assertTrue(all(row.witness_kind == "virtual" for row in projected["Person:exists"]))
 
     def test_explicit_empty_dependency_relation_is_not_a_missing_relation(self) -> None:
         plan, schema_ir, relation = _compiled_query_and_relation()

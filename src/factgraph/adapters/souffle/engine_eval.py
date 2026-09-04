@@ -251,6 +251,7 @@ def _run_query_and_read_support_rows(
             manifest_path,
             [query_rel, *(rel.relation_name for rel in witness_program.branch_relations)],
         )
+        _capture_projected_domain_view(store, out_dir, manifest_path, witnesses=True)
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
         outputs_map = manifest.get("outputs_map", {})
         query_outputs = outputs_map.get("__query__") if isinstance(outputs_map, dict) else None
@@ -306,6 +307,7 @@ def _run_query_and_read_bindings(
             "query_variables": query_variables,
         },
     )
+    _capture_projected_domain_view(store, out_dir, manifest_path, witnesses=False)
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     outputs_map = manifest.get("outputs_map", {})
     query_outputs = outputs_map.get("__query__") if isinstance(outputs_map, dict) else None
@@ -325,6 +327,54 @@ def _run_query_and_read_bindings(
 
     out_path = out_dir / "outputs" / f"{query_rel}.out.facts"
     return _read_query_bindings(out_path, query_variables)
+
+
+def _capture_projected_domain_view(
+    store: Any, out_dir: Path, manifest_path: Path, *, witnesses: bool
+) -> None:
+    """Lower canonical Entity domains into this private, read-only query program.
+
+    Public package exports retain their ledger contract. Runtime queries instead
+    use chosen, visible Identity bundles, including their opaque virtual witnesses.
+    No synthetic assertion is appended to the ledger or the exported claim files.
+    """
+    from factgraph.adapters.souffle.package import _digest_for_paths
+    from factgraph.adapters.souffle.pred_norm import normalize_pred_id
+    from factgraph.adapters.souffle.souffle_view_gen import generate_view_dl, witness_rel_name
+    from factgraph.adapters.souffle.where_compile import _text_to_symbol
+    from factgraph.core.view.projector import _project_entity_domains_with_witness
+
+    domains = _project_entity_domains_with_witness(store.ledger, store.schema_ir)
+    schema = {
+        **store.schema_ir,
+        "predicates": [
+            predicate for predicate in store.schema_ir["predicates"]
+            if predicate["pred_id"] not in domains
+        ],
+    }
+    lines = [generate_view_dl(schema, include_witness_views=witnesses)]
+    for predicate, rows in sorted(domains.items()):
+        relation = normalize_pred_id(predicate)
+        witness_relation = witness_rel_name(relation)
+        lines.extend((f".decl {relation}(E:symbol)", f".output {relation}"))
+        if witnesses:
+            lines.append(f".decl {witness_relation}(E:symbol, WA:symbol)")
+        for row in rows:
+            entity = _text_to_symbol(row.fact_tuple[0])
+            lines.append(f"{relation}({entity}).")
+            if witnesses:
+                witness = _text_to_symbol(row.asrt_id)
+                lines.append(f"{witness_relation}({entity}, {witness}).")
+    view_path = out_dir / "rules" / "view.dl"
+    view_path.write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["digests"]["rules_digest"] = _digest_for_paths(
+        [view_path, out_dir / "rules" / "idb.dl"], out_dir
+    )
+    manifest_path.write_text(
+        json.dumps(manifest, ensure_ascii=False, sort_keys=True, separators=(",", ":")),
+        encoding="utf-8", newline="\n",
+    )
 
 
 def _rewrite_query_outputs_map(manifest_path: Path, query_outputs: list[str]) -> None:
@@ -661,7 +711,11 @@ def _extend_binding_from_witness_facts(
             f"selected witness branch out of range: {selected_case_index}"
         ) from exc
 
-    out = dict(binding)
+    # Souffle symbols cross the TSV boundary as strings. Reconstruct typed
+    # bindings from the selected witnesses first, then require the transport
+    # spelling to equal the existing exporter codec. Never parse by guessing a
+    # value's appearance, nor weaken joins between two real witness values.
+    out: dict[str, Any] = {}
     for condition_index, atom in enumerate(branch):
         if not isinstance(atom, tuple) or not atom or atom[0] != "pred":
             continue
@@ -673,6 +727,19 @@ def _extend_binding_from_witness_facts(
                 f"missing witness facts for selected predicate atom: {pred_condition_key}"
             )
         _bind_terms_from_fact(terms, facts[0].fact_tuple, out)
+    from factgraph.adapters.souffle.package import _atom_to_str
+
+    for term, supplied in binding.items():
+        if term not in out:
+            out[term] = supplied
+            continue
+        canonical = out[term]
+        if isinstance(supplied, str):
+            agrees = supplied == _atom_to_str(canonical)
+        else:
+            agrees = type(supplied) is type(canonical) and supplied == canonical
+        if not agrees:
+            raise WhereValidationError(f"witness fact binding conflict for {term}")
     return out
 
 
