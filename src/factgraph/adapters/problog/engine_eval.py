@@ -129,7 +129,7 @@ def resolve_problog_timeout(engine_options: dict[str, Any] | None) -> int:
     if engine_options is None:
         return default_timeout
     if not isinstance(engine_options, dict):
-        raise ValueError(
+        raise ValueError(  # noqa: TRY004 - Documented engine_options rejections stay ValueError (ProbLog adapter docs 6A).
             f"ProbLog engine_options must be dict[str, Any] or None, got {type(engine_options).__name__}"
         )
 

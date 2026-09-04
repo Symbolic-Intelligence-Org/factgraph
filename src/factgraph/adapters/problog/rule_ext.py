@@ -270,7 +270,7 @@ def normalize_problog_case_probabilities(
     out: list[float] = []
     for idx, value in enumerate(raw):
         if isinstance(value, bool) or not isinstance(value, (int, float)):
-            raise ValueError(f"{field_name}[{idx}] must be float in (0,1]")
+            raise ValueError(f"{field_name}[{idx}] must be float in (0,1]")  # noqa: TRY004 - Public ProbLogRuleExt/body_confidences element rejections share one ValueError family (docs 5).
         normalized = float(value)
         if normalized <= 0.0 or normalized > 1.0:
             raise ValueError(f"{field_name}[{idx}] must be within (0,1]")
@@ -375,7 +375,7 @@ def _materialize_profile_case_probabilities(
     if semantics_profile is None:
         return None
     if not isinstance(semantics_profile, SemanticsProfile):
-        raise ValueError(
+        raise ValueError(  # noqa: TRY004 - Profile consumption rejections stay ValueError (ProbLog adapter docs 4 Track 3/C).
             f"semantics_profile must be SemanticsProfile or None, got {type(semantics_profile).__name__}"
         )
     if semantics_profile.engine != "problog":
@@ -427,7 +427,7 @@ def _parse_profile_branch_target(raw: Any, *, entry_index: int) -> int:
 
 def _normalize_profile_probability(raw: Any, *, entry_index: int) -> float:
     if isinstance(raw, bool) or not isinstance(raw, (int, float)):
-        raise ValueError(
+        raise ValueError(  # noqa: TRY004 - Profile branch_probability value rejections share the consumption ValueError contract.
             f"rule_projection.problog[{entry_index}].value must be float in (0,1]"
         )
     value = float(raw)

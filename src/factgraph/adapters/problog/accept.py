@@ -19,7 +19,7 @@ def persist_problog_annotations(
 ) -> int:
     """Persist pending ``problog/*`` annotations for a single accepted candidate."""
     if not isinstance(ledger, Ledger):
-        raise ValueError("ledger must be a Ledger instance")
+        raise ValueError("ledger must be a Ledger instance")  # noqa: TRY004 - Documented post-accept binder keeps the adapter ValueError argument contract (ProbLog adapter docs 4/12).
     if not isinstance(run_id, str) or not run_id:
         raise ValueError("run_id must be non-empty string")
 

@@ -14,7 +14,7 @@ def generate_view_dl(
 
     predicates = schema_ir.get("predicates")
     if not isinstance(predicates, list):
-        raise ValueError("schema_ir.predicates must be list")
+        raise ValueError("schema_ir.predicates must be list")  # noqa: TRY004 - schema_ir content-shape rejections stay ValueError; only a non-dict schema_ir is TypeError.
 
     lines: list[str] = [
         '.decl claim(Asrt:symbol, PredId:symbol, E:symbol, TupDigest:symbol)',
@@ -40,7 +40,7 @@ def generate_view_dl(
 
     for predicate in predicates:
         if not isinstance(predicate, dict):
-            raise ValueError("schema predicate must be dict")
+            raise ValueError("schema predicate must be dict")  # noqa: TRY004 - schema_ir predicate-shape rejections stay ValueError like the sibling pred_id check.
 
         pred_id = predicate.get("pred_id")
         cardinality = predicate.get("cardinality")
