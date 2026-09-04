@@ -63,7 +63,6 @@ from .dsl.application_rule import build_application_rule
 from .errors import SDKStoreError
 from .policy_authoring import (
     AuthoredPolicyTargetV1,
-    PolicyAuthoringError as PolicyAuthoringError,
     PolicyConstraintHandle,
     PolicyEntityPortHandle,
     PolicyFieldHandle,
@@ -72,6 +71,9 @@ from .policy_authoring import (
     PolicyPortHandle,
     PolicyScalarPortHandle,
     policy_draft,
+)
+from .policy_authoring import (
+    PolicyAuthoringError as PolicyAuthoringError,
 )
 from .schema import Entity, Field
 
