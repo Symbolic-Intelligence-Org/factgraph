@@ -10,6 +10,11 @@ from .semantic_port import EntityIdentityEndpoint, FieldEndpoint
 
 SemanticCandidateScalar: TypeAlias = str | int | float | bool
 SemanticCandidateMatchMode: TypeAlias = Literal["exact", "unicode_casefold_v1"]
+"""Candidate matching policy: typed exact equality, or Unicode NFC/trim/casefold.
+
+``unicode_casefold_v1`` first preserves exact matches, then normalizes strings.
+Prefix suggestions are hints only and are never equality matches.
+"""
 SEMANTIC_CANDIDATE_RESOLVER_CONTRACT_V1 = (
     "factgraph.semantic-value-candidates.v1:"
     "typed-exact,unicode-nfc-trim-casefold,prefix-suggestions,revision-guard"

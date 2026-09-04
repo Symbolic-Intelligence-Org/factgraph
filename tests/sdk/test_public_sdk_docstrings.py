@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
+import ast
 import inspect
 import unittest
-from typing import Any
+from typing import Any, Literal, get_args, get_origin
 
 from factgraph import sdk
 from factgraph.application.goal_plan_v2_runtime import ProductEvaluationInvocationV2
 from factgraph.application.product_result_views_v2 import EvaluationRunV2RowView
+from factgraph.application.protocol import semantic_candidates
 from factgraph.sdk import (
     Database,
     Entity,
@@ -48,6 +50,37 @@ def _assert_sections(
     return doc
 
 
+def _assert_candidate_match_mode_documented(
+    test: unittest.TestCase, exported: object, source: str
+) -> None:
+    """One exact Literal alias uses declaration docs, never a shared __doc__ write."""
+    test.assertIs(exported, semantic_candidates.SemanticCandidateMatchMode)
+    test.assertIs(get_origin(exported), Literal)
+    test.assertEqual(get_args(exported), ("exact", "unicode_casefold_v1"))
+    body = ast.parse(source).body
+    declarations = [
+        (index, node)
+        for index, node in enumerate(body)
+        if isinstance(node, ast.AnnAssign)
+        and isinstance(node.target, ast.Name)
+        and node.target.id == "SemanticCandidateMatchMode"
+    ]
+    test.assertEqual(len(declarations), 1, "expected one exact candidate mode declaration")
+    index, declaration = declarations[0]
+    expected = ast.parse(
+        'SemanticCandidateMatchMode: TypeAlias = Literal["exact", "unicode_casefold_v1"]'
+    ).body[0]
+    test.assertEqual(ast.dump(declaration), ast.dump(expected))
+    adjacent = body[index + 1] if index + 1 < len(body) else None
+    test.assertIsInstance(adjacent, ast.Expr, "alias must have adjacent declaration documentation")
+    value = adjacent.value if isinstance(adjacent, ast.Expr) else None
+    test.assertIsInstance(value, ast.Constant)
+    doc = value.value if isinstance(value, ast.Constant) else None
+    test.assertIsInstance(doc, str)
+    for required in ("exact", "unicode_casefold_v1", "suggestions"):
+        test.assertIn(required, doc)
+
+
 class PublicSDKDocstringTests(unittest.TestCase):
     def test_product_fluent_entrypoints_preserve_concrete_hover_types(self) -> None:
         cases = (
@@ -78,10 +111,15 @@ class PublicSDKDocstringTests(unittest.TestCase):
             exported = getattr(sdk, export_name)
             doc = inspect.getdoc(exported)
             with self.subTest(export=export_name):
-                self.assertTrue(
-                    doc,
-                    f"factgraph.sdk.{export_name} is missing a docstring",
-                )
+                if export_name == "SemanticCandidateMatchMode":
+                    _assert_candidate_match_mode_documented(
+                        self, exported, inspect.getsource(semantic_candidates)
+                    )
+                else:
+                    self.assertTrue(
+                        doc,
+                        f"factgraph.sdk.{export_name} is missing a docstring",
+                    )
                 if inspect.isclass(exported):
                     self.assertFalse(
                         doc.startswith(f"{export_name}(") if doc else False,
