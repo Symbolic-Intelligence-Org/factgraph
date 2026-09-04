@@ -321,7 +321,7 @@ def support_artifact_to_dict(artifact: ProofReceipt) -> dict[str, Any]:
 
 def support_artifact_from_dict(row: Mapping[str, Any]) -> ProofReceipt:
     if not isinstance(row, Mapping):
-        raise ValueError("row must be Mapping[str, Any]")
+        raise ValueError("row must be Mapping[str, Any]")  # noqa: TRY004 - Closed ProofReceipt decode; bundle/witness callers wrap ValueError.
     return ProofReceipt(
         kind=row["kind"],
         root_result_kind=row["root_result_kind"],
@@ -398,10 +398,10 @@ def provenance_envelope_to_dict(envelope: ProvenanceEnvelope) -> dict[str, Any]:
 
 def provenance_envelope_from_dict(row: Mapping[str, Any]) -> ProvenanceEnvelope:
     if not isinstance(row, Mapping):
-        raise ValueError("row must be Mapping[str, Any]")
+        raise ValueError("row must be Mapping[str, Any]")  # noqa: TRY004 - Closed ProvenanceEnvelope decode shares the *_from_dict ValueError contract.
     payload = row.get("payload")
     if not isinstance(payload, Mapping):
-        raise ValueError("row.payload must be Mapping[str, Any]")
+        raise ValueError("row.payload must be Mapping[str, Any]")  # noqa: TRY004 - Closed ProvenanceEnvelope decode shares the *_from_dict ValueError contract.
     return ProvenanceEnvelope(
         candidate_id=row["candidate_id"],
         engine=row["engine"],

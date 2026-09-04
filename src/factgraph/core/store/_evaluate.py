@@ -610,7 +610,7 @@ def _collect_atom_predicates(atom: Atom, predicates: set[str]) -> None:
         _collect_where_expr_predicates(atom.body, predicates)
         return
     if isinstance(atom, RuleRefAtom):
-        raise ValueError(
+        raise ValueError(  # noqa: TRY004 - Wrapped by scenario dependency resolution (SCENARIO_QUERY_DEPENDENCY_UNSUPPORTED).
             "native effective relation capture requires materialized where without ruleref atoms"
         )
     if isinstance(atom, CmpAtom):

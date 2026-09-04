@@ -50,7 +50,7 @@ class FileArtifactSidecar:
 
     def write_support(self, support_digest: str, artifact: ProofReceipt) -> None:
         if not isinstance(artifact, ProofReceipt):
-            raise ValueError("artifact must be ProofReceipt")
+            raise ValueError("artifact must be ProofReceipt")  # noqa: TRY004 - Mirrors Store._remember_support_artifact's ValueError guard.
         payload_path = self._support_path(support_digest)
         first_write = self._write_bytes(
             payload_path,
@@ -62,7 +62,7 @@ class FileArtifactSidecar:
 
     def write_rule_trace(self, rule_run_id: str, artifact: RuleTraceArtifact) -> None:
         if not isinstance(artifact, RuleTraceArtifact):
-            raise ValueError("artifact must be RuleTraceArtifact")
+            raise ValueError("artifact must be RuleTraceArtifact")  # noqa: TRY004 - Mirrors Store._remember_rule_trace_artifact's ValueError guard.
         payload_path = self._rule_trace_path(rule_run_id)
         first_write = self._write_bytes(
             payload_path,
@@ -140,7 +140,7 @@ class FileArtifactSidecar:
                     raise ValueError(f"artifact row missing: {meta_path}")
                 captured_at_ns = meta_row.get("captured_at_ns")
                 if not isinstance(captured_at_ns, int) or isinstance(captured_at_ns, bool):
-                    raise ValueError(f"captured_at_ns must be int: {meta_path}")
+                    raise ValueError(f"captured_at_ns must be int: {meta_path}")  # noqa: TRY004 - GC loop records ValueError in GCResult.failed_keys.
                 if captured_at_ns >= now_ns - ttl_ns:
                     continue
                 if not dry_run:
@@ -182,7 +182,7 @@ class FileArtifactSidecar:
             return None
         row = json.loads(payload)
         if not isinstance(row, dict):
-            raise ValueError(f"artifact row must decode to object: {path}")
+            raise ValueError(f"artifact row must decode to object: {path}")  # noqa: TRY004 - Sidecar row decode shares JSONDecodeError's ValueError boundary; GC records it.
         return row
 
     @staticmethod
