@@ -32,7 +32,7 @@ class ProjectedFact:
         if not isinstance(self.asrt_id, str) or not self.asrt_id:
             raise ValueError("ProjectedFact.asrt_id must be non-empty string")
         if not isinstance(self.fact_tuple, tuple):
-            raise ValueError("ProjectedFact.fact_tuple must be tuple")
+            raise ValueError("ProjectedFact.fact_tuple must be tuple")  # noqa: TRY004 - Retain exact ProjectedFact construction ValueError; pinned by constructor contract tests.
         if self.witness_kind not in {"assertion", "virtual", "unknown"}:
             raise ValueError("invalid projected witness kind")
 
@@ -202,7 +202,7 @@ class ProvenanceEnvelope:
         if not isinstance(self.payload_type, str) or not self.payload_type:
             raise ValueError("ProvenanceEnvelope.payload_type must be non-empty string")
         if not isinstance(self.payload, dict):
-            raise ValueError("ProvenanceEnvelope.payload must be dict")
+            raise ValueError("ProvenanceEnvelope.payload must be dict")  # noqa: TRY004 - Retain exact ProvenanceEnvelope construction ValueError; decoder Mapping normalization is separate.
 
 
 def normalize_binding_items(binding: Mapping[str, Any] | Sequence[tuple[str, Any]]) -> BindingItems:
