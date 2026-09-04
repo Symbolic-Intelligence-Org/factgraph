@@ -683,7 +683,7 @@ def _replace_jsonl(path: Path, rows: list[dict[str, JSONValue]]) -> None:
                 )
                 handle.write("\n")
         os.replace(tmp_path, path)
-    except Exception:
+    except Exception:  # noqa: BLE001 - temp-file cleanup only for the atomic JSONL replace; the original OS/JSON failure is re-raised unchanged.
         try:
             tmp_path.unlink(missing_ok=True)
         finally:
@@ -717,7 +717,7 @@ def _replace_json(path: Path, payload: dict[str, Any]) -> None:
         with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as handle:
             handle.write(json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")))
         os.replace(tmp_path, path)
-    except Exception:
+    except Exception:  # noqa: BLE001 - temp-file cleanup only for the atomic manifest replace; the original OS/JSON failure is re-raised unchanged.
         try:
             tmp_path.unlink(missing_ok=True)
         finally:

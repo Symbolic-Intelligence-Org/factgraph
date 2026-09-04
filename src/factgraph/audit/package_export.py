@@ -292,7 +292,7 @@ def _build_mapping_audit_payload(store: Store, policy_mode: str) -> dict[str, An
             row["status"] = "conflict"
             row["error"] = str(exc)
             row["conflicts"] = exc.conflicts
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - mapping resolution spans the store and policy adapters; the audit row records status="error" instead of dropping the predicate.
             row["status"] = "error"
             row["error"] = str(exc)
         rows.append(row)

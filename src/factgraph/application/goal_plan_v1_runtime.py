@@ -391,7 +391,7 @@ def execute_goal_plan_invocation_v1(
         ProviderRelationMaterializationError,
     ) as exc:
         return _failure(invocation, exc.code, type(exc).__name__)
-    except Exception as exc:  # fail closed; never repackage as an empty result.
+    except Exception as exc:  # noqa: BLE001 - fail closed; never repackage as an empty result: engine/provider/scenario faults become a typed GOAL_EXECUTION_FAILED assessment.
         return _failure(invocation, "GOAL_EXECUTION_FAILED", type(exc).__name__)
 
 

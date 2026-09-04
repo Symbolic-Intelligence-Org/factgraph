@@ -93,7 +93,7 @@ def check_fact_overlay_binding(
             registry=registry,
         )
         diff = _build_overlay_diff(before, after)
-    except Exception as exc:  # pragma: no cover - exercised through patched runtime tests
+    except Exception as exc:  # pragma: no cover - exercised through patched runtime tests  # noqa: BLE001 - registry-supplied native overlay phase/projection is an adapter boundary; every fault becomes the OVERLAY_PHASE_RUNTIME_ERROR invalid-request result.
         return _invalid_request(
             request,
             errors=(

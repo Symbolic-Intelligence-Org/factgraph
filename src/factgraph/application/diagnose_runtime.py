@@ -301,7 +301,7 @@ def _extend_env_with_atom(
 
 
 def _primary_env(envs: list[dict[str, Any]]) -> dict[str, Any]:
-    return sorted(envs, key=_env_sort_key)[0]
+    return sorted(envs, key=_env_sort_key)[0]  # noqa: FURB192 - keep IndexError for an empty env list; min() would raise ValueError and change the typed failure.
 
 
 def _dedupe_envs(envs: list[dict[str, Any]]) -> list[dict[str, Any]]:

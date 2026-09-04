@@ -537,7 +537,7 @@ class Database:
     def __del__(self) -> None:
         try:
             self.close()
-        except Exception:
+        except Exception:  # noqa: BLE001 - __del__ finalizer must not raise during interpreter teardown; close() faults stay visible to explicit close()/context-manager use.
             return
 
     def close(self) -> None:

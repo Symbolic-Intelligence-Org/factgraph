@@ -444,9 +444,9 @@ def _warn(*, phase: str, code: str, message: str, path: str | None) -> dict[str,
 def _find_souffle_binary_safe() -> Any:
     try:
         from factgraph.adapters.souffle.runner import find_souffle_binary
-    except Exception:
+    except Exception:  # noqa: BLE001 - optional Soufflé adapter import; an unimportable adapter is reported as the CODE_SOUFFLE_BINARY_MISSING preflight warning.
         return None
     try:
         return find_souffle_binary()
-    except Exception:
+    except Exception:  # noqa: BLE001 - Soufflé binary probe touches the environment/filesystem; a failing probe is reported as the CODE_SOUFFLE_BINARY_MISSING preflight warning.
         return None

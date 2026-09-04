@@ -223,7 +223,7 @@ def accept_many_candidate_sets(
                 schema_ir=schema_ir,
                 resolved_candidate_refs=accepted_entity_refs,
             )
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - accept_candidate_set spans ledger and write-protocol adapters; each fault becomes a FAILED_VALIDATION/FAILED_RUNTIME item and blocks the key.
             code = _error_code_from_exception(exc)
             state = "FAILED_VALIDATION" if isinstance(exc, WriteProtocolError) else "FAILED_RUNTIME"
             results[idx] = _accept_many_item(

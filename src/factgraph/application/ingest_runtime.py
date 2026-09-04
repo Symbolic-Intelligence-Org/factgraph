@@ -143,7 +143,7 @@ def _apply_write(
         plan = plan_write_command(command, store=store, index=index)
     except (EntityWriteError, SchemaResolutionError) as exc:
         return ([_exc_to_error_dto(exc, path=("items", str(idx)))], [], [], [])
-    except Exception as exc:  # pragma: no cover - defensive
+    except Exception as exc:  # pragma: no cover - defensive  # noqa: BLE001 - write planning crosses the schema index and store adapters; every fault becomes the INGEST_PLAN_FAILED item error.
         return (
             [
                 ErrorDTO(
@@ -245,7 +245,7 @@ def _apply_retract(
                     ),
                 )
                 revoker_id = committed.revocations[0].revoker_asrt_id
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - ledger/SQLite retraction boundary; every fault becomes the INGEST_RETRACT_FAILED item error instead of a silent no-op.
         return (
             [
                 ErrorDTO(

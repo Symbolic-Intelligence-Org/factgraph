@@ -1875,7 +1875,7 @@ def _opaque_locator_wire(value: object) -> Mapping[str, object] | None:
     elif hasattr(value, "to_wire") and callable(value.to_wire):
         try:
             candidate = value.to_wire()
-        except Exception:  # pragma: no cover - third-party descriptor defense.
+        except Exception:  # pragma: no cover - third-party descriptor defense.  # noqa: BLE001 - third-party locator objects supply to_wire(); a faulty descriptor is rejected as unusable wire exactly like malformed input.
             return None
         if not isinstance(candidate, Mapping):
             return None
