@@ -52,38 +52,32 @@ python -m mypy src/factgraph
 
 ## Releasing
 
-Releases follow a 3-layer model: the development branch → `milestone/rc-vX.Y.Z-<date>`
-(frozen anchor) → `release/X.Y.x` (clean projection) → `vX.Y.Z[-rc.N]` (tag).
-
-The full pipeline is encapsulated in `scripts/release.sh`:
+The complete current repository is the release source. Use the pinned build
+extra in a dedicated Python 3.11+ environment, commit the candidate version and
+release notes, then build an immutable local candidate:
 
 ```bash
-# Always dry-run first to validate the projection + verify pass
-./scripts/release.sh v0.1.0-rc.1 --dry-run
-
-# Then execute live (creates milestone, projects, verifies, tags, pushes)
-./scripts/release.sh v0.1.0-rc.1
+python3.11 -m venv /tmp/factgraph-build-env
+/tmp/factgraph-build-env/bin/python -m pip install ".[build]"
+bash scripts/release.sh 0.4.0rc1 --source-ref HEAD \
+  --python /tmp/factgraph-build-env/bin/python --outdir dist/candidates/0.4.0rc1-a
 ```
 
-Before running:
+The output directory must be new. The script archives the selected commit,
+checks version and tool identities, builds the complete package and records
+source/commit/tool hashes. It never changes refs, publishes, installs into an
+existing environment, or replaces a retained wheel. Repeat in a second output
+directory and compare wheel SHA-256 before acceptance.
 
-1. Bump `version` in `pyproject.toml` to match the release (PEP 440 form, e.g.
-   `0.1.0rc1` for tag `v0.1.0-rc.1`).
-2. Move new entries from `## [Unreleased]` to a new versioned section in
-   `CHANGELOG.md` with the release date.
-3. Commit those changes on the development branch and ensure the tree is clean.
-4. Run the dry-run; if it passes, run live.
+The old milestone/projection/release-branch pipeline and its source allowlist
+are historical tooling; the current builder does not use them. New package
+modules must never be omitted by that old list.
 
-The script enforces:
-- `vX.Y.Z[-rc.N]` tag-name shape.
-- Clean working tree.
-- Source ref exists; tag does not exist yet (locally or on origin).
-- Projection allowlist + deny patterns + bad-link checks all pass.
-- (Unless `--skip-verify`) `pip install -e .` + the focused FactGraph test suite pass on
-  the projected content.
-
-The release branch (`release/X.Y.x`) is created on first release of a minor
-version and reused for subsequent patches and rcs.
+[Release and compatibility guidance](docs/releases.md) defines producer checks,
+installed-consumer acceptance, artifact rollback and the separate publication
+step. A matching `v<PEP440 version>` tag pushed after approval runs the reusable
+CI gate and PyPI trusted-publisher workflow. The `pypi` environment/publisher
+configuration must already exist. Local candidate builds do not publish.
 
 ## Security
 

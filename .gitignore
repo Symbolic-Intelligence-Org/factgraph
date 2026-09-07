@@ -9,6 +9,7 @@
 !/CONTRIBUTING.md
 !/LICENSE
 !/pyproject.toml
+!/MANIFEST.in
 !/.gitignore
 !/.gitattributes
 

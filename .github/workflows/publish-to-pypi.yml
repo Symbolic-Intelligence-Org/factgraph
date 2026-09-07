@@ -1,0 +1,58 @@
+name: Publish to PyPI
+
+on:
+  push:
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+*"
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    uses: ./.github/workflows/factgraph-tests.yml
+
+  build:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install pinned build tools
+        run: python -m pip install build==1.6.0 setuptools==84.0.0 wheel==0.48.0
+      - name: Build from the tagged commit and verify version
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: bash scripts/release.sh "${RELEASE_TAG#v}" --source-ref HEAD --outdir dist/release
+      - uses: actions/upload-artifact@v6
+        with:
+          name: python-package-distributions
+          path: |
+            dist/release/*.whl
+            dist/release/*.tar.gz
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v6
+        with:
+          name: release-provenance
+          path: |
+            dist/release/manifest.json
+            dist/release/SHA256SUMS
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/factgraph
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v6
+        with:
+          name: python-package-distributions
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1

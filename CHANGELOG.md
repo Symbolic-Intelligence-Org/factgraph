@@ -5,9 +5,13 @@ All notable changes to FactGraph will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [Unreleased] — 0.4.0rc1 candidate
 
-### Breaking
+This candidate consolidates the runtime already retained by Meander in its
+`0.2.0rc3` artifact with the public `0.3.0` packaging line. It is not a published
+release. Runtime source is preserved from producer `2a4f6b8f`.
+
+### Breaking relative to published 0.3.0
 
 - **SDK/application entity materialization no longer persists a second
   `<EntityType>:exists` truth carrier.** `fg.entities.create(...)` and lazy
@@ -17,6 +21,65 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   mismatched, or legacy-marker-only entities remain outside the domain.
   Existing legacy `:exists` Claims remain retract-guarded compatibility data
   and do not become projection authority.
+
+### Added
+
+- **Trusted product compilers have a public, schema-bound compilation
+  context.** `build_product_compilation_context_v1(...)` projects typed field
+  descriptions and positive schema-declared relation premises from a resolved
+  Rule without exposing `SchemaIndex`, mutable Store state, or Rule AST to the
+  consumer. Entity-reference relationship fields are valid
+  `ensure_relation` Scenario targets; scalar fields and derived predicates
+  remain rejected.
+- **Branch-aware Product V2 targets can be retained and executed after a
+  process restart.** `FrozenEvaluationTargetV2` stores a closed, canonical,
+  ABI- and digest-bound deterministic Product Policy target together with its
+  normalized schema/address-space material and compiled Input Cases. Decode
+  never compiles Policy or reads latest state. Product runs retain neutral
+  multi-proof Branch witnesses before row deduplication and may enforce an
+  explicit whole-invocation aggregate budget without changing existing
+  per-side execution-profile semantics. The internal replay codec includes
+  explicit typed `Var`/`Origin` and `PortType` arms required by sealed Query
+  Graph targets; it is not a public raw-address or arbitrary-object wire.
+- **Application-level published relation queries are shipped.** A
+  `PublishedRelationGraphV1` admits only schema-matching stored entity fields,
+  stored ternary relations, and endpoint-continuous forward/reverse paths.
+  Typed bindings and ordered selections compile into a schema- and
+  graph-pinned `SealedRelationQueryInvocationV1`; native execution consumes
+  only that sealed compiler product, adds virtual entity-domain guards for
+  every path node, rejects schema drift and tampering, and fails closed when
+  the published row limit would be exceeded. This read/compile surface operates
+  on relation facts already present in an application `Store`; it does not add
+  SDK Relationship CRUD or a durable ternary Database writer.
+- Read-only semantic value candidates return canonical supplied-value matches
+  and bind them to a projected-view digest; Product V2 execution can require
+  that expected digest before evaluating.
+- Retained evaluation evidence and captured Store/native RuleProgram witness
+  classifications support result-local explanation without rewriting old evidence.
+
+### Fixed
+
+- Batch writes preserve the distinction between declared scalar values and entity
+  references. ProbLog exports canonical virtual entity domains and rejects invalid
+  non-ground results; Souffle query witnesses use the same entity-domain semantics.
+- Python 3.10 annotation compatibility, exact error boundaries, default test
+  collection, Query projection and durable schema anchors have regression coverage.
+
+### Build and release
+
+- Distribution version advances to `0.4.0rc1`; Apache-2.0 uses SPDX metadata and
+  includes the license file. Runtime dependencies and package APIs are unchanged
+  from the retained rc3 producer.
+- Restore the reusable PyPI workflow and keep Ruff pinned to `0.16.5`.
+- Build local candidates from complete immutable Git archives with recorded hashes;
+  the old partial-source projection and implicit push flow are retired.
+- Preserve the shared Meander rc3 artifact independently under
+  `artifacts/compatibility/`, excluded from wheel and source distributions.
+
+## [0.3.0] - 2026-08-28
+
+### Breaking
+
 - **Post-creation system metadata overrides now fail closed.** Append or UNSET
   operations cannot replace `ingested_at`, `ingest_key`, or
   `revoked_asrt_id`; these are the lifecycle-managed S-class keys. Source
@@ -70,33 +133,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **Trusted product compilers have a public, schema-bound compilation
-  context.** `build_product_compilation_context_v1(...)` projects typed field
-  descriptions and positive schema-declared relation premises from a resolved
-  Rule without exposing `SchemaIndex`, mutable Store state, or Rule AST to the
-  consumer. Entity-reference relationship fields are valid
-  `ensure_relation` Scenario targets; scalar fields and derived predicates
-  remain rejected.
-- **Branch-aware Product V2 targets can be retained and executed after a
-  process restart.** `FrozenEvaluationTargetV2` stores a closed, canonical,
-  ABI- and digest-bound deterministic Product Policy target together with its
-  normalized schema/address-space material and compiled Input Cases. Decode
-  never compiles Policy or reads latest state. Product runs retain neutral
-  multi-proof Branch witnesses before row deduplication and may enforce an
-  explicit whole-invocation aggregate budget without changing existing
-  per-side execution-profile semantics. The internal replay codec includes
-  explicit typed `Var`/`Origin` and `PortType` arms required by sealed Query
-  Graph targets; it is not a public raw-address or arbitrary-object wire.
-- **Application-level published relation queries are shipped.** A
-  `PublishedRelationGraphV1` admits only schema-matching stored entity fields,
-  stored ternary relations, and endpoint-continuous forward/reverse paths.
-  Typed bindings and ordered selections compile into a schema- and
-  graph-pinned `SealedRelationQueryInvocationV1`; native execution consumes
-  only that sealed compiler product, adds virtual entity-domain guards for
-  every path node, rejects schema drift and tampering, and fails closed when
-  the published row limit would be exceeded. This read/compile surface operates
-  on relation facts already present in an application `Store`; it does not add
-  SDK Relationship CRUD or a durable ternary Database writer.
 - **Database commits now carry dual state/history commitments.** One logical
   batch is one SQLite transaction with a CAS-protected head, incremental
   `lthash16-v2` state digest binding assertion id plus content digest, and a
