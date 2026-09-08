@@ -20,6 +20,37 @@ artifact survive. Its recovered files are the original Actions outputs, not a
 rebuild. Alpha files were recovered from TestPyPI and verified against its
 published SHA256 values; its expired Actions artifact was not used.
 
+## 0.4 source lineage
+
+| Source reference | Role | Verified source |
+| --- | --- | --- |
+| `release/0.4-baseline` | Frozen source of Meander's retained wheel; a pre-0.4 publication baseline | `2a4f6b8fb1e9204c9782213590c61c5d21c069d8` |
+| `release/0.4.0rc1` / `v0.4.0rc1` | Frozen source of the published prerelease | `bb805b4f109ead85a9a2bfc1a51e23ae481711fd` |
+| `release/0.4.x` | Moving 0.4 maintenance line | `f40c5bae7ad06de6248a5a8f4665a8e54e55dd33` at the 2026-09-08 checkpoint |
+| `main` | Moving development line | `864aca3be4d0f3f4bebf5e9b81556e4bf50c0e8c` at the same checkpoint |
+
+The baseline is an ancestor of rc1, which is an ancestor of both maintenance
+and main. Existing merge commits preserve that ancestry; this is not a claim
+that every milestone lies on a single first-parent path. Adding the baseline
+branch created no new source commit or divergent development line. Its source
+still declares `0.2.0rc3`; `0.4-baseline` names its role in the release history
+and is not a published package version.
+
+At this checkpoint, main and maintenance have different merge commit IDs but
+identical complete source trees. Relative to published rc1, their only changes
+are CI and documentation; runtime source, tests and runtime dependencies are
+unchanged. This documentation update preserves that runtime. All 310 runtime
+files also match the original Meander wheel byte for byte. The full rc3 and
+published rc1 wheels remain distinct artifacts with different package metadata,
+versions and whole-wheel hashes; runtime equality does not make their pins
+interchangeable.
+
+The checkpoint records verified history, not a promise that moving branches
+will always match. Later changes belong under `Unreleased` until separately
+versioned and published. No `0.4.0rc2` has been published as of this checkpoint.
+Historical snapshot branches and tags retain their original CHANGELOG files;
+updated release explanations live on main and supported maintenance branches.
+
 ## Earlier changelog milestones
 
 | Preserved CHANGELOG entry | Source evidence | Public release evidence |
