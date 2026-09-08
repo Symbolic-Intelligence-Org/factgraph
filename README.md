@@ -31,11 +31,13 @@ For implementation architecture, see the module documentation links below.
 
 ## Install
 
-The latest public release is `0.3.0`. This branch prepares `0.4.0rc1` from
-the newer development runtime; the candidate is not yet published. Consumers
+The latest stable release is `0.3.0`; the current prerelease line is `0.4.0rc1`.
+`main` carries current development, and [GitHub Releases](https://github.com/Symbolic-Intelligence-Org/factgraph/releases)
+record published artifacts and their source identities. Consumers
 using a retained wheel should keep its exact version and hash until their
 compatibility checks and coordinated promotion complete. See
-[release and compatibility guidance](docs/releases.md).
+[release and compatibility guidance](docs/releases.md) and
+[repository history](docs/repository-history.md).
 
 Install the published release:
 

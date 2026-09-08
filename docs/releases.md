@@ -57,3 +57,35 @@ the preserved artifact; it does not rewind UI commits or workspace databases.
 
 See the [PyPA trusted-publishing guide](https://packaging.python.org/en/latest/guides/publishing-package-distribution-releases-using-github-actions-ci-cd-workflows/)
 for the separation between build artifacts and the publishing job.
+
+## Cloud merge and release gates
+
+`main` is the current development source. Use a short-lived branch and PR;
+version tags and Releases identify immutable distributions. The original main
+snapshot is `archive/main-before-2026-09-08`; historical branch/source accounting
+is in [repository history](repository-history.md). Existing version tags are
+never moved to reconcile naming differences.
+
+The required `release-gate` aggregates the complete producer matrix (Python
+3.10/3.11 with real Souffle/ProbLog), protocol preservation, complete and repeated
+wheel builds, an sdist roundtrip and installed-wheel golden parity. Artifacts
+include exact source/manifest/checksums and test reports. Mypy remains an explicit
+non-blocking audit, preserving the preexisting policy.
+
+`meander-compatibility` is a separate required commit status from trusted,
+independent installed-consumer acceptance. Meander is private: its source and
+raw test output must stay outside this public repository and public CI logs.
+The acceptance record identifies the exact producer commit/wheel, frozen
+consumer commit, baseline/candidate test outcomes and unchanged skip reasons.
+The maintainer records only that public-safe summary and sets the status on the
+exact verified commit. A new commit requires a new result; producer CI alone
+cannot clear this gate. No shared consumer pin is updated by this process.
+
+Before a version tag is pushed, recheck acceptance on the exact main commit;
+a PR merge can change the source commit/epoch and therefore the distribution
+bytes. The tag workflow reuses the full producer/artifact gates, verifies that
+the tag matches the package version, requires successful consumer status for
+that commit, and publishes only the already-verified wheel and sdist through
+the existing PyPI environment. Keep manifest/checksums and the consumer summary
+with the GitHub Release. Old source-projection scripts are historical tools;
+the release path is `scripts/release.sh`.
