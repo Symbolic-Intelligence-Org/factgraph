@@ -44,6 +44,45 @@ replacement for installed API verification.
 
 ## Publication and adoption
 
+### Supported release branches
+
+| Ref | Responsibility |
+| --- | --- |
+| `main` | New development and fixes carried forward from supported release lines |
+| `release/0.4.x` | 0.4 candidate stabilization, the future 0.4.0 final release and compatible 0.4 patch releases |
+| `v0.4.0rc1`, future `v0.4.0` / `v0.4.1` tags | Immutable source identities for individual published distributions |
+
+The 0.4 maintenance line starts from the published `v0.4.0rc1` source plus the
+reviewed CI/documentation bootstrap. It initially has the same runtime and
+source as `main`. Creating the branch does not publish another artifact or
+replace the existing rc1 files. The latest stable release remains `0.3.0` until
+a separately accepted final release is published.
+
+Keep maintenance branches only for versions that are actively supported. Create
+`release/0.3.x` from `v0.3.0` if a concrete 0.3 support need appears; older tags
+and archive refs retain historical releases without an idle branch per version.
+Meander's retained `0.2.0rc3` is a distinct artifact from public `0.3.0`; an
+urgent fix for that retained baseline starts from its recorded producer commit.
+
+Develop a 0.4 fix on a short-lived branch based on `release/0.4.x`, then open a
+PR targeting that maintenance branch. Carry the fix forward to `main` through a
+PR as part of the same change. When a fix originates on newer `main`, backport
+only the selected fix through a maintenance PR; do not pull unrelated new
+features into a supported release. Both long-lived branches require the same
+producer and installed-consumer gates, including for administrators, and reject
+force pushes and deletion. Push CI covers `main` and `release/*`; PR CI covers
+either target.
+
+Prepare each release in a PR against its maintenance branch, with a new package
+version and release notes. Use `0.4.0rc2` for a further candidate, `0.4.0` for the
+accepted final release, and `0.4.1` for a later patch; never reuse a published
+version for changed source or wheel bytes. After merge, rebuild and verify the
+exact maintenance commit, record its independent consumer acceptance, then push
+the matching version tag. Attach verified distributions, provenance, checksums
+and the safe acceptance summary to its GitHub Release after publication.
+
+### Versioned publication and consumer adoption
+
 The PyPI workflow builds from an explicitly pushed version tag, verifies it
 matches the source version, runs reusable producer CI and publishes the resulting
 distributions through the existing `pypi` trusted publisher. Configure protected
@@ -60,8 +99,10 @@ for the separation between build artifacts and the publishing job.
 
 ## Cloud merge and release gates
 
-`main` is the current development source. Use a short-lived branch and PR;
-version tags and Releases identify immutable distributions. The original main
+`main` is the current development source; supported `release/*` branches own
+their respective stabilization and patch work. Use short-lived branches and PRs
+against the appropriate target. Version tags and Releases identify immutable
+distributions. The original main
 snapshot is `archive/main-before-2026-09-08`; historical branch/source accounting
 is in [repository history](repository-history.md). Existing version tags are
 never moved to reconcile naming differences.
@@ -81,7 +122,7 @@ The maintainer records only that public-safe summary and sets the status on the
 exact verified commit. A new commit requires a new result; producer CI alone
 cannot clear this gate. No shared consumer pin is updated by this process.
 
-Before a version tag is pushed, recheck acceptance on the exact main commit;
+Before a version tag is pushed, recheck acceptance on the exact maintenance-branch commit;
 a PR merge can change the source commit/epoch and therefore the distribution
 bytes. The tag workflow reuses the full producer/artifact gates, verifies that
 the tag matches the package version, requires successful consumer status for
