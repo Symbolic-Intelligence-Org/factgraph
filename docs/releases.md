@@ -16,6 +16,12 @@ An immutable backup and original manifest are retained in the repository at
 Those files are not included in distributions. UI-only development can continue
 on that artifact while new candidates are tested separately.
 
+The read-only branch `release/0.4-baseline` points to that original producer
+commit. It marks an existing ancestor of published `0.4.0rc1` and the maintained
+0.4 line; it does not rename the wheel's `0.2.0rc3` package version or create a
+separate development line. See the [0.4 source lineage](release-history.md#04-source-lineage)
+for the verified relationship between source trees and runtime payloads.
+
 A consumer may bind source, version, filename, whole-wheel and RECORD digests,
 runtime ABI and compiled artifacts together. A package version bump by itself is
 not a compatible pin update. Do not overwrite the old wheel, relabel its bytes,
@@ -52,6 +58,7 @@ replacement for installed API verification.
 | --- | --- |
 | `main` | New development and fixes carried forward from supported release lines |
 | `release/0.4.x` | 0.4 candidate stabilization, the future 0.4.0 final release and compatible 0.4 patch releases |
+| `release/0.4-baseline` | Frozen pre-publication source marker at `2a4f6b8f` for Meander's original `0.2.0rc3` wheel; receives no commits |
 | `v0.4.0rc1`, future `v0.4.0` / `v0.4.1` tags | Immutable source identities for individual published distributions |
 
 The 0.4 maintenance line starts from the published `v0.4.0rc1` source plus the
@@ -68,6 +75,7 @@ They receive no fixes or new commits. See [release history](release-history.md)
 for the distinction from earlier RC milestones in CHANGELOG.
 Meander's retained `0.2.0rc3` is a distinct artifact from public `0.3.0`; an
 urgent fix for that retained baseline starts from its recorded producer commit.
+Use a new short-lived branch for such a fix; keep `release/0.4-baseline` frozen.
 
 Develop a 0.4 fix on a short-lived branch based on `release/0.4.x`, then open a
 PR targeting that maintenance branch. Carry the fix forward to `main` through a
