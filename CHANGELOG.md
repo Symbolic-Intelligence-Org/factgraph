@@ -5,11 +5,26 @@ All notable changes to FactGraph will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] — 0.4.0rc1 candidate
+## [Unreleased]
 
-This candidate consolidates the runtime already retained by Meander in its
-`0.2.0rc3` artifact with the public `0.3.0` packaging line. It is not a published
-release. Runtime source is preserved from producer `2a4f6b8f`.
+### Build and release
+
+- Add protected `release/0.4.x` maintenance with the same producer and independent
+  installed-consumer gates as `main`, and CI for release-branch pushes.
+- Reconcile historical changelog entries, recover original alpha/0.2 release
+  files, and retain exact-version source branches as read-only snapshots.
+
+These repository maintenance changes do not publish another package version.
+
+## [0.4.0rc1] - 2026-09-08
+
+Published prerelease from `v0.4.0rc1` at `bb805b4f`. It consolidates the runtime
+already retained by Meander in its `0.2.0rc3` artifact with the public `0.3.0`
+packaging line. Runtime source is preserved from producer `2a4f6b8f`.
+Publication does not update Meander's retained dependency.
+
+Exact tags, source snapshots and original artifacts are mapped in the
+[release history](docs/release-history.md).
 
 ### Breaking relative to published 0.3.0
 
@@ -171,6 +186,33 @@ release. Runtime source is preserved from producer `2a4f6b8f`.
   Entity create/delete, field mutation, ingest, batch, metadata append, and
   additive schema mutation use the same commit chain for created, loaded, and
   writable-attached graphs.
+
+### Changed
+
+- **Souffle exports now materialize effective metadata only.** Historical
+  superseded values and UNSET tombstones stay in the audit event history but
+  do not enter the adapter's evaluation fact set.
+- **v0.2 annotation migration now treats `annotation_rows` as ground truth.**
+  A shared-key meta row appended after claim creation remains meta-only when
+  the source has no matching annotation; migration no longer synthesizes one.
+  Exact initial-meta contract annotations are regenerated, while custom
+  namespace/category rows are preserved as replayable companion events.
+- **SDK write-lifecycle failures are classified at the SDK boundary.**
+  Writes after an SDK-owned graph is closed raise
+  `SDKStoreError(code="GRAPH_CLOSED")` with
+  reopen guidance. Writes through a durable view attach report its read-only
+  status directly instead of being wrapped as a non-additive schema failure.
+
+## [0.2.0] - 2026-06-14
+
+Published from remote tag `v0.2.0` at `2a173f25`. The notes below were
+already present in that tag's `Unreleased` section and were later carried
+into the 0.3.0 entry; they are restored here to their first tagged release.
+Original wheel and sdist are retained from the successful PyPI publisher run.
+See the [release history](docs/release-history.md) for provenance.
+
+### Added
+
 - **`fg.meta.capabilities()` runtime introspection** is shipped: new read-only
   `fg.meta` namespace exposing `capabilities()` which returns a frozen
   `MappingProxyType` of `frozenset[str]` reporting runtime-accepted
@@ -251,19 +293,6 @@ release. Runtime source is preserved from producer `2a4f6b8f`.
 
 ### Changed
 
-- **Souffle exports now materialize effective metadata only.** Historical
-  superseded values and UNSET tombstones stay in the audit event history but
-  do not enter the adapter's evaluation fact set.
-- **v0.2 annotation migration now treats `annotation_rows` as ground truth.**
-  A shared-key meta row appended after claim creation remains meta-only when
-  the source has no matching annotation; migration no longer synthesizes one.
-  Exact initial-meta contract annotations are regenerated, while custom
-  namespace/category rows are preserved as replayable companion events.
-- **SDK write-lifecycle failures are classified at the SDK boundary.**
-  Writes after an SDK-owned graph is closed raise
-  `SDKStoreError(code="GRAPH_CLOSED")` with
-  reopen guidance. Writes through a durable view attach report its read-only
-  status directly instead of being wrapped as a non-additive schema failure.
 - **`Explanation.repr` conclusion line now auto-renders `Rule.desc`** when the
   rule head sets `desc=` template. `_row_conclusion_node` calls
   `head.render_desc(row.bindings)` and stores the rendered string as the
@@ -324,6 +353,10 @@ release. Runtime source is preserved from producer `2a4f6b8f`.
 
 ## [0.2.0-rc.1] - 2026-05-26
 
+Historical source milestone (`factgraph 0.2.0rc1`), preserved under its original
+changelog name. No matching public release tag or original distribution has
+been verified. This entry is distinct from the June 14 `v0.2.0` publication.
+
 ### Breaking
 
 - **PyPI package renamed**: install `factgraph` instead of `factpy-kernel`.
@@ -374,9 +407,20 @@ release. Runtime source is preserved from producer `2a4f6b8f`.
   attach by `as_of(...)`, full EvidenceGraph Phase B, and adapter-consuming
   semantics beyond carrier-only public wrappers remain future tracks.
 
+## [0.1.0a1] - 2026-05-15
+
+- Publish the standalone `factgraph` alpha to TestPyPI from `v0.1.0a1` at
+  `18a74006`. Original wheel and sdist remain available and are retained in
+  the historical GitHub Release with their TestPyPI SHA256 checksums.
+- This alpha uses its original public version; it is not a rename of the
+  earlier `factpy-kernel 0.1.0rc1` milestone below.
+
 ## [0.1.0-rc.1] - 2026-05-10
 
-First public preview release candidate.
+Historical source milestone (`factpy-kernel 0.1.0rc1`), described at the time
+as the first public preview release candidate. Its original notes are retained
+below; no matching public release tag or original distribution has been verified.
+This is distinct from the May 15 `factgraph 0.1.0a1` TestPyPI publication.
 
 ### Added
 
