@@ -32,7 +32,8 @@ For implementation architecture, see the module documentation links below.
 ## Install
 
 The latest stable release is `0.3.0`; the current prerelease line is `0.4.0rc1`.
-`main` carries current development, and [GitHub Releases](https://github.com/Symbolic-Intelligence-Org/factgraph/releases)
+`main` carries current development; `release/0.4.x` maintains the 0.4 line.
+[GitHub Releases](https://github.com/Symbolic-Intelligence-Org/factgraph/releases)
 record published artifacts and their source identities. Consumers
 using a retained wheel should keep its exact version and hash until their
 compatibility checks and coordinated promotion complete. See
