@@ -122,3 +122,11 @@ verified main or otherwise explicitly preserved with resolved provenance.
 | `release/v0.1.0-alpha.1` | `938d59c04aa41ccf6e693db2185c5f396972744a` |
 | `release/v0.2.0` | `2b08eb2d575227376dd43a7ea5792677b6ff830f` |
 | `release/v0.3.0-2026-08-28` | `5f8a78f403c79e72fa2037099e60d4b8ea7a5679` |
+
+## Restored exact-version visibility
+
+The initial cleanup retired the old branch names listed above. Subsequent
+[release-history reconciliation](release-history.md) restores read-only
+`release/<exact-version>` snapshots at the actual remote release tags. This
+preserves visible history without treating snapshots as maintenance lines or
+relabeling the earlier RC source milestones.

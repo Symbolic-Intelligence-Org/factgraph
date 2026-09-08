@@ -2,8 +2,10 @@
 
 The public `0.3.0` release and the subsequent `0.2.0rc3` development artifacts
 share history but were versioned on separate branches. `0.4.0rc1` consolidates
-the current development runtime and public packaging. It is a candidate; public
-publication and a consumer's adoption are separate transitions.
+the current development runtime and public packaging. It was published as a
+prerelease on 2026-09-08; a consumer's adoption is a separate transition.
+See the [verified release history](release-history.md) for exact versions,
+historical source branches and original distribution provenance.
 
 ## Preserve the shared baseline
 
@@ -58,9 +60,12 @@ source as `main`. Creating the branch does not publish another artifact or
 replace the existing rc1 files. The latest stable release remains `0.3.0` until
 a separately accepted final release is published.
 
-Keep maintenance branches only for versions that are actively supported. Create
-`release/0.3.x` from `v0.3.0` if a concrete 0.3 support need appears; older tags
-and archive refs retain historical releases without an idle branch per version.
+Maintain only lines that are actively supported. Create `release/0.3.x` from
+`v0.3.0` if a concrete 0.3 support need appears. Exact-version branches
+`release/0.1.0a1`, `release/0.2.0`, `release/0.3.0` and `release/0.4.0rc1`
+are read-only historical snapshots at their corresponding remote tags.
+They receive no fixes or new commits. See [release history](release-history.md)
+for the distinction from earlier RC milestones in CHANGELOG.
 Meander's retained `0.2.0rc3` is a distinct artifact from public `0.3.0`; an
 urgent fix for that retained baseline starts from its recorded producer commit.
 
@@ -99,8 +104,9 @@ for the separation between build artifacts and the publishing job.
 
 ## Cloud merge and release gates
 
-`main` is the current development source; supported `release/*` branches own
-their respective stabilization and patch work. Use short-lived branches and PRs
+`main` is the current development source; supported `release/<major>.<minor>.x`
+branches own their respective stabilization and patch work. Exact-version
+`release/<version>` branches retain immutable historical source snapshots. Use short-lived branches and PRs
 against the appropriate target. Version tags and Releases identify immutable
 distributions. The original main
 snapshot is `archive/main-before-2026-09-08`; historical branch/source accounting
