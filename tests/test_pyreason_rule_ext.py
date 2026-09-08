@@ -5,7 +5,6 @@ import sys
 import types
 import unittest
 import warnings
-from contextlib import contextmanager
 from unittest.mock import patch
 
 from factgraph.adapters.pyreason.rule_ext import (
@@ -288,24 +287,6 @@ class RunnerTypedDefTests(unittest.TestCase):
         )
         return fake_pyreason, added_rules, added_facts, loaded_graphs, reset_calls
 
-    @contextmanager
-    def _record_user_warnings(self):
-        """Record only ``UserWarning``s raised inside the block.
-
-        ``catch_warnings(record=True)`` with a blanket ``simplefilter("always")``
-        captures *every* warning raised process-wide during the block. That
-        includes ``ResourceWarning``s for sqlite connections other tests leave
-        open, which the garbage collector happens to finalize while this block
-        is active. Those foreign warnings would otherwise make the
-        warning-count assertions depend on suite ordering and GC timing.
-        Scoping the recording to ``UserWarning`` (the only category these tests
-        care about) keeps them hermetic.
-        """
-        with warnings.catch_warnings(record=True) as caught:
-            warnings.simplefilter("ignore")
-            warnings.simplefilter("always", UserWarning)
-            yield caught
-
     def test_run_pyreason_accepts_rule_objects_and_fact_defs(self) -> None:
         session = PyReasonSession(_test_schema_ir())
         session._write_node_fact_internal("user:name", "Alice", "Alice", bound=[1.0, 1.0])
@@ -364,7 +345,8 @@ class RunnerTypedDefTests(unittest.TestCase):
         )
 
         with patch.dict(sys.modules, {"pyreason": fake_pyreason}):
-            with self._record_user_warnings() as caught:
+            with warnings.catch_warnings(record=True) as caught:
+                warnings.simplefilter("always")
                 run_pyreason(
                     session,
                     rule_defs=[rule],
@@ -388,7 +370,8 @@ class RunnerTypedDefTests(unittest.TestCase):
         fact_def = PyReasonFactDef(atom="popular(Alice)", name="alice_pop", start=0, end=3, bound=[0.4, 0.6])
 
         with patch.dict(sys.modules, {"pyreason": fake_pyreason}):
-            with self._record_user_warnings() as caught:
+            with warnings.catch_warnings(record=True) as caught:
+                warnings.simplefilter("always")
                 run_pyreason(
                     session,
                     rule_defs=[rule],
@@ -419,7 +402,8 @@ class RunnerTypedDefTests(unittest.TestCase):
         )
 
         with patch.dict(sys.modules, {"pyreason": fake_pyreason}):
-            with self._record_user_warnings() as caught:
+            with warnings.catch_warnings(record=True) as caught:
+                warnings.simplefilter("always")
                 run_pyreason(
                     session,
                     rules=[compiled_rule],
@@ -441,7 +425,8 @@ class RunnerTypedDefTests(unittest.TestCase):
         )
 
         with patch.dict(sys.modules, {"pyreason": fake_pyreason}):
-            with self._record_user_warnings() as caught:
+            with warnings.catch_warnings(record=True) as caught:
+                warnings.simplefilter("always")
                 run_pyreason(
                     session,
                     rule_defs=[rule],

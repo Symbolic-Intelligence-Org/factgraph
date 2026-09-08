@@ -13,7 +13,6 @@ import warnings
 
 # Slice 7C / Q6-A (a.2): FileAuthoringRegistry was removed. Test methods
 # that exercised the legacy adapter directly are skipped below.
-from factgraph.core.evidence.write_protocol import set_field
 from factgraph.core.schema.schema_ir import schema_digest
 from factgraph.sdk import (
     Case,
@@ -127,21 +126,9 @@ def _seed_fg(*, registry_root: Path | None = None, path: Path | None = None):
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", DeprecationWarning)
         fg = FactGraph.create(schema_classes=[User], **kwargs)
-    alice_ref = fg.entities.ref(User, user_id="Alice")
-    set_field(
-        fg.ledger,
-        pred_id="user:name",
-        e_ref=alice_ref,
-        rest_terms=[("string", "Alice")],
-        meta={"source": "test"},
-    )
-    set_field(
-        fg.ledger,
-        pred_id="user:tag_seed",
-        e_ref=alice_ref,
-        rest_terms=[("string", "vip")],
-        meta={"source": "test"},
-    )
+    alice_ref = fg.entities.create(User, user_id="Alice")
+    fg.fields.set(User.name, alice_ref, "Alice", meta={"source": "test"})
+    fg.fields.set(User.tag_seed, alice_ref, "vip", meta={"source": "test"})
     return fg
 
 
@@ -203,6 +190,20 @@ class SchemaMutationAPITests(unittest.TestCase):
         sdk_module = _sdk_module()
 
         self.assertIn("SchemaAddResult", sdk_module.__all__)
+
+    def test_sdk_has_no_raw_non_additive_schema_transition_channel(self) -> None:
+        sdk_module = _sdk_module()
+        self.assertNotIn("SchemaTransitionInput", sdk_module.__all__)
+        self.assertFalse(hasattr(sdk_module, "SchemaTransitionInput"))
+
+        with TemporaryDirectory() as tmp_dir:
+            workspace = Path(tmp_dir) / "workspace"
+            fg = FactGraph.create(schema_classes=[User], path=workspace)
+            before = fg._database.head()
+            with self.assertRaises(SDKStoreError):
+                fg.schema.apply(_changed_user_class())
+            self.assertEqual(fg._database.head(), before)
+            fg.close()
 
 
 class SchemaMutationApplicationRuntimeTests(unittest.TestCase):
@@ -385,7 +386,7 @@ class SchemaMutationDigestAnchorTests(unittest.TestCase):
     def test_ledger_old_digest_updates_to_new_digest(self) -> None:
         with TemporaryDirectory() as tmp_dir:
             ledger_path = Path(tmp_dir) / "ledger.db"
-            fg = FactGraph.create(schema_classes=[User], ledger_path=str(ledger_path))
+            fg = FactGraph.from_schema_classes([User], ledger_path=str(ledger_path))
             old_digest = schema_digest(fg.schema_ir)
             self.assertEqual(fg.ledger.get_ledger_meta("schema_digest"), old_digest)
 
@@ -402,7 +403,10 @@ class SchemaMutationDigestAnchorTests(unittest.TestCase):
 
     def test_ledger_mismatched_digest_raises(self) -> None:
         fg = FactGraph.create(schema_classes=[User])
-        fg.ledger.set_ledger_meta("schema_digest", schema_digest(compile_schema_from_classes([Account])))
+        fg.ledger.replace_ledger_meta(
+            "schema_digest",
+            schema_digest(compile_schema_from_classes([Account])),
+        )
 
         with self.assertRaises(SDKStoreError) as ctx:
             fg.schema.apply(Account)
@@ -411,20 +415,33 @@ class SchemaMutationDigestAnchorTests(unittest.TestCase):
 
 
 class SchemaMutationWorkspaceTests(unittest.TestCase):
-    def test_workspace_manifest_updates_only_after_save(self) -> None:
+    def test_workspace_schema_head_updates_immediately_and_save_only_touches_metadata(self) -> None:
         with TemporaryDirectory() as tmp_dir:
             workspace = Path(tmp_dir) / "workspace"
             fg = _seed_fg(path=workspace)
             fg.save_workspace()
-            old_manifest = _read_workspace_manifest(workspace)
+            before = fg._database.head()
+            old_meta = json.loads((workspace / "db" / "meta.json").read_text(encoding="utf-8"))
 
             result = fg.schema.apply(Account)
-            after_add_manifest = _read_workspace_manifest(workspace)
+            after_add = fg._database.head()
+            after_add_meta = json.loads(
+                (workspace / "db" / "meta.json").read_text(encoding="utf-8")
+            )
             fg.save_workspace()
-            after_save_manifest = _read_workspace_manifest(workspace)
+            after_save = fg._database.head()
+            after_save_meta = json.loads(
+                (workspace / "db" / "meta.json").read_text(encoding="utf-8")
+            )
 
-        self.assertEqual(after_add_manifest["schema_digest"], old_manifest["schema_digest"])
-        self.assertEqual(after_save_manifest["schema_digest"], result.new_digest)
+        self.assertEqual(after_add.tx_seq, before.tx_seq + 1)
+        self.assertEqual(after_add.schema_digest, result.new_digest)
+        self.assertEqual(after_save, after_add)
+        self.assertEqual(after_add_meta, old_meta)
+        self.assertGreaterEqual(
+            after_save_meta["last_saved_at_epoch_ns"],
+            after_add_meta["last_saved_at_epoch_ns"],
+        )
 
     # Q8 Phase 2 (Slice 6): test_post_add_rule_save_uses_new_schema_digest and
     # test_post_add_inference_save_uses_new_schema_digest were removed.
@@ -531,7 +548,9 @@ class SchemaMutationPreservationTests(unittest.TestCase):
             fg = _seed_fg(path=workspace)
 
             fg.save_workspace()
+            fg.close()
             loaded = FactGraph.load_workspace(workspace, schema_classes=[User])
+            loaded.close()
 
             self.assertEqual(schema_digest(loaded.schema_ir), schema_digest(fg.schema_ir))
 

@@ -1,9 +1,18 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import Any
 
-from factgraph.core.evidence.write_protocol import add_field, retract_by_asrt, set_field
-from factgraph.core.store import Store
+from factgraph.core.evidence.write_protocol import (
+    _compute_ingest_key,
+    _infer_meta_kind,
+    _normalize_meta,
+    add_field,
+    now_epoch_nanos,
+    retract_by_asrt,
+    set_field,
+)
+from factgraph.core.store import AssertionInput, Database, MetaEntry, RevocationInput, Store
 from factgraph.core.view.projector import project_view_facts
 
 from .protocol import (
@@ -26,6 +35,7 @@ from .protocol import (
     WarningDTO,
     WriteValue,
 )
+from .retract_guard import RetractGuardError, check_retract_allowed
 from .schema_runtime import (
     SchemaIndex,
     SchemaResolutionError,
@@ -35,7 +45,6 @@ from .schema_runtime import (
     field_value_type,
     resolve_selector,
 )
-from .retract_guard import RetractGuardError, check_retract_allowed
 from .value_validation import FieldValueValidationError, validate_field_value
 
 
@@ -68,6 +77,118 @@ class EntityWriteError(ValueError):
             path=self.path,
             details=self.details,
         )
+
+
+def planned_ops_to_inputs(
+    planned_ops: Sequence[PlannedOpDTO],
+    *,
+    index: SchemaIndex,
+) -> tuple[list[AssertionInput], list[RevocationInput]]:
+    """Translate application write-plan operations into Database commit DTOs.
+
+    The translation preserves the metadata produced by the shipped evidence
+    write protocol. In particular, assertion inputs receive ``ingested_at``
+    and ``ingest_key`` rows, while revocations receive ``ingested_at`` and
+    ``revoked_asrt_id`` rows. Database-owned digest/tx metadata remains the
+    responsibility of ``Database.commit_changes``.
+    """
+    if isinstance(planned_ops, (str, bytes)) or not isinstance(planned_ops, Sequence):
+        raise TypeError("planned_ops must be a sequence of PlannedOpDTO")
+    if not isinstance(index, SchemaIndex):
+        raise TypeError("index must be SchemaIndex")
+
+    assertions: list[AssertionInput] = []
+    revocations: list[RevocationInput] = []
+    for op in planned_ops:
+        if not isinstance(op, PlannedOpDTO):
+            raise TypeError("planned_ops must contain PlannedOpDTO")
+
+        e_ref = _encoded_ref(op.target, index=index)
+        if op.op == "record_exists":
+            pred_id = entity_info(index, op.target.entity_type).exists_predicate_id
+            rest_terms: list[tuple[str, Any]] = []
+        elif op.op in {"set", "add"}:
+            assert op.field is not None and op.value is not None
+            pred_info = field_predicate(index, op.field.entity_type, op.field.field_name)
+            field_type = field_value_type(index, op.field.entity_type, op.field.field_name)
+            try:
+                validate_field_value(op.value, pred_info=pred_info)
+            except FieldValueValidationError as exc:
+                raise EntityWriteError(
+                    str(exc),
+                    code=exc.code,
+                    path=exc.path,
+                    details=exc.details,
+                ) from exc
+            pred_id = pred_info.pred_id
+            rest_terms = [
+                _rest_term_for_value(
+                    op.value,
+                    field_type=field_type,
+                    index=index,
+                    field=op.field,
+                )
+            ]
+        else:
+            assert op.assertion_id is not None
+            revocations.append(
+                RevocationInput(
+                    revoked_asrt_id=op.assertion_id,
+                    meta=_revocation_meta_entries(
+                        op.assertion_id,
+                        dict(op.meta) if op.meta else None,
+                    ),
+                )
+            )
+            continue
+
+        assertions.append(
+            AssertionInput(
+                pred_id=pred_id,
+                fact_tuple=(("entity_ref", e_ref), *rest_terms),
+                meta=_assertion_meta_entries(
+                    pred_id,
+                    e_ref,
+                    rest_terms,
+                    dict(op.meta) if op.meta else None,
+                ),
+            )
+        )
+    return assertions, revocations
+
+
+def _assertion_meta_entries(
+    pred_id: str,
+    e_ref: str,
+    rest_terms: list[tuple[str, Any]],
+    meta: dict[str, Any] | None,
+) -> tuple[MetaEntry, ...]:
+    normalized = _normalize_meta(meta)
+    ingest_key = _compute_ingest_key(pred_id, e_ref, rest_terms, normalized)
+    return (
+        MetaEntry("ingested_at", "time", now_epoch_nanos()),
+        MetaEntry("ingest_key", "str", ingest_key),
+        *_user_meta_entries(normalized),
+    )
+
+
+def _revocation_meta_entries(
+    revoked_asrt_id: str,
+    meta: dict[str, Any] | None,
+) -> tuple[MetaEntry, ...]:
+    normalized = _normalize_meta(meta)
+    return (
+        MetaEntry("ingested_at", "time", now_epoch_nanos()),
+        MetaEntry("revoked_asrt_id", "str", revoked_asrt_id),
+        *_user_meta_entries(normalized),
+    )
+
+
+def _user_meta_entries(meta: dict[str, Any]) -> tuple[MetaEntry, ...]:
+    return tuple(
+        MetaEntry(key, _infer_meta_kind(key, meta[key]), meta[key])
+        for key in sorted(meta)
+    )
 
 
 def plan_write_command(
@@ -138,6 +259,7 @@ def apply_write_plan(
     *,
     store: Store,
     index: SchemaIndex,
+    database: Database | None = None,
 ) -> EntityWriteResult:
     if not plan.can_apply:
         return EntityWriteResult(
@@ -145,6 +267,14 @@ def apply_write_plan(
             errors=plan.errors,
             warnings=plan.warnings,
         )
+
+    if database is not None:
+        return apply_write_plans(
+            (plan,),
+            store=store,
+            index=index,
+            database=database,
+        )[0]
 
     applied: list[AppliedOpResultDTO] = []
     for op_index, op in enumerate(plan.planned_ops):
@@ -157,7 +287,7 @@ def apply_write_plan(
                     assertion_id=assertion_id,
                 )
             )
-        except (SchemaResolutionError, EntityWriteError, Exception) as exc:
+        except (SchemaResolutionError, EntityWriteError, Exception) as exc:  # noqa: BLE001 - executor boundary: any store/write-protocol fault must become a typed failed AppliedOpResultDTO + ErrorDTO instead of escaping apply_write_plan
             error = _to_error_dto(exc)
             applied.append(AppliedOpResultDTO(op_index=op_index, status="failed"))
             return EntityWriteResult(
@@ -172,6 +302,184 @@ def apply_write_plan(
         applied=tuple(applied),
         warnings=plan.warnings,
     )
+
+
+def apply_write_plans(
+    plans: Sequence[EntityWritePlan],
+    *,
+    store: Store,
+    index: SchemaIndex,
+    database: Database,
+) -> tuple[EntityWriteResult, ...]:
+    """Apply multiple write plans as one Database transaction.
+
+    This is the application-layer batch boundary. Every planned operation is
+    translated and retract-guarded before the single ``commit_changes`` call.
+    Result ``op_index`` values remain local to each input plan.
+    """
+    if not plans:
+        return ()
+    for plan in plans:
+        if not isinstance(plan, EntityWritePlan):
+            raise TypeError("plans must contain EntityWritePlan")
+    if any(not plan.can_apply for plan in plans):
+        return tuple(
+            EntityWriteResult(
+                resolved_target=plan.resolved_target,
+                errors=plan.errors,
+                warnings=plan.warnings,
+            )
+            for plan in plans
+        )
+
+    try:
+        flattened_ops = tuple(op for plan in plans for op in plan.planned_ops)
+        flattened_applied = _commit_planned_ops_to_database(
+            flattened_ops,
+            store=store,
+            index=index,
+            database=database,
+            enforce_retract_guard=True,
+        )
+        results: list[EntityWriteResult] = []
+        offset = 0
+        for plan in plans:
+            plan_applied = tuple(
+                AppliedOpResultDTO(
+                    op_index=local_index,
+                    status=row.status,
+                    assertion_id=row.assertion_id,
+                )
+                for local_index, row in enumerate(
+                    flattened_applied[offset : offset + len(plan.planned_ops)]
+                )
+            )
+            offset += len(plan.planned_ops)
+            results.append(
+                EntityWriteResult(
+                    resolved_target=plan.resolved_target,
+                    applied=plan_applied,
+                    warnings=plan.warnings,
+                )
+            )
+        return tuple(results)
+    except Exception as exc:  # noqa: BLE001 - batch transaction boundary: a Database translate/commit fault must be reported as failed EntityWriteResults for every plan, never re-raised
+        return tuple(
+            EntityWriteResult(
+                resolved_target=plan.resolved_target,
+                applied=(AppliedOpResultDTO(op_index=0, status="failed"),),
+                errors=(_to_error_dto(exc),),
+                warnings=plan.warnings,
+            )
+            for plan in plans
+        )
+
+
+def _commit_planned_ops_to_database(
+    planned_ops: Sequence[PlannedOpDTO],
+    *,
+    store: Store,
+    index: SchemaIndex,
+    database: Database,
+    enforce_retract_guard: bool,
+) -> tuple[AppliedOpResultDTO, ...]:
+    if database._ledger_for_attach() is not store.ledger:
+        raise EntityWriteError(
+            "database and store must share the same Ledger",
+            code="DATABASE_STORE_MISMATCH",
+        )
+    assertion_inputs, revocation_inputs = planned_ops_to_inputs(planned_ops, index=index)
+    assertion_iter = iter(assertion_inputs)
+    revocation_iter = iter(revocation_inputs)
+    revocation_targets = frozenset(
+        op.assertion_id
+        for op in planned_ops
+        if op.op == "retract" and op.assertion_id is not None
+    )
+    kept_assertions: list[AssertionInput] = []
+    kept_by_ingest_key: dict[str, int] = {}
+    kept_revocations: list[RevocationInput] = []
+    kept_revocation_by_target: dict[str, int] = {}
+    resolutions: list[tuple[str, str | int]] = []
+    for op in planned_ops:
+        if op.op == "retract":
+            revocation = next(revocation_iter)
+            target = revocation.revoked_asrt_id
+            existing_revoker = store.ledger.find_revoker(target)
+            if existing_revoker is not None:
+                resolutions.append(("existing", existing_revoker))
+                continue
+            kept_index = kept_revocation_by_target.get(target)
+            if kept_index is None:
+                if enforce_retract_guard:
+                    _check_generic_retract_allowed(op, store=store, index=index)
+                kept_index = len(kept_revocations)
+                kept_revocations.append(revocation)
+                kept_revocation_by_target[target] = kept_index
+            resolutions.append(("revocation", kept_index))
+            continue
+        assertion = next(assertion_iter)
+        ingest_key = _meta_entry_str(assertion.meta, "ingest_key")
+        if op.op == "add":
+            # Q-SYS-B §4.5.2: add is multiset append, so neither an existing
+            # active value nor a duplicate in this batch is coalesced.
+            kept_index = len(kept_assertions)
+            kept_assertions.append(assertion)
+            resolutions.append(("assertion", kept_index))
+            continue
+        existing = _active_assertion_for_ingest_key(store, ingest_key)
+        if existing is not None and existing not in revocation_targets:
+            resolutions.append(("existing", existing))
+            continue
+        kept_index = kept_by_ingest_key.get(ingest_key)
+        if kept_index is None:
+            kept_index = len(kept_assertions)
+            kept_assertions.append(assertion)
+            kept_by_ingest_key[ingest_key] = kept_index
+        resolutions.append(("assertion", kept_index))
+
+    if not kept_assertions and not kept_revocations:
+        if any(kind != "existing" for kind, _resolution in resolutions):
+            raise AssertionError("no-write resolution must contain only existing assertion ids")
+        return tuple(
+            AppliedOpResultDTO(
+                op_index=op_index,
+                status="applied",
+                assertion_id=str(resolution),
+            )
+            for op_index, (_kind, resolution) in enumerate(resolutions)
+        )
+    commit = database.commit_changes(kept_assertions, kept_revocations)
+    applied_ids: list[str] = []
+    for kind, resolution in resolutions:
+        if kind == "existing":
+            applied_ids.append(str(resolution))
+        elif kind == "assertion":
+            applied_ids.append(commit.assertions[int(resolution)].asrt_id)
+        else:
+            applied_ids.append(commit.revocations[int(resolution)].revoker_asrt_id)
+    return tuple(
+        AppliedOpResultDTO(
+            op_index=op_index,
+            status="applied",
+            assertion_id=assertion_id,
+        )
+        for op_index, assertion_id in enumerate(applied_ids)
+    )
+
+
+def _meta_entry_str(meta: Sequence[MetaEntry], key: str) -> str:
+    values = [entry.value for entry in meta if entry.key == key and entry.kind == "str"]
+    if len(values) != 1 or not isinstance(values[0], str):
+        raise EntityWriteError(
+            f"translated assertion requires exactly one string meta[{key}]",
+            code="INVALID_TRANSLATED_META",
+        )
+    return values[0]
+
+
+def _active_assertion_for_ingest_key(store: Store, ingest_key: str) -> str | None:
+    return store.ledger._find_active_assertion_by_ingest_key(ingest_key)
 
 
 # ---------- Slice 3a Step 2: fg.entities.create eager emission planner + executor ----------
@@ -246,14 +554,13 @@ def apply_create_plan(
     *,
     store: Store,
     index: SchemaIndex,
+    database: Database | None = None,
 ) -> EntityCreateResult:
     """Execute the planned materialization ops atomically per ADR-IC §4.2。
 
-    Reuses the same ``_apply_op`` dispatcher as ``apply_write_plan`` so emission
-    semantics are byte-identical to the shipped lazy materialization path。If
-    any planned op fails the whole result surfaces the error(no partial writes
-    are leaked through the result DTO,though ledger atomicity is governed by
-    the write_protocol layer per Q-PR1 carve-out boundary)。
+    The legacy Store route reuses ``_apply_op``. The Database-backed route
+    translates the complete plan and calls ``Database.commit_changes`` once,
+    so Identity and ``:exists`` emission share one tx and head advance.
     """
     if not plan.can_apply:
         return EntityCreateResult(
@@ -261,6 +568,28 @@ def apply_create_plan(
             errors=plan.errors,
             warnings=plan.warnings,
         )
+
+    if database is not None:
+        try:
+            applied = _commit_planned_ops_to_database(
+                plan.planned_ops,
+                store=store,
+                index=index,
+                database=database,
+                enforce_retract_guard=True,
+            )
+            return EntityCreateResult(
+                resolved_target=plan.resolved_target,
+                applied=applied,
+                warnings=plan.warnings,
+            )
+        except Exception as exc:  # noqa: BLE001 - create commit boundary: any Database translate/commit fault must become a typed failed EntityCreateResult carrying the ErrorDTO
+            return EntityCreateResult(
+                resolved_target=plan.resolved_target,
+                applied=(AppliedOpResultDTO(op_index=0, status="failed"),),
+                errors=(_to_error_dto(exc),),
+                warnings=plan.warnings,
+            )
 
     applied: list[AppliedOpResultDTO] = []
     for op_index, op in enumerate(plan.planned_ops):
@@ -273,7 +602,7 @@ def apply_create_plan(
                     assertion_id=assertion_id,
                 )
             )
-        except (SchemaResolutionError, EntityWriteError, Exception) as exc:
+        except (SchemaResolutionError, EntityWriteError, Exception) as exc:  # noqa: BLE001 - create executor boundary: any per-op store fault must become a typed failed EntityCreateResult carrying the ErrorDTO
             error = _to_error_dto(exc)
             applied.append(AppliedOpResultDTO(op_index=op_index, status="failed"))
             return EntityCreateResult(
@@ -385,15 +714,14 @@ def apply_delete_plan(
     *,
     store: Store,
     index: SchemaIndex,
+    database: Database | None = None,
 ) -> EntityDeleteResult:
     """Execute a whole-entity retract plan via the path-bound private helper。
 
-    Per SF3 P1 amend:this executor calls ``_apply_entity_delete_retract``
-    **directly** on each planned retract op,NOT through generic ``_apply_op``。
-    ``_apply_op`` continues to enforce Slice 2 ``check_retract_allowed`` on
-    every retract — any application-level caller routing through the generic
-    dispatcher hits the guard。 ``apply_delete_plan`` is the **only** entry
-    point into ``_apply_entity_delete_retract`` from within this module。
+    The legacy Store route calls ``_apply_entity_delete_retract`` directly.
+    The Database-backed route translates the whole delete plan inside this
+    executor and commits once. Both are path-bound here; generic ``_apply_op``
+    and ``apply_write_plan`` continue to enforce ``check_retract_allowed``.
     """
     if not plan.can_apply:
         return EntityDeleteResult(
@@ -401,6 +729,30 @@ def apply_delete_plan(
             errors=plan.errors,
             warnings=plan.warnings,
         )
+
+    if database is not None:
+        try:
+            # Whole-entity delete is the path-bound INV-7c exception. The
+            # generic write executor still enables the retract guard above.
+            applied = _commit_planned_ops_to_database(
+                plan.planned_retracts,
+                store=store,
+                index=index,
+                database=database,
+                enforce_retract_guard=False,
+            )
+            return EntityDeleteResult(
+                resolved_target=plan.resolved_target,
+                applied=applied,
+                warnings=plan.warnings,
+            )
+        except Exception as exc:  # noqa: BLE001 - delete commit boundary: any Database translate/commit fault must become a typed failed EntityDeleteResult carrying the ErrorDTO
+            return EntityDeleteResult(
+                resolved_target=plan.resolved_target,
+                applied=(AppliedOpResultDTO(op_index=0, status="failed"),),
+                errors=(_to_error_dto(exc),),
+                warnings=plan.warnings,
+            )
 
     applied: list[AppliedOpResultDTO] = []
     for op_index, op in enumerate(plan.planned_retracts):
@@ -413,7 +765,7 @@ def apply_delete_plan(
                     assertion_id=assertion_id,
                 )
             )
-        except (SchemaResolutionError, EntityWriteError, Exception) as exc:
+        except (SchemaResolutionError, EntityWriteError, Exception) as exc:  # noqa: BLE001 - delete executor boundary: any per-op path-bound retract fault must become a typed failed EntityDeleteResult carrying the ErrorDTO
             error = _to_error_dto(exc)
             applied.append(AppliedOpResultDTO(op_index=op_index, status="failed"))
             return EntityDeleteResult(
@@ -660,13 +1012,8 @@ def _materialization_ops(
                 meta=dict(meta),
             )
         )
-    # Co-emit the ``<EntityType>:exists`` Claim atomically with the Identity
-    # Claims (ADR-IC §4.4 — the existence-claim transitional guard already treats
-    # :exists as co-emitted-with-identity; this is the emission leg that makes the
-    # claim a real, rule-matchable EDB fact). The record_exists op carries no
-    # field/value (its DTO shape forbids them); ``_apply_op`` routes on
-    # op="record_exists" to info.exists_predicate_id.
-    ops.append(PlannedOpDTO(op="record_exists", target=ref, meta=dict(meta)))
+    # Entity-domain rows are projected virtually from this complete Identity
+    # bundle.  Do not persist a second ``<EntityType>:exists`` truth carrier.
     return ops
 
 
@@ -725,11 +1072,29 @@ def _apply_op(
                 path=exc.path,
                 details=exc.details,
             ) from exc
-        rest_terms = [_rest_term_for_value(op.value, field_type=field_type, index=index)]
+        rest_terms = [
+            _rest_term_for_value(
+                op.value,
+                field_type=field_type,
+                index=index,
+                field=op.field,
+            )
+        ]
         if op.op == "set":
             return set_field(store.ledger, pred_info.pred_id, target_e_ref, rest_terms, dict(op.meta) if op.meta else None)
         return add_field(store.ledger, pred_info.pred_id, target_e_ref, rest_terms, dict(op.meta) if op.meta else None)
+    _check_generic_retract_allowed(op, store=store, index=index)
     assert op.assertion_id is not None
+    return retract_by_asrt(store.ledger, op.assertion_id, dict(op.meta) if op.meta else None)
+
+
+def _check_generic_retract_allowed(
+    op: PlannedOpDTO,
+    *,
+    store: Store,
+    index: SchemaIndex,
+) -> None:
+    assert op.op == "retract" and op.assertion_id is not None
     # Slice 2 Step 5: application entity_write path leg of three-layer retract guard.
     # check_retract_allowed raises RetractGuardError for INV-7c-protected Identity
     # Claims or :exists Claims (existence-claim transitional guard).
@@ -748,12 +1113,19 @@ def _apply_op(
                 "Identity bundle modification requires delete + recreate of the entity. "
                 "See ADR-IC §4.1."
             )
-        else:  # classification == "exists"
+        elif guard_exc.classification == "exists":
             message = (
                 f"<EntityType>:exists Claim {guard_exc.asrt_id} "
                 f"(pred_id={guard_exc.pred_id}) cannot be retracted independently; "
                 ":exists is co-emitted atomically with Identity Claims (existence-claim "
                 "transitional guard). See ADR-IC §4.4."
+            )
+        else:  # classification == "system"
+            message = (
+                f"System Claim {guard_exc.asrt_id} "
+                f"(pred_id={guard_exc.pred_id}) cannot be retracted; "
+                "revoke-of-revoke is forbidden by INV-12 part 2. "
+                "See ADR-SYS-B §4.1.5."
             )
         raise EntityWriteError(
             message,
@@ -765,7 +1137,6 @@ def _apply_op(
                 "classification": guard_exc.classification,
             },
         ) from guard_exc
-    return retract_by_asrt(store.ledger, op.assertion_id, dict(op.meta) if op.meta else None)
 
 
 def _rest_term_for_value(
@@ -773,16 +1144,28 @@ def _rest_term_for_value(
     *,
     field_type: Any,
     index: SchemaIndex,
+    field: FieldPath,
 ) -> tuple[str, Any]:
+    path = ("planned_ops", field.entity_type, field.field_name, "value")
+    field_name = f"{field.entity_type}.{field.field_name}"
     if field_type.value_kind == "entity_ref":
         if not isinstance(value, EntityRef):
             raise EntityWriteError(
                 "entity_ref planned value must be EntityRef",
                 code="INVALID_PLANNED_VALUE",
-                path=("planned_ops", "value"),
+                path=path,
             )
         return ("entity_ref", _encoded_ref(value, index=index))
-    return (str(field_type.scalar_domain), value)
+    scalar_domain = str(field_type.scalar_domain)
+    return (
+        scalar_domain,
+        _normalize_scalar_value(
+            scalar_domain,
+            value,
+            field_name=field_name,
+            path=path,
+        ),
+    )
 
 
 def _normalize_scalar_field_value(
@@ -794,6 +1177,21 @@ def _normalize_scalar_field_value(
 ) -> Any:
     path = ("mutations", str(mutation_index), "value")
     field_name = f"{mutation.field.entity_type}.{mutation.field.field_name}"
+    return _normalize_scalar_value(
+        scalar_domain,
+        value,
+        field_name=field_name,
+        path=path,
+    )
+
+
+def _normalize_scalar_value(
+    scalar_domain: str | None,
+    value: Any,
+    *,
+    field_name: str,
+    path: tuple[str, ...],
+) -> Any:
     if scalar_domain == "string":
         if not isinstance(value, str):
             raise EntityWriteError(
@@ -849,12 +1247,14 @@ def _normalize_scalar_field_value(
             )
         return value.lower()
     if scalar_domain == "bytes":
-        raise EntityWriteError(
-            f"{field_name} uses unsupported protocol field domain: bytes",
-            code="UNSUPPORTED_FIELD_DOMAIN",
-            path=path,
-            details={"expected_type_domain": scalar_domain},
-        )
+        if not isinstance(value, bytes):
+            raise EntityWriteError(
+                f"{field_name} expects bytes value",
+                code="FIELD_VALUE_TYPE_MISMATCH",
+                path=path,
+                details={"expected_type_domain": scalar_domain},
+            )
+        return value
     raise EntityWriteError(
         f"{field_name} uses unsupported field domain: {scalar_domain!r}",
         code="UNSUPPORTED_FIELD_DOMAIN",
@@ -911,9 +1311,11 @@ __all__ = [
     "apply_create_plan",
     "apply_delete_plan",
     "apply_write_plan",
+    "apply_write_plans",
     "plan_create_command",
     "plan_delete_command",
     "plan_write_command",
+    "planned_ops_to_inputs",
 ]
 # Note:``_apply_entity_delete_retract`` is intentionally **NOT** in __all__。
 # It is the path-bound private helper per SF3 P1 amend(see module docstring

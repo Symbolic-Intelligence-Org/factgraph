@@ -1,9 +1,39 @@
-# FactPy SDK Documentation
+# FactGraph SDK Documentation
 
-`factgraph.sdk` is the Python product surface of FactPy: schema authoring,
-ergonomic facade, DSL primitives, outward result shapes, and a stable
-public error hierarchy. The canonical runtime authority lives in
-`factgraph.application`; the SDK delegates to it.
+- Applicable scope: `src/factgraph/sdk`
+- Last updated: 2026-08-16
+- Audience: SDK users and maintainers of the Python product surface
+
+`factgraph.sdk` provides schema declarations, the `FactGraph` lifecycle,
+namespaced reads and writes, rule/evaluation values, outward result shapes, and
+the public error hierarchy. Runtime planning authority lives in
+`factgraph.application`; durable commit authority lives in `Database`.
+
+## Scope
+
+The SDK compiles Python schema classes, owns or attaches a Database, translates
+entity/field/ingest operations into application plans, and exposes read,
+evaluation, audit, and package namespaces.
+
+## Current Responsibilities
+
+- Create in-memory or durable graphs through `FactGraph.create(...)`.
+- Open durable workspaces through `FactGraph.load_workspace(...)` and release
+  their exclusive writer lock through `close()` or a context manager.
+- Attach to a caller-owned Database through `FactGraph.attach(...)`.
+- Route canonical SDK mutations through `Database.commit_changes(...)` when a
+  Database is present, including entity create/delete, field writes, ingest,
+  metadata append, schema transition, and batch commit.
+- Author immutable, typed managed Policy targets through `fg.policy(...)`,
+  then route them through the same structured Query/Run/Explain compiler path
+  as resolved Rule targets.
+- Author graph-bound Product Rules, peer Product Functions and Product
+  Policies through the direct `build_*` or staged `*_builder` forms, then run
+  them through typed Query, Scenario and target-pinned Product V2 profiles.
+- Open sealed V2 runs as named ResultViews, row-explicit structured Explain
+  data and detached replay through `outcome_from_run_v2(...)`.
+- Keep `FactGraph.from_schema_classes(...)` as the lower-level unmanaged
+  Ledger compatibility constructor.
 
 ## Quick Start
 
@@ -14,69 +44,140 @@ class User(Entity):
     user_id: str = Identity()
     name: str = Field()
 
-fg = FactGraph.create(schema_classes=[User])
+with FactGraph.create(schema_classes=[User], path="./workspace") as fg:
+    ref_alice = fg.entities.create(User, user_id="u-1")
+    fg.fields.set(User.name, ref_alice, "Alice")  # durable on return
+    print(fg.entities.get(User, user_id="u-1").name)
 
-ref_alice = fg.entities.create(User, user_id="u-1")
-fg.fields.set(User.name, ref_alice, "Alice")
-
-snap = fg.entities.get(User, user_id="u-1")
-print(snap.name)            # → Alice
+with FactGraph.load_workspace("./workspace", schema_classes=[User]) as fg:
+    print(fg.entities.get(User, user_id="u-1").name)
 ```
 
-`FactGraph` is the canonical entry point — a literal alias of
-`SDKStore`. Both names refer to the same class.
+`FactGraph` is the canonical entry point and a literal alias of `SDKStore`.
 
-`FactGraph.attach(db, schema_classes=...)` is the Database-owned lifecycle for
-the base writable attach form. Attached runtimes write through
-`fg.commit_assertions(...)` and reject the shipped SDK mutation shortcuts that
-bypass the Database boundary. `FactGraph.attach(db, view=view,
-schema_classes=...)` is the shipped read-only view-scoped attach form for
-durable Database views. Snapshot attach (`db.as_of(...)`) and method-level
-`view=` parameters remain future work.
+For the current end-to-end product path, continue with the public
+[quickstart index](../../../../docs/quickstart/README.md) and
+[complete Product V2 workflow](../../../../docs/quickstart/product_workflow_v2.md).
+The example notebook
+[`09_product_scenario_execution_v2.ipynb`](../../../../examples/09_product_scenario_execution_v2.ipynb)
+executes that surface with real Native, Soufflé and ProbLog adapters.
+
+## Lifecycle and Ownership
+
+`FactGraph.create(path=...)` creates and owns a durable Database;
+`FactGraph.load_workspace(...)` opens and owns one. Both hold the workspace's
+exclusive writer lock until `close()`. A second open, even for read-only use,
+fails explicitly in v0.3.
+
+`FactGraph.attach(db, schema_classes=...)` binds to a caller-owned Database.
+Base attach is writable and all canonical SDK write surfaces route through the
+Database transaction chain. Closing the attached graph does not close `db`.
+`FactGraph.attach(db, view=view, ...)` is read-only.
+
+Factual writes are write-through. `fg.save_workspace()` is an optional
+lifecycle-metadata touch and does not establish durability, advance the head,
+copy, or rebind a workspace. To sandbox or dry-run changes, copy the workspace
+directory first and open the copy. The old "modify, omit save, then discard"
+behavior no longer exists.
+
+Closed v0.2 workspaces must be migrated explicitly:
+
+```bash
+python -m factgraph migrate-workspace ./workspace
+```
+
+Migration uses a visible `<workspace-name>.legacy-<UTC timestamp>` sibling
+during atomic replacement. If a crash strands that sibling, rerun the same
+command: it returns `workspace_recovery_required` with candidate paths and
+whether a replacement is already present. Verify the indicated copy before
+renaming, archiving, or removing anything; recovery is intentionally not
+automatic.
+
+## Non-responsibilities
+
+- The SDK does not provide concurrent read-only opens for durable workspaces.
+- It does not reconstruct pre-v0.3 transaction history during migration.
+- It does not own HTTP routes, service DTOs, engine implementations, or
+  meander deployment/pinning policy.
+- It does not persist in-memory rules/inferences or assertion-view manager
+  state as part of a workspace save.
+
+## Limitations and Compatibility
+
+- `FactGraph.create(...)` rejects `ledger=` and `ledger_path=`; use
+  `from_schema_classes(...)` for unmanaged Ledger compatibility.
+- Database-backed ingest rejects raw target/entity-reference tokens that are
+  not present in the graph's managed identity cache. Use
+  `fg.entities.ref/create` first. The lower-level
+  `from_schema_classes(...)` lifecycle alone retains the legacy direct-write
+  fallback.
+- `save_workspace(path=other)` does not copy or rebind; make an explicit
+  directory copy for sandbox workflows.
+- Durable lifecycle is single-writer. Multi-worker deployments must arrange a
+  single writer or wait for a separately designed read-only channel.
+- Schema mutation remains additive-only. Successful durable schema changes are
+  committed immediately as isolated `schema_change` transactions. The raw
+  core `SchemaTransitionInput` mechanism is policy-free and is not exported
+  from `factgraph.sdk`.
+- Snapshot attach (`db.as_of(...)`) and method-level `view=` parameters remain
+  future work.
+
+## Test Entry Points
+
+- `tests/test_factgraph_workspace_lifecycle.py`
+- `tests/test_db_attach_lifecycle.py`
+- `tests/test_application_entity_write.py`
+- `tests/test_sdk_batch_application_delegate.py`
+- `tests/test_schema_mutation_lifecycle.py`
+- `tests/test_a20e_registry_final_removal.py`
+- `tests/sdk/test_public_sdk_docstrings.py`
+
+## Public Docstring Contract
+
+Public SDK classes, functions and high-frequency namespace methods use
+Google-style docstrings. The type signature remains authoritative; prose
+documents behavioral meaning and FactGraph-specific boundaries.
+
+Coverage is mechanically enforced for every name in ``factgraph.sdk.__all__``,
+every public method/property on exported classes, and every public member of
+the concrete ``FactGraph`` namespaces. Query construction is included through
+all terminals: ``bind``, ``select``, ``expect_contains``, ``using``, ``plan``,
+``plan_v2``, ``compile``, ``evaluate``, ``capture`` and ``what_if``.
+
+- Start with one behavioral summary sentence.
+- Add `Args`, `Returns`, `Raises`, `Examples` and `Notes` only when they help a
+  caller make a correct decision.
+- Use `Notes` to identify ledger writes, execution of trusted user code,
+  source/evidence authority, replay behavior and V0/V1/V2 boundaries.
+- Name stable error codes when callers can act on them.
+- Keep full tutorials in `docs/quickstart` and use docstring examples only for
+  the local call pattern.
+- Do not expose blueprint history, internal line references or implementation
+  debates through `help(...)`.
 
 ## Doc Map
 
-The user-facing official quickstart lives at
-[`docs/official/factgraph/index.md`](docs/official/factgraph/index.md).
-The module docs below remain the implementation-truth layer for maintainers and
-advanced users.
+The user-facing quickstarts live under
+[`docs/quickstart/`](../../../../docs/quickstart/). The module documents below
+remain the implementation-truth layer for maintainers and advanced users.
 
 | Doc | When to read |
 |---|---|
-| [`00_user_guide.en.md`](00_user_guide.en.md) | Start here. End-to-end tour with examples for each namespace. |
-| [`01_concepts.en.md`](01_concepts.en.md) | The conceptual model: object lifecycles, layer ownership, frozen DTO boundary, stability tiers. |
-| [`02_readwrite_and_ingest.en.md`](02_readwrite_and_ingest.en.md) | In-depth reference for `read`, `write`, `schema.ingest`, `schema.validate_provenance`. |
-| [`03_rules_and_inferences.en.md`](03_rules_and_inferences.en.md) | In-depth reference for the DSL (`Rule`, `Query`, `Inference`) and the `eval` namespace. |
-| [`04_api_surface.en.md`](04_api_surface.en.md) | Full public API index with every method signature, every export, every error class. |
-| [`06_what_if_and_proof.en.md`](06_what_if_and_proof.en.md) | T5 evidence and closed-head replay overview. |
-| [`07_walker_and_advanced.en.md`](07_walker_and_advanced.en.md) | When and why to use direct imports (walker views, recorder, raw DTOs, engine adapters). |
+| [`00_user_guide.en.md`](00_user_guide.en.md) | End-to-end SDK tour and lifecycle examples. |
+| [`01_concepts.en.md`](01_concepts.en.md) | Object lifecycles, layer ownership, frozen DTOs, stability tiers. |
+| [`02_readwrite_and_ingest.en.md`](02_readwrite_and_ingest.en.md) | Read/write and ingest behavior. |
+| [`03_rules_and_inferences.en.md`](03_rules_and_inferences.en.md) | Rule DSL, SDK Policy authoring, and evaluation namespace. |
+| [`04_api_surface.en.md`](04_api_surface.en.md) | Public API index and signatures. |
+| [`06_what_if_and_proof.en.md`](06_what_if_and_proof.en.md) | V1 Query/Scenario What-if, explicit detached evidence/replay, and bounded `ScenarioRunV0` compatibility overview. |
+| [`07_walker_and_advanced.en.md`](07_walker_and_advanced.en.md) | Advanced direct imports and adapters. |
+| [`08_product_scenario_execution_v2.en.md`](08_product_scenario_execution_v2.en.md) | Product `fg.scenario()`, strict metadata/provenance, target-scoped V2 execution profiles, V2 Query terminal, and the detached Outcome/Explain canonical read projection. |
+| [`22_native_program_witnesses.en.md`](22_native_program_witnesses.en.md) | Result-local native RuleProgram capture, original support/source correlation, immutable codec and capability exclusions. |
 
 ## Stability and Versioning
 
 - `factgraph.sdk.__all__` is the product surface. Removing or renaming an
   exported name requires a major version bump.
-- The `FactGraph` namespaced form (`fg.entities.get`, `fg.fields.set`,
-  `fg.assertions.where`, `fg.eval.evaluate`, etc.) is the recommended shape for
-  new code.
-- Historical flat read/write aliases such as `fg.get` / `fg.set` were removed
-  in the namespace migration. Legacy evidence shells such as direct `fg.check`
-  / `fg.why_not` are not part of the T5 public evidence path.
-- Behaviors in the docs are labeled **stable contract** (safe to assert
-  against), **current behavior** (subject to evolution), or **current
-  boundary** (a deliberate non-feature). See
-  [`01_concepts.en.md` §4](01_concepts.en.md#4-three-stability-tiers).
-
-## Contributing
-
-- Issues: file at the project's GitHub issue tracker.
-- Code contributions: see the project root `CONTRIBUTING.md`.
-- Doc fixes: PRs welcome; docs are versioned alongside the code they
-  describe. Changes to behavior must update the relevant doc in the
-  same PR.
-
-## Internal Design Records
-
-Internal design history (blueprints, drift analyses, reference
-bundles) is not shipped with the release; it is preserved in the
-source repository alongside the corresponding code and git history,
-which capture the design rationale behind specific API decisions.
+- The namespaced form (`fg.entities.*`, `fg.fields.*`, `fg.assertions.*`,
+  `fg.eval.*`) is the recommended shape for new code.
+- Behavior labels in the detailed docs distinguish stable contract, current
+  behavior, and deliberate current boundary.

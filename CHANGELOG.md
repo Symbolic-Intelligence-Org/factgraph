@@ -5,10 +5,172 @@ All notable changes to FactGraph will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [Unreleased] — 0.4.0rc1 candidate
+
+This candidate consolidates the runtime already retained by Meander in its
+`0.2.0rc3` artifact with the public `0.3.0` packaging line. It is not a published
+release. Runtime source is preserved from producer `2a4f6b8f`.
+
+### Breaking relative to published 0.3.0
+
+- **SDK/application entity materialization no longer persists a second
+  `<EntityType>:exists` truth carrier.** `fg.entities.create(...)` and lazy
+  field materialization emit the complete Identity Claim bundle only. View
+  projection derives one virtual entity-domain row when the complete chosen
+  bundle reconstructs the same content-derived `e_ref`; incomplete, revoked,
+  mismatched, or legacy-marker-only entities remain outside the domain.
+  Existing legacy `:exists` Claims remain retract-guarded compatibility data
+  and do not become projection authority.
 
 ### Added
 
+- **Trusted product compilers have a public, schema-bound compilation
+  context.** `build_product_compilation_context_v1(...)` projects typed field
+  descriptions and positive schema-declared relation premises from a resolved
+  Rule without exposing `SchemaIndex`, mutable Store state, or Rule AST to the
+  consumer. Entity-reference relationship fields are valid
+  `ensure_relation` Scenario targets; scalar fields and derived predicates
+  remain rejected.
+- **Branch-aware Product V2 targets can be retained and executed after a
+  process restart.** `FrozenEvaluationTargetV2` stores a closed, canonical,
+  ABI- and digest-bound deterministic Product Policy target together with its
+  normalized schema/address-space material and compiled Input Cases. Decode
+  never compiles Policy or reads latest state. Product runs retain neutral
+  multi-proof Branch witnesses before row deduplication and may enforce an
+  explicit whole-invocation aggregate budget without changing existing
+  per-side execution-profile semantics. The internal replay codec includes
+  explicit typed `Var`/`Origin` and `PortType` arms required by sealed Query
+  Graph targets; it is not a public raw-address or arbitrary-object wire.
+- **Application-level published relation queries are shipped.** A
+  `PublishedRelationGraphV1` admits only schema-matching stored entity fields,
+  stored ternary relations, and endpoint-continuous forward/reverse paths.
+  Typed bindings and ordered selections compile into a schema- and
+  graph-pinned `SealedRelationQueryInvocationV1`; native execution consumes
+  only that sealed compiler product, adds virtual entity-domain guards for
+  every path node, rejects schema drift and tampering, and fails closed when
+  the published row limit would be exceeded. This read/compile surface operates
+  on relation facts already present in an application `Store`; it does not add
+  SDK Relationship CRUD or a durable ternary Database writer.
+- Read-only semantic value candidates return canonical supplied-value matches
+  and bind them to a projected-view digest; Product V2 execution can require
+  that expected digest before evaluating.
+- Retained evaluation evidence and captured Store/native RuleProgram witness
+  classifications support result-local explanation without rewriting old evidence.
+
+### Fixed
+
+- Batch writes preserve the distinction between declared scalar values and entity
+  references. ProbLog exports canonical virtual entity domains and rejects invalid
+  non-ground results; Souffle query witnesses use the same entity-domain semantics.
+- Python 3.10 annotation compatibility, exact error boundaries, default test
+  collection, Query projection and durable schema anchors have regression coverage.
+
+### Build and release
+
+- Distribution version advances to `0.4.0rc1`; Apache-2.0 uses SPDX metadata and
+  includes the license file. Runtime dependencies and package APIs are unchanged
+  from the retained rc3 producer.
+- Restore the reusable PyPI workflow and keep Ruff pinned to `0.16.5`.
+- Build local candidates from complete immutable Git archives with recorded hashes;
+  the old partial-source projection and implicit push flow are retired.
+- Preserve the shared Meander rc3 artifact independently under
+  `artifacts/compatibility/`, excluded from wheel and source distributions.
+
+## [0.3.0] - 2026-08-28
+
+### Breaking
+
+- **Post-creation system metadata overrides now fail closed.** Append or UNSET
+  operations cannot replace `ingested_at`, `ingest_key`, or
+  `revoked_asrt_id`; these are the lifecycle-managed S-class keys. Source
+  timestamps must use the ordinary `event_time` time-valued key instead of
+  backfilling `ingested_at`. Mapping projections that explicitly consume
+  `ingested_at` reject duplicate persisted values instead of silently resolving
+  them last-wins.
+- **Single-cardinality chosen selection now follows durable claim sequence.**
+  The latest `claims.seq` wins regardless of sampled `ingested_at` or assertion
+  id. This intentionally changes time-inversion, equal-time, and imported
+  histories; Souffle packages now carry the matching `claim_seq` EDB relation.
+- **Initial assertion and revocation metadata now requires unique keys per
+  operation.** Repeating one key inside a single assertion/revocation input is
+  rejected fail-closed; successive values for one key must be separate
+  `append_meta` operations so `(tx_seq, op_ordinal)` defines an unambiguous
+  event order.
+- **The v0.3 workspace lifecycle is write-through and single-writer.**
+  `FactGraph.create(path=...)` and `FactGraph.load_workspace(...)` now own a
+  transactional `Database` and hold its exclusive lock until `close()`.
+  Canonical mutations are durable when their call returns;
+  `save_workspace()` only touches lifecycle metadata. Omitting save no longer
+  discards changes, and save cannot copy or rebind a workspace. Copy a closed
+  workspace directory first for dry-run/sandbox workflows. A second durable
+  open, including read-only use, fails explicitly; v0.3 has no read-only open
+  channel.
+- **The durable workspace layout converges on `db/`.** The authoritative
+  SQLite file is `db/assertions.db`; existing v0.2 `ledger.db` workspaces require
+  explicit `python -m factgraph migrate-workspace <path>` before load. The CLI
+  stages and verifies the replacement, writes a genesis import transaction
+  using standard assertion/revocation/append-meta operations, and retains the
+  complete source workspace by default. Interrupted
+  replacement is reported as `workspace_recovery_required` with visible backup
+  candidates and manual recovery guidance; torn-create or registry-only input
+  is `workspace_incomplete` and must be recreated. The v0.3
+  `factgraph_workspace.json` no longer contains a top-level `schema_digest`;
+  schema anchoring now comes from the Database head and content-addressed
+  schema objects. Unreleased v0.3 development workspaces carrying the
+  intermediate seven-table layout have no upgrade path: open and migration
+  fail with guidance to rebuild or remigrate from the original v0.2 source.
+- **Database-backed ingest no longer falls back to unmanaged raw entity
+  references.** `FactGraph.create(...)`, `FactGraph.load_workspace(...)`, and
+  writable `FactGraph.attach(...)` fail closed when an ingest target or
+  `entity_ref` value cannot be recovered from the graph's managed identity
+  cache. Obtain references through `fg.entities.ref/create` before ingest.
+  `FactGraph.from_schema_classes(...)` remains the lower-level unmanaged
+  Ledger compatibility lifecycle and retains the legacy fallback.
+- **Raw schema transitions are not an SDK policy surface.**
+  `SchemaTransitionInput` is no longer exported from `factgraph.sdk`; SDK
+  callers must use the additive-only `fg.schema.register/extend/apply` paths.
+  The core Database DTO remains an internal, policy-free commit mechanism.
+
+### Added
+
+- **Database commits now carry dual state/history commitments.** One logical
+  batch is one SQLite transaction with a CAS-protected head, incremental
+  `lthash16-v2` state digest binding assertion id plus content digest, and a
+  normalized delta tx object carrying `digest_scheme`. Open is fail-closed;
+  repair is explicit; durable opens use a lifetime `flock`.
+- **`Database.commit_changes(...)` supports metadata and schema history.**
+  `append_meta` is history-only and leaves active-state identity unchanged.
+  Isolated `schema_change` transactions commit old/new schema digests while
+  replay requires both content-addressed schema objects and transition
+  continuity. Application `FieldValue` now carries `bytes` additively.
+- **Schema compilation supports orthogonal metadata policy declarations.**
+  `compile_schema_from_classes(..., meta_keys=...)` and authoring JSON accept
+  typed `MetaKeyPolicy` declarations for reader class, premise eligibility,
+  load policy, storage scope, and query indexing. Default-valued declarations
+  stay out of canonical bytes; premise configuration is closed against the
+  schema, and audit/lazy keys stay out of the eager evaluation workset.
+- **Database batches can carry chained transaction metadata defaults.**
+  `Database.commit_changes(..., meta_defaults=...)` accepts unique ordinary
+  keys declared `storage_scope="tx_liftable"` and emits them in canonical key
+  order. Defaults are committed in the tx object and inherited by assertions
+  and revokers in that transaction; claim metadata overrides them and an
+  `UNSET` claim event removes inheritance.
+- **Ledger persistence converges from seven tables to three.** `claims`,
+  eventized `claim_meta`, and `ledger_meta` are the complete SQLite shape;
+  revocations are internal claims, while argument and annotation compatibility
+  views are reconstructed projections. Metadata events use immutable
+  `(tx_seq, op_ordinal)` order, support internal dual-NULL UNSET tombstones, and
+  are checked against the canonical tx chain on open. Narrow audit/debug APIs
+  expose event history and as-of replay without adding a general SDK history
+  surface or changing factual/state/support digests.
+- **The SDK exposes low-level atomic assertion/revocation commits.**
+  `fg.commit_changes(assertions, revocations)` and the public
+  `RevocationInput` DTO let advanced callers submit one mixed change set as
+  one Database transaction.
+- **The canonical SDK write surface routes through Database transactions.**
+  Entity create/delete, field mutation, ingest, batch, metadata append, and
+  additive schema mutation use the same commit chain for created, loaded, and
+  writable-attached graphs.
 - **`fg.meta.capabilities()` runtime introspection** is shipped: new read-only
   `fg.meta` namespace exposing `capabilities()` which returns a frozen
   `MappingProxyType` of `frozenset[str]` reporting runtime-accepted
@@ -89,6 +251,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Souffle exports now materialize effective metadata only.** Historical
+  superseded values and UNSET tombstones stay in the audit event history but
+  do not enter the adapter's evaluation fact set.
+- **v0.2 annotation migration now treats `annotation_rows` as ground truth.**
+  A shared-key meta row appended after claim creation remains meta-only when
+  the source has no matching annotation; migration no longer synthesizes one.
+  Exact initial-meta contract annotations are regenerated, while custom
+  namespace/category rows are preserved as replayable companion events.
+- **SDK write-lifecycle failures are classified at the SDK boundary.**
+  Writes after an SDK-owned graph is closed raise
+  `SDKStoreError(code="GRAPH_CLOSED")` with
+  reopen guidance. Writes through a durable view attach report its read-only
+  status directly instead of being wrapped as a non-additive schema failure.
 - **`Explanation.repr` conclusion line now auto-renders `Rule.desc`** when the
   rule head sets `desc=` template. `_row_conclusion_node` calls
   `head.render_desc(row.bindings)` and stores the rendered string as the

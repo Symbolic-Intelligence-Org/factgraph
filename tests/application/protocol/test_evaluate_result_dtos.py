@@ -1,8 +1,14 @@
 from __future__ import annotations
 
-from dataclasses import fields
 import unittest
+from dataclasses import fields, replace
 
+from factgraph.application.explain.evidence_tree import (
+    LAYOUT_TREE,
+    EvidenceGraph,
+    EvidenceRule,
+    EvidenceTree,
+)
 from factgraph.application.protocol import (
     BOOLEAN_CERTAINTY,
     Certainty,
@@ -13,12 +19,16 @@ from factgraph.application.protocol import (
     Explanation,
     ResultFingerprint,
     Rule,
+    ScenarioFieldSubstitutionOperationV0,
+    ScenarioFieldSubstitutionSetResolutionV0,
+    ScenarioResolutionV0,
 )
 from factgraph.application.protocol.common import ProtocolShapeError
 from factgraph.application.protocol.evaluate_result import (
-    _candidate_set_to_evaluate_row,
+    _derivation_output_to_evaluate_row,
     _explain_live_row,
     _row_digest_for,
+    _scenario_semantic_rows_digest,
     canonical_bytes_for_evaluate,
     claim_digest_for,
     closed_head_digest_for,
@@ -27,12 +37,6 @@ from factgraph.application.protocol.evaluate_result import (
     result_id_for,
     row_id_for,
 )
-from factgraph.application.explain.evidence_tree import (
-    EvidenceGraph,
-    EvidenceRule,
-    EvidenceTree,
-    LAYOUT_TREE,
-)
 from factgraph.core.derivation.candidates import CandidateSet
 from factgraph.core.protocol.digests import sha256_token
 from factgraph.core.rules.where_ast import CmpAtom, Const, PredAtom, Var
@@ -40,8 +44,8 @@ from factgraph.core.store._support import (
     SOUFFLE_WITNESS_KIND,
     NonFactStep,
     PredWitness,
-    ProvenanceEnvelope,
     ProofReceipt,
+    ProvenanceEnvelope,
 )
 
 
@@ -495,8 +499,152 @@ class EvaluateResultDTOTests(unittest.TestCase):
         self.assertEqual(len(result), 1)
         self.assertTrue(result.exists())
         self.assertEqual(result.count(), 1)
+        self.assertIsNone(result.run_anchor)
         self.assertIs(result.first(), result[0])
         self.assertIs(result[0]._require_live_result(), result)
+
+    def test_scenario_result_cannot_carry_run_anchor_or_bundle(self) -> None:
+        from factgraph.application.protocol import (
+            FieldPath,
+            ScenarioResultDiffV0,
+            ScenarioScalarValueV0,
+        )
+
+        result = _single_row_result()
+        effective_digest = result.fingerprint.view_snapshot_digest
+        diff = ScenarioResultDiffV0(
+            1,
+            1,
+            _token("baseline"),
+            _scenario_semantic_rows_digest(result.rows),
+            True,
+        )
+        scenario = ScenarioResolutionV0(
+            premise_id="hypothesis",
+            entity_ref="idref_v1:Person:test",
+            field=FieldPath("Person", "age"),
+            baseline_value=ScenarioScalarValueV0("int", 22),
+            effective_value=ScenarioScalarValueV0("int", 35),
+            base_view_digest=_token("base"),
+            baseline_relation_digest=_token("before"),
+            effective_relation_digest=effective_digest,
+            semantic_value_changed=True,
+            effective_source_changed=True,
+            result_diff=diff,
+        )
+        scenario_result = _evaluate_result(
+            result_id=result.result_id,
+            rows=result.rows,
+            head=result.head,
+            engine=result.engine,
+            expr_digest=result.fingerprint.expr_digest,
+            rule_set_digest=result.fingerprint.rule_set_digest,
+            view_snapshot_digest=result.fingerprint.view_snapshot_digest,
+            config_digest=result.fingerprint.config_digest,
+            result_digest=result.fingerprint.result_digest,
+            run_id=result.fingerprint.run_id,
+            scenario=scenario,
+        )
+        self.assertIs(scenario_result.scenario, scenario)
+
+        with self.assertRaisesRegex(ProtocolShapeError, "effective relation digest"):
+            replace(
+                scenario_result,
+                scenario=replace(scenario, effective_relation_digest=_token("wrong")),
+            )
+        with self.assertRaisesRegex(ProtocolShapeError, "requires a result diff"):
+            replace(scenario_result, scenario=replace(scenario, result_diff=None))
+        with self.assertRaisesRegex(ProtocolShapeError, "effective rows"):
+            replace(
+                scenario_result,
+                scenario=replace(
+                    scenario,
+                    result_diff=ScenarioResultDiffV0(
+                        1,
+                        1,
+                        _token("baseline"),
+                        _token("wrong-rows"),
+                        True,
+                    ),
+                ),
+            )
+
+        with self.assertRaisesRegex(ProtocolShapeError, "resolution changed"):
+            replace(
+                scenario_result,
+                scenario=replace(
+                    scenario,
+                    effective_value=ScenarioScalarValueV0("int", 999),
+                ),
+            )
+
+    def test_set_scenario_resolution_cannot_be_spliced_after_result_seal(self) -> None:
+        from factgraph.application.protocol import (
+            FieldPath,
+            ScenarioResultDiffV0,
+            ScenarioScalarValueV0,
+        )
+
+        result = _single_row_result()
+        effective_digest = result.fingerprint.view_snapshot_digest
+        diff = ScenarioResultDiffV0(
+            1,
+            1,
+            _token("baseline"),
+            _scenario_semantic_rows_digest(result.rows),
+            True,
+        )
+        age = ScenarioFieldSubstitutionOperationV0(
+            premise_id="age-hypothesis",
+            entity_ref="idref_v1:Person:alice",
+            field=FieldPath("Person", "age"),
+            baseline_value=ScenarioScalarValueV0("int", 22),
+            effective_value=ScenarioScalarValueV0("int", 35),
+            semantic_value_changed=True,
+            effective_source_changed=True,
+        )
+        score = ScenarioFieldSubstitutionOperationV0(
+            premise_id="score-hypothesis",
+            entity_ref="idref_v1:Person:bob",
+            field=FieldPath("Person", "score"),
+            baseline_value=ScenarioScalarValueV0("int", 7),
+            effective_value=ScenarioScalarValueV0("int", 11),
+            semantic_value_changed=True,
+            effective_source_changed=True,
+        )
+        scenario = ScenarioFieldSubstitutionSetResolutionV0(
+            operations=(age, score),
+            base_view_digest=_token("base"),
+            baseline_relation_digest=_token("before"),
+            effective_relation_digest=effective_digest,
+            result_diff=diff,
+        )
+        scenario_result = _evaluate_result(
+            result_id=result.result_id,
+            rows=result.rows,
+            head=result.head,
+            engine=result.engine,
+            expr_digest=result.fingerprint.expr_digest,
+            rule_set_digest=result.fingerprint.rule_set_digest,
+            view_snapshot_digest=result.fingerprint.view_snapshot_digest,
+            config_digest=result.fingerprint.config_digest,
+            result_digest=result.fingerprint.result_digest,
+            run_id=result.fingerprint.run_id,
+            scenario=scenario,
+        )
+        forged_age = replace(
+            age,
+            effective_value=ScenarioScalarValueV0("int", 999),
+        )
+        forged = ScenarioFieldSubstitutionSetResolutionV0(
+            operations=(forged_age, score),
+            base_view_digest=scenario.base_view_digest,
+            baseline_relation_digest=scenario.baseline_relation_digest,
+            effective_relation_digest=scenario.effective_relation_digest,
+            result_diff=scenario.result_diff,
+        )
+        with self.assertRaisesRegex(ProtocolShapeError, "resolution changed"):
+            replace(scenario_result, scenario=forged)
 
     def test_row_provenance_envelopes_reject_unknown_row_id(self) -> None:
         result = _single_row_result()
@@ -532,7 +680,7 @@ class EvaluateResultDTOTests(unittest.TestCase):
             _single_row_result(provenance_envelope=bad_envelope)
 
     def test_detached_row_live_helper_raises(self) -> None:
-        run_id, result_id, _expr, _rules, _view, _semantics, closed_head_digest, *_rest, head = _result_parts()
+        run_id, result_id, _expr, _rules, _view, _semantics, closed_head_digest, *_rest, _head = _result_parts()
         row = _row(result_id, run_id, closed_head_digest, {"person": "p1"})
 
         with self.assertRaises(DetachedRowError):
@@ -781,7 +929,7 @@ class EvaluateResultDTOTests(unittest.TestCase):
         self.assertFalse(hasattr(explanation.evidence, "edges"))
 
     def test_explanation_status_matrix_is_enforced(self) -> None:
-        run_id, result_id, _expr, _rules, _view, _semantics, closed_head_digest, *_rest, head = _result_parts()
+        run_id, result_id, _expr, _rules, _view, _semantics, closed_head_digest, *_rest, _head = _result_parts()
         row = _row(result_id, run_id, closed_head_digest, {"person": "p1"})
 
         with self.assertRaisesRegex(ProtocolShapeError, "iff"):
@@ -1082,7 +1230,7 @@ class EvaluateResultDTOTests(unittest.TestCase):
             confidence_kind="probability",
         )
 
-        row = _candidate_set_to_evaluate_row(
+        row = _derivation_output_to_evaluate_row(
             candidate,
             head=head,
             result_id=result_id,
@@ -1095,7 +1243,7 @@ class EvaluateResultDTOTests(unittest.TestCase):
         self.assertFalse(hasattr(row, "candidate_id"))
         self.assertEqual(row.digest, claim_digest_for(row.kind, "Person:exists", row.bindings))
 
-        native_row = _candidate_set_to_evaluate_row(
+        native_row = _derivation_output_to_evaluate_row(
             CandidateSet(
                 derivation_id="native",
                 derivation_version="v1",
@@ -1114,7 +1262,7 @@ class EvaluateResultDTOTests(unittest.TestCase):
             run_id=run_id,
             closed_head_digest=closed_head_digest,
         )
-        pyreason_row = _candidate_set_to_evaluate_row(
+        pyreason_row = _derivation_output_to_evaluate_row(
             CandidateSet(
                 derivation_id="pyreason",
                 derivation_version="v1",

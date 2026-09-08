@@ -324,7 +324,8 @@ class QueryTypeMismatchPolicyTests(unittest.TestCase):
         )
         response = execute_query(request, store=store, index=index)
         self.assertEqual(response.errors, ())
-        self.assertTrue(any(row["p"] is None for row in response.rows))
+        self.assertEqual(len(response.rows), 2)
+        self.assertTrue(all(row["p"] is not None for row in response.rows))
 
 
 if __name__ == "__main__":

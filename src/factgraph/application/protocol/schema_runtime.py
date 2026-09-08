@@ -29,6 +29,8 @@ class EntitySelector:
 
 @dataclass(frozen=True)
 class EntityRef:
+    """Canonical application reference to one typed entity identity."""
+
     entity_type: str
     identity: IdentityValue
     encoded_ref: str | None = field(default=None, compare=False)
@@ -44,6 +46,8 @@ class EntityRef:
 
 @dataclass(frozen=True)
 class FieldPath:
+    """Canonical entity-type and field-name address."""
+
     entity_type: str
     field_name: str
 

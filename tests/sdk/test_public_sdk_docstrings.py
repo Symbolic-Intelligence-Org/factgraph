@@ -1,0 +1,286 @@
+"""Public SDK docstring style and contract smoke tests."""
+
+from __future__ import annotations
+
+import ast
+import inspect
+import unittest
+from typing import Any, Literal, get_args, get_origin
+
+from factgraph import sdk
+from factgraph.application.goal_plan_v2_runtime import ProductEvaluationInvocationV2
+from factgraph.application.product_result_views_v2 import EvaluationRunV2RowView
+from factgraph.application.protocol import semantic_candidates
+from factgraph.sdk import (
+    Database,
+    Entity,
+    EvaluationQueryBuilderV1,
+    ExecutionProfileBuilderV2,
+    FactGraph,
+    Field,
+    FunctionBuilder,
+    Identity,
+    PolicyBuilder,
+    ProductEvaluationOutcomeV2,
+    RuleBuilder,
+    ScenarioBuilderV2,
+    build_application_rule,
+    build_authoring_schema_from_classes,
+    build_function,
+    function_builder,
+    outcome_from_run_v2,
+)
+
+
+class Person(Entity):
+    person_id: str = Identity()
+    age: int = Field()
+
+
+def _assert_sections(
+    test: unittest.TestCase,
+    value: object,
+    *sections: str,
+) -> str:
+    doc = inspect.getdoc(value)
+    test.assertIsNotNone(doc, f"missing docstring for {value!r}")
+    assert doc is not None
+    for section in sections:
+        test.assertIn(f"{section}:", doc, f"{value!r} is missing {section} section")
+    return doc
+
+
+def _assert_candidate_match_mode_documented(
+    test: unittest.TestCase, exported: object, source: str
+) -> None:
+    """One exact Literal alias uses declaration docs, never a shared __doc__ write."""
+    test.assertIs(exported, semantic_candidates.SemanticCandidateMatchMode)
+    test.assertIs(get_origin(exported), Literal)
+    test.assertEqual(get_args(exported), ("exact", "unicode_casefold_v1"))
+    body = ast.parse(source).body
+    declarations = [
+        (index, node)
+        for index, node in enumerate(body)
+        if isinstance(node, ast.AnnAssign)
+        and isinstance(node.target, ast.Name)
+        and node.target.id == "SemanticCandidateMatchMode"
+    ]
+    test.assertEqual(len(declarations), 1, "expected one exact candidate mode declaration")
+    index, declaration = declarations[0]
+    expected = ast.parse(
+        'SemanticCandidateMatchMode: TypeAlias = Literal["exact", "unicode_casefold_v1"]'
+    ).body[0]
+    test.assertEqual(ast.dump(declaration), ast.dump(expected))
+    adjacent = body[index + 1] if index + 1 < len(body) else None
+    test.assertIsInstance(adjacent, ast.Expr, "alias must have adjacent declaration documentation")
+    value = adjacent.value if isinstance(adjacent, ast.Expr) else None
+    test.assertIsInstance(value, ast.Constant)
+    doc = value.value if isinstance(value, ast.Constant) else None
+    test.assertIsInstance(doc, str)
+    for required in ("exact", "unicode_casefold_v1", "suggestions"):
+        test.assertIn(required, doc)
+
+
+class PublicSDKDocstringTests(unittest.TestCase):
+    def test_product_fluent_entrypoints_preserve_concrete_hover_types(self) -> None:
+        cases = (
+            (FactGraph.rule_builder, "RuleBuilder"),
+            (FactGraph.build_rule, "ProductRuleV1"),
+            (FactGraph.function_builder, "FunctionBuilder"),
+            (FactGraph.build_function, "ProductFunctionV1"),
+            (FactGraph.policy_builder, "PolicyBuilder"),
+            (FactGraph.build_policy, "ProductPolicyV1"),
+            (FactGraph.scenario, "ScenarioBuilderV2"),
+            (FactGraph.query, "EvaluationQueryBuilderV1"),
+            (RuleBuilder.build, "ProductRuleV1"),
+            (FunctionBuilder.build, "ProductFunctionV1"),
+            (PolicyBuilder.build, "ProductPolicyV1"),
+            (ScenarioBuilderV2.build, "ScenarioSpecV2"),
+            (ExecutionProfileBuilderV2.build, "EvaluationExecutionProfileV2"),
+            (EvaluationQueryBuilderV1.plan, "ProductEvaluationInvocationV2"),
+            (EvaluationQueryBuilderV1.plan_v2, "ProductEvaluationInvocationV2"),
+        )
+        for value, expected_type in cases:
+            with self.subTest(value=value):
+                return_annotation = inspect.signature(value).return_annotation
+                self.assertNotIn(return_annotation, {inspect.Signature.empty, Any, "Any"})
+                self.assertIn(expected_type, str(return_annotation))
+
+    def test_every_public_export_and_exported_class_member_has_a_docstring(self) -> None:
+        for export_name in sdk.__all__:
+            exported = getattr(sdk, export_name)
+            doc = inspect.getdoc(exported)
+            with self.subTest(export=export_name):
+                if export_name == "SemanticCandidateMatchMode":
+                    _assert_candidate_match_mode_documented(
+                        self, exported, inspect.getsource(semantic_candidates)
+                    )
+                else:
+                    self.assertTrue(
+                        doc,
+                        f"factgraph.sdk.{export_name} is missing a docstring",
+                    )
+                if inspect.isclass(exported):
+                    self.assertFalse(
+                        doc.startswith(f"{export_name}(") if doc else False,
+                        f"factgraph.sdk.{export_name} has only an autogenerated signature",
+                    )
+            if not inspect.isclass(exported):
+                continue
+            for member_name, member in inspect.getmembers(exported):
+                if member_name.startswith("_"):
+                    continue
+                target = member.fget if isinstance(member, property) else member
+                if not (inspect.isroutine(target) or isinstance(member, property)):
+                    continue
+                with self.subTest(export=export_name, member=member_name):
+                    self.assertTrue(
+                        inspect.getdoc(target),
+                        f"factgraph.sdk.{export_name}.{member_name} is missing a docstring",
+                    )
+
+    def test_every_exported_function_has_google_parameter_and_return_sections(self) -> None:
+        for export_name in sdk.__all__:
+            exported = getattr(sdk, export_name)
+            if not inspect.isfunction(exported):
+                continue
+            signature = inspect.signature(exported)
+            doc = inspect.getdoc(exported) or ""
+            with self.subTest(export=export_name):
+                if signature.parameters:
+                    self.assertIn("Args:", doc)
+                if signature.return_annotation not in {
+                    inspect.Signature.empty,
+                    None,
+                    type(None),
+                    "None",
+                }:
+                    self.assertIn("Returns:", doc)
+
+    def test_every_factgraph_namespace_member_has_a_docstring(self) -> None:
+        fg = FactGraph.create(schema_classes=[Person])
+        namespace_names = (
+            "assertion_views",
+            "assertions",
+            "schema",
+            "entities",
+            "fields",
+            "rules",
+            "inferences",
+            "eval",
+            "audit",
+            "meta",
+            "package",
+            "execution",
+            "problog",
+        )
+        for namespace_name in namespace_names:
+            namespace = getattr(fg, namespace_name)
+            for member_name, member in inspect.getmembers(type(namespace)):
+                if member_name.startswith("_"):
+                    continue
+                target = member.fget if isinstance(member, property) else member
+                if not (inspect.isroutine(target) or isinstance(member, property)):
+                    continue
+                with self.subTest(namespace=namespace_name, member=member_name):
+                    self.assertTrue(
+                        inspect.getdoc(target),
+                        f"fg.{namespace_name}.{member_name} is missing a docstring",
+                    )
+
+    def test_product_authoring_query_and_outcome_use_google_sections(self) -> None:
+        cases = (
+            (FactGraph.create, ("Args", "Returns", "Raises", "Notes")),
+            (FactGraph.load_workspace, ("Args", "Returns", "Raises", "Notes")),
+            (FactGraph.attach, ("Args", "Returns", "Raises", "Notes")),
+            (Database.create, ("Args", "Returns", "Raises")),
+            (Database.open, ("Args", "Returns", "Raises")),
+            (Database.close, ("Notes",)),
+            (Database.head, ("Returns", "Raises")),
+            (build_authoring_schema_from_classes, ("Args", "Returns")),
+            (build_application_rule, ("Args", "Returns", "Raises", "Notes")),
+            (FactGraph.rule_builder, ("Args", "Returns", "Raises", "Notes")),
+            (FactGraph.build_rule, ("Args", "Returns", "Raises", "Notes")),
+            (RuleBuilder.build, ("Args", "Returns", "Raises", "Notes")),
+            (function_builder, ("Args", "Returns", "Raises")),
+            (build_function, ("Args", "Returns", "Raises", "Notes")),
+            (FactGraph.function_builder, ("Args", "Returns", "Raises", "Notes")),
+            (FactGraph.build_function, ("Args", "Returns", "Raises", "Notes")),
+            (FactGraph.policy_builder, ("Args", "Returns", "Raises", "Notes")),
+            (FactGraph.build_policy, ("Args", "Returns", "Raises", "Notes")),
+            (FactGraph.scenario, ("Returns", "Notes")),
+            (FactGraph.query, ("Args", "Returns", "Raises", "Notes")),
+            (FunctionBuilder.build, ("Args", "Returns", "Raises", "Examples", "Notes")),
+            (PolicyBuilder.use, ("Args", "Returns", "Raises", "Notes")),
+            (PolicyBuilder.all, ("Args", "Returns", "Raises", "Notes")),
+            (PolicyBuilder.any, ("Args", "Returns", "Raises", "Notes")),
+            (PolicyBuilder.weighted_choice, ("Args", "Returns", "Raises", "Notes")),
+            (PolicyBuilder.build, ("Args", "Returns", "Raises", "Notes")),
+            (ScenarioBuilderV2.build, ("Returns", "Raises", "Notes")),
+            (ExecutionProfileBuilderV2.build, ("Returns", "Raises", "Notes")),
+            (EvaluationQueryBuilderV1.bind, ("Args", "Returns", "Raises", "Notes")),
+            (EvaluationQueryBuilderV1.select, ("Args", "Returns", "Raises", "Notes")),
+            (
+                EvaluationQueryBuilderV1.expect_contains,
+                ("Args", "Returns", "Raises", "Notes"),
+            ),
+            (EvaluationQueryBuilderV1.using, ("Args", "Returns", "Raises", "Notes")),
+            (EvaluationQueryBuilderV1.plan, ("Args", "Returns", "Raises", "Notes")),
+            (EvaluationQueryBuilderV1.plan_v2, ("Args", "Returns", "Raises")),
+            (EvaluationQueryBuilderV1.compile, ("Returns", "Raises", "Notes")),
+            (EvaluationQueryBuilderV1.evaluate, ("Args", "Returns", "Notes")),
+            (EvaluationQueryBuilderV1.capture, ("Returns", "Notes")),
+            (EvaluationQueryBuilderV1.what_if, ("Args", "Returns", "Raises", "Notes")),
+            (ProductEvaluationInvocationV2.run, ("Returns", "Raises", "Notes")),
+            (ScenarioBuilderV2.set, ("Args", "Returns", "Raises", "Notes")),
+            (ScenarioBuilderV2.set_exact, ("Args", "Returns", "Raises", "Notes")),
+            (ScenarioBuilderV2.without, ("Args", "Returns", "Raises", "Notes")),
+            (ProductEvaluationOutcomeV2.from_run, ("Args", "Returns", "Raises", "Notes")),
+            (ProductEvaluationOutcomeV2.explain, ("Args", "Returns", "Raises", "Notes")),
+            (ProductEvaluationOutcomeV2.replay, ("Returns", "Notes")),
+            (EvaluationRunV2RowView.to_explain_target, ("Returns", "Notes")),
+            (outcome_from_run_v2, ("Args", "Returns", "Raises", "Examples", "Notes")),
+        )
+        for value, sections in cases:
+            with self.subTest(value=value):
+                doc = _assert_sections(self, value, *sections)
+                self.assertNotIn("ADR-", doc)
+                self.assertNotIn("blueprint", doc.lower())
+
+    def test_factgraph_namespaces_expose_user_contracts(self) -> None:
+        fg = FactGraph.create(schema_classes=[Person])
+        cases = (
+            (fg.entities.ref, ("Args", "Returns", "Raises", "Notes")),
+            (fg.entities.create, ("Args", "Returns", "Raises", "Notes")),
+            (fg.entities.where, ("Args", "Returns", "Raises", "Notes")),
+            (fg.fields.set, ("Args", "Returns", "Raises", "Notes")),
+            (fg.fields.add, ("Args", "Returns", "Raises", "Notes")),
+            (fg.fields.retract, ("Args", "Returns", "Raises", "Notes")),
+            (fg.fields.get, ("Args", "Returns", "Notes")),
+            (fg.assertions.by_id, ("Args", "Returns", "Raises")),
+            (fg.assertions.where, ("Args", "Returns", "Raises", "Notes")),
+            (fg.assertions.retract, ("Args", "Returns", "Raises", "Notes")),
+            (fg.assertions.append_meta, ("Args", "Raises", "Notes")),
+            (fg.commit_assertions, ("Args", "Returns", "Raises", "Notes")),
+            (fg.commit_changes, ("Args", "Returns", "Raises", "Notes")),
+            (fg.batch, ("Args", "Returns", "Raises", "Notes")),
+            (fg.schema.ingest, ("Args", "Returns", "Raises", "Notes")),
+            (fg.schema.validate_provenance, ("Args", "Returns", "Notes")),
+            (fg.meta.capabilities, ("Returns", "Notes")),
+            (
+                fg.execution.native_deterministic,
+                ("Args", "Returns", "Raises", "Notes"),
+            ),
+            (fg.execution.problog, ("Args", "Returns", "Raises", "Notes")),
+            (
+                fg.execution.portable_deterministic,
+                ("Args", "Returns", "Raises", "Notes"),
+            ),
+        )
+        for value, sections in cases:
+            with self.subTest(value=value):
+                _assert_sections(self, value, *sections)
+
+
+if __name__ == "__main__":
+    unittest.main()

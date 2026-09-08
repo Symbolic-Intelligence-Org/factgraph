@@ -5,9 +5,18 @@ import time
 from typing import Any
 from uuid import uuid4
 
+from factgraph.core.protocol.annotation_v1 import (
+    SHARED_ANNOTATION_KEYS,
+    initial_meta_annotation_v1,
+)
 from factgraph.core.protocol.digests import sha256_token
 from factgraph.core.protocol.tup_v1 import canonical_bytes_tup_v1, claim_args_from_rest_terms
+from factgraph.core.schema.meta_policy import (
+    EVENT_TIME_META_KEY,
+    SYSTEM_MANAGED_META_KEYS,
+)
 from factgraph.core.store.ledger import (
+    _ANNOTATION_COMPAT_PREFIX,
     AnnotationRow,
     Claim,
     ClaimArg,
@@ -15,6 +24,7 @@ from factgraph.core.store.ledger import (
     Ledger,
     MetaRow,
     Revokes,
+    _is_reserved_annotation_meta_key,
 )
 
 
@@ -26,7 +36,7 @@ class PolicyNonDeterminismError(WriteProtocolError):
     pass
 
 
-_SYSTEM_MANAGED_META_KEYS = {"ingested_at", "ingest_key", "revoked_asrt_id"}
+_SYSTEM_MANAGED_META_KEYS = SYSTEM_MANAGED_META_KEYS
 _CONVENTION_META_KEYS = {
     "source",
     "source_loc",
@@ -35,6 +45,7 @@ _CONVENTION_META_KEYS = {
     "bound",
     "approved_by",
     "note",
+    EVENT_TIME_META_KEY,
 }
 _REMOVED_UNCERTAINTY_META_KEYS = {"probability", "bound_lower", "bound_upper", "confidence", "confidence_source"}
 _RAW_UNCERTAINTY_KINDS = {"probabilistic", "possibilistic"}
@@ -59,6 +70,7 @@ _KEY_KIND_MAP = {
     "ingest_key": "str",
     "revoked_asrt_id": "str",
     "accepted_at": "time",
+    EVENT_TIME_META_KEY: "time",
     "source": "str",
     "source_loc": "str",
     "trace_id": "str",
@@ -94,26 +106,18 @@ _missing_kind_map_keys = sorted(_required_kind_keys - set(_KEY_KIND_MAP.keys()))
 if _missing_kind_map_keys:
     raise RuntimeError(f"_KEY_KIND_MAP is missing required keys: {', '.join(_missing_kind_map_keys)}")
 
-_SHARED_ANNOTATION_WHITELIST: dict[str, tuple[str, str]] = {
-    "source": ("source", "observed"),
-    "source_loc": ("source", "observed"),
-    "trace_id": ("source", "observed"),
-    "approved_by": ("source", "observed"),
-    "note": ("source", "observed"),
-    "raw_kind": ("semantic", "observed"),
-    "bound": ("semantic", "observed"),
-}
+_SHARED_ANNOTATION_WHITELIST = SHARED_ANNOTATION_KEYS
 
 __all__ = [
-    "WriteProtocolError",
-    "PolicyNonDeterminismError",
     "_SYSTEM_MANAGED_META_KEYS",
+    "PolicyNonDeterminismError",
+    "WriteProtocolError",
+    "add_field",
     "new_assertion_id",
     "now_epoch_nanos",
-    "set_field",
-    "add_field",
-    "retract_by_asrt",
     "replace_field",
+    "retract_by_asrt",
+    "set_field",
 ]
 
 
@@ -176,8 +180,15 @@ def retract_by_asrt(
         raise WriteProtocolError("ledger must be Ledger")
     if not isinstance(revoked_asrt_id, str) or not revoked_asrt_id:
         raise WriteProtocolError("revoked_asrt_id must be non-empty string")
-    if ledger.get_claim(revoked_asrt_id) is None:
+    target = ledger._get_claim_including_system(revoked_asrt_id)
+    if target is None:
         raise WriteProtocolError(f"unknown revoked_asrt_id: {revoked_asrt_id}")
+    if target.pred_id.startswith("__system__."):
+        raise WriteProtocolError(
+            f"INV-12 part 2: target {revoked_asrt_id!r} is a system claim "
+            f"(pred_id={target.pred_id!r}); revoke-of-revoke is forbidden. "
+            "See ADR-SYS-B §4.1.5."
+        )
 
     existing_revoker = ledger.find_revoker(revoked_asrt_id)
     if existing_revoker is not None:
@@ -186,7 +197,6 @@ def retract_by_asrt(
     normalized_meta = _normalize_meta(meta)
     revoker_asrt_id = new_assertion_id()
     ingested_at = now_epoch_nanos()
-    annotation_rows = _annotation_rows_for_claim(revoker_asrt_id, normalized_meta)
     meta_rows = [
         MetaRow(asrt_id=revoker_asrt_id, key="ingested_at", kind="time", value=ingested_at),
         MetaRow(
@@ -203,8 +213,6 @@ def retract_by_asrt(
         idempotency=None,
         revoker_asrt_id=revoker_asrt_id,
     )
-    if annotation_rows:
-        ledger.append_annotations(annotation_rows)
     return revoker_asrt_id
 
 
@@ -238,6 +246,11 @@ def _validate_write_inputs(
         raise WriteProtocolError("ledger must be Ledger")
     if not isinstance(pred_id, str) or not pred_id:
         raise WriteProtocolError("pred_id must be non-empty string")
+    if pred_id.startswith("__system__."):
+        raise WriteProtocolError(
+            "general field writes cannot use the reserved '__system__.' namespace; "
+            "use retract_by_asrt for revocations"
+        )
     if not isinstance(e_ref, str) or not e_ref:
         raise WriteProtocolError("e_ref must be non-empty string")
     if not isinstance(rest_terms, list):
@@ -257,8 +270,16 @@ def _normalize_meta(meta: dict[str, Any] | None) -> dict[str, Any]:
     for key in meta:
         if not isinstance(key, str) or not key:
             raise WriteProtocolError("meta keys must be non-empty strings")
+        if _is_reserved_annotation_meta_key(key):
+            raise WriteProtocolError(
+                "meta key uses the reserved annotation storage namespace: "
+                f"{_ANNOTATION_COMPAT_PREFIX}"
+            )
         if key in _SYSTEM_MANAGED_META_KEYS:
-            raise WriteProtocolError(f"meta[{key}] is reserved and system-managed")
+            raise WriteProtocolError(
+                f"meta[{key}] is reserved and system-managed; "
+                f"use meta[{EVENT_TIME_META_KEY}] for source event time"
+            )
     result = dict(meta)
     _validate_no_removed_uncertainty_keys(result)
     _normalize_raw_uncertainty_meta(result)
@@ -371,7 +392,7 @@ def _compute_ingest_key(
 
 
 def _find_active_claim_by_ingest_key(ledger: Ledger, ingest_key: str) -> str | None:
-    for row in ledger.find_meta(key="ingest_key", kind="str"):
+    for row in ledger.effective_meta_rows(key="ingest_key", kind="str"):
         if row.value != ingest_key:
             continue
         if ledger.has_active_revocation(row.asrt_id):
@@ -403,10 +424,9 @@ def _annotation_rows_for_claim(
     """Project whitelisted shared meta keys into canonical annotation rows."""
     rows: list[AnnotationRow] = []
     for key in sorted(meta.keys()):
-        entry = _SHARED_ANNOTATION_WHITELIST.get(key)
-        if entry is None:
+        projection = initial_meta_annotation_v1(key)
+        if projection is None:
             continue
-        category, origin = entry
         value = meta[key]
         kind = _KEY_KIND_MAP.get(key)
         if kind is None:
@@ -414,21 +434,16 @@ def _annotation_rows_for_claim(
         rows.append(
             AnnotationRow(
                 asrt_id=asrt_id,
-                namespace="shared",
-                category=category,
+                namespace=projection.namespace,
+                category=projection.category,
                 key=key,
                 kind=kind,
                 value=value,
-                origin=origin,
-                derivation=_annotation_derivation_for_key(key, meta),
+                origin=projection.origin,
+                derivation=projection.derivation,
             )
         )
     return rows
-
-
-def _annotation_derivation_for_key(key: str, meta: dict[str, Any]) -> str | None:
-    del key, meta
-    return None
 
 
 def _user_meta_rows(asrt_id: str, meta: dict[str, Any]) -> list[MetaRow]:
@@ -451,9 +466,9 @@ def _infer_meta_kind(key: str, value: Any) -> str:
 
 
 def _infer_meta_kind_by_value(key: str, value: Any) -> str:
-    if key == "ingested_at":
+    if key in {"ingested_at", EVENT_TIME_META_KEY}:
         if isinstance(value, bool) or not isinstance(value, int):
-            raise WriteProtocolError("ingested_at must be epoch-nanos int")
+            raise WriteProtocolError(f"{key} must be epoch-nanos int")
         return "time"
     if isinstance(value, bool):
         return "bool"

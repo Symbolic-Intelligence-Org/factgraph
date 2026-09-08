@@ -1,16 +1,19 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
 import re
+from datetime import datetime, timezone
 from typing import Any
 
+from factgraph.core.schema.meta_policy import (
+    MetaKeyPolicyError,
+    normalize_authoring_meta_keys,
+)
 from factgraph.core.schema.schema_ir import CANONICAL_TAGS, ensure_schema_ir
 from factgraph.core.schema.schema_repr import (
     SchemaReprTemplateError,
     validate_member_repr_template,
     validate_meta_repr_template,
 )
-
 
 _IDENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
@@ -42,6 +45,13 @@ def compile_authoring_schema_v1(
     if not isinstance(relationships_raw, list):
         raise _compile_error("authoring_schema.relationships must be list when provided", path="$.relationships")
 
+    meta_keys_out: dict[str, dict[str, object]] | None = None
+    if "meta_keys" in authoring_schema:
+        try:
+            meta_keys_out = normalize_authoring_meta_keys(authoring_schema["meta_keys"])
+        except MetaKeyPolicyError as exc:
+            raise _compile_error(str(exc), path="$.meta_keys") from exc
+
     for entity_index, entity_raw in enumerate(entities_raw):
         entity_out, entity_preds = _compile_entity(entity_raw, entity_index)
         entities_out.append(entity_out)
@@ -71,6 +81,8 @@ def compile_authoring_schema_v1(
         },
         "generated_at": generated_at or _utc_now_iso_z(),
     }
+    if meta_keys_out is not None:
+        schema_ir["meta_keys"] = meta_keys_out
     try:
         return ensure_schema_ir(schema_ir)
     except Exception as exc:

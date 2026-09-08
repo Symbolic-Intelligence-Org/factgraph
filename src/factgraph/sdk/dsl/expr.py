@@ -7,7 +7,6 @@ from typing import Any
 from .branch import Case
 from .errors import SDKDSLError
 
-
 _VAR_IDS = count(1)
 
 
@@ -58,10 +57,10 @@ class LogicVar:
             raise AttributeError(item)
         return AttrRef(self, item)
 
-    def __eq__(self, other: Any) -> CompareExpr:  # type: ignore[override]
+    def __eq__(self, other: object) -> CompareExpr:  # type: ignore[override]
         return CompareExpr("eq", self, other)
 
-    def __ne__(self, other: Any) -> CompareExpr:  # type: ignore[override]
+    def __ne__(self, other: object) -> CompareExpr:  # type: ignore[override]
         return CompareExpr("ne", self, other)
 
     def __gt__(self, other: Any) -> CompareExpr:
@@ -112,10 +111,10 @@ class AttrRef:
         ):
             raise SDKDSLError("AttrRef.entity_type must be non-empty string or None")
 
-    def __eq__(self, other: Any) -> CompareExpr:  # type: ignore[override]
+    def __eq__(self, other: object) -> CompareExpr:  # type: ignore[override]
         return CompareExpr("eq", self, other)
 
-    def __ne__(self, other: Any) -> CompareExpr:  # type: ignore[override]
+    def __ne__(self, other: object) -> CompareExpr:  # type: ignore[override]
         return CompareExpr("ne", self, other)
 
     def __gt__(self, other: Any) -> CompareExpr:
@@ -137,10 +136,10 @@ class BinaryExpr:
     left: Any
     right: Any
 
-    def __eq__(self, other: Any) -> CompareExpr:  # type: ignore[override]
+    def __eq__(self, other: object) -> CompareExpr:  # type: ignore[override]
         return CompareExpr("eq", self, other)
 
-    def __ne__(self, other: Any) -> CompareExpr:  # type: ignore[override]
+    def __ne__(self, other: object) -> CompareExpr:  # type: ignore[override]
         return CompareExpr("ne", self, other)
 
     def __gt__(self, other: Any) -> CompareExpr:
@@ -215,10 +214,10 @@ class _AggregateRef:
     target: Any
     filter: tuple[Any, ...]
 
-    def __eq__(self, other: Any) -> CompareExpr:  # type: ignore[override]
+    def __eq__(self, other: object) -> CompareExpr:  # type: ignore[override]
         return CompareExpr("eq", self, other)
 
-    def __ne__(self, other: Any) -> CompareExpr:  # type: ignore[override]
+    def __ne__(self, other: object) -> CompareExpr:  # type: ignore[override]
         return CompareExpr("ne", self, other)
 
     def __gt__(self, other: Any) -> CompareExpr:
@@ -304,6 +303,15 @@ def Not(body: list[Any]) -> NotExpr:
 
     Use `Not([...])` for absence or anti-join style checks. The wrapped body
     may correlate with variables already bound by earlier atoms.
+
+    Args:
+        body: Non-empty list of body atoms to negate.
+
+    Returns:
+        A symbolic negation expression for a legacy DSL body.
+
+    Raises:
+        SDKDSLError: If ``body`` is not a non-empty list.
     """
 
     if not isinstance(body, list) or not body:
@@ -317,6 +325,12 @@ def Pred(pred_id: str, *terms: Any) -> PredAtom:
     Args:
         pred_id: Predicate id such as `"User:exists"` or `"User:tag"`.
         *terms: Logic variables or literal terms passed to the predicate.
+
+    Returns:
+        A symbolic predicate atom for the legacy DSL.
+
+    Raises:
+        SDKDSLError: If the predicate id or term list is empty.
     """
 
     if not isinstance(pred_id, str) or not pred_id:

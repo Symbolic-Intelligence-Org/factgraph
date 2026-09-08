@@ -1,14 +1,14 @@
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-import re
-from typing import Any
+from typing import Any, cast
 
+from factgraph.application import schema_runtime
 from factgraph.application.diagnose_runtime import _extend_env_with_atom
 from factgraph.application.entity_view import _recover_identity_from_predicates
-from factgraph.application import schema_runtime
-from factgraph.application.protocol.schema_runtime import EntityRef
+from factgraph.application.protocol.certainty import BOOLEAN_CERTAINTY
 from factgraph.application.protocol.rule_expr_lowering import (
     RuleExprEvaluationTrace,
     RuleExprLoweringBranch,
@@ -17,9 +17,9 @@ from factgraph.application.protocol.rule_expr_lowering import (
     _materialize_native_derivation_plan,
     transitively_expand_seed,
 )
-from factgraph.application.protocol.certainty import BOOLEAN_CERTAINTY
+from factgraph.application.protocol.schema_runtime import EntityRef
 from factgraph.core.protocol.tup_v1 import ENTITY_REF_PREFIX, display_float64_value
-from factgraph.core.rules.where_ast import _AGGREGATE_KINDS, _parse_term, AggregateAtom
+from factgraph.core.rules.where_ast import _AGGREGATE_KINDS, AggregateAtom, _parse_term
 from factgraph.core.rules.where_ast_validate import _aggregate_filter_bound_vars
 
 from .evidence_tree import (
@@ -29,6 +29,8 @@ from .evidence_tree import (
     Const,
     EvidenceAtom,
     EvidenceJoin,
+    EvidencePolicyCondition,
+    EvidenceProbeBranchTerminalBindings,
     EvidenceProbeResult,
     EvidenceRule,
     EvidenceTree,
@@ -40,7 +42,12 @@ from .evidence_tree import (
     Source,
     TreeStatus,
 )
-from .structure_keys import alias_for_atom, atom_id_for_condition, join_id_for_materialization, vars_in_atom_tuple
+from .structure_keys import (
+    alias_for_atom,
+    atom_id_for_condition,
+    join_id_for_materialization,
+    vars_in_atom_tuple,
+)
 
 _REPR_PLACEHOLDER_RE = re.compile(r"%[A-Za-z_][A-Za-z0-9_]*")
 
@@ -76,21 +83,31 @@ def probe_native(
     # expansion is an identity extension and the result is unchanged.
     seed = transitively_expand_seed(dict(bindings or {}), branches)
     paths: list[EvidenceTree] = []
+    terminal_bindings: list[EvidenceProbeBranchTerminalBindings] = []
     for branch, trace, lowered_branch in zip(branches, traces, plan.branches, strict=True):
-        paths.append(
-            _probe_branch(
-                plan,
-                lowered_branch,
-                trace,
-                branch,
-                view_facts={key: list(value) for key, value in view_facts.items()},
-                initial_bindings=seed,
-                schema_index=schema_index,
-                rules_by_id=rules_by_id or {},
-                subject_binding=subject_binding or {},
+        path, branch_terminal_envs = _probe_branch(
+            plan,
+            lowered_branch,
+            trace,
+            branch,
+            view_facts={key: list(value) for key, value in view_facts.items()},
+            initial_bindings=seed,
+            schema_index=schema_index,
+            rules_by_id=rules_by_id or {},
+            subject_binding=subject_binding or {},
+        )
+        paths.append(path)
+        terminal_bindings.append(
+            EvidenceProbeBranchTerminalBindings(
+                branch_id=trace.branch_id,
+                environments=tuple(environment.bindings for environment in branch_terminal_envs),
             )
         )
-    return EvidenceProbeResult(paths=tuple(paths), certainty=BOOLEAN_CERTAINTY)
+    return EvidenceProbeResult(
+        paths=tuple(paths),
+        certainty=BOOLEAN_CERTAINTY,
+        terminal_bindings=tuple(terminal_bindings),
+    )
 
 
 def _probe_branch(
@@ -104,18 +121,32 @@ def _probe_branch(
     schema_index: object | None,
     rules_by_id: Mapping[str, Any],
     subject_binding: Mapping[str, Any],
-) -> EvidenceTree:
-    anchor_envs = (ProbeEnv.from_bindings(initial_bindings),)
-    envs = anchor_envs
-    verdict_envs = anchor_envs
+) -> tuple[EvidenceTree, tuple[ProbeEnv, ...]]:
+    anchor_envs: tuple[ProbeEnv, ...] = (ProbeEnv.from_bindings(initial_bindings),)
+    envs: tuple[ProbeEnv, ...] = anchor_envs
+    verdict_envs: tuple[ProbeEnv, ...] = anchor_envs
     atom_results: list[tuple[int, tuple[Any, ...], EvidenceAtom, tuple[ProbeEnv, ...]]] = []
     failed_upstream = False
     join_indexes = {join.materialized_condition_index for join in trace.join_materializations}
-    head_link_indexes = {link.materialized_condition_index for link in trace.head_port_link_materializations}
+    head_link_indexes = {
+        link.materialized_condition_index for link in trace.head_port_link_materializations
+    }
+    navigation_indexes = {
+        index
+        for navigation in trace.query_navigation_materializations
+        for index in (
+            navigation.lookup_materialized_condition_index,
+            navigation.projection_head_link_materialized_condition_index,
+        )
+    }
+    policy_condition_indexes = {
+        condition.materialized_condition_index
+        for condition in trace.policy_condition_materializations
+    }
 
     for idx, atom in enumerate(atoms):
         before_envs = envs
-        if idx in join_indexes or idx in head_link_indexes:
+        if idx in join_indexes or idx in head_link_indexes or idx in navigation_indexes:
             evidence_atom, envs, verdict_envs = _probe_atom(
                 atom,
                 before_envs,
@@ -151,7 +182,11 @@ def _probe_branch(
     )
     display_terminal_envs = _display_envs(envs, schema_index=schema_index, view_facts=view_facts)
     head_atom_indexes = _head_atom_indexes_for_branch(lowered_branch, trace, atom_results)
-    head_atoms = tuple(evidence_atom for idx, _atom, evidence_atom, _envs in atom_results if idx in head_atom_indexes)
+    head_atoms = tuple(
+        evidence_atom
+        for idx, _atom, evidence_atom, _envs in atom_results
+        if idx in head_atom_indexes
+    )
     body_rules = _body_rules_for_branch(
         plan,
         lowered_branch,
@@ -159,9 +194,11 @@ def _probe_branch(
         atom_results,
         terminal_envs=display_terminal_envs,
         head_atom_indexes=head_atom_indexes,
+        policy_condition_indexes=policy_condition_indexes,
         rules_by_id=rules_by_id,
     )
     joins = _joins_for_trace(trace, atom_results)
+    policy_conditions = _policy_conditions_for_trace(trace, atom_results)
     body_status = _tree_status((*body_rules,)) if body_rules else "holds"
     head_status = _atom_status(head_atoms) if head_atoms else body_status
     head_rule = _head_rule_for_plan(
@@ -172,14 +209,32 @@ def _probe_branch(
         atoms=head_atoms,
         subject_binding=subject_binding,
     )
-    status = _fold_join_status(_tree_status((head_rule, *body_rules)), joins)
-    return EvidenceTree(
-        tree_id=trace.branch_id,
-        status=status,
-        rules=(head_rule, *body_rules),
-        joins=joins,
-        certainty=BOOLEAN_CERTAINTY,
-        metadata={"branch_id": trace.branch_id, "runtime_case_index": trace.runtime_case_index},
+    status = _fold_policy_condition_status(
+        _fold_join_status(_tree_status((head_rule, *body_rules)), joins),
+        policy_conditions,
+    )
+    metadata: dict[str, Any] = {
+        "branch_id": trace.branch_id,
+        "runtime_case_index": trace.runtime_case_index,
+    }
+    if navigation_indexes:
+        navigation_atom_ids = tuple(
+            atom_id_for_condition(trace.branch_id, index, materialized=True)
+            for index in sorted(navigation_indexes)
+        )
+        metadata["query_navigation_atom_ids"] = navigation_atom_ids
+        metadata["outside_policy_lineage_atom_ids"] = navigation_atom_ids
+    return (
+        EvidenceTree(
+            tree_id=trace.branch_id,
+            status=status,
+            rules=(head_rule, *body_rules),
+            joins=joins,
+            policy_conditions=policy_conditions,
+            certainty=BOOLEAN_CERTAINTY,
+            metadata=metadata,
+        ),
+        envs,
     )
 
 
@@ -258,7 +313,13 @@ def _probe_atom(
                 verdict_envs,
             )
         return (
-            EvidenceAtom(form=form, verdict=Fails(support=fails_support), atom_id=atom_id, repr_text=repr_text, negated=negated),
+            EvidenceAtom(
+                form=form,
+                verdict=Fails(support=fails_support),
+                atom_id=atom_id,
+                repr_text=repr_text,
+                negated=negated,
+            ),
             candidate_envs,
             tuple(runnable_envs) or verdict_envs,
         )
@@ -286,7 +347,17 @@ def _probe_atom(
             (),
             envs or verdict_envs,
         )
-    return EvidenceAtom(form=form, verdict=Fails(support=fails_support), atom_id=atom_id, repr_text=repr_text, negated=negated), (), envs or verdict_envs
+    return (
+        EvidenceAtom(
+            form=form,
+            verdict=Fails(support=fails_support),
+            atom_id=atom_id,
+            repr_text=repr_text,
+            negated=negated,
+        ),
+        (),
+        envs or verdict_envs,
+    )
 
 
 def _body_rules_for_branch(
@@ -298,14 +369,36 @@ def _body_rules_for_branch(
     terminal_envs: tuple[ProbeEnv, ...],
     head_atom_indexes: set[int],
     rules_by_id: Mapping[str, Any],
+    policy_condition_indexes: set[int] | None = None,
 ) -> tuple[EvidenceRule, ...]:
     occurrence_by_alias = {occ.alias: occ for occ in plan.occurrence_map}
     join_indexes = {join.materialized_condition_index for join in trace.join_materializations}
-    head_link_indexes = {link.materialized_condition_index for link in trace.head_port_link_materializations}
-    grouped: dict[str, list[EvidenceAtom]] = {alias: [] for alias in lowered_branch.occurrence_aliases}
-    fallback_alias = lowered_branch.occurrence_aliases[0] if lowered_branch.occurrence_aliases else ""
+    head_link_indexes = {
+        link.materialized_condition_index for link in trace.head_port_link_materializations
+    }
+    navigation_indexes = {
+        index
+        for navigation in trace.query_navigation_materializations
+        for index in (
+            navigation.lookup_materialized_condition_index,
+            navigation.projection_head_link_materialized_condition_index,
+        )
+    }
+    condition_indexes = policy_condition_indexes or set()
+    grouped: dict[str, list[EvidenceAtom]] = {
+        alias: [] for alias in lowered_branch.occurrence_aliases
+    }
+    fallback_alias = (
+        lowered_branch.occurrence_aliases[0] if lowered_branch.occurrence_aliases else ""
+    )
     for idx, atom, evidence_atom, _envs in atom_results:
-        if idx in join_indexes or idx in head_link_indexes or idx in head_atom_indexes:
+        if (
+            idx in join_indexes
+            or idx in head_link_indexes
+            or idx in navigation_indexes
+            or idx in condition_indexes
+            or idx in head_atom_indexes
+        ):
             continue
         alias = alias_for_atom(atom, lowered_branch.occurrence_aliases) or fallback_alias
         grouped.setdefault(alias, []).append(evidence_atom)
@@ -335,10 +428,27 @@ def _head_atom_indexes_for_branch(
     atom_results: list[tuple[int, tuple[Any, ...], EvidenceAtom, tuple[ProbeEnv, ...]]],
 ) -> set[int]:
     join_indexes = {join.materialized_condition_index for join in trace.join_materializations}
-    head_link_indexes = {link.materialized_condition_index for link in trace.head_port_link_materializations}
+    head_link_indexes = {
+        link.materialized_condition_index for link in trace.head_port_link_materializations
+    }
+    navigation_indexes = {
+        index
+        for navigation in trace.query_navigation_materializations
+        for index in (
+            navigation.lookup_materialized_condition_index,
+            navigation.projection_head_link_materialized_condition_index,
+        )
+    }
+    policy_condition_indexes = {
+        condition.materialized_condition_index
+        for condition in trace.policy_condition_materializations
+    }
     out: set[int] = set()
     for idx, atom, _evidence_atom, _envs in atom_results:
-        if idx in join_indexes or idx in head_link_indexes:
+        if idx in join_indexes or idx in head_link_indexes or idx in policy_condition_indexes:
+            continue
+        if idx in navigation_indexes:
+            out.add(idx)
             continue
         if alias_for_atom(atom, lowered_branch.occurrence_aliases) is not None:
             continue
@@ -377,7 +487,9 @@ def _rebake_atom_results_from_terminal(
             names = _atom_var_names(atom)
             if names and all(terminal_bindings.get(name) is not None for name in names):
                 original_bindings = envs_after[0].bindings if envs_after else {}
-                if all(original_bindings.get(name) == terminal_bindings.get(name) for name in names):
+                if all(
+                    original_bindings.get(name) == terminal_bindings.get(name) for name in names
+                ):
                     rebaked.append((idx, atom, evidence_atom, envs_after))
                     continue
                 form = _atom_form(atom, terminal_envs)
@@ -404,10 +516,7 @@ def _head_rule_for_plan(
     subject_binding: Mapping[str, Any],
 ) -> EvidenceRule:
     env = dict(terminal_envs[0].bindings) if terminal_envs else dict(initial_bindings)
-    ports = {
-        port_name: env.get(var.name)
-        for port_name, var in plan.head.ports.items()
-    }
+    ports = {port_name: env.get(var.name) for port_name, var in plan.head.ports.items()}
     return EvidenceRule(
         occurrence_alias=plan.head.id,
         rule_id=plan.head.id,
@@ -425,7 +534,7 @@ def _render_rule_repr(rule: Any, bindings: Mapping[str, Any]) -> str | None:
         return None
     try:
         text = render({key: value for key, value in bindings.items() if value is not None})
-    except Exception:
+    except Exception:  # noqa: BLE001 - foreign render_repr callable boundary: a renderer fault degrades the rule to no repr_text, never to a wrong repr
         return None
     return text if isinstance(text, str) and text else None
 
@@ -440,7 +549,9 @@ def _display_envs(
         return envs
 
     def resolve(entity_type: str, value: object, index: object | None) -> Mapping[str, Any]:
-        return _recover_identity_from_predicates(str(value), entity_type, view_facts=view_facts, index=index)
+        return _recover_identity_from_predicates(
+            str(value), entity_type, view_facts=view_facts, index=index
+        )
 
     out: list[ProbeEnv] = []
     for env in envs:
@@ -481,6 +592,39 @@ def _joins_for_trace(
     return tuple(joins)
 
 
+def _policy_conditions_for_trace(
+    trace: RuleExprEvaluationTrace,
+    atom_results: list[tuple[int, tuple[Any, ...], EvidenceAtom, tuple[ProbeEnv, ...]]],
+) -> tuple[EvidencePolicyCondition, ...]:
+    """Attach compiler-owned Policy conditions outside ``EvidenceRule``.
+
+    The trace is the ownership authority.  We intentionally do not infer this
+    from generated variable names or atom position: either shortcut would let a
+    lowering change silently contaminate reusable Rule evidence.
+    """
+
+    atom_by_index = {idx: evidence_atom for idx, _atom, evidence_atom, _envs in atom_results}
+    conditions: list[EvidencePolicyCondition] = []
+    seen_indexes: set[int] = set()
+    for materialization in trace.policy_condition_materializations:
+        index = materialization.materialized_condition_index
+        if index in seen_indexes:
+            raise ValueError("Policy condition trace has duplicate materialized index")
+        seen_indexes.add(index)
+        evidence_atom = atom_by_index.get(index)
+        if evidence_atom is None:
+            raise ValueError("Policy condition trace references an absent materialized atom")
+        conditions.append(
+            EvidencePolicyCondition(
+                policy_node_id=materialization.policy_node_id,
+                condition_id=materialization.condition_id,
+                role=materialization.role,
+                atom=evidence_atom,
+            )
+        )
+    return tuple(conditions)
+
+
 def _ports_for_occurrence(
     occurrence: RuleExprOccurrenceBinding | None,
     envs: tuple[ProbeEnv, ...],
@@ -511,7 +655,9 @@ def _atom_form(atom: tuple[Any, ...], envs: tuple[ProbeEnv, ...]) -> Fact | Comp
     return Builtin(kind=str(kind), operands=operands)
 
 
-def fact_source_for_atom(form: Any, atom_id: str, *, engine: str, repr_text: str | None = None) -> Source | None:
+def fact_source_for_atom(
+    form: Any, atom_id: str, *, engine: str, repr_text: str | None = None
+) -> Source | None:
     """Provenance ``Source`` for a holding *Fact* atom — the matched EDB fact behind
     a holds verdict. Returns ``None`` for Compare / Builtin / Aggregate forms (no
     backing fact), so those keep empty ``support``. Mirrors the souffle-provenance
@@ -544,9 +690,7 @@ def refuting_sources_for_atom(
     if owner_value is None:
         return ()
     rows = [
-        row
-        for row in view_facts.get(form.predicate, ())
-        if row and str(row[0]) == str(owner_value)
+        row for row in view_facts.get(form.predicate, ()) if row and str(row[0]) == str(owner_value)
     ]
     return tuple(
         Source(
@@ -593,12 +737,11 @@ def _repr_not_atom(
     if not branches:
         return "!<not>"
     branch_texts = tuple(
-        _repr_not_branch(branch, envs, schema_index, view_facts=view_facts)
-        for branch in branches
+        _repr_not_branch(branch, envs, schema_index, view_facts=view_facts) for branch in branches
     )
     if len(branch_texts) == 1:
         text = branch_texts[0]
-        return f"!{text}" if not text.startswith("(") else f"!{text}"
+        return f"!{text}"
     return "!(" + " || ".join(branch_texts) + ")"
 
 
@@ -681,13 +824,15 @@ def _repr_fact(
     return _REPR_PLACEHOLDER_RE.sub(replace_placeholder, info.repr)
 
 
-def _predicate_info(schema_index: object | None, predicate: str) -> object | None:
+def _predicate_info(
+    schema_index: object | None, predicate: str
+) -> schema_runtime.PredicateInfo | None:
     if schema_index is None:
         return None
     predicates = getattr(schema_index, "predicates_by_id", None)
     if not isinstance(predicates, Mapping):
         return None
-    return predicates.get(predicate)
+    return cast(schema_runtime.PredicateInfo | None, predicates.get(predicate))
 
 
 def _entity_repr_for_fact(
@@ -701,8 +846,10 @@ def _entity_repr_for_fact(
     value = _term_value(subject)
     if schema_index is not None and isinstance(value, EntityRef):
         try:
-            return schema_runtime.render_entity_repr(schema_index, value.entity_type, value.identity)
-        except Exception:
+            return schema_runtime.render_entity_repr(
+                schema_index, value.entity_type, value.identity
+            )
+        except Exception:  # noqa: BLE001 - schema render boundary: an entity-repr fault degrades to the raw term rendering of the same subject
             return _render_term_value(subject, schema_index=schema_index, view_facts=view_facts)
     if schema_index is not None and isinstance(value, Mapping):
         identity = value.get("identity")
@@ -710,13 +857,15 @@ def _entity_repr_for_fact(
         if isinstance(ref_entity_type, str) and isinstance(identity, Mapping):
             try:
                 return schema_runtime.render_entity_repr(schema_index, ref_entity_type, identity)
-            except Exception:
+            except Exception:  # noqa: BLE001 - schema render boundary: an entity-repr fault degrades to the raw term rendering of the same subject
                 return _render_term_value(subject, schema_index=schema_index, view_facts=view_facts)
     if schema_index is not None and isinstance(value, str) and value.startswith(ENTITY_REF_PREFIX):
         try:
-            identity = _recover_identity_from_predicates(value, entity_type, view_facts=view_facts, index=schema_index)
+            identity = _recover_identity_from_predicates(
+                value, entity_type, view_facts=view_facts, index=schema_index
+            )
             return schema_runtime.render_entity_repr(schema_index, entity_type, identity)
-        except Exception:
+        except Exception:  # noqa: BLE001 - identity-recovery/render boundary: a view-fact or repr fault degrades to the raw term rendering of the same subject
             return _render_term_value(subject, schema_index=schema_index, view_facts=view_facts)
     return _render_term_value(subject, schema_index=schema_index, view_facts=view_facts)
 
@@ -730,9 +879,16 @@ def _fact_fallback_repr(
 ) -> str:
     if predicate_info is not None and getattr(predicate_info, "is_entity_exists", False):
         return f"{_entity_repr_for_fact(schema_index, str(getattr(predicate_info, 'owner_type', '')), form, view_facts=view_facts)} exists"
-    field_name = getattr(predicate_info, "py_field_name", None) if predicate_info is not None else None
+    field_name = (
+        getattr(predicate_info, "py_field_name", None) if predicate_info is not None else None
+    )
     owner_type = getattr(predicate_info, "owner_type", None) if predicate_info is not None else None
-    if isinstance(field_name, str) and field_name and isinstance(owner_type, str) and len(form.terms) > 1:
+    if (
+        isinstance(field_name, str)
+        and field_name
+        and isinstance(owner_type, str)
+        and len(form.terms) > 1
+    ):
         entity = _entity_repr_for_fact(schema_index, owner_type, form, view_facts=view_facts)
         value = _render_term_value(
             form.terms[1],
@@ -746,7 +902,8 @@ def _fact_fallback_repr(
             term,
             schema_index=schema_index,
             view_facts=view_facts,
-            decode_float64=idx > 0 and getattr(predicate_info, "value_type_domain", None) == "float64",
+            decode_float64=idx > 0
+            and getattr(predicate_info, "value_type_domain", None) == "float64",
         )
         for idx, term in enumerate(form.terms)
     )
@@ -759,8 +916,12 @@ def _repr_compare(
     *,
     view_facts: dict[str, list[tuple[Any, ...]]],
 ) -> str:
-    left = _render_term_value(form.left, schema_index=schema_index, view_facts=view_facts, decode_float64=True)
-    right = _render_term_value(form.right, schema_index=schema_index, view_facts=view_facts, decode_float64=True)
+    left = _render_term_value(
+        form.left, schema_index=schema_index, view_facts=view_facts, decode_float64=True
+    )
+    right = _render_term_value(
+        form.right, schema_index=schema_index, view_facts=view_facts, decode_float64=True
+    )
     labels = {
         "eq": "equals",
         "ne": "does not equal",
@@ -780,7 +941,9 @@ def _repr_builtin(
     view_facts: dict[str, list[tuple[Any, ...]]],
 ) -> str:
     terms = tuple(
-        _render_term_value(term, schema_index=schema_index, view_facts=view_facts, decode_float64=True)
+        _render_term_value(
+            term, schema_index=schema_index, view_facts=view_facts, decode_float64=True
+        )
         for term in form.operands
     )
     if form.kind == "in" and terms:
@@ -801,10 +964,17 @@ def _render_term_value(
     if _is_aggregate_term(value):
         return _render_aggregate_term(value)
     if isinstance(value, EntityRef):
-        fallback = value.encoded_ref or f"{value.entity_type}({', '.join(str(v) for v in value.identity.values())})"
+        fallback = (
+            value.encoded_ref
+            or f"{value.entity_type}({', '.join(str(v) for v in value.identity.values())})"
+        )
         try:
-            return schema_runtime.render_entity_repr(schema_index, value.entity_type, value.identity) if schema_index is not None else fallback
-        except Exception:
+            return (
+                schema_runtime.render_entity_repr(schema_index, value.entity_type, value.identity)
+                if schema_index is not None
+                else fallback
+            )
+        except Exception:  # noqa: BLE001 - schema render boundary: an entity-repr fault degrades to the encoded-ref fallback string
             return fallback
     if schema_index is not None and isinstance(value, Mapping):
         identity = value.get("identity")
@@ -812,20 +982,22 @@ def _render_term_value(
         if isinstance(ref_entity_type, str) and isinstance(identity, Mapping):
             try:
                 return schema_runtime.render_entity_repr(schema_index, ref_entity_type, identity)
-            except Exception:
+            except Exception:  # noqa: BLE001, S110 - schema render boundary: a mapping-ref repr fault falls through to the next rendering strategy, not to a wrong repr
                 pass
     if schema_index is not None and isinstance(value, str) and value.startswith(ENTITY_REF_PREFIX):
         entity_type = _entity_type_from_ref(value)
         if entity_type is not None:
             try:
-                identity = _recover_identity_from_predicates(value, entity_type, view_facts=view_facts, index=schema_index)
+                identity = _recover_identity_from_predicates(
+                    value, entity_type, view_facts=view_facts, index=schema_index
+                )
                 return schema_runtime.render_entity_repr(schema_index, entity_type, identity)
-            except Exception:
+            except Exception:  # noqa: BLE001, S110 - identity-recovery boundary: a view-fact lookup or repr fault falls through to the next rendering strategy
                 pass
     if decode_float64 and isinstance(value, str):
         try:
             return display_float64_value(value)
-        except Exception:
+        except Exception:  # noqa: BLE001, S110 - float64 decode boundary: an undecodable payload falls through to str(value) rendering
             pass
     if value is None and isinstance(term, BoundVar):
         return "<unbound>"
@@ -851,22 +1023,23 @@ def _aggregate_target_label(target: Any, filter_atoms: Any) -> str:
             terms = atom[2]
             if not isinstance(terms, Sequence) or isinstance(terms, (str, bytes)):
                 continue
-            if target_vars & set(vars_in_atom_tuple(terms)):
-                if isinstance(pred_id, str) and ":" in pred_id:
-                    return pred_id.rsplit(":", 1)[1]
+            if (
+                target_vars & set(vars_in_atom_tuple(terms))
+                and isinstance(pred_id, str)
+                and ":" in pred_id
+            ):
+                return pred_id.rsplit(":", 1)[1]
     if target_vars:
-        return _clean_var_label(sorted(target_vars)[0])
+        return _clean_var_label(min(target_vars))
     return "value"
 
 
 def _clean_var_label(var_name: str) -> str:
-    label = var_name[1:] if var_name.startswith("$") else var_name
+    label = var_name.removeprefix("$")
     if "__" in label:
         label = label.rsplit("__", 1)[1]
-    if label.startswith("_agg"):
-        label = label[4:]
-    if label.startswith("agg"):
-        label = label[3:]
+    label = label.removeprefix("_agg")
+    label = label.removeprefix("agg")
     return label or "value"
 
 
@@ -928,12 +1101,16 @@ def _is_aggregate_term(value: object) -> bool:
     )
 
 
-def _aggregate_required_outer_vars(aggregate_term: tuple[Any, ...], env: Mapping[str, Any]) -> tuple[str, ...]:
+def _aggregate_required_outer_vars(
+    aggregate_term: tuple[Any, ...], env: Mapping[str, Any]
+) -> tuple[str, ...]:
     _kind, target, filter_atoms = aggregate_term
     all_vars = set(vars_in_atom_tuple(target))
     all_vars |= set(vars_in_atom_tuple(filter_atoms))
     local_vars = _aggregate_local_vars(aggregate_term, env)
-    return tuple(var for var in vars_in_atom_tuple((target, filter_atoms)) if var in all_vars - local_vars)
+    return tuple(
+        var for var in vars_in_atom_tuple((target, filter_atoms)) if var in all_vars - local_vars
+    )
 
 
 def _aggregate_local_vars(aggregate_term: tuple[Any, ...], env: Mapping[str, Any]) -> set[str]:
@@ -944,7 +1121,11 @@ def _aggregate_local_vars(aggregate_term: tuple[Any, ...], env: Mapping[str, Any
         return local
 
     canonically_bound = _canonical_aggregate_filter_bound_vars(aggregate_term, env)
-    pred_atoms = [atom for atom in filter_atoms if _is_atom_tuple(atom) and atom[0] == "pred" and len(atom) >= 3]
+    pred_atoms = [
+        atom
+        for atom in filter_atoms
+        if _is_atom_tuple(atom) and atom[0] == "pred" and len(atom) >= 3
+    ]
 
     changed = True
     while changed:
@@ -969,21 +1150,23 @@ def _aggregate_local_vars(aggregate_term: tuple[Any, ...], env: Mapping[str, Any
     return local
 
 
-def _canonical_aggregate_filter_bound_vars(aggregate_term: tuple[Any, ...], env: Mapping[str, Any]) -> set[str]:
+def _canonical_aggregate_filter_bound_vars(
+    aggregate_term: tuple[Any, ...], env: Mapping[str, Any]
+) -> set[str]:
     try:
         parsed = _parse_term(aggregate_term, path="$.aggregate")
-    except Exception:
+    except Exception:  # noqa: BLE001 - where-AST parse boundary: an unparsable aggregate term yields no canonically bound vars
         return set()
     if not isinstance(parsed, AggregateAtom):
         return set()
     try:
         return set(_aggregate_filter_bound_vars(parsed, set(env))) - set(env)
-    except Exception:
+    except Exception:  # noqa: BLE001 - where-AST analysis boundary: a filter-bound-var analysis fault yields no canonically bound vars
         return set()
 
 
 def _is_lowered_aggregate_local_var(var_name: str) -> bool:
-    return var_name.startswith("$agg") or var_name.startswith("$_agg") or "__" in var_name
+    return var_name.startswith(("$agg", "$_agg")) or "__" in var_name
 
 
 def _normalize_compiled_body(body_ir: object) -> list[list[tuple[Any, ...]]]:
@@ -1071,6 +1254,22 @@ def _fold_join_status(status: TreeStatus, joins: tuple[EvidenceJoin, ...]) -> Tr
     if any(join.status == "fails" for join in joins):
         return "fails"
     if status == "holds" and any(join.status == "not_reached" for join in joins):
+        return "not_reached"
+    return status
+
+
+def _fold_policy_condition_status(
+    status: TreeStatus,
+    conditions: tuple[EvidencePolicyCondition, ...],
+) -> TreeStatus:
+    """Policy conditions are AND-conjuncts but never masquerade as Rule atoms."""
+
+    if not conditions:
+        return status
+    condition_statuses = tuple(condition.status for condition in conditions)
+    if any(item == "fails" for item in condition_statuses):
+        return "fails"
+    if status == "holds" and any(item == "not_reached" for item in condition_statuses):
         return "not_reached"
     return status
 

@@ -4,21 +4,20 @@ from __future__ import annotations
 
 from typing import Any
 
-from factgraph.core.rules.rule_ir import RuleSpec
-from factgraph.core.store._support import ProofReceipt
-
 from factgraph.application.protocol import (
+    AddedCondition,
+    ConditionPath,
     FactOverlay,
     RuleAddConditionAction,
     RuleAddConditionRequest,
-    AddedCondition,
     RuleDisableAction,
     RuleDisableRequest,
-    ConditionPath,
     RuleLiteralReplaceAction,
     RuleLiteralReplaceRequest,
     RuleOverlayAction,
 )
+from factgraph.core.rules.rule_ir import RuleSpec
+from factgraph.core.store._support import ProofReceipt
 
 from ._binding import _reject_sdk_origin
 from .errors import CapabilityHelperError

@@ -125,7 +125,6 @@ service:
 |---|---|---|
 | `ProtocolShapeError` (application protocol DTO validation failure) | `errors[0].kind="shape"`, `path` points at the field | 200 |
 | `AuditQueryError` (generic audit query error) | `errors[0].kind="audit"` | 200 |
-| `AuditOptionalDomainError` (missing domain bundle, factgraph-only wheel) | `errors[0].kind="audit_optional_domain"` | 200 |
 | Authentication failure | (does not enter the envelope; HTTP error directly) | 401 / 503 |
 | Other uncaught exceptions | `app_v1` global handler wraps them as `errors[0].kind="runtime"`, `details.message=str(exc)` | 200 |
 

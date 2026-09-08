@@ -2,11 +2,9 @@ from __future__ import annotations
 
 import unittest
 
-import factgraph.sdk as sdk
-import factgraph.sdk.dsl as dsl
-from factgraph.application.protocol import Rule
-from factgraph.application.protocol import RuleValidationError
-from factgraph.sdk import Entity, Field, Identity
+from factgraph import sdk
+from factgraph.application.protocol import Rule, RuleValidationError
+from factgraph.sdk import Entity, Field, Identity, dsl
 
 
 class User(Entity):
@@ -43,14 +41,13 @@ class SDKRuleNamingTests(unittest.TestCase):
         self.assertEqual(rule.version, "v1")
 
     def test_top_level_rule_no_longer_accepts_legacy_dsl_shape(self) -> None:
-        with sdk.vars("u") as (u,):
-            with self.assertRaises((RuleValidationError, TypeError)):
-                sdk.Rule(
-                    id="legacy_rule",
-                    version="v1",
-                    select=[u],
-                    where=[sdk.Pred("User:exists", u)],
-                )
+        with sdk.vars("u") as (u,), self.assertRaises((RuleValidationError, TypeError)):
+            sdk.Rule(
+                id="legacy_rule",
+                version="v1",
+                select=[u],
+                where=[sdk.Pred("User:exists", u)],
+            )
 
     def test_top_level_build_application_rule_returns_application_rule(self) -> None:
         with sdk.vars("u") as (u,):

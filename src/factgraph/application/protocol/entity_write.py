@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field as dc_field
+from dataclasses import dataclass
+from dataclasses import field as dc_field
 from typing import Any, Literal, TypeAlias
 
 from .common import (
@@ -18,11 +19,13 @@ from .common import (
 from .entity_read import FieldValue, _validate_field_value
 from .schema_runtime import EntityRef, EntitySelector, FieldPath
 
-WriteValue: TypeAlias = JSONValue | EntitySelector | EntityRef
+WriteValue: TypeAlias = JSONValue | bytes | EntitySelector | EntityRef
 
 
 def _validate_write_value(value: Any, *, field_name: str) -> None:
     if isinstance(value, (EntitySelector, EntityRef)):
+        return
+    if isinstance(value, bytes):
         return
     _validate_json_value(value, field_name=field_name)
 

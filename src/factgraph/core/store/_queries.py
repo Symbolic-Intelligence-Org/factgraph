@@ -38,7 +38,7 @@ def explain_fact(store: Any, pred_id: str, e_ref: str, *val_atoms: Any) -> dict[
         chosen_ids = set(chosen_map.values())
         matching = [row["asrt_id"] for row in claim_rows if row["asrt_id"] in chosen_ids]
         if matching:
-            chosen_asrt_id = sorted(matching)[0]
+            chosen_asrt_id = min(matching)
 
     return {
         "pred_id": pred_id,
@@ -102,7 +102,7 @@ def resolve_mapping(store: Any, pred_id: str, *, policy_mode: str = "edb") -> Ma
 def meta_subset(store: Any, asrt_id: str) -> dict[str, Any]:
     wanted = {"ingested_at", "source", "run_id", "candidate_id", "candidate_key", "cand_key_digest"}
     out: dict[str, Any] = {}
-    for row in store.ledger.find_meta(asrt_id=asrt_id):
-        if row.key in wanted and row.key not in out:
+    for row in store.ledger.effective_meta_rows(asrt_id=asrt_id):
+        if row.key in wanted:
             out[row.key] = row.value
     return out

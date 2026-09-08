@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 
 def internal_rule_pred_id(rule_id: str, version: str) -> str:
@@ -27,7 +28,7 @@ def resolve_exposed_rule_ref(
         raise error_factory("ruleref terms must be non-empty list")
     try:
         ref_spec = registry.resolve(rule_id, version)
-    except Exception as exc:  # noqa: BLE001 - normalize to caller error type
+    except Exception as exc:  # Normalize to caller error type.
         raise error_factory(str(exc)) from exc
     if not bool(getattr(ref_spec, "expose", False)):
         raise error_factory(f"RuleRef target must be expose=True: {rule_id}@{version}")

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal, cast
 
 from factgraph.core.rules.ruleref_types import NativeRuleRefResolution
 from factgraph.core.rules.where_eval import (
@@ -18,8 +18,9 @@ from factgraph.core.store._support import (
     NonFactStep,
     PredWitness,
     ProjectedFact,
-    RuleRefEdge,
     ProofReceipt,
+    RuleRefEdge,
+    WitnessCapture,
     make_non_fact_step_key,
     make_pred_condition_key,
     normalize_asrt_ids,
@@ -36,7 +37,10 @@ def build_support_artifact_for_binding(
     root_result_kind: str,
     selected_case_index: int,
     rule_ref_edges: tuple[RuleRefEdge, ...] = (),
+    capture_witness_metadata: bool = False,
 ) -> ProofReceipt:
+    if not isinstance(capture_witness_metadata, bool):
+        raise TypeError("capture_witness_metadata must be bool")
     pred_witnesses: list[PredWitness] = []
     non_fact_steps: list[NonFactStep] = []
 
@@ -58,6 +62,7 @@ def build_support_artifact_for_binding(
                     atom=atom,
                     binding=binding,
                     witness_facts=witness_facts,
+                    capture_witness_metadata=capture_witness_metadata,
                 )
             )
             continue
@@ -71,6 +76,7 @@ def build_support_artifact_for_binding(
         )
 
     return ProofReceipt(
+        witness_capture_version=1 if capture_witness_metadata else None,
         kind="native_binding_v1",
         root_result_kind=_validate_root_result_kind(root_result_kind),
         binding_items=normalize_binding_items(binding),
@@ -155,7 +161,6 @@ def find_winning_case_index(
     resolution_by_key = {row.ruleref_condition_key: row for row in rule_ref_resolutions}
     view_facts = _view_facts_from_witness_facts(witness_facts)
     ast_gate_on = _where_ast_gate_enabled()
-
     for case_index, branch in enumerate(branches):
         if _branch_satisfies(
             case_index=case_index,
@@ -167,8 +172,41 @@ def find_winning_case_index(
             ast_gate_on=ast_gate_on,
         ):
             return case_index
-
     raise WhereValidationError("no satisfying branch for final binding")
+
+
+def find_matching_case_indexes(
+    *,
+    where: list[Any],
+    binding: dict[str, Any],
+    witness_facts: dict[str, list[ProjectedFact]],
+    rule_ref_resolutions: tuple[NativeRuleRefResolution, ...],
+) -> tuple[int, ...]:
+    """Return every satisfied DNF case for one final binding.
+
+    The existing public Check/Explain behavior intentionally keeps using
+    :func:`find_winning_case_index`.  Product V2 branch-witness capture opts
+    into this complete inventory before result-row de-duplication so two
+    independent proof paths for the same projected row are not collapsed.
+    """
+
+    branches = _normalize_where_branches(where)
+    resolution_by_key = {row.ruleref_condition_key: row for row in rule_ref_resolutions}
+    view_facts = _view_facts_from_witness_facts(witness_facts)
+    ast_gate_on = _where_ast_gate_enabled()
+    return tuple(
+        case_index
+        for case_index, branch in enumerate(branches)
+        if _branch_satisfies(
+            case_index=case_index,
+            branch=branch,
+            binding=binding,
+            witness_facts=witness_facts,
+            view_facts=view_facts,
+            resolution_by_key=resolution_by_key,
+            ast_gate_on=ast_gate_on,
+        )
+    )
 
 
 def _build_pred_witness(
@@ -178,6 +216,7 @@ def _build_pred_witness(
     atom: tuple[Any, ...],
     binding: dict[str, Any],
     witness_facts: dict[str, list[ProjectedFact]],
+    capture_witness_metadata: bool,
 ) -> PredWitness:
     _, pred_id, terms = atom
     if not isinstance(pred_id, str) or not pred_id:
@@ -186,16 +225,25 @@ def _build_pred_witness(
     if grounded_terms is None:
         raise WhereValidationError(f"selected branch contains ungroundable pred atom: {pred_id}")
 
-    matches: list[str] = []
+    matches: dict[str, WitnessCapture] = {}
     for projected in witness_facts.get(pred_id, []):
         if tuple(projected.fact_tuple) == grounded_terms:
-            matches.append(projected.asrt_id)
+            item = WitnessCapture(
+                witness_ref=projected.asrt_id,
+                kind=projected.witness_kind,
+                predicate_id=pred_id,
+                terms=tuple(projected.fact_tuple),
+            )
+            previous = matches.setdefault(projected.asrt_id, item)
+            if previous != item:
+                raise WhereValidationError("conflicting captured witness metadata")
     if not matches:
         raise WhereValidationError(f"selected branch lacks predicate witness for {pred_id}")
 
     return PredWitness(
         pred_condition_key=make_pred_condition_key(case_index, condition_index, pred_id),
-        asrt_ids=normalize_asrt_ids(matches),
+        asrt_ids=normalize_asrt_ids(tuple(matches)),
+        witnesses=tuple(matches[ref] for ref in sorted(matches)) if capture_witness_metadata else None,
     )
 
 
@@ -518,14 +566,15 @@ def _require_selected_branch(
     return branches[selected_case_index]
 
 
-def _validate_root_result_kind(value: str) -> str:
+def _validate_root_result_kind(value: str) -> Literal["fact", "entity", "row"]:
     if value not in {"fact", "entity", "row"}:
         raise WhereValidationError("root_result_kind must be 'fact', 'entity', or 'row'")
-    return value
+    return cast(Literal["fact", "entity", "row"], value)
 
 
 __all__ = [
     "build_support_artifact_for_binding",
     "derive_rule_ref_edges_for_binding",
+    "find_matching_case_indexes",
     "find_winning_case_index",
 ]

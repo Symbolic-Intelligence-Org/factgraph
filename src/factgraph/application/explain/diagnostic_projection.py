@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from types import MappingProxyType
-from typing import Mapping, TypeAlias
+from typing import TypeAlias
 
 from factgraph.core.rules.where_ast import Const, Var
 

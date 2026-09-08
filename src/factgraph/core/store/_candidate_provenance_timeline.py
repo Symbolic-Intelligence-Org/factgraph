@@ -9,9 +9,9 @@ Blueprint: 2026-03-30_pyreason-runtime-explain-timeline.md
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any, Mapping
-
+from typing import Any
 
 # ---------------------------------------------------------------------------
 # Dataclasses
@@ -300,9 +300,9 @@ def render_candidate_provenance_timeline_nl_explain(
 ) -> dict[str, Any]:
     """Timeline NL explain — symmetric with CandidateEvidenceTree NL."""
     if not isinstance(summary, Mapping):
-        raise ValueError("summary must be object")
+        raise ValueError("summary must be object")  # noqa: TRY004 - Symmetric with the tree NL explain's ValueError-derived rejection.
     if not isinstance(narrative, Mapping):
-        raise ValueError("narrative must be object")
+        raise ValueError("narrative must be object")  # noqa: TRY004 - Symmetric with the tree NL explain's ValueError-derived rejection.
     if not isinstance(locale, str) or not locale:
         raise ValueError("locale must be non-empty string")
 
@@ -363,7 +363,7 @@ def build_candidate_provenance_steps(timeline: dict[str, Any]) -> list[dict[str,
     """
     chains = timeline.get("chains", [])
     if not isinstance(chains, list):
-        raise ValueError("timeline.chains must be list")
+        raise ValueError("timeline.chains must be list")  # noqa: TRY004 - Symmetric with the tree steps' ValueError-derived shape rejection.
 
     def _fmt_bound(b: Any) -> str:
         if isinstance(b, (list, tuple)) and len(b) == 2:
@@ -473,7 +473,7 @@ def _resolve_candidate_anchor(
         raise ValueError("candidate_payload.pred_id must be non-empty string")
     terms = candidate_payload.get("terms")
     if not isinstance(terms, list):
-        raise ValueError("candidate_payload.terms must be list")
+        raise ValueError("candidate_payload.terms must be list")  # noqa: TRY004 - Documented candidate evidence rejection stays ValueError.
 
     entity_refs = [
         str(term.get("value"))

@@ -26,17 +26,59 @@ compatibility.
   - English overview of the application module.
 - `src/factgraph/application/docs/rule.md`
   - Application-layer Rule DTO contract. Stores core rule AST atoms directly
-    and remains below SDK ergonomic authoring.
+    and remains below SDK ergonomic authoring. Also records the optional
+    in-process semantic-port binding and authored occurrence/direct-port
+    address space used by managed Rule consumers, the head-independent managed
+    Policy v0 compiler (including direct scalar comparison and one-hop
+    identity-to-field navigation) and structural-lineage boundary, and the compile-only
+    `EvaluationQuery` typed bind/select projection contract plus opt-in,
+    detached `EvaluationRunBundleV0` capture/codec, isolated verification,
+    single-row evidence playback, readonly `PolicyExplanationViewV0`
+    projection semantics, and the separate outer
+    `CapturedEvaluationQueryRunV0` record for bounded detached Query
+    observations; also records the narrow replacement-only
+    `ScenarioFieldSubstitutionV0` and atomic
+    `ScenarioFieldSubstitutionSetV0` boundaries, including the separate,
+    captured `ScenarioRunV0` lifecycle for detached Scenario evidence and
+    isolated verification; and the parallel, query-dependency-scoped
+    `QueryEffectiveSnapshotV1` pre-evaluation identity used internally by the
+    replacement-only resolver (not a global or historical snapshot); and the
+    parallel GoalPlan/Scenario v1 contract, including captured effective
+    worlds, portable selected-row parity, and explicit detached native-inner
+    EvidenceGraph/Policy-overlay Explain; and the private-only R3d
+    `CapturedReceiptEvidenceV0` receipt inventory, which is deliberately
+    separate from existing `EvidenceGraph` playback and absent from every
+    application/protocol root or Product/SDK/Meander/Agent/MCP façade.
+- `src/factgraph/application/docs/relation_query.md`
+  - Published stored-relation graph admission, typed path bindings and
+    selections, virtual entity-domain guards, sealed compiler products,
+    native execution, row-limit behavior, and stable error boundaries.
+- `src/factgraph/application/docs/semantic_candidates.md`
+  - Product-neutral read-only scalar candidate batches, exact and normalized
+    matching, bounded suggestions, canonical evidence, and the Product V2
+    optimistic revision guard and typed failure semantics.
+- `src/factgraph/application/docs/product_result_explain_v2.md`
+  - Immutable Product read views over sealed V1 and V2 runs: explicit
+    row/summary targets, structured Explain data, pure renderers, detached
+    versioned `to_dict()` / canonical bytes / read-projection digest, V1/V2
+    availability boundaries, and sanitized evidence/provenance display.
+- `src/factgraph/application/docs/frozen_evaluation_target_v2.md`
+  - Internal restart-safe compiled Product target and Input Case persistence,
+    closed/canonical codec rules, deterministic-only V1 scope, neutral Branch
+    witness identity, and aggregate Product Invocation limits.
 - `src/factgraph/application/explain/docs/README.md`
   - Paths-model evidence tree types (`EvidenceGraph`, `EvidenceTree`,
     `EvidenceRule`, `EvidenceAtom`, `Certainty`, `AtomForm`, `Verdict`) and
-    native prober (`probe_native`). Canonical type site for the explain layer;
-    `factgraph.audit.evidence_graph` re-exports from here.
+    native prober (`probe_native`), plus the `RuleStructure` static projection
+    contract and node-identity alignment with `EvidenceGraph`. Canonical type
+    site for the explain layer; `factgraph.audit.evidence_graph` re-exports
+    from here.
 - `src/factgraph/application/protocol/docs/README.md`
   - `EvaluateResult` / `EvaluateRow` / `Explanation` / `ResultFingerprint`
     protocol contract; `EvaluateRow.explain()` dispatch; S5 evidence invariant
     (`{passed,failed} ↔ evidence is not None`); ProbLog/PyReason rich evidence
-    builder dispatch; `walk_evidence` text renderer.
+    builder dispatch; `walk_evidence` text renderer; optional F4A Run anchors
+    and strict F4B1 detached bundle attachment.
 - `src/factgraph/application/walker/docs/README.md`
   - Current implementation contract for the application-layer walker
     module.
@@ -47,6 +89,27 @@ compatibility.
     application overview.
 
 ## Conventions
+
+V2 Product execution and detached replay translate dependency/validation
+failures into `ProductEvaluationRuntimeErrorV2` at their existing guarded call
+sites. Translation preserves an upstream `code` when present, otherwise uses
+the site's fallback code, prefixes the original message, and retains the
+original exception as `__cause__`. The private error constructor does not raise:
+each caller explicitly uses `raise ... from exc`. The existing `Exception`
+handlers still contain unexpected dependency failures; they do not intercept
+process-control exceptions such as `KeyboardInterrupt` or `SystemExit`.
+`tests/application/test_goal_plan_v2_runtime.py` covers these guarantees through
+the public replay, WeightedChoice capture, and Function capture readers.
+
+The separate WeightedChoice-to-ProbLog lowerer raises
+`ProductWeightedChoiceProbLogV2Error` directly at its rejection sites; there is
+no private pass-through raising helper. Its five dependency guards intentionally
+catch `Exception` to reject unexpected seal, compiler and canonical-IR failures
+with stable codes and `cause_type` details. Their historical implicit
+`__context__` (and absent explicit `__cause__`) is retained, so these specific
+guards have local `BLE001` exceptions rather than changing exception chaining
+for lint. `tests/application/test_weighted_choice_problog_v2.py` covers each
+guard and verifies that process-control exceptions still escape unchanged.
 
 - Documents in this directory reflect current implementation
   behavior, not standalone design drafts.

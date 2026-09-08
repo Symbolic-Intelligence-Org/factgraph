@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Callable
+from typing import Any
 
 from factgraph.core.rules.ruleref_common import internal_rule_pred_id, resolve_exposed_rule_ref
 from factgraph.core.rules.ruleref_types import NativeRuleRefResolution, NativeRuleRefRowSupport
@@ -99,7 +100,7 @@ def _validate_where_for_ruleref(where: list[Any]) -> None:
         )
     except (WhereASTError, WhereASTValidationError) as exc:
         adapted = WhereValidationError(str(exc))
-        setattr(adapted, "path", getattr(exc, "path", None) or "$.where")
+        adapted.path = getattr(exc, "path", None) or "$.where"
         raise adapted from exc
 
 
@@ -169,7 +170,7 @@ def _rewrite_where_rule_refs(
                 [rewrite_atom(case_index, condition_index, atom) for condition_index, atom in enumerate(branch)]
             )
         return out_branches, overlay, tuple(sorted(resolutions, key=lambda row: row.ruleref_condition_key))
-    return where, overlay, tuple()
+    return where, overlay, ()
 
 
 def _evaluate_registered_rule_output(

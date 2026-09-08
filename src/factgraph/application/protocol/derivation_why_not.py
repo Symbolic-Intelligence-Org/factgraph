@@ -123,7 +123,7 @@ def _validate_ordered_partition(
     *,
     requested_universe: tuple[BindingItems, ...],
     passed: tuple[BindingItems, ...],
-    failed: tuple["WhyNotFailedRow", ...],
+    failed: tuple["WhyNotFailedRow", ...],  # noqa: UP037 - Preserve Python 3.10 runtime hint shape.
 ) -> None:
     requested_universe = _validate_unique_bindings(
         requested_universe, field_name="requested_universe"
@@ -339,8 +339,8 @@ class WhyNotUniverseResult:
 __all__ = [
     "WhyNotConditionLocator",
     "WhyNotEngine",
-    "WhyNotFailureKind",
     "WhyNotFailedRow",
+    "WhyNotFailureKind",
     "WhyNotRowDiagnostic",
     "WhyNotRowGranularity",
     "WhyNotRowStatus",

@@ -85,6 +85,38 @@ class DerivationActorMetaTests(unittest.TestCase):
         self.assertEqual(meta.get("source"), "derivation.accept")
         self.assertEqual(meta.get("derived_rule_id"), "inf.actor_meta.tag")
         self.assertEqual(meta.get("approved_by"), "user-123")
+        self.assertTrue(str(meta.get("schema_digest", "")).startswith("sha256:"))
+        self.assertTrue(str(meta.get("policy_digest", "")).startswith("sha256:"))
+
+    def test_application_accept_preserves_declared_business_rule_provenance(self) -> None:
+        sdk = _make_sdk()
+        candidate = sdk.eval.evaluate_candidates(_inference(), engine="native")[0]
+        self.assertNotEqual(candidate.derivation_id, "business.authored.tag")
+
+        result = accept_derivation_candidate_set(
+            candidate,
+            DerivationAcceptRequest(approved_by="user-123"),
+            store=sdk.store,
+            derived_rule_id="business.authored.tag",
+            derived_rule_version="v7",
+        )
+
+        written = result.written_assertions[0]["asrt_id"]
+        meta = {item.key: item.value for item in sdk.ledger.find_meta(asrt_id=written)}
+        self.assertEqual(meta.get("derivation_id"), candidate.derivation_id)
+        self.assertEqual(meta.get("derivation_version"), candidate.derivation_version)
+        self.assertEqual(meta.get("derived_rule_id"), "business.authored.tag")
+        self.assertEqual(meta.get("derived_rule_version"), "v7")
+        self.assertTrue(str(meta.get("schema_digest", "")).startswith("sha256:"))
+        self.assertTrue(str(meta.get("policy_digest", "")).startswith("sha256:"))
+
+        with self.assertRaisesRegex(ValueError, "derivation_id mismatch"):
+            sdk.store.accept(
+                "business.authored.tag",
+                "v7",
+                candidate,
+                AcceptOptions(),
+            )
 
     def test_actor_meta_never_overwrites_protocol_meta(self) -> None:
         # actor_meta versucht, Protokoll-Schlüssel zu überschreiben -> wird ignoriert.

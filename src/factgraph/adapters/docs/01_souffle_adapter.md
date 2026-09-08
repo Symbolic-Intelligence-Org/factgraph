@@ -81,6 +81,22 @@ Additional boundaries:
   `Store.evaluate(mode="souffle")` remains a single-engine adapter
   contract.
 
+### V1 sealed portable-query boundary
+
+`portable_deterministic_v1` is a separate FactGraph application contract, not
+a new general `Store.evaluate` mode. Its runtime materializes one finite,
+dependency-complete positive relation into a fresh isolated Store and invokes
+the existing Soufflé adapter there alongside native and ProbLog. It accepts
+only the documented deterministic common subset and returns a typed
+`succeeded`, `failed`, or `unsupported` frame. A missing binary, lowering
+restriction, or output mismatch is visible to the V1 Run; it never silently
+falls back to native.
+
+The portable contract compares only canonical selected-row sets. It does not
+claim Soufflé reach/witness receipts, certainty carriers, provenance trees or
+detached Explain output are equivalent to the other engines. The older adapter
+workflows below retain their existing semantics.
+
 ## 4. Typical workflows
 
 ### 4.1 Souffle engine evaluation
@@ -92,7 +108,7 @@ The main flow of `evaluate_store_engine(...)`:
    the query where)
 3. `run_package(..., engine="souffle")` executes
 4. Read `outputs/<query_rel>.out.facts` and parse bindings
-5. Convert into `CandidateSet` (entity / fact candidate)
+5. Convert into `DerivationOutput` (entity / fact output; legacy materialization still uses the `CandidateSet` alias)
 
 Note: `engine_eval` strictly verifies that
 `run_manifest.engine_mode == "souffle"`; if the runner falls back
@@ -103,13 +119,48 @@ Explainability addendum:
 
 - The current Souffle evaluate splits explainability into two
   paths:
+  - **reach-chain row explain path**
+    - SDK row explain for `lowering_plan` inputs routes through
+      `adapters.souffle.reach_explain`, not the shared ProbLog-style
+      companion program
+    - The reach program is generated from the materialized
+      `RuleExprLoweringPlan` body after Souffle-specific join/head links have
+      been lowered to comparison atoms
+    - Each branch emits chained `reach_i` relations. A row seed anchors the
+      subject binding; each level carries accumulated variable bindings. Reach
+      explain intentionally does not carry predicate assertion ids, because
+      rich labels are rebaked from row-specific term bindings and the extra
+      assertion columns would widen Souffle relations without being consumed.
+    - The seed is branch-local: each branch carries only row seed variables
+      referenced by that materialized branch, so unrelated OR-branch aliases do
+      not widen every reach relation
+    - `holds` means the row seed reaches that condition; `fails` means the
+      previous reach was non-empty but the next condition did not pass; later
+      conditions can remain `not_reached`
+    - If a branch would exceed Souffle's current arity ceiling after an earlier
+      failure has already been localized, later atoms are reported as
+      `not_reached`; if the branch outcome is still unknown at the first
+      overwide relation, reach explain degrades to the receipt/minimal path
+    - S1 supports materialized `pred`, `eq`, `ne`, `gt`, `ge`, `lt`, `le`, and
+      simple `not(pred|compare)` atoms. `ruleref`, recursion, aggregates, and
+      unsupported atoms degrade to the receipt/minimal paths below
+    - The reach package is an independent query program. It still exports the
+      current fact set, but it does not append diagnostics to the full idb or
+      rerun the original inference graph during row explain
   - **partial witness path**
     - When `where` contains top-level `pred` atoms, the adapter
-      exports a `_w` witness variant view and lets the query
-      output additionally pass through witness columns
-    - `engine_eval` aggregates these witness columns by binding,
-      builds a restricted subset of `ProofReceipt`, and
-      registers it with `Store`
+      exports `_w` witness variant views. `engine_eval` then replaces the
+      package idb with an independent query program:
+      - a narrow result relation, `query__(<head vars>)`
+      - one narrow witness relation per satisfying branch,
+        `query__b{k}_w(<head vars>, <that branch witness ids>)`
+    - Branch witness relations are checked against Souffle's current arity
+      ceiling (`22`) before the runner is invoked. Overwide branches raise a
+      `WhereValidationError` naming the branch, arity, witness predicate
+      count, and limit instead of reaching Souffle's SIGABRT path.
+    - `engine_eval` reads these per-branch witness rows by binding,
+      builds a restricted subset of `ProofReceipt`, and registers it with
+      `Store`
     - Externally, `support_kind="souffle_witness_v1"`
     - Currently committed field scope:
       - `binding`
@@ -194,8 +245,14 @@ helper**:
 Runtime note:
 
 - `Store.evaluate(mode="souffle")` persists the existing `ProofReceipt`
-  witness carrier, not raw `SouffleProofTreeV0`. SDK explain converts that
-  receipt into a paths-model graph with head/body rules and witness atoms.
+  witness carrier, not raw `SouffleProofTreeV0`. For supported lowered rows,
+  SDK explain now builds a reach-chain graph directly. For unsupported shapes
+  it converts the receipt into a paths-model graph with head/body rules and
+  witness atoms, then falls back to minimal row evidence if receipt conversion
+  fails.
+- Souffle row explain no longer routes `lowering_plan` rows through the shared
+  diagnostic companion. ProbLog now uses its own reach-chain row explain path,
+  so the old shared companion emitter is retired.
 - The adapter-local `SouffleProofTreeV0` converter remains available for
   direct `souffle -t explain` JSON proof streams.
 

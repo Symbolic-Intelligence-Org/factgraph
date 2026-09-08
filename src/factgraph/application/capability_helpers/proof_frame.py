@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-from factgraph.core.store._support import ProofReceipt
-
 from factgraph.application.protocol import (
     FactOverlay,
     ProofFrameRecheckRequest,
 )
+from factgraph.core.store._support import ProofReceipt
 
 from ._binding import _reject_sdk_origin
 from .errors import CapabilityHelperError

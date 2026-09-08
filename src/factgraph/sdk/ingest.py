@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from factgraph.application import apply_ingest_request, entity_type_from_ref, field_value_type
 from factgraph.application.protocol import (
@@ -14,8 +14,12 @@ from factgraph.application.protocol import (
     IngestSetItem,
     ProtocolShapeError,
 )
-from factgraph.core.derivation.candidates import CandidateSet
+from factgraph.core.derivation.candidates import DerivationOutput
 from factgraph.core.evidence.write_protocol import add_field, set_field
+from factgraph.core.schema.meta_policy import (
+    EVENT_TIME_META_KEY,
+    SYSTEM_MANAGED_META_KEYS,
+)
 
 from .errors import SDKStoreError
 
@@ -23,7 +27,7 @@ if TYPE_CHECKING:
     from .store import SDKStore
 
 
-HARD_RESERVED_META_KEYS: frozenset[str] = frozenset({"ingested_at", "ingest_key", "revoked_asrt_id"})
+HARD_RESERVED_META_KEYS = SYSTEM_MANAGED_META_KEYS
 # Proposed future reserved key (spec-level, not enforced by write_protocol yet).
 SUGGESTED_HARD_RESERVED_META_KEYS: frozenset[str] = frozenset({"meta_origin"})
 
@@ -70,6 +74,8 @@ DEDUP_AFFECTING_META_KEYS: frozenset[str] = frozenset({"source", "source_loc", "
 
 @dataclass(frozen=True)
 class IngestResult:
+    """Summary, diagnostics and assertion ids produced by SDK ingest."""
+
     written_assertion_ids: list[str]
     skipped_count: int
     duplicate_count: int
@@ -80,6 +86,8 @@ class IngestResult:
 
 @dataclass(frozen=True)
 class ValidationReport:
+    """Structured validation status, warnings and errors for ingest provenance."""
+
     ok: bool
     warnings: list[dict[str, Any]]
     errors: list[dict[str, Any]]
@@ -97,7 +105,7 @@ class _PreparedIngestItem:
 
 
 def sdk_validate_provenance(
-    sdk: "SDKStore",
+    sdk: SDKStore,
     obj: Any,
     *,
     standard: str = "derivation_v1",
@@ -143,23 +151,26 @@ def sdk_validate_provenance(
 
     # Optional but semantically meaningful if present.
     for key in ("schema_digest", "policy_digest"):
-        if key in source_obj and source_obj.get(key) is not None:
-            if not _is_sha256_token(source_obj.get(key)):
-                warnings.append(
-                    _diag(
-                        code="provenance_optional_digest_malformed",
-                        severity="warning",
-                        path=f"$.provenance.{key}",
-                        message=f"{key} should be 'sha256:<hex>' when provided",
-                        data={"key": key},
-                    )
+        if (
+            key in source_obj
+            and source_obj.get(key) is not None
+            and not _is_sha256_token(source_obj.get(key))
+        ):
+            warnings.append(
+                _diag(
+                    code="provenance_optional_digest_malformed",
+                    severity="warning",
+                    path=f"$.provenance.{key}",
+                    message=f"{key} should be 'sha256:<hex>' when provided",
+                    data={"key": key},
                 )
+            )
 
     return ValidationReport(ok=not errors, warnings=warnings, errors=errors)
 
 
 def sdk_ingest(
-    sdk: "SDKStore",
+    sdk: SDKStore,
     data: Any,
     *,
     meta: dict[str, Any] | None = None,
@@ -274,7 +285,7 @@ def sdk_ingest(
 
 
 def _ingest_set_or_add_prepared(
-    sdk: "SDKStore",
+    sdk: SDKStore,
     item: _PreparedIngestItem,
     *,
     kind: str,
@@ -320,12 +331,19 @@ def _ingest_set_or_add_prepared(
 
 
 def _legacy_ingest_set_or_add(
-    sdk: "SDKStore",
+    sdk: SDKStore,
     item: _PreparedIngestItem,
     *,
     kind: str,
     path: str,
 ) -> str:
+    database = sdk._database_for_application_write("fg.ingest")
+    if database is not None:
+        raise SDKStoreError(
+            f"{path}: ingest item cannot be represented by the application write protocol",
+            code="INGEST_PLAN_FAILED",
+            path=path,
+        )
     field = item.field
     e_ref = item.e_ref
     if not isinstance(e_ref, str) or not e_ref:
@@ -348,7 +366,7 @@ _MISSING = object()
 _APP_FALLBACK = object()
 
 
-def _identity_dict_for_e_ref(sdk: "SDKStore", e_ref: str, *, owner_type: str) -> dict[str, Any] | None:
+def _identity_dict_for_e_ref(sdk: SDKStore, e_ref: str, *, owner_type: str) -> dict[str, Any] | None:
     if entity_type_from_ref(e_ref) != owner_type:
         return None
     identity = sdk._identity_values_by_e_ref.get(e_ref)
@@ -358,7 +376,7 @@ def _identity_dict_for_e_ref(sdk: "SDKStore", e_ref: str, *, owner_type: str) ->
 
 
 def _app_value_for_ingest(
-    sdk: "SDKStore",
+    sdk: SDKStore,
     value: Any,
     *,
     owner_type: str,
@@ -381,7 +399,7 @@ def _app_value_for_ingest(
 
 
 def _app_ingest_set_or_add(
-    sdk: "SDKStore",
+    sdk: SDKStore,
     item: _PreparedIngestItem,
     *,
     kind: str,
@@ -405,6 +423,7 @@ def _app_ingest_set_or_add(
         IngestRequest(items=(app_item,), collect_mode="stop"),
         store=sdk._store,
         index=sdk._application_schema_index,
+        database=sdk._database_for_application_write("fg.ingest"),
     )
     warnings.extend(_app_warnings_to_sdk(result.warnings, fallback_path=path))
     if result.errors:
@@ -419,7 +438,7 @@ def _app_ingest_set_or_add(
 
 
 def _app_ingest_retract(
-    sdk: "SDKStore",
+    sdk: SDKStore,
     item: _PreparedIngestItem,
     *,
     path: str,
@@ -436,6 +455,7 @@ def _app_ingest_retract(
         ),
         store=sdk._store,
         index=sdk._application_schema_index,
+        database=sdk._database_for_application_write("fg.ingest"),
     )
     warnings.extend(_app_warnings_to_sdk(result.warnings, fallback_path=path))
     if result.errors:
@@ -478,7 +498,7 @@ def _sdk_path_from_app_path(path: tuple[str, ...], *, fallback_path: str) -> str
 
 
 def _prepare_ingest_items(
-    sdk: "SDKStore",
+    sdk: SDKStore,
     data: list[Any] | tuple[Any, ...],
     *,
     base_meta: dict[str, Any],
@@ -504,7 +524,7 @@ def _prepare_ingest_items(
 
 
 def _prepare_single_ingest_item(
-    sdk: "SDKStore",
+    sdk: SDKStore,
     raw_item: Any,
     *,
     item_path: str,
@@ -548,7 +568,7 @@ def _prepare_single_ingest_item(
         schema_pred = None
         try:
             schema_pred = sdk._schema_pred_for_field(field)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - schema/field resolution boundary: the failure is recorded as an ingest_item_field_invalid diagnostic carrying the original message
             diagnostics.append(
                 _diag(
                     code="ingest_item_field_invalid",
@@ -603,7 +623,7 @@ def _prepare_single_ingest_item(
         if schema_pred is not None and value is not _MISSING:
             try:
                 sdk._rest_terms_for_field(schema_pred, value=value)
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001 - value lowering boundary: the failure is recorded as an ingest_item_field_value_invalid diagnostic carrying the original message
                 diagnostics.append(
                     _diag(
                         code="ingest_item_field_value_invalid",
@@ -660,7 +680,7 @@ def _prepare_single_ingest_item(
 
 
 def _coerce_provenance_input(obj: Any) -> dict[str, Any]:
-    if isinstance(obj, CandidateSet):
+    if isinstance(obj, DerivationOutput):
         return {
             "derived_rule_id": obj.derivation_id,
             "derived_rule_version": obj.derivation_version,
@@ -672,7 +692,8 @@ def _coerce_provenance_input(obj: Any) -> dict[str, Any]:
     if isinstance(obj, dict):
         return dict(obj)
     raise SDKStoreError(
-        "validate_provenance(...) currently supports CandidateSet or meta dict input"
+        "validate_provenance(...) currently supports DerivationOutput "
+        "(including the legacy CandidateSet alias) or meta dict input"
     )
 
 
@@ -686,7 +707,10 @@ def _normalize_user_meta(meta: Any, *, path: str) -> dict[str, Any]:
         if not isinstance(key, str) or not key:
             raise SDKStoreError(f"{path}: meta keys must be non-empty strings")
         if key in HARD_RESERVED_META_KEYS:
-            raise SDKStoreError(f"{path}[{key!r}] is reserved and system-managed")
+            raise SDKStoreError(
+                f"{path}[{key!r}] is reserved and system-managed; "
+                f"use {EVENT_TIME_META_KEY!r} for source event time"
+            )
         out[key] = value
     return out
 

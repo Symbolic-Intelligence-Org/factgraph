@@ -27,6 +27,7 @@ from factgraph.core.evidence.write_protocol import set_field
 from factgraph.core.rules.rule_ir import RuleSpec
 from factgraph.core.store import Store
 from factgraph.core.store._support import NonFactStep, PredWitness, RuleRefEdge, ProofReceipt
+from factgraph.core.view.projector import project_view_facts_with_witness
 from factgraph.sdk import Entity, Field, Identity, compile_schema_from_classes
 
 
@@ -68,7 +69,8 @@ def _seed_person(
     )
     info = entity_info(index, "Person")
     encoded = ref.encoded_ref or ""
-    exists_asrt_id = set_field(store.ledger, info.exists_predicate_id, encoded, [])
+    identity_pred_id = field_predicate(index, "Person", "name").pred_id
+    set_field(store.ledger, identity_pred_id, encoded, [("string", name)])
     age_pred_id = field_predicate(index, "Person", "age").pred_id
     age_asrt_id = set_field(store.ledger, age_pred_id, encoded, [("int", age)])
     region_pred_id = field_predicate(index, "Person", "region").pred_id
@@ -77,6 +79,13 @@ def _seed_person(
         region_pred_id,
         encoded,
         [("string", region)],
+    )
+    exists_asrt_id = next(
+        row.asrt_id
+        for row in project_view_facts_with_witness(store.ledger, store.schema_ir)[
+            info.exists_predicate_id
+        ]
+        if row.fact_tuple == (encoded,)
     )
     return SeededPerson(
         e_ref=encoded,

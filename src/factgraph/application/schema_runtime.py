@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping
 from dataclasses import dataclass
-import re
 from typing import Any, Literal
 
 from factgraph.core.protocol.idref_v1 import encode_idref_v1
@@ -330,7 +330,7 @@ def display_value(
     if isinstance(value, EntityRef):
         try:
             return render_entity_repr(index, value.entity_type, value.identity)
-        except Exception:
+        except (SchemaResolutionError, TypeError, ValueError):
             return value.encoded_ref or value
     if isinstance(value, Mapping):
         identity = value.get("identity")
@@ -338,7 +338,7 @@ def display_value(
         if isinstance(entity_type, str) and isinstance(identity, Mapping):
             try:
                 return render_entity_repr(index, entity_type, identity)
-            except Exception:
+            except (SchemaResolutionError, TypeError, ValueError):
                 return value
     if isinstance(value, str):
         entity_type = entity_type_from_ref(value)
@@ -350,7 +350,7 @@ def display_value(
                 identity = resolver(entity_type, value, index)
                 if isinstance(identity, Mapping):
                     return render_entity_repr(index, entity_type, identity)
-            except Exception:
+            except Exception:  # noqa: BLE001 - provider display is best-effort
                 return value
     return value
 
@@ -373,7 +373,7 @@ def _identity_value_text(
     if type_domain == "float64":
         try:
             return display_float64_value(value)
-        except Exception:
+        except ValueError:
             return str(value)
     return str(value)
 
@@ -428,6 +428,34 @@ def field_value_type(index: SchemaIndex, entity_type: str, field_name: str) -> F
         value_kind="scalar",
         cardinality=pred.cardinality,
         scalar_domain=pred.value_type_domain,
+    )
+
+
+def is_scenario_relation_predicate_v1(index: SchemaIndex, predicate_id: str) -> bool:
+    """Return whether one schema predicate is an admissible relation Scenario target."""
+
+    info = index.predicates_by_id.get(predicate_id)
+    record = next(
+        (
+            item
+            for item in index.schema_ir.get("predicates", ())
+            if isinstance(item, dict) and item.get("pred_id") == predicate_id
+        ),
+        None,
+    )
+    if info is None or record is None:
+        return False
+    return not (
+        info.is_entity_exists
+        or info.is_identity_field
+        or (
+            info.py_field_name is not None
+            and info.value_type_domain != "entity_ref"
+        )
+        or bool(record.get("is_derived"))
+        or record.get("kind") == "derived"
+        or record.get("source_kind") == "derived"
+        or predicate_id.startswith("**")
     )
 
 
@@ -603,10 +631,10 @@ __all__ = [
     "SchemaIndex",
     "SchemaResolutionError",
     "build_schema_index",
+    "display_value",
     "encode_entity_ref",
     "entity_info",
     "entity_type_from_ref",
-    "display_value",
     "field_predicate",
     "field_value_type",
     "materialize_identity",

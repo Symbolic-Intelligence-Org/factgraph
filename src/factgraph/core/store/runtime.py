@@ -1,26 +1,31 @@
 from __future__ import annotations
 
 import warnings
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
 from factgraph.core.derivation.accept import AcceptOptions, AcceptRequest, AcceptResult
-from factgraph.core.derivation.candidates import CandidateSet, make_candidate
+from factgraph.core.derivation.candidates import (
+    CandidateSet,
+    DerivationOutput,
+    make_derivation_output,
+)
 from factgraph.core.evidence.write_protocol import now_epoch_nanos
 from factgraph.core.mapping.canon import MappingResolution
 from factgraph.core.protocol.digests import sha256_token
 from factgraph.core.protocol.tup_v1 import canonical_bytes_tup_v1
 from factgraph.core.rules._trace import RuleTraceArtifact
 from factgraph.core.rules.where_eval import WhereValidationError
-from factgraph.core.store._explain_rule_trace import render_rule_trace_artifact
+from factgraph.core.schema.meta_policy import lazy_meta_keys
 from factgraph.core.schema.schema_ir import ensure_schema_ir
 from factgraph.core.store import _accept as _store_accept
 from factgraph.core.store._artifact_sidecar import ArtifactSidecar
+from factgraph.core.store._explain_rule_trace import render_rule_trace_artifact
 from factgraph.core.store._explain_support import render_support_artifact
 from factgraph.core.store._support import (
     ENGINE_NO_WITNESS_KIND,
-    ProvenanceEnvelope,
     ProofReceipt,
+    ProvenanceEnvelope,
     provenance_envelope_to_dict,
 )
 from factgraph.core.store.evaluation import evaluate_store
@@ -33,13 +38,14 @@ from factgraph.core.store.premise_filter import (
     normalize_premise_blocks,
     normalize_premise_exclusions,
     premise_scoped_ledger,
+    validate_premise_configuration,
 )
 from factgraph.core.store.queries import conflicts as store_conflicts
 from factgraph.core.store.queries import explain_fact as store_explain_fact
 from factgraph.core.store.queries import resolve_mapping as store_resolve_mapping
 from factgraph.core.store.types import (
-    EngineExtBase,
     EngineEvaluatorFn,
+    EngineExtBase,
     EngineOptionsIR,
     EvaluateMode,
     HeadSpecIR,
@@ -83,17 +89,27 @@ class Store:
         *,
         engine_evaluator: EngineEvaluatorFn | None = None,
         artifact_sidecar: ArtifactSidecar | None = None,
-        premise_exclusions: "MetaExclusion | Iterable[MetaExclusion] | None" = None,
-        premise_allowances: "PredicatePremiseAllowance | Iterable[PredicatePremiseAllowance] | None" = None,
-        premise_blocks: "PredicatePremiseBlock | Iterable[PredicatePremiseBlock] | None" = None,
+        premise_exclusions: MetaExclusion | Iterable[MetaExclusion] | None = None,
+        premise_allowances: PredicatePremiseAllowance | Iterable[PredicatePremiseAllowance] | None = None,
+        premise_blocks: PredicatePremiseBlock | Iterable[PredicatePremiseBlock] | None = None,
     ) -> None:
         if not isinstance(schema_ir, dict):
-            raise ValueError("schema_ir must be dict")
+            raise ValueError("schema_ir must be dict")  # noqa: TRY004 - Store construction rejection is a ValueError the SDK wraps
         self.schema_ir = ensure_schema_ir(schema_ir)
         self.ledger = ledger if ledger is not None else Ledger()
+        self.ledger.configure_meta_load_policy(lazy_meta_keys(self.schema_ir))
         self._premise_exclusions = normalize_premise_exclusions(premise_exclusions)
         self._premise_allowances = normalize_premise_allowances(premise_allowances)
         self._premise_blocks = normalize_premise_blocks(premise_blocks)
+        validate_premise_configuration(
+            self.schema_ir,
+            self._premise_exclusions,
+            self._premise_allowances,
+            self._premise_blocks,
+        )
+        # Internal, process-local generation marker for compiled Query ABA
+        # freshness. It is not a snapshot, serialized field, or public API.
+        self._premise_policy_revision = 0
         self._engine_overrides: dict[str, EngineEvaluatorFn] = {}
         self._artifact_sidecar = artifact_sidecar
         self._support_artifacts: dict[str, ProofReceipt] = {}
@@ -103,6 +119,10 @@ class Store:
         self._candidate_confidence_kind_index: dict[str, str] = {}
         self._candidate_pred_index: dict[str, str] = {}
         self._rule_trace_artifacts: dict[str, RuleTraceArtifact] = {}
+        # Product V2 enables this only inside its isolated per-side Store.
+        # Ordinary Store Query/Check behavior continues selecting one stable
+        # support per row.
+        self._capture_all_query_style_supports = False
         if engine_evaluator is not None:
             self._engine_overrides["souffle"] = engine_evaluator
 
@@ -122,7 +142,7 @@ class Store:
 
     def set_premise_exclusions(
         self,
-        exclusions: "MetaExclusion | Iterable[MetaExclusion] | None",
+        exclusions: MetaExclusion | Iterable[MetaExclusion] | None,
     ) -> None:
         """Configure evaluation premise exclusions; see core/store/premise_filter.py.
 
@@ -130,8 +150,21 @@ class Store:
         to every rule evaluation (all engine modes, proof-frame recheck, and
         the derivation check). Read/query paths outside evaluation stay
         unfiltered. Passing ``None`` or an empty iterable disables filtering.
+
+        A successful assignment, including an equivalent configuration,
+        advances an internal process-local generation only after normalization
+        and schema validation succeed; a failed setter leaves it unchanged.
+        That generation makes an in-flight compiled EvaluationQuery execution
+        that sampled the preceding policy state, and live-row
+        ``close()``/``explain()`` on a result from such an earlier execution,
+        fail closed. It is not public API or serialized state, does not provide a
+        Store snapshot or isolation guarantee, and does not enable
+        premise-filtered compiled Query execution.
         """
-        self._premise_exclusions = normalize_premise_exclusions(exclusions)
+        normalized = normalize_premise_exclusions(exclusions)
+        validate_premise_configuration(self.schema_ir, exclusions=normalized)
+        self._premise_exclusions = normalized
+        self._premise_policy_revision += 1
 
     @property
     def premise_allowances(self) -> tuple[PredicatePremiseAllowance, ...]:
@@ -140,7 +173,7 @@ class Store:
 
     def set_premise_allowances(
         self,
-        allowances: "PredicatePremiseAllowance | Iterable[PredicatePremiseAllowance] | None",
+        allowances: PredicatePremiseAllowance | Iterable[PredicatePremiseAllowance] | None,
     ) -> None:
         """Configure per-predicate evaluation allowances; see core/store/premise_filter.py.
 
@@ -152,8 +185,21 @@ class Store:
         assertion excluded by either is invisible), so the global exclusion
         floor is never lifted. Passing ``None`` or an empty iterable disables
         per-predicate filtering.
+
+        A successful assignment, including an equivalent configuration,
+        advances an internal process-local generation only after normalization
+        and schema validation succeed; a failed setter leaves it unchanged.
+        That generation makes an in-flight compiled EvaluationQuery execution
+        that sampled the preceding policy state, and live-row
+        ``close()``/``explain()`` on a result from such an earlier execution,
+        fail closed. It is not public API or serialized state, does not provide a
+        Store snapshot or isolation guarantee, and does not enable
+        premise-filtered compiled Query execution.
         """
-        self._premise_allowances = normalize_premise_allowances(allowances)
+        normalized = normalize_premise_allowances(allowances)
+        validate_premise_configuration(self.schema_ir, allowances=normalized)
+        self._premise_allowances = normalized
+        self._premise_policy_revision += 1
 
     @property
     def premise_blocks(self) -> tuple[PredicatePremiseBlock, ...]:
@@ -162,7 +208,7 @@ class Store:
 
     def set_premise_blocks(
         self,
-        blocks: "PredicatePremiseBlock | Iterable[PredicatePremiseBlock] | None",
+        blocks: PredicatePremiseBlock | Iterable[PredicatePremiseBlock] | None,
     ) -> None:
         """Configure per-predicate evaluation blocklists; see core/store/premise_filter.py.
 
@@ -173,8 +219,21 @@ class Store:
         is OR-combined with ``premise_exclusions`` and ``premise_allowances``
         (an assertion excluded by any is invisible). Passing ``None`` or an
         empty iterable disables per-predicate blocking.
+
+        A successful assignment, including an equivalent configuration,
+        advances an internal process-local generation only after normalization
+        and schema validation succeed; a failed setter leaves it unchanged.
+        That generation makes an in-flight compiled EvaluationQuery execution
+        that sampled the preceding policy state, and live-row
+        ``close()``/``explain()`` on a result from such an earlier execution,
+        fail closed. It is not public API or serialized state, does not provide a
+        Store snapshot or isolation guarantee, and does not enable
+        premise-filtered compiled Query execution.
         """
-        self._premise_blocks = normalize_premise_blocks(blocks)
+        normalized = normalize_premise_blocks(blocks)
+        validate_premise_configuration(self.schema_ir, blocks=normalized)
+        self._premise_blocks = normalized
+        self._premise_policy_revision += 1
 
     def _remember_support_artifact(
         self,
@@ -184,7 +243,7 @@ class Store:
         if not isinstance(support_digest, str) or not support_digest.startswith("sha256:"):
             raise ValueError("support_digest must be sha256 token")
         if not isinstance(artifact, ProofReceipt):
-            raise ValueError("artifact must be ProofReceipt")
+            raise ValueError("artifact must be ProofReceipt")  # noqa: TRY004 - support registration rejections are one ValueError contract
         existing = self._support_artifacts.get(support_digest)
         if existing is None:
             if self._artifact_sidecar is not None:
@@ -219,7 +278,7 @@ class Store:
         if not isinstance(support_digest, str) or not support_digest.startswith("sha256:"):
             raise ValueError("support_digest must be sha256 token")
         if not isinstance(envelope, ProvenanceEnvelope):
-            raise ValueError("envelope must be ProvenanceEnvelope")
+            raise ValueError("envelope must be ProvenanceEnvelope")  # noqa: TRY004 - support registration rejections are one ValueError contract
         existing = self._provenance_envelopes.get(support_digest)
         if existing is None:
             self._provenance_envelopes[support_digest] = envelope
@@ -253,7 +312,7 @@ class Store:
         if not isinstance(confidence_kind, str) or not confidence_kind:
             raise ValueError("confidence_kind must be non-empty string")
         if not isinstance(target_pred_id, str):
-            raise ValueError("target_pred_id must be string")
+            raise ValueError("target_pred_id must be string")  # noqa: TRY004 - candidate support rejections are one ValueError contract
         if candidate_id in self._candidate_support_index:
             existing_digest = self._candidate_support_index[candidate_id]
             if existing_digest != support_digest:
@@ -302,7 +361,7 @@ class Store:
         if not isinstance(rule_run_id, str) or not rule_run_id:
             raise ValueError("rule_run_id must be non-empty string")
         if not isinstance(artifact, RuleTraceArtifact):
-            raise ValueError("artifact must be RuleTraceArtifact")
+            raise ValueError("artifact must be RuleTraceArtifact")  # noqa: TRY004 - trace registration rejections are one ValueError contract
         existing = self._rule_trace_artifacts.get(rule_run_id)
         if existing is None:
             if self._artifact_sidecar is not None:
@@ -338,12 +397,12 @@ class Store:
         where: WhereIR,
         mode: EvaluateMode = "native",
         head: HeadSpecIR | None = None,
-        registry: "RuleRegistry | None" = None,
+        registry: RuleRegistry | None = None,
         confidence_kind_resolver: Any | None = None,
         engine_ext: EngineExtBase | None = None,
         engine_options: EngineOptionsIR = None,
         semantics_profile: Any | None = None,
-    ) -> list[CandidateSet]:
+    ) -> list[DerivationOutput]:
         return evaluate_store(
             self,
             derivation_id=derivation_id,
@@ -373,7 +432,7 @@ class Store:
         engine_ext: EngineExtBase | None = None,
         engine_options: EngineOptionsIR = None,
         semantics_profile: Any | None = None,
-    ) -> list[CandidateSet]:
+    ) -> list[DerivationOutput]:
         """Internal adapter entrypoint; prefer evaluate(mode='souffle'|'problog'|'pyreason')."""
         if not isinstance(mode, str) or not mode:
             raise WhereValidationError("mode must be non-empty string")
@@ -413,7 +472,7 @@ class Store:
         e_ref: str,
         rest_terms: list[tuple[str, Any]],
         dims_terms: list[tuple[str, Any]],
-    ) -> CandidateSet:
+    ) -> DerivationOutput:
         warnings.warn(
             "evaluate_dummy is deprecated; use evaluate()",
             DeprecationWarning,
@@ -428,7 +487,7 @@ class Store:
             + [{"kind": "literal", "tag": tag, "value": value} for tag, value in rest_terms],
         }
         tup_digest = sha256_token(canonical_bytes_tup_v1(rest_terms))
-        return make_candidate(
+        return make_derivation_output(
             derivation_id=derivation_id,
             derivation_version=version,
             run_id=run_id,
@@ -564,7 +623,7 @@ def premise_scoped_store_view(store: Store) -> Store:
 
 __all__ = [
     "Store",
+    "get_engine_evaluator",
     "premise_scoped_store_view",
     "register_engine_evaluator",
-    "get_engine_evaluator",
 ]

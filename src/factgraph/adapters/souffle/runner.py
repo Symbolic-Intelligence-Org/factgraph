@@ -229,7 +229,7 @@ def _build_program_file(pkg_dir: Path, manifest: dict[str, Any], work_dir: Path)
 
     program_path = work_dir / "program.dl"
     program_path.write_text(
-        "\n".join([view_text, policy_text, idb_text]) + "\n",
+        f"{view_text}\n{policy_text}\n{idb_text}\n",
         encoding="utf-8",
         newline="\n",
     )
@@ -295,6 +295,7 @@ def _validate_package_layout(pkg_dir: Path, manifest: dict[str, Any]) -> None:
         _manifest_path(manifest, "paths", "rules", "view"),
         _manifest_path(manifest, "paths", "rules", "idb"),
         _manifest_path(manifest, "paths", "facts", "claim"),
+        _manifest_path(manifest, "paths", "facts", "claim_seq"),
         _manifest_path(manifest, "paths", "facts", "claim_arg"),
         _manifest_path(manifest, "paths", "facts", "meta_str"),
         _manifest_path(manifest, "paths", "facts", "meta_time"),

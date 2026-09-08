@@ -4,9 +4,10 @@ import json
 import os
 import tempfile
 import time
+from collections.abc import Mapping
 from dataclasses import dataclass, field, fields, is_dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Mapping, TypeAlias
+from typing import TYPE_CHECKING, Any, TypeAlias
 
 from factgraph.core.protocol.digests import sha256_token
 from factgraph.core.store._support import BindingItems, ProofReceipt, compute_support_digest
@@ -297,9 +298,23 @@ def project_check_event_payload(request: Any, result: Any) -> dict[str, JSONValu
     evidence_payload: dict[str, JSONValue] | None = None
     if evidence is not None:
         support_digest = getattr(evidence, "support_digest", None)
+        as_of_event_seq = getattr(evidence, "as_of_event_seq", None)
+        if (
+            not isinstance(as_of_event_seq, tuple)
+            or len(as_of_event_seq) != 2
+            or any(
+                isinstance(part, bool) or not isinstance(part, int) or part < 0
+                for part in as_of_event_seq
+            )
+        ):
+            raise RoundEventError(
+                "evidence_envelope.as_of_event_seq must be a "
+                "(tx_seq, op_ordinal) pair of non-negative ints"
+            )
         evidence_payload = {
             "engine_payload_kind": str(getattr(evidence, "support_kind", "")),
             "payload_digest": str(support_digest) if isinstance(support_digest, str) else _opaque_digest(evidence),
+            "as_of_event_seq": list(as_of_event_seq),
         }
     return {
         "request": {
@@ -668,7 +683,7 @@ def _replace_jsonl(path: Path, rows: list[dict[str, JSONValue]]) -> None:
                 )
                 handle.write("\n")
         os.replace(tmp_path, path)
-    except Exception:
+    except Exception:  # noqa: BLE001 - temp-file cleanup only for the atomic JSONL replace; the original OS/JSON failure is re-raised unchanged.
         try:
             tmp_path.unlink(missing_ok=True)
         finally:
@@ -702,7 +717,7 @@ def _replace_json(path: Path, payload: dict[str, Any]) -> None:
         with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as handle:
             handle.write(json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")))
         os.replace(tmp_path, path)
-    except Exception:
+    except Exception:  # noqa: BLE001 - temp-file cleanup only for the atomic manifest replace; the original OS/JSON failure is re-raised unchanged.
         try:
             tmp_path.unlink(missing_ok=True)
         finally:
@@ -750,10 +765,10 @@ def _validate_json_value(value: Any, *, field_name: str) -> JSONValue:
 
 
 __all__ = [
-    "ROUND_EVENT_SCHEMA_VERSION",
-    "ROUND_EVENT_KINDS",
     "ROUND_EVENTS_AUDIT_FILE_KEY",
     "ROUND_EVENTS_REL_PATH",
+    "ROUND_EVENT_KINDS",
+    "ROUND_EVENT_SCHEMA_VERSION",
     "RoundEvent",
     "RoundEventError",
     "RoundRecorder",

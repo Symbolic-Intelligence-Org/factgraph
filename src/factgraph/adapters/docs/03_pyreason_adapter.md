@@ -14,7 +14,7 @@ engine. It is now wired into the shared evaluate surface:
 `Store.evaluate(mode="pyreason")` /
 `fg.eval.evaluate(derivation, engine="pyreason")` go through
 the adapter's EDB materialization, WhereIR compilation, runner,
-and `CandidateSet` output. The adapter-local provenance, session,
+and `DerivationOutput` output. The adapter-local provenance, session,
 rule extension, runner, and accept helper are still kept as
 engine-internal implementation and standalone helper layers.
 
@@ -48,7 +48,7 @@ ProbLog (probabilistic logic).
 | `rule_ext.py` | `PyReasonRuleExt` / `PyReasonFactDef` / `compile_pyreason_rule(...)` |
 | `where_compile.py` | `compile_where_ir_to_pyreason(...)` — lowered WhereIR → PyReason rule syntax (the execution-surface compiler) |
 | `runner.py` | `run_pyreason(...)` / `build_pyreason_graph(...)` / `PyReasonRunConfig` / `PyReasonRunResult`; accepts both legacy tuple form and shared `Rule` / typed `PyReasonFactDef` |
-| `engine_eval.py` | `pyreason_engine_eval(...)` / `_materialize_edb_session(...)` — shared evaluate dispatch entry point that emits `CandidateSet` and caches pending annotations |
+| `engine_eval.py` | `pyreason_engine_eval(...)` / `_materialize_edb_session(...)` — shared evaluate dispatch entry point that emits `DerivationOutput` and caches pending annotations |
 | `accept.py` | `accept_pyreason_session(...)` + `persist_pyreason_annotations(...)` — adapter-local accept helper and shared-surface post-accept annotation binder |
 | `__init__.py` | On import, registers `register_engine_evaluator(pyreason_engine_eval, "pyreason")` |
 
@@ -297,7 +297,7 @@ result = run_pyreason(
   `RuleRefAtom` raise an explicit error
 - `run_pyreason(...)` itself remains a low-level helper;
   `Store.evaluate(mode="pyreason")` performs the WHERE → PyReason
-  compilation and CandidateSet assembly outside, via
+  compilation and DerivationOutput assembly outside, via
   `engine_eval.py`
 - `derived_session` can be passed directly to
   `accept_pyreason_session(...)`
@@ -361,7 +361,7 @@ Execution sequence:
    - Calls `run_pyreason(...)`; the shared evaluate path
      internally forces `atom_trace=True` to produce runtime
      provenance
-   - Converts derived session facts into `CandidateSet`
+   - Converts derived session facts into `DerivationOutput`
    - When the run carries a `trace_dict`, upgrades each
      candidate to:
      - `support_kind="pyreason_provenance_v1"`

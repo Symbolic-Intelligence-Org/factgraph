@@ -1,19 +1,30 @@
 from __future__ import annotations
 
-from dataclasses import FrozenInstanceError
 import unittest
+from dataclasses import FrozenInstanceError
 
-import factgraph.sdk as sdk
-import factgraph.sdk.dsl as dsl
+from factgraph import sdk
 from factgraph.application.protocol import (
     ConditionDescriptor,
     OccurrenceInspect,
     PortInspect,
-    Rule as ApplicationRule,
     RuleExprInspect,
 )
+from factgraph.application.protocol import (
+    Rule as ApplicationRule,
+)
 from factgraph.application.protocol.rule_expr import RuleExprError
-from factgraph.core.rules.where_ast import AndExpr, BuiltinAtom, CmpAtom, Const, InAtom, NotAtom, PredAtom, Var
+from factgraph.core.rules.where_ast import (
+    AndExpr,
+    BuiltinAtom,
+    CmpAtom,
+    Const,
+    InAtom,
+    NotAtom,
+    PredAtom,
+    Var,
+)
+from factgraph.sdk import dsl
 from factgraph.sdk.schema import Entity, Field, Identity
 from factgraph.sdk.store import SDKStoreError
 

@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Literal, TypeAlias, Any
+from typing import Any, Literal, TypeAlias
 
 from factgraph.core.store._support import (
     BindingItems,
-    ProvenanceEnvelope,
     ProofReceipt,
+    ProvenanceEnvelope,
     normalize_binding_items,
 )
 
@@ -19,7 +19,6 @@ from .common import (
     _validate_tuple_items,
 )
 from .derivation import CompiledDerivationPlan
-
 
 CheckStatus: TypeAlias = Literal["passed", "failed", "unsupported", "invalid_request"]
 CheckEngine: TypeAlias = Literal["native", "souffle", "problog", "pyreason"]
@@ -59,6 +58,21 @@ def _validate_non_negative_int_or_none(value: Any, *, field_name: str) -> int | 
     return value
 
 
+def _validate_event_sequence(value: Any, *, field_name: str) -> tuple[int, int]:
+    if (
+        not isinstance(value, tuple)
+        or len(value) != 2
+        or any(
+            isinstance(part, bool) or not isinstance(part, int) or part < 0
+            for part in value
+        )
+    ):
+        raise ProtocolShapeError(
+            f"{field_name} must be a (tx_seq, op_ordinal) pair of non-negative ints"
+        )
+    return value
+
+
 @dataclass(frozen=True)
 class EvidenceEnvelope:
     engine: CheckEngine
@@ -66,6 +80,7 @@ class EvidenceEnvelope:
     support_digest: str
     case_index: int | None
     proof: ProofReceipt | ProvenanceEnvelope
+    as_of_event_seq: tuple[int, int]
     branch_atom_projection: None = None
 
     def __post_init__(self) -> None:
@@ -77,6 +92,7 @@ class EvidenceEnvelope:
         _validate_non_negative_int_or_none(self.case_index, field_name="case_index")
         if not isinstance(self.proof, (ProofReceipt, ProvenanceEnvelope)):
             raise ProtocolShapeError("proof must be ProofReceipt or ProvenanceEnvelope")
+        _validate_event_sequence(self.as_of_event_seq, field_name="as_of_event_seq")
         if self.branch_atom_projection is not None:
             raise ProtocolShapeError("branch_atom_projection must be None in MVP")
 

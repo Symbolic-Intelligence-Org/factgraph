@@ -15,7 +15,6 @@ from factgraph.authoring.dsl_bridge import (
 from factgraph.authoring.session import build_authoring_session_dto
 from factgraph.authoring.workflow import build_authoring_publish_workflow_dry_run_bundle_dto
 
-
 # Slice 7C / Q6-A (a.2): apply-execute pipeline retired. CLI is now
 # schema-only with `preflight` (session preview) and `workflow-dry-run`
 # (publish-plan + apply-dry-run bundle) subcommands. The legacy

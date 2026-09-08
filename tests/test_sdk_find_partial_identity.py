@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import json
 import unittest
+from pathlib import Path
+from unittest.mock import patch
 
 import factgraph.sdk as sdk_module
 from factgraph.application import execute_read_request
@@ -147,8 +150,36 @@ class SDKFindPartialIdentityTests(unittest.TestCase):
         # Bumped from 84 to 85 for the deliberate compile_derivation_plan
         # addition (the public lowering that lets the capability shells take
         # the application rule form).
+        # Bumped from 85 to 86 for the Stage A RevocationInput DTO exposed by
+        # the unified Database.commit_changes assertion/revocation entrypoint,
+        # then to 88 for the Phase 3 MetaAppendInput/SchemaTransitionInput DTOs.
+        # C3 withdrew policy-free SchemaTransitionInput from the SDK namespace,
+        # returning the intentional surface to 87 names. Slice 3b Phase 3 adds
+        # the typed MetaKeyPolicy authoring DTO, bringing the deliberate total
+        # to 88. The subsequent shipped service/query surface had already
+        # grown the base to 105. Q18 deliberately adds 46 V1 GoalPlan,
+        # Scenario, provider, execution-profile, Run/Explain/replay, and
+        # immutable-comparison names (including explicit assertion absence and
+        # the non-causal Scenario diff and V1 detached-Explain Policy
+        # projection), bringing the explicit total to 152. Q19 deliberately
+        # adds ten typed Policy-authoring values (the frozen target, draft,
+        # authoring error, and seven typed handle categories), bringing the
+        # explicit total to 162. Q20 deliberately adds 38 Product Rule/Policy,
+        # Scenario V2, provenance, execution-profile, ProbLog-semantics and
+        # Product outcome façade names, bringing the total to 200. Q21 adds
+        # eight Product Function asset/builder/occurrence/binding names,
+        # bringing the explicit total to 208.
         # Intent unchanged: no ACCIDENTAL name creep.
-        self.assertEqual(len(sdk_module.__all__), 85)
+        # The retained 8d7e6b8f producer deliberately adds 17 candidate/Store
+        # witness/RuleProgram witness names to eb36a76d's exact 208-name set.
+        # Freeze names, not just a count: replacing a public name with a private
+        # helper must fail even when the total remains unchanged.
+        expected = json.loads(
+            (Path(__file__).parent / "fixtures" / "public_sdk_exports.json").read_text()
+        )
+        self.assertEqual(len(expected), 225)
+        self.assertEqual(len(set(expected)), len(expected))
+        self.assertEqual(sorted(sdk_module.__all__), expected)
         self.assertIn("compile_derivation_plan", sdk_module.__all__)
         self.assertIn("RuleProgram", sdk_module.__all__)
         self.assertIn("RuleProgramFact", sdk_module.__all__)
@@ -160,8 +191,23 @@ class SDKFindPartialIdentityTests(unittest.TestCase):
         self.assertIn("ProbLogConfig", sdk_module.__all__)
         self.assertIn("PyReasonConfig", sdk_module.__all__)
         self.assertIn("ResultFingerprint", sdk_module.__all__)
+        self.assertIn("PolicyDraft", sdk_module.__all__)
+        self.assertIn("AuthoredPolicyTargetV1", sdk_module.__all__)
         self.assertNotIn("EntityDomainSet", sdk_module.__all__)
         self.assertFalse(hasattr(sdk, "read"))
+
+    def test_export_inventory_rejects_unknown_duplicate_and_same_count_substitution(self) -> None:
+        original = list(sdk_module.__all__)
+        cases = (
+            [*original, "ThirdPartyHelper"],
+            [*original, original[0]],
+            ["PrivateStoreReader", *original[1:]],
+            original[1:],
+        )
+        for altered in cases:
+            with self.subTest(exports=altered[:1], count=len(altered)):
+                with patch.object(sdk_module, "__all__", altered), self.assertRaises(AssertionError):
+                    self.test_no_new_public_sdk_names_or_read_helpers_are_added()
 
 
 if __name__ == "__main__":

@@ -5,8 +5,8 @@ from typing import Any
 
 from factgraph.application.protocol import Rule as ApplicationRule
 from factgraph.core.rules.where_ast import (
-    AndExpr,
     AggregateAtom,
+    AndExpr,
     Atom,
     BuiltinAtom,
     CmpAtom,
@@ -14,12 +14,16 @@ from factgraph.core.rules.where_ast import (
     InAtom,
     NotAtom,
     OrExpr,
-    PredAtom as CorePredAtom,
-    RuleRefAtom as CoreRuleRefAtom,
     Var,
     WhereASTError,
     WhereExpr,
     parse_where_ir_to_ast,
+)
+from factgraph.core.rules.where_ast import (
+    PredAtom as CorePredAtom,
+)
+from factgraph.core.rules.where_ast import (
+    RuleRefAtom as CoreRuleRefAtom,
 )
 from factgraph.core.rules.where_ast_validate import (
     WhereASTValidationError,
@@ -32,10 +36,14 @@ from .expr import (
     AttrRef,
     CompareExpr,
     NotExpr,
-    PredAtom as DSLPredAtom,
-    RuleRefAtom as DSLRuleRefAtom,
     _AggregateRef,
     lower_where,
+)
+from .expr import (
+    PredAtom as DSLPredAtom,
+)
+from .expr import (
+    RuleRefAtom as DSLRuleRefAtom,
 )
 
 
@@ -51,7 +59,26 @@ def build_application_rule(
     version: str | None = None,
     repr: str | None = None,
 ) -> ApplicationRule:
-    """Build an application-layer Rule from SDK DSL when atoms and ports."""
+    """Build an application-layer Rule from SDK DSL atoms and ports.
+
+    Args:
+        id: Stable Rule identifier.
+        when: Non-empty AND-only SDK DSL body.
+        ports: Public port names mapped to bound DSL values.
+        version: Optional Rule version.
+        repr: Optional representation template.
+
+    Returns:
+        A validated application protocol Rule.
+
+    Raises:
+        DSLToApplicationRuleError: If the body or port mapping cannot be
+            lowered without changing its meaning.
+
+    Notes:
+        This compatibility bridge does not resolve semantic ports. Prefer
+        ``fg.build_rule`` for Product Rule authoring.
+    """
 
     _reject_or_shape(when)
     _reject_legacy_when(when, path="when")

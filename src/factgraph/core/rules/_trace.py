@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import Any, Mapping
+from typing import Any
 
 
 def _normalize_binding_items(binding: dict[str, Any]) -> tuple[tuple[str, Any], ...]:
     if not isinstance(binding, dict):
-        raise ValueError("binding must be dict[str, Any]")
+        raise ValueError("binding must be dict[str, Any]")  # noqa: TRY004 - Rule trace binding codec; audit.query wraps this family with except ValueError.
     items: list[tuple[str, Any]] = []
     for key, value in binding.items():
         if not isinstance(key, str) or not key.startswith("$"):
@@ -27,7 +28,7 @@ def _normalize_detail_items(details: dict[str, Any] | list[tuple[str, Any]]) -> 
     elif isinstance(details, list):
         items = list(details)
     else:
-        raise ValueError("details must be dict[str, Any] or list[tuple[str, Any]]")
+        raise ValueError("details must be dict[str, Any] or list[tuple[str, Any]]")  # noqa: TRY004 - Rule trace detail codec shares the ValueError family wrapped by audit.query.
     out: list[tuple[str, Any]] = []
     for key, value in items:
         if not isinstance(key, str) or not key:
@@ -112,7 +113,7 @@ class RuleTraceInvocation:
         if not isinstance(self.version, str) or not self.version:
             raise ValueError("version must be non-empty string")
         if not isinstance(self.memo_hit, bool):
-            raise ValueError("memo_hit must be bool")
+            raise ValueError("memo_hit must be bool")  # noqa: TRY004 - RuleTraceInvocation decode DTO: RuleTraceSummaryError subclasses ValueError.
         if self.memo_source_invocation_id is not None and (
             not isinstance(self.memo_source_invocation_id, str) or not self.memo_source_invocation_id
         ):
@@ -162,7 +163,7 @@ class RuleRunResult:
         if not isinstance(self.rule_run_id, str) or not self.rule_run_id:
             raise ValueError("rule_run_id must be non-empty string")
         if not isinstance(self.rows, list):
-            raise ValueError("rows must be list[tuple[Any, ...]]")
+            raise ValueError("rows must be list[tuple[Any, ...]]")  # noqa: TRY004 - RuleRunResult decode DTO shares the rule trace ValueError rejection family.
 
 
 @dataclass
@@ -242,7 +243,7 @@ def _require_summary_non_empty_str(value: Any, *, path: str) -> str:
 
 def rule_trace_artifact_to_dict(artifact: RuleTraceArtifact) -> dict[str, Any]:
     if not isinstance(artifact, RuleTraceArtifact):
-        raise ValueError("artifact must be RuleTraceArtifact")
+        raise ValueError("artifact must be RuleTraceArtifact")  # noqa: TRY004 - Sidecar/explain encode boundary pins ValueError for non-artifact input.
     return {
         "rule_run_id": artifact.rule_run_id,
         "root_rule": {"rule_id": artifact.root_rule_id, "version": artifact.root_version},
@@ -304,7 +305,7 @@ def rule_trace_artifact_bytes(artifact: RuleTraceArtifact) -> bytes:
 
 def rule_trace_artifact_from_dict(row: Mapping[str, Any]) -> RuleTraceArtifact:
     if not isinstance(row, Mapping):
-        raise ValueError("row must be Mapping[str, Any]")
+        raise ValueError("row must be Mapping[str, Any]")  # noqa: TRY004 - Closed-format decode contract: sidecar rows reject as ValueError.
     root_rule = row["root_rule"]
     return RuleTraceArtifact(
         rule_run_id=row["rule_run_id"],

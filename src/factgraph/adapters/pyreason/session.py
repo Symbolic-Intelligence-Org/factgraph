@@ -133,7 +133,7 @@ def _generate_annotation_templates(
 class PyReasonFieldHandle:
     """Proxy for field mutations on a managed entity."""
 
-    __slots__ = ("_tx", "_entity_handle", "_field_name", "_pred_id")
+    __slots__ = ("_entity_handle", "_field_name", "_pred_id", "_tx")
 
     def __init__(
         self,
@@ -173,14 +173,14 @@ class PyReasonEntityHandle:
     """Managed handle for an entity in a batch transaction."""
 
     __slots__ = (
-        "_tx",
         "_entity_cls",
         "_entity_type",
-        "_node_ref",
-        "_owner_prefix",
+        "_field_handles",
         "_field_pred_ids",
         "_identity_values",
-        "_field_handles",
+        "_node_ref",
+        "_owner_prefix",
+        "_tx",
     )
 
     def __init__(
@@ -222,7 +222,7 @@ class PyReasonEntityHandle:
 class PyReasonBatchTx:
     """Batch transaction for entity-level fact writing."""
 
-    __slots__ = ("_session", "_entity_handles")
+    __slots__ = ("_entity_handles", "_session")
 
     def __init__(self, session: PyReasonSession) -> None:
         self._session = session
@@ -305,9 +305,9 @@ class PyReasonBatchTx:
                 f"(missing __sdk_relationship_spec__)"
             )
         if not isinstance(from_entity, PyReasonEntityHandle):
-            raise ValueError("from_entity must be a PyReasonEntityHandle")
+            raise ValueError("from_entity must be a PyReasonEntityHandle")  # noqa: TRY004 - tx.relationship() public batch API rejects handle type as ValueError (docs 5A.1).
         if not isinstance(to_entity, PyReasonEntityHandle):
-            raise ValueError("to_entity must be a PyReasonEntityHandle")
+            raise ValueError("to_entity must be a PyReasonEntityHandle")  # noqa: TRY004 - tx.relationship() public batch API rejects handle type as ValueError (docs 5A.1).
 
         rel_type = str(spec["relationship_type"])
         prefix = _owner_prefix(rel_type)
@@ -338,10 +338,10 @@ class PyReasonBatchTx:
     def commit(self) -> None:
         """No-op: facts are staged immediately on each call."""
 
-    def __enter__(self) -> PyReasonBatchTx:
+    def __enter__(self) -> PyReasonBatchTx:  # noqa: PYI034 - Preserve concrete runtime hints on Python 3.10 without a new dependency.
         return self
 
-    def __exit__(self, *exc_info: Any) -> None:
+    def __exit__(self, *exc_info: object) -> None:
         return None
 
 
@@ -350,11 +350,11 @@ class PyReasonSession:
 
     def __init__(self, schema_ir: dict[str, Any]) -> None:
         if not isinstance(schema_ir, dict):
-            raise ValueError("schema_ir must be dict")
+            raise ValueError("schema_ir must be dict")  # noqa: TRY004 - PyReasonSession(schema_ir) validates shared schema_ir as ValueError (docs 5A).
         self._schema_ir = schema_ir
         predicates = schema_ir.get("predicates", [])
         if not isinstance(predicates, list):
-            raise ValueError("schema_ir.predicates must be list")
+            raise ValueError("schema_ir.predicates must be list")  # noqa: TRY004 - shared schema_ir predicate shape errors stay ValueError (docs 5A).
         self._pred_ids = {
             pred["pred_id"]
             for pred in predicates
@@ -443,7 +443,7 @@ class PyReasonSession:
         if not isinstance(node_ref, str) or not node_ref:
             raise ValueError("node_ref must be non-empty string")
         if not isinstance(value, str):
-            raise ValueError("value must be string")
+            raise ValueError("value must be string")  # noqa: TRY004 - write_node_fact argument rejections share the session ValueError contract.
 
         lo, hi = _validate_bound(bound)
         resolved_meta = _resolve_shared_meta(meta, lower_bound=lo)
@@ -498,7 +498,7 @@ class PyReasonSession:
         if not isinstance(to_ref, str) or not to_ref:
             raise ValueError("to_ref must be non-empty string")
         if not isinstance(value, str):
-            raise ValueError("value must be string")
+            raise ValueError("value must be string")  # noqa: TRY004 - write_edge_fact argument rejections share the session ValueError contract.
 
         lo, hi = _validate_bound(bound)
         resolved_meta = _resolve_shared_meta(meta, lower_bound=lo)
@@ -596,7 +596,7 @@ def _resolve_shared_meta(meta: dict[str, Any] | None, *, lower_bound: float) -> 
     if meta is None:
         return {}
     if not isinstance(meta, dict):
-        raise ValueError("meta must be dict when provided")
+        raise ValueError("meta must be dict when provided")  # noqa: TRY004 - documented writer meta parameter rejects wrong type as ValueError (docs 5A.1).
 
     resolved = dict(meta)
     resolved.pop("confidence", None)

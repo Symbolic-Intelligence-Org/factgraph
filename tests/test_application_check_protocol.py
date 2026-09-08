@@ -75,6 +75,7 @@ def _evidence_envelope(
         support_digest="sha256:" + ("1" * 64),
         case_index=0 if engine in {"native", "souffle"} else None,
         proof=payload or _support_artifact(),
+        as_of_event_seq=(3, 2),
     )
 
 
@@ -167,8 +168,31 @@ class EvidenceEnvelopeProtocolTests(unittest.TestCase):
                 support_digest="sha256:" + ("1" * 64),
                 case_index=0,
                 proof=_support_artifact(),
+                as_of_event_seq=(3, 2),
                 branch_atom_projection=object(),  # type: ignore[arg-type]
             )
+
+    def test_evidence_envelope_as_of_event_sequence_is_required_and_strict(self) -> None:
+        with self.assertRaises(TypeError):
+            EvidenceEnvelope(
+                engine="native",
+                support_kind="native_binding_v1",
+                support_digest="sha256:" + ("1" * 64),
+                case_index=0,
+                proof=_support_artifact(),
+            )  # type: ignore[call-arg]
+        for malformed in ((-1, 0), (0, -1), (True, 0), [0, 0], (0,)):
+            with self.subTest(as_of_event_seq=malformed), self.assertRaises(
+                ProtocolShapeError
+            ):
+                EvidenceEnvelope(
+                    engine="native",
+                    support_kind="native_binding_v1",
+                    support_digest="sha256:" + ("1" * 64),
+                    case_index=0,
+                    proof=_support_artifact(),
+                    as_of_event_seq=malformed,  # type: ignore[arg-type]
+                )
 
     def test_evidence_envelope_engine_payload_round_trip(self) -> None:
         artifact = _support_artifact()

@@ -26,14 +26,32 @@ contributors), not SDK end-users learning the surface.
   Core semantics scaffolding: `SemanticsProfile` validation and
   inspection helpers for future runtime projection work.
 - [../store/docs/README.md](../store/docs/README.md) — Core store
-  substrate docs: `Ledger` compatibility storage and the Database
-  identity boundary built above it.
+  substrate docs: three-table `Ledger` storage, metadata events/tiering,
+  and the Database identity boundary built above it.
+- [../policy/README.md](../policy/README.md) — Active/chosen projection,
+  premise-key closure, and two-level effective metadata policy.
 
 > Note: the `04` numeric prefix was historically split between two
 > different topics (`04_public_contract_v1` + `04_service_layer`);
 > the two do not conflict and the existing filenames are preserved.
 
 ## Boundaries
+
+### Canonical codec errors
+
+`protocol/tup_v1.py` rejects the explicitly validated invalid tag and value
+types with `ValueError`, just as it does invalid value syntax or range.
+`evidence/write_protocol.py` relies on that error family to raise
+`WriteProtocolError` with the original cause before appending any assertion.
+`protocol/idref_v1.py` likewise rejects a non-string entity type with
+`ValueError`. These are existing codec contracts, not requests to coerce input.
+Their individual `TRY004` exceptions must not be replaced by `TypeError`
+as a lint-only repair. `tests/test_protocol_v1.py` covers the affected branches,
+canonical float bytes, and the no-write error translation at `set_field` and
+`add_field`. This does not promise to normalize every arbitrary malformed
+Python object into `ValueError`.
+
+### Documentation ownership
 
 - This directory is **not the SDK getting-started guide** — the SDK
   user guide lives at

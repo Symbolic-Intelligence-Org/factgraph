@@ -244,7 +244,7 @@ def _protocol_version(schema_ir: dict) -> dict[str, str]:
 
 
 def _latest_run_id(store: Store) -> str | None:
-    run_rows = store.ledger.find_meta(key="run_id", kind="str")
+    run_rows = store.ledger.effective_meta_rows(key="run_id", kind="str")
     if not run_rows:
         return None
     return str(run_rows[-1].value)
@@ -292,7 +292,7 @@ def _build_mapping_audit_payload(store: Store, policy_mode: str) -> dict[str, An
             row["status"] = "conflict"
             row["error"] = str(exc)
             row["conflicts"] = exc.conflicts
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - mapping resolution spans the store and policy adapters; the audit row records status="error" instead of dropping the predicate.
             row["status"] = "error"
             row["error"] = str(exc)
         rows.append(row)
@@ -342,7 +342,7 @@ def _build_support_artifact_rows(store: Store) -> list[dict[str, Any]]:
 
 def _build_rule_trace_artifact_rows(store: Store) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
-    for _rule_run_id, artifact in store._rule_trace_artifacts.items():
+    for artifact in store._rule_trace_artifacts.values():
         rows.append(rule_trace_artifact_to_dict(artifact))
     return sorted(rows, key=lambda row: str(row.get("rule_run_id")))
 
@@ -829,14 +829,14 @@ def _build_accept_write_ledger_rows(store: Store) -> list[dict[str, Any]]:
 
 
 def _meta_str(store: Store, asrt_id: str, key: str) -> str | None:
-    for row in store.ledger.find_meta(asrt_id=asrt_id, key=key, kind="str"):
+    for row in store.ledger.effective_meta_rows(asrt_id=asrt_id, key=key, kind="str"):
         if isinstance(row.value, str):
             return row.value
     return None
 
 
 def _meta_time(store: Store, asrt_id: str, key: str) -> int | None:
-    for row in store.ledger.find_meta(asrt_id=asrt_id, key=key, kind="time"):
+    for row in store.ledger.effective_meta_rows(asrt_id=asrt_id, key=key, kind="time"):
         if isinstance(row.value, int) and not isinstance(row.value, bool):
             return row.value
     return None

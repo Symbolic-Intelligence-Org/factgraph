@@ -1,15 +1,121 @@
 # Rules: declaring queries and composing them
 
-This chapter covers how to *declare* rules and *compose* them. Executing a rule (engine choice, semantics) is [`engines_and_configs.md`](engines_and_configs.md); the shape of result rows and explanations is [`evaluate_and_evidence.md`](evaluate_and_evidence.md).
+This chapter covers the established `Rule` / `RuleExpr` surface and the current
+Product Rule/Policy/Function authoring path. New product code should read the
+Product V2 section below together with the
+[complete Product V2 workflow](product_workflow_v2.md). Executing a target
+(engine choice, semantics) is
+[`engines_and_configs.md`](engines_and_configs.md); Result/Explain shape is
+[`evaluate_and_evidence.md`](evaluate_and_evidence.md).
 
-Two assets carry the work in this chapter:
+The current product assets are:
 
 | Asset | Role | Triggers evaluation? |
 |---|---|---|
-| `Rule` | a named query template — `when` body + `ports` head | no (declaration only) |
-| `RuleExpr` | AND/OR/join composition over Rules | no (declaration only) |
+| `ProductRuleV1` | resolved Rule plus typed semantic ports and optional `AssetMeta` | no |
+| `ProductFunctionV1` | pure deterministic scalar computation asset; a Rule peer | no |
+| `ProductPolicyV1` | owns Rule/Function occurrences, topology and comparisons | no |
+| `Rule` | lower-level named query template — `when` body + `ports` head | no |
+| `RuleExpr` | legacy AND/OR/join composition over Rules | no |
 
-Two older assets — `Inference` and `Query` — exist but are no longer the primary surface. They are recorded in §6 (History note) with pointers to their current successors.
+Two older assets — `Inference` and the legacy `Query` DTO — exist but are no
+longer the primary surface. They are recorded in §6. The public
+`fg.query(product_target)` builder is active and unrelated to that deferred
+legacy DTO.
+
+## Product V2 authoring (recommended)
+
+Use the symmetric direct/staged builders. These calls construct immutable
+values; they do not register assets by id:
+
+```python
+from factgraph.sdk import AssetMeta, vars
+
+with vars("person", "age") as (person, age):
+    person_values = fg.build_rule(
+        id="person_values",
+        version="1",
+        meta=AssetMeta(name="Person values"),
+        when=(Person(person), Person(person).age == age),
+        ports={"person": person, "age": age},
+        semantic_ports={"person": Person, "age": Person.age},
+    )
+
+def decade(age: int) -> int:
+    return age // 10
+
+age_decade = fg.build_function(
+    id="age_decade",
+    version="1",
+    meta=AssetMeta(name="Age decade"),
+    implementation=decade,
+)
+
+draft = fg.policy_builder("people_by_decade", version="1")
+people = draft.use(person_values).as_("people")
+computed = draft.use(age_decade).as_("computed")
+computed.inputs(age=people.age)
+target = draft.build(draft.all(people, computed, computed.result >= 3))
+```
+
+Equivalent staged/direct pairs are:
+
+- `fg.rule_builder(...).build(...)` / `fg.build_rule(...)`;
+- `fg.function_builder(...).build(...)` / `fg.build_function(...)`; and
+- `fg.policy_builder(...).build(...)` /
+  `fg.build_policy(..., build=lambda policy: ...)`.
+
+Rule and Function are peer assets. Neither can call or contain the other;
+Function-to-Function chaining is also rejected. Policy is the sole composition
+owner. Function inputs currently come from direct scalar ports of one Rule
+occurrence, while Function output is a directional select/compare value and
+cannot be Query-bound.
+
+`all(...)`, `any(...)`, rich typed comparisons and explicit `same(...)` retain
+authored topology for Explain. Exclusive probability is a separate
+`weighted_choice(...)`, never a weight on ordinary logical OR. A first-slice
+Policy cannot combine Product Function and `WeightedChoice` topology.
+
+### Policy topology capability matrix
+
+This is the current shipped boundary above Rule bodies. `any(...)` is logical
+disjunction inside one Policy and preserves alternative authored paths; it is
+not a standalone relational `UNION` operator and it does not imply exclusive
+or probabilistic choice.
+
+| Form | Shipped status | Boundary |
+|---|---|---|
+| Nested `all(...)` / `any(...)` | supported | Selected coordinates and Policy-owned constraints still have to be branch-total. |
+| `same(entity_port, entity_port)` | supported inside one owning `all(...)` subtree | A constraint spanning an `any(...)` arm where an endpoint is absent fails with `PARTIAL_BRANCH_CONSTRAINT`. |
+| Scalar port vs scalar port | `eq` / `ne` support matching single-scalar domains; ordering supports only `int` / `time` | String-port equality is valid. Ordering over string, bool or float remains rejected. |
+| Scalar port vs literal | `eq` / `ne` support canonical `int`, `time`, `string` and `bool`; ordering supports only `int` / `time` | Float64, UUID, bytes, `None` and implicit coercions remain rejected. |
+| Entity identity port vs `EntityRef` literal | `eq` / `ne` supported | The SDK recomputes the canonical reference from typed identity and the trusted schema; ordering is rejected, and entity-port-to-port identity still uses `same(...)`. |
+| Policy-owned one-hop entity field navigation | supported as a compare operand | One same-entity, single-scalar field only; no relationship or multi-hop traversal. |
+| Query-owned one-hop entity field navigation | supported only by `select` | It is not accepted by `bind` and does not change Policy identity. |
+| `WeightedChoice` | Product V2, ProbLog point profile only | It is distinct from ordinary `any(...)`; the first slice cannot coexist with Product Function topology. |
+| Product Function | Product V2 only | One Rule source occurrence per Function, no Function chaining, and output is select/compare-only rather than bindable. |
+
+The relationship/multi-hop limit above belongs to the SDK Product
+Policy/Query surface. The separate advanced application contract
+`PublishedRelationQueryV1` can compile published stored-relation paths, but it
+is not an SDK Query builder or a Policy target; see the
+[application relation-query contract](../../src/factgraph/application/docs/relation_query.md).
+
+Literal admission is operator-sensitive because equality does not require a
+portable ordering or collation. The implemented contract separates equality
+from ordering as follows.
+
+| Literal domain | `eq` / `ne` disposition | `gt` / `ge` / `lt` / `le` disposition | Rationale |
+|---|---|---|---|
+| `int` / `time` | supported | supported | Existing portable canonical envelope. |
+| `string` | supported | rejected | Equality is unambiguous; portable collation is not. |
+| `bool` | supported | rejected | Equality is meaningful; ordering is not part of the Policy contract. |
+| `entity_ref` | supported against one entity identity port | rejected | The reference is explicitly encoded from trusted-schema identity; `same()` and Query `bind()` remain distinct forms. |
+| `float64` | rejected | rejected | Float equality is intentionally excluded from logical identity; enabling it requires a separate engine-level semantic decision. |
+
+UUID and bytes literals remain outside Q22 and therefore remain rejected. The
+new equality rows retain their domain/value tag through replay, bundle and
+Product V2 views, and are covered by real Native/Souffle/ProbLog parity tests.
 
 ## 1. Rule + RuleExpr — the one-paragraph triangle
 
@@ -122,7 +228,8 @@ It is still importable, but `build_application_rule(when=[Pred(...)])` **rejects
 1. Inside an `Inference` body (history note §6.1) — the legacy DSL path
 2. When constructing a low-level `Rule(id=..., when=tuple[PredAtom, ...], ports=...)` directly (§2.6)
 
-For the full Entity-DSL reference and aggregate signatures, see [`docs/official/kernel/quickstart/rules-and-inferences.md`](../official/kernel/quickstart/rules-and-inferences.md) §"Run a Rule" and §"Aggregate helpers in `when` bodies".
+For the full Entity-DSL and product authoring reference, see
+[`src/factgraph/sdk/docs/03_rules_and_inferences.en.md`](../../src/factgraph/sdk/docs/03_rules_and_inferences.en.md).
 
 ### 2.3 `ports` — the head
 
@@ -462,8 +569,23 @@ This holds identically across the relational engines (`native` / `souffle` / `pr
 
 ## 5. → evaluation (one-line pointer)
 
-`Rule` and `RuleExpr` are *inputs* to the evaluator. The execution surface lives in the next chapters:
+For new product code, a resolved Product Rule/Policy is a typed Query target:
 
+```python
+run = (
+    fg.query(target)
+      .select("age", people.age)
+      .select("decade", computed.result)
+      .plan(profile=fg.execution.native_deterministic(target=target).build())
+      .run()
+)
+```
+
+The execution surfaces live in the next chapters:
+
+- Product V2 `fg.query(...).plan(profile=..., scenario=...).run()` returns a
+  sealed `EvaluationRunV2`; open it with `outcome_from_run_v2(...)` — see
+  [`product_workflow_v2.md`](product_workflow_v2.md).
 - `fg.eval.evaluate(rule_or_expr_or_inference, ...)` — execution entry, returning `EvaluateResult` (see [`evaluate_and_evidence.md`](evaluate_and_evidence.md))
 - `engine=` and `semantics=` (`ProbLogSemantics` / `PyReasonSemantics`) — see [`engines_and_configs.md`](engines_and_configs.md)
 - `EvaluateRow` / `Explanation` shapes — see [`evaluate_and_evidence.md`](evaluate_and_evidence.md)
@@ -498,13 +620,15 @@ Status:
 - **Track 1 is single-head only** — `Inference(head=[...multi...])` is rejected. For multiple heads, write multiple `Inference` values or compose `Rule`s with `RuleExpr`.
 - `Inference` is the only context where raw `Pred(...)` atoms are accepted in the `when` body.
 
-Detailed Inference usage:[`docs/official/kernel/quickstart/rules-and-inferences.md`](../official/kernel/quickstart/rules-and-inferences.md) §"Legacy compatibility: evaluate an Inference".
+Detailed legacy Inference usage is retained in
+[`src/factgraph/sdk/docs/03_rules_and_inferences.en.md`](../../src/factgraph/sdk/docs/03_rules_and_inferences.en.md).
 
-### 6.2 `Query` — fully deferred
+### 6.2 Legacy `Query` DTO — deferred; `fg.query(...)` is active
 
 `Query(head, where, on_missing, on_type_mismatch)` was the ad-hoc read template — a "build a query object, run it, get rows" shape.
 
-Status:
+This type must not be confused with the current SDK Query builder returned by
+`fg.query(product_rule_or_policy)`. The legacy DTO status is:
 
 - **Fully deferred** — still importable, but the source comment classifies it as "legacy DSL value object for internal tests".
 - **Successor is `fg.entities.match(...)`** — instead of constructing a `Query`, express the search as a `Rule` (or `RuleExpr`) and project entity snapshots through `match`.
@@ -513,7 +637,9 @@ Status:
 
 > "Replaces the older `Query` mechanism — instead of constructing a query object you express the search as a rule/condition expression, and `match` returns the entities that satisfy it."
 
-There is no separate Query chapter; the `match` surface absorbs the read-projection role.
+For entity snapshot matching, `match` absorbs the old DTO's read-projection
+role. For typed Product evaluation, `fg.query(...)` is the current path and is
+documented in [`product_workflow_v2.md`](product_workflow_v2.md).
 
 ## 7. Reference
 
@@ -528,6 +654,15 @@ from factgraph.sdk import (
     Not,                 # negation: Not([body atoms])
     vars,                # logic-var context: with vars("u", "t") as (u, t):
     build_application_rule,  # primary Rule factory (Entity-DSL → Rule)
+
+    # Recommended Product assets/builders:
+    AssetMeta,
+    ProductRuleV1,
+    ProductFunctionV1,
+    ProductPolicyV1,
+    RuleBuilder,
+    FunctionBuilder,
+    PolicyBuilder,
 
     # Inspection result types:
     RuleExprInspect,
@@ -548,7 +683,7 @@ from factgraph.sdk import (
     # History (§6):
     Inference,           # Rule + head/emits, legacy still-usable
     EmitSpec,            # head fact emit: target, vars
-    Query,               # ad-hoc read, fully deferred — successor: fg.entities.match
+    Query,               # legacy ad-hoc DTO; not the active fg.query(...) builder
 )
 ```
 
@@ -579,8 +714,11 @@ Indirect types reached through methods:
 ### 7.4 Related chapters
 
 - [`schema_definition.md`](schema_definition.md) — Entity / Identity / Field declarations that rule bodies reference
-- [`data_model.md`](data_model.md) — the Claim / MetaRow shape that rule matches read from
+- [`data_model.md`](data_model.md) — the Claim and meta-event shape that rule matches read from
 - [`three_layer_api.md`](three_layer_api.md) — `fg.entities.match(...)` (Query's successor)
 - [`engines_and_configs.md`](engines_and_configs.md) — `engine=`, `semantics=`, config
 - [`evaluate_and_evidence.md`](evaluate_and_evidence.md) — `fg.eval.evaluate` / `explain`, `EvaluateRow` / `Explanation` shapes
-- Legacy long-form Rule / Inference reference: [`docs/official/kernel/quickstart/rules-and-inferences.md`](../official/kernel/quickstart/rules-and-inferences.md)
+- [`product_workflow_v2.md`](product_workflow_v2.md) — current typed Query,
+  Scenario, Product Function, structured Explain and replay
+- Long-form Rule / Inference and Product authoring reference:
+  [`src/factgraph/sdk/docs/03_rules_and_inferences.en.md`](../../src/factgraph/sdk/docs/03_rules_and_inferences.en.md)

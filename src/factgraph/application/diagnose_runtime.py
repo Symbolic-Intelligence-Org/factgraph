@@ -11,7 +11,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from factgraph.core.derivation.candidates import CandidateSet
+from factgraph.core.derivation.candidates import DerivationOutput
 from factgraph.core.rules.rule_ir import RuleCompileError, RuleRegistry
 from factgraph.core.rules.ruleref_substrate import evaluate_native_where
 from factgraph.core.rules.where_eval import (
@@ -31,8 +31,8 @@ from factgraph.core.rules.where_eval import (
 )
 from factgraph.core.store._support import (
     BindingItems,
-    ProvenanceEnvelope,
     ProofReceipt,
+    ProvenanceEnvelope,
     normalize_binding_items,
 )
 from factgraph.core.store._support_capture import find_winning_case_index
@@ -233,7 +233,6 @@ def _localize_failed_atom(
         if requested_vars and branch_vars.isdisjoint(requested_vars):
             continue
         envs = [dict(requested_env)]
-        atoms_satisfied = 0
         for condition_index, atom in enumerate(branch):
             next_envs: list[dict[str, Any]] = []
             for env in envs:
@@ -243,13 +242,12 @@ def _localize_failed_atom(
                     _FailedAtomCandidate(
                         case_index=case_index,
                         failed_atom_index=condition_index,
-                        atoms_satisfied=atoms_satisfied,
+                        atoms_satisfied=condition_index,
                         attempted_env=_primary_env(envs),
                     )
                 )
                 break
             envs = _dedupe_envs(next_envs)
-            atoms_satisfied += 1
 
     if not candidates:
         return None
@@ -303,7 +301,7 @@ def _extend_env_with_atom(
 
 
 def _primary_env(envs: list[dict[str, Any]]) -> dict[str, Any]:
-    return sorted(envs, key=_env_sort_key)[0]
+    return sorted(envs, key=_env_sort_key)[0]  # noqa: FURB192 - keep IndexError for an empty env list; min() would raise ValueError and change the typed failure.
 
 
 def _dedupe_envs(envs: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -543,8 +541,8 @@ def _diagnose_souffle(
         eval_request, store=store, registry=registry
     )
 
-    matches: list[tuple[CandidateSet, ProofReceipt, dict[str, Any]]] = []
-    lookup_miss: list[CandidateSet] = []
+    matches: list[tuple[DerivationOutput, ProofReceipt, dict[str, Any]]] = []
+    lookup_miss: list[DerivationOutput] = []
     for candidate in candidates:
         artifact = _lookup_support_artifact(store, candidate.support_digest)
         if artifact is None:
@@ -556,7 +554,7 @@ def _diagnose_souffle(
 
     if matches:
         def _sort_key(
-            item: tuple[CandidateSet, ProofReceipt, dict[str, Any]],
+            item: tuple[DerivationOutput, ProofReceipt, dict[str, Any]],
         ) -> tuple[Any, ...]:
             candidate, artifact, binding = item
             case_index = _derive_case_index_from_artifact(artifact)
@@ -647,8 +645,8 @@ def _diagnose_problog_pyreason(
         eval_request, store=store, registry=registry
     )
 
-    matches: list[tuple[CandidateSet, ProvenanceEnvelope, dict[str, Any]]] = []
-    lookup_miss: list[CandidateSet] = []
+    matches: list[tuple[DerivationOutput, ProvenanceEnvelope, dict[str, Any]]] = []
+    lookup_miss: list[DerivationOutput] = []
     for candidate in candidates:
         envelope = _lookup_provenance_envelope(store, candidate.support_digest)
         if envelope is None:
@@ -663,7 +661,7 @@ def _diagnose_problog_pyreason(
 
     if matches:
         def _sort_key(
-            item: tuple[CandidateSet, ProvenanceEnvelope, dict[str, Any]],
+            item: tuple[DerivationOutput, ProvenanceEnvelope, dict[str, Any]],
         ) -> tuple[Any, ...]:
             candidate, _envelope, binding = item
             return (candidate.candidate_key, normalize_binding_items(binding))
@@ -723,7 +721,7 @@ def _lookup_provenance_envelope(
 
 def _extract_head_var_binding(
     *,
-    candidate: CandidateSet,
+    candidate: DerivationOutput,
     plan: Any,
 ) -> dict[str, Any]:
     """Extract var → value mapping from a candidate via head-var alignment."""

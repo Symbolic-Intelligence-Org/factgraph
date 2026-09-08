@@ -11,7 +11,6 @@ from factgraph.core.schema.schema_repr import (
     validate_meta_repr_template,
 )
 
-
 _BUILTIN_TAG_MAP = {
     "str": "string",
     "int": "int",
@@ -466,7 +465,7 @@ def _reject_unknown_keys(
     path: str,
     message: str | None = None,
 ) -> None:
-    unknown = [key for key in kwargs.keys() if key not in allowed]
+    unknown = [key for key in kwargs if key not in allowed]
     if unknown:
         unknown_sorted = sorted(unknown)
         raise _parse_error(

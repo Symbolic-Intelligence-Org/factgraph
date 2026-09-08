@@ -44,7 +44,8 @@ def _make_materialized_fg():
     """
     fg = FactGraph.create(schema_classes=[IdentityRejectUser])
     e_ref = fg.entities.ref(IdentityRejectUser, user_id="alice", tenant_id="acme")
-    # Materialize entity by writing a Field — triggers Identity + :exists Claim emission.
+    # Materialize entity by writing a Field — emits the Identity bundle; the
+    # entity-domain row is projected virtually from that bundle.
     fg.fields.set(IdentityRejectUser.name, e_ref, "Alice")
     return fg, e_ref
 

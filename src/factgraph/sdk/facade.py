@@ -1,21 +1,25 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-from datetime import datetime, timezone
 import os
 import re
 import reprlib
-from typing import Any, TYPE_CHECKING
 import warnings
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from typing import TYPE_CHECKING, Any
 
 from factgraph.application import execute_read_request, hydrate_entity
 from factgraph.application.protocol import (
     AssertionRecordDTO,
     EntityReadRequest,
-    EntityRef as AppEntityRef,
-    EntitySelector as AppEntitySelector,
     EntitySnapshotDTO,
     FieldAssertionsDTO,
+)
+from factgraph.application.protocol import (
+    EntityRef as AppEntityRef,
+)
+from factgraph.application.protocol import (
+    EntitySelector as AppEntitySelector,
 )
 from factgraph.application.schema_runtime import encode_entity_ref as encode_app_entity_ref
 from factgraph.core.policy.active import is_active
@@ -32,6 +36,7 @@ from .errors import (
 
 if TYPE_CHECKING:
     from factgraph.core.store.ledger import Claim
+
     from .batch import BatchCommitResult, BatchPlan
     from .store import SDKStore
 
@@ -51,7 +56,7 @@ class AssertionMeta:
     raw: dict[str, Any]
 
     @classmethod
-    def from_raw(cls, raw: dict[str, Any]) -> "AssertionMeta":
+    def from_raw(cls, raw: dict[str, Any]) -> AssertionMeta:
         source = raw.get("source") if isinstance(raw.get("source"), str) else None
         trace_id = raw.get("trace_id") if isinstance(raw.get("trace_id"), str) else None
         approved_by = raw.get("approved_by") if isinstance(raw.get("approved_by"), str) else None
@@ -104,10 +109,10 @@ _ASSERTION_FILTER_MISSING = object()
 
 
 class AssertionRecordSet(tuple):
-    def __new__(cls, records: Any = ()) -> "AssertionRecordSet":
+    def __new__(cls, records: Any = ()) -> AssertionRecordSet:  # noqa: PYI034 - Preserve concrete runtime hints on Python 3.10 without a new dependency.
         return super().__new__(cls, tuple(records))
 
-    def __call__(self) -> "AssertionRecordSet":
+    def __call__(self) -> AssertionRecordSet:
         return self
 
     def __getitem__(self, index: Any) -> Any:
@@ -116,17 +121,17 @@ class AssertionRecordSet(tuple):
             return type(self)(value)
         return value
 
-    def __add__(self, other: Any) -> "AssertionRecordSet":
+    def __add__(self, other: Any) -> AssertionRecordSet:
         if not isinstance(other, tuple):
             return NotImplemented
         return type(self)(tuple(self) + tuple(other))
 
-    def __radd__(self, other: Any) -> "AssertionRecordSet":
+    def __radd__(self, other: Any) -> AssertionRecordSet:
         if not isinstance(other, tuple):
             return NotImplemented
         return type(self)(tuple(other) + tuple(self))
 
-    def __mul__(self, count: Any) -> "AssertionRecordSet":
+    def __mul__(self, count: Any) -> AssertionRecordSet:
         if not isinstance(count, int):
             return NotImplemented
         return type(self)(tuple(self) * count)
@@ -139,7 +144,7 @@ class AssertionRecordSet(tuple):
         value: Any = _ASSERTION_FILTER_MISSING,
         value_tag: Any = _ASSERTION_FILTER_MISSING,
         _meta: Any = _ASSERTION_FILTER_MISSING,
-    ) -> "AssertionRecordSet":
+    ) -> AssertionRecordSet:
         if value_tag is not _ASSERTION_FILTER_MISSING and not isinstance(value_tag, str):
             raise SDKStoreError("AssertionRecordSet.where(value_tag=...) expects string tag")
         if _meta is not _ASSERTION_FILTER_MISSING and not isinstance(_meta, dict):
@@ -158,7 +163,7 @@ class AssertionRecordSet(tuple):
 
         return type(self)(record for record in self if matches(record))
 
-    def at(self, t: str) -> "AssertionRecordSet":
+    def at(self, t: str) -> AssertionRecordSet:
         at_time = _validate_iso8601_text(t, context="AssertionRecordSet.at(t)")
         return type(self)(
             record
@@ -170,7 +175,7 @@ class AssertionRecordSet(tuple):
             )
         )
 
-    def by_id(self, asrt_id: str) -> "AssertionRecordSet":
+    def by_id(self, asrt_id: str) -> AssertionRecordSet:
         if not isinstance(asrt_id, str) or not asrt_id:
             raise SDKStoreError("AssertionRecordSet.by_id(asrt_id) expects non-empty string")
         return type(self)(record for record in self if record.asrt_id == asrt_id)
@@ -195,7 +200,7 @@ class AssertionView:
         self,
         *,
         entity_type: str,
-        field_map: dict[str, "AssertionView"] | None = None,
+        field_map: dict[str, "AssertionView"] | None = None,  # noqa: UP037 - Preserve Python 3.10 runtime hint shape.
         field_name: str | None = None,
         cardinality: str | None = None,
         active_records: tuple[AssertionRecord, ...] = (),
@@ -247,7 +252,7 @@ class AssertionView:
             )
         return self.all
 
-    def field(self, field: Any) -> "AssertionView":
+    def field(self, field: Any) -> AssertionView:
         entity_type = object.__getattribute__(self, "_entity_type")
         field_name = _field_name_for_snapshot_assertions(field, entity_type=entity_type)
         field_map = object.__getattribute__(self, "_field_map")
@@ -335,7 +340,7 @@ class AssertionView:
             )
         )
 
-    def __getattr__(self, name: str) -> "AssertionView":
+    def __getattr__(self, name: str) -> AssertionView:
         field_map = object.__getattribute__(self, "_field_map")
         if name in field_map:
             return field_map[name]
@@ -418,7 +423,7 @@ class EntitySnapshot:
 
 
 class FieldEditor:
-    def __init__(self, editor: "EntityEditor", field_name: str) -> None:
+    def __init__(self, editor: EntityEditor, field_name: str) -> None:
         self._editor = editor
         self._field_name = field_name
 
@@ -431,7 +436,7 @@ class FieldEditor:
         value: Any,
         *,
         meta: dict[str, Any] | None = None,
-    ) -> "EntityEditor":
+    ) -> EntityEditor:
         self._editor._ensure_open()
         cardinality = self._cardinality()
         if cardinality != "single":
@@ -450,7 +455,7 @@ class FieldEditor:
         value: Any,
         *,
         meta: dict[str, Any] | None = None,
-    ) -> "EntityEditor":
+    ) -> EntityEditor:
         self._editor._ensure_open()
         cardinality = self._cardinality()
         if cardinality != "multi":
@@ -469,7 +474,7 @@ class FieldEditor:
         *,
         asrt_id: str,
         meta: dict[str, Any] | None = None,
-    ) -> "EntityEditor":
+    ) -> EntityEditor:
         self._editor._ensure_open()
         handle = self._editor._handle
         getattr(handle, self._field_name).retract(asrt_id, meta=meta)
@@ -477,7 +482,7 @@ class FieldEditor:
 
 
 class IdentityEditor:
-    def __init__(self, editor: "EntityEditor", field_name: str) -> None:
+    def __init__(self, editor: EntityEditor, field_name: str) -> None:
         self._editor = editor
         self._field_name = field_name
 
@@ -493,7 +498,7 @@ class IdentityEditor:
     def __bool__(self) -> bool:
         return bool(self.value)
 
-    def __eq__(self, other: Any) -> bool:  # type: ignore[override]
+    def __eq__(self, other: object) -> bool:  # type: ignore[override]
         return self.value == other
 
     def set(self, *args: Any, **kwargs: Any) -> None:
@@ -518,7 +523,7 @@ class IdentityEditor:
 
 
 class EntityEditor:
-    def __init__(self, sdk: "SDKStore", entity_cls: type[Any], identity_values: dict[str, Any]) -> None:
+    def __init__(self, sdk: SDKStore, entity_cls: type[Any], identity_values: dict[str, Any]) -> None:
         self._sdk = sdk
         self._entity_cls = entity_cls
         self._identity_values = dict(identity_values)
@@ -555,11 +560,11 @@ class EntityEditor:
         if self._closed:
             raise EditorClosedError("editor is closed")
 
-    def preview(self) -> "BatchPlan":
+    def preview(self) -> BatchPlan:
         self._ensure_open()
         return self._tx.preview(objects=[self._handle])
 
-    def commit(self, *, meta: dict[str, Any] | None = None) -> "BatchCommitResult":
+    def commit(self, *, meta: dict[str, Any] | None = None) -> BatchCommitResult:
         self._ensure_open()
         try:
             return self._tx.commit(objects=[self._handle], commit_meta=meta)
@@ -570,7 +575,7 @@ class EntityEditor:
         self._ensure_open()
         self._closed = True
 
-    def __enter__(self) -> "EntityEditor":
+    def __enter__(self) -> EntityEditor:  # noqa: PYI034 - Preserve concrete runtime hints on Python 3.10 without a new dependency.
         self._ensure_open()
         return self
 
@@ -584,7 +589,7 @@ class EntityEditor:
         return False
 
 
-def sdk_get(sdk: "SDKStore", entity_cls: type[Any], **identity_kwargs: Any) -> EntitySnapshot | None:
+def sdk_get(sdk: SDKStore, entity_cls: type[Any], **identity_kwargs: Any) -> EntitySnapshot | None:
     _validate_entity_cls(sdk, entity_cls)
     spec = sdk._entity_spec_by_class[entity_cls]
     _validate_identity_kwargs_for_get(spec, entity_cls, identity_kwargs)
@@ -619,7 +624,7 @@ def sdk_get(sdk: "SDKStore", entity_cls: type[Any], **identity_kwargs: Any) -> E
 
 
 def sdk_find(
-    sdk: "SDKStore",
+    sdk: SDKStore,
     entity_cls: type[Any],
     *,
     limit: int | None = None,
@@ -635,7 +640,7 @@ def sdk_find(
     identity_names = [field["name"] for field in spec.get("identity_fields", []) if isinstance(field, dict)]
     field_names = [field["py_name"] for field in spec.get("fields", []) if isinstance(field, dict)]
     allowed = set(identity_names) | set(field_names)
-    unknown = sorted([k for k in filter_kwargs.keys() if k not in allowed])
+    unknown = sorted([k for k in filter_kwargs if k not in allowed])
     if unknown:
         raise SDKSchemaError(f"unknown filter fields for {entity_cls.__name__}: {unknown}")
 
@@ -704,7 +709,7 @@ def sdk_find(
     return out
 
 
-def sdk_edit(sdk: "SDKStore", entity_cls: type[Any], **identity_kwargs: Any) -> EntityEditor:
+def sdk_edit(sdk: SDKStore, entity_cls: type[Any], **identity_kwargs: Any) -> EntityEditor:
     snapshot = sdk_get(sdk, entity_cls, **identity_kwargs)
     if snapshot is None:
         raise EntityNotFoundError(
@@ -715,7 +720,7 @@ def sdk_edit(sdk: "SDKStore", entity_cls: type[Any], **identity_kwargs: Any) -> 
     return EntityEditor(sdk, entity_cls, identity_kwargs)
 
 
-def _validate_entity_cls(sdk: "SDKStore", entity_cls: type[Any]) -> None:
+def _validate_entity_cls(sdk: SDKStore, entity_cls: type[Any]) -> None:
     if entity_cls not in sdk._entity_spec_by_class:
         raise_if_superseded = getattr(sdk, "_raise_if_superseded_entity_class", None)
         if callable(raise_if_superseded):
@@ -741,7 +746,7 @@ def _identity_spec_by_name(spec: dict[str, Any]) -> dict[str, dict[str, Any]]:
     return out
 
 
-def _entity_exists_pred_id_for_entity(sdk: "SDKStore", entity_cls: type[Any]) -> str | None:
+def _entity_exists_pred_id_for_entity(sdk: SDKStore, entity_cls: type[Any]) -> str | None:
     entity_type = sdk._entity_spec_by_class[entity_cls].get("entity_type")
     if not isinstance(entity_type, str):
         return None
@@ -758,7 +763,7 @@ def _entity_exists_pred_id_for_entity(sdk: "SDKStore", entity_cls: type[Any]) ->
     return None
 
 
-def _entity_field_rows(sdk: "SDKStore", entity_cls: type[Any]) -> list[tuple[str, dict[str, Any], dict[str, Any]]]:
+def _entity_field_rows(sdk: SDKStore, entity_cls: type[Any]) -> list[tuple[str, dict[str, Any], dict[str, Any]]]:
     spec = sdk._entity_spec_by_class[entity_cls]
     out: list[tuple[str, dict[str, Any], dict[str, Any]]] = []
     for field_decl in spec.get("fields", []):
@@ -776,7 +781,7 @@ def _entity_field_rows(sdk: "SDKStore", entity_cls: type[Any]) -> list[tuple[str
     return out
 
 
-def _entity_visible_in_view(sdk: "SDKStore", entity_cls: type[Any], *, e_ref: str, view_facts: dict[str, list[tuple[Any, ...]]]) -> bool:
+def _entity_visible_in_view(sdk: SDKStore, entity_cls: type[Any], *, e_ref: str, view_facts: dict[str, list[tuple[Any, ...]]]) -> bool:
     exists_pred = _entity_exists_pred_id_for_entity(sdk, entity_cls)
     if isinstance(exists_pred, str):
         for row in view_facts.get(exists_pred, []):
@@ -792,7 +797,7 @@ def _entity_visible_in_view(sdk: "SDKStore", entity_cls: type[Any], *, e_ref: st
     return False
 
 
-def _candidate_entity_refs(sdk: "SDKStore", entity_cls: type[Any], *, view_facts: dict[str, list[tuple[Any, ...]]]) -> set[str]:
+def _candidate_entity_refs(sdk: SDKStore, entity_cls: type[Any], *, view_facts: dict[str, list[tuple[Any, ...]]]) -> set[str]:
     out: set[str] = set()
     exists_pred = _entity_exists_pred_id_for_entity(sdk, entity_cls)
     if isinstance(exists_pred, str):
@@ -810,7 +815,7 @@ def _candidate_entity_refs(sdk: "SDKStore", entity_cls: type[Any], *, view_facts
 
 
 def _build_snapshot(
-    sdk: "SDKStore",
+    sdk: SDKStore,
     entity_cls: type[Any],
     *,
     e_ref: str,
@@ -839,7 +844,7 @@ def _build_snapshot(
 def _dto_to_sdk_snapshot(
     dto: EntitySnapshotDTO,
     *,
-    sdk: "SDKStore",
+    sdk: SDKStore,
     entity_cls: type[Any],
     known_identity_values: dict[str, Any] | None = None,
 ) -> EntitySnapshot:
@@ -872,7 +877,7 @@ def _dto_to_sdk_snapshot(
 def _dto_assertions_to_sdk(
     dto: FieldAssertionsDTO,
     *,
-    sdk: "SDKStore",
+    sdk: SDKStore,
     entity_cls: type[Any],
     e_ref: str,
 ) -> AssertionView:
@@ -913,7 +918,7 @@ def _dto_assertions_to_sdk(
 def _dto_assertion_record_to_sdk(
     dto: AssertionRecordDTO,
     *,
-    sdk: "SDKStore",
+    sdk: SDKStore,
     entity_type: str,
     field_name: str,
     pred_id: str,
@@ -933,7 +938,7 @@ def _dto_assertion_record_to_sdk(
     )
 
 
-def _dto_value_to_sdk_value(value: Any, *, sdk: "SDKStore") -> Any:
+def _dto_value_to_sdk_value(value: Any, *, sdk: SDKStore) -> Any:
     if isinstance(value, tuple):
         return tuple(_dto_value_to_sdk_value(item, sdk=sdk) for item in value)
     if isinstance(value, AppEntityRef):
@@ -941,7 +946,7 @@ def _dto_value_to_sdk_value(value: Any, *, sdk: "SDKStore") -> Any:
     return value
 
 
-def _dto_ref_to_sdk_ref(ref: AppEntityRef, *, sdk: "SDKStore") -> str:
+def _dto_ref_to_sdk_ref(ref: AppEntityRef, *, sdk: SDKStore) -> str:
     if isinstance(ref.encoded_ref, str) and ref.encoded_ref:
         return ref.encoded_ref
     return encode_app_entity_ref(ref, index=sdk._application_schema_index)
@@ -952,7 +957,7 @@ def _sdk_field_cardinality(entity_cls: type[Any], field_name: str) -> str:
     return str(getattr(descriptor, "cardinality", "single"))
 
 
-def _pred_id_for_entity_field(sdk: "SDKStore", entity_cls: type[Any], field_name: str) -> str:
+def _pred_id_for_entity_field(sdk: SDKStore, entity_cls: type[Any], field_name: str) -> str:
     descriptor = getattr(entity_cls, field_name, None)
     schema_pred = sdk._field_pred_by_descriptor.get(descriptor)
     if isinstance(schema_pred, dict):
@@ -972,7 +977,7 @@ def _pred_id_for_entity_field(sdk: "SDKStore", entity_cls: type[Any], field_name
     raise SDKStoreError(f"schema predicate missing pred_id for field {field_name}")
 
 
-def _value_tag_for_entity_field(sdk: "SDKStore", entity_cls: type[Any], field_name: str) -> str:
+def _value_tag_for_entity_field(sdk: SDKStore, entity_cls: type[Any], field_name: str) -> str:
     descriptor = getattr(entity_cls, field_name, None)
     schema_pred = sdk._field_pred_by_descriptor.get(descriptor)
     if isinstance(schema_pred, dict):
@@ -1019,7 +1024,7 @@ def _current_value_from_rows(rows: list[tuple[Any, ...]], *, cardinality: str) -
 
 
 def _field_assertions_for_entity_field(
-    sdk: "SDKStore",
+    sdk: SDKStore,
     *,
     e_ref: str,
     field_name: str,
@@ -1046,8 +1051,8 @@ def _field_assertions_for_entity_field(
     )
 
 
-def _claim_sort_key(sdk: "SDKStore", claim: "Claim") -> tuple[int, bytes]:
-    rows = sdk.ledger.find_meta(asrt_id=claim.asrt_id, key="ingested_at")
+def _claim_sort_key(sdk: SDKStore, claim: Claim) -> tuple[int, bytes]:
+    rows = sdk.ledger.effective_meta_rows(asrt_id=claim.asrt_id, key="ingested_at")
     ingested = -1
     if rows:
         row = rows[-1]
@@ -1056,7 +1061,7 @@ def _claim_sort_key(sdk: "SDKStore", claim: "Claim") -> tuple[int, bytes]:
     return (ingested, claim.asrt_id.encode("utf-8"))
 
 
-def _assertion_record_from_claim(sdk: "SDKStore", claim: "Claim", *, schema_pred: dict[str, Any]) -> AssertionRecord:
+def _assertion_record_from_claim(sdk: SDKStore, claim: Claim, *, schema_pred: dict[str, Any]) -> AssertionRecord:
     value = _decode_claim_rest_terms(schema_pred, claim.rest_terms)
     raw_meta = _meta_raw_for_assertion(sdk, claim.asrt_id)
     active = is_active(sdk.ledger, claim.asrt_id)
@@ -1082,9 +1087,9 @@ def _decode_claim_rest_terms(schema_pred: dict[str, Any], rest_terms: list[tuple
     return rest_terms[-1][1]
 
 
-def _meta_raw_for_assertion(sdk: "SDKStore", asrt_id: str) -> dict[str, Any]:
+def _meta_raw_for_assertion(sdk: SDKStore, asrt_id: str) -> dict[str, Any]:
     out: dict[str, Any] = {}
-    for row in sdk.ledger.find_meta(asrt_id=asrt_id):
+    for row in sdk.ledger.effective_meta_rows(asrt_id=asrt_id):
         out[row.key] = row.value
     return out
 
@@ -1168,7 +1173,7 @@ def _read_assertion_time_meta(
 
 
 def _snapshot_matches_filters(
-    sdk: "SDKStore",
+    sdk: SDKStore,
     entity_cls: type[Any],
     snapshot: EntitySnapshot,
     filters: dict[str, Any],

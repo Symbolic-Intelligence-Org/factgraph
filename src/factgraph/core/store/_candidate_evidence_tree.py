@@ -3,7 +3,6 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping, Sequence
 from typing import Any
 
-
 AssertionDetailLookup = Callable[[str], dict[str, Any] | None]
 SupportLookup = Callable[[str], dict[str, Any] | None]
 _MAX_RECURSION_DEPTH = 8
@@ -25,7 +24,7 @@ def build_candidate_evidence_tree(
     if not isinstance(support_kind, str) or not support_kind:
         raise ValueError("support_kind must be non-empty string")
     if not isinstance(support, Mapping):
-        raise ValueError("support must be mapping")
+        raise ValueError("support must be mapping")  # noqa: TRY004 - AuditQuery wraps builder ValueError into AuditQueryError.
 
     binding, root_result_kind, rule_refs, rule_ref_edges, children = _build_support_sections(
         node_key=candidate_id,
@@ -257,10 +256,10 @@ def _extract_fact_meta(detail: Mapping[str, Any]) -> dict[str, Any] | None:
 def _build_assertion_leaf(asrt_id: str, *, assertion_lookup: AssertionDetailLookup) -> dict[str, Any]:
     detail = assertion_lookup(asrt_id)
     if not isinstance(detail, Mapping):
-        raise ValueError(f"assertion detail not found for asrt_id={asrt_id!r}")
+        raise ValueError(f"assertion detail not found for asrt_id={asrt_id!r}")  # noqa: TRY004 - Lookup shape errors flow to AuditQuery's ValueError wrap.
     claim = detail.get("claim")
     if not isinstance(claim, Mapping):
-        raise ValueError(f"assertion detail missing claim for asrt_id={asrt_id!r}")
+        raise ValueError(f"assertion detail missing claim for asrt_id={asrt_id!r}")  # noqa: TRY004 - Lookup shape errors flow to AuditQuery's ValueError wrap.
     pred_id = _require_non_empty_str(claim.get("pred_id"), label=f"{asrt_id}.claim.pred_id")
     e_ref = _require_non_empty_str(claim.get("e_ref"), label=f"{asrt_id}.claim.e_ref")
     claim_args = _normalize_claim_args(detail.get("claim_args"), label=f"{asrt_id}.claim_args")
@@ -423,10 +422,10 @@ def _normalize_claim_args(value: Any, *, label: str) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
     for idx, row in enumerate(rows):
         if not isinstance(row, Mapping):
-            raise ValueError(f"{label}[{idx}] must be mapping")
+            raise ValueError(f"{label}[{idx}] must be mapping")  # noqa: TRY004 - Assertion detail decode shares the builder's ValueError contract.
         arg_idx = row.get("idx")
         if isinstance(arg_idx, bool) or not isinstance(arg_idx, int):
-            raise ValueError(f"{label}[{idx}].idx must be int")
+            raise ValueError(f"{label}[{idx}].idx must be int")  # noqa: TRY004 - Assertion detail decode shares the builder's ValueError contract.
         tag = _require_non_empty_str(row.get("tag"), label=f"{label}[{idx}].tag")
         raw_val = row.get("val")
         out.append(
@@ -445,7 +444,7 @@ def _normalize_rule_ref_edges(value: Any, *, label: str) -> list[dict[str, Any]]
     out: list[dict[str, Any]] = []
     for idx, row in enumerate(rows):
         if not isinstance(row, Mapping):
-            raise ValueError(f"{label}[{idx}] must be mapping")
+            raise ValueError(f"{label}[{idx}] must be mapping")  # noqa: TRY004 - Support row decode shares the builder's ValueError contract.
         out.append(
             {
                 "ruleref_condition_key": _require_non_empty_str(
@@ -497,7 +496,7 @@ def _normalize_strings(value: Any, *, label: str) -> list[str]:
 
 def _require_list(value: Any, *, label: str) -> list[Any]:
     if not isinstance(value, list):
-        raise ValueError(f"{label} must be list")
+        raise ValueError(f"{label} must be list")  # noqa: TRY004 - Support field decode shares the builder's ValueError contract.
     return value
 
 

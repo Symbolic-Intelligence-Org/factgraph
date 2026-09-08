@@ -8,8 +8,8 @@ from factgraph.core.rules.where_eval import evaluate_where
 from factgraph.sdk import Entity, Field, Identity
 from factgraph.sdk.dsl import (
     DSLToApplicationRuleError,
-    SDKDSLError,
     Pred,
+    SDKDSLError,
     agg_count,
     agg_max,
     agg_mean,
@@ -116,14 +116,13 @@ class AggregateHelperLoweringTests(unittest.TestCase):
         self.assertEqual(_count_pred(aggregate[2], "Order:exists", "$o"), 1)
 
     def test_filter_local_self_ensured_target_var_does_not_leak_outer_bindings(self) -> None:
-        with vars("u", "o", "total") as (u, o, total):
-            with self.assertRaises(SDKDSLError):
-                lower_where(
-                    [
-                        total == agg_sum(Order(o).amount, where=[User(u)]),
-                        o.amount == 7,
-                    ]
-                )
+        with vars("u", "o", "total") as (u, o, total), self.assertRaises(SDKDSLError):
+            lower_where(
+                [
+                    total == agg_sum(Order(o).amount, where=[User(u)]),
+                    o.amount == 7,
+                ]
+            )
 
 
 class AggregateApplicationBridgeTests(unittest.TestCase):
@@ -156,43 +155,45 @@ class AggregateApplicationBridgeTests(unittest.TestCase):
         self.assertEqual(rows, [{"$total": 5, "$u": "u-1"}])
 
     def test_bridge_validator_rejects_unbound_aggregate_target_var(self) -> None:
-        with vars("o", "amount", "total") as (o, amount, total):
-            with self.assertRaises(DSLToApplicationRuleError):
-                build_application_rule(
-                    id="invalid_sum",
-                    when=[total == agg_sum(amount, where=[Order(o)])],
-                    ports={"total": total},
-                )
+        with (
+            vars("o", "amount", "total") as (o, amount, total),
+            self.assertRaises(DSLToApplicationRuleError),
+        ):
+            build_application_rule(
+                id="invalid_sum",
+                when=[total == agg_sum(amount, where=[Order(o)])],
+                ports={"total": total},
+            )
 
     def test_bridge_rejects_bare_attr_ref_target(self) -> None:
-        with vars("o", "total") as (o, total):
-            with self.assertRaises(DSLToApplicationRuleError):
-                build_application_rule(
-                    id="legacy_aggregate_target",
-                    when=[total == agg_sum(o.amount, where=[Order(o)])],
-                    ports={"total": total},
-                )
+        with vars("o", "total") as (o, total), self.assertRaises(DSLToApplicationRuleError):
+            build_application_rule(
+                id="legacy_aggregate_target",
+                when=[total == agg_sum(o.amount, where=[Order(o)])],
+                ports={"total": total},
+            )
 
     def test_bridge_rejects_legacy_pred_in_aggregate_filter(self) -> None:
-        with vars("u", "n") as (u, n):
-            with self.assertRaises(DSLToApplicationRuleError):
-                build_application_rule(
-                    id="legacy_aggregate_filter",
-                    when=[n == agg_count(where=[Pred("User:exists", u)])],
-                    ports={"count": n},
-                )
+        with vars("u", "n") as (u, n), self.assertRaises(DSLToApplicationRuleError):
+            build_application_rule(
+                id="legacy_aggregate_filter",
+                when=[n == agg_count(where=[Pred("User:exists", u)])],
+                ports={"count": n},
+            )
 
     def test_application_rule_rejects_aggregate_filter_local_port(self) -> None:
-        with vars("u", "o", "total") as (u, o, total):
-            with self.assertRaises(RuleValidationError):
-                build_application_rule(
-                    id="aggregate_local_port",
-                    when=[
-                        User(u),
-                        total == agg_sum(Order(o).amount, where=[Order(o).buyer == u]),
-                    ],
-                    ports={"user": u, "order": o},
-                )
+        with (
+            vars("u", "o", "total") as (u, o, total),
+            self.assertRaises(RuleValidationError),
+        ):
+            build_application_rule(
+                id="aggregate_local_port",
+                when=[
+                    User(u),
+                    total == agg_sum(Order(o).amount, where=[Order(o).buyer == u]),
+                ],
+                ports={"user": u, "order": o},
+            )
 
 
 if __name__ == "__main__":

@@ -8,21 +8,12 @@ from pathlib import Path
 from typing import Any
 
 from factgraph.adapters.souffle.pred_norm import normalize_pred_id
+from factgraph.adapters.souffle.souffle_view_gen import generate_view_dl
 from factgraph.adapters.souffle.tsv_v1 import write_tsv
-from factgraph.core.policy.policy_ir import (
-    build_policy_ir_v1,
-    canonicalize_policy_ir_jcs,
-    policy_digest,
-)
-from factgraph.core.protocol.digests import sha256_token
-from factgraph.core.protocol.tup_v1 import canonical_bytes_tup_v1
 from factgraph.adapters.souffle.where_compile import (
     compile_where_to_query_dl,
     query_rel_for_where,
 )
-from factgraph.core.schema.schema_ir import canonicalize_schema_ir_jcs, schema_digest
-from factgraph.core.store.runtime import Store
-from factgraph.adapters.souffle.souffle_view_gen import generate_view_dl
 
 # The audit ledgers are engine-neutral and store-derived. Their builders live in
 # factgraph.audit.package_export (single source of truth); the audit branch below
@@ -34,6 +25,15 @@ from factgraph.audit.package_export import (
     _protocol_version,
     write_audit_artifacts,
 )
+from factgraph.core.policy.policy_ir import (
+    build_policy_ir_v1,
+    canonicalize_policy_ir_jcs,
+    policy_digest,
+)
+from factgraph.core.protocol.digests import sha256_token
+from factgraph.core.protocol.tup_v1 import canonical_bytes_tup_v1
+from factgraph.core.schema.schema_ir import canonicalize_schema_ir_jcs, schema_digest
+from factgraph.core.store.runtime import Store
 
 _WHERE_ATOM_TAGS = {
     "pred",
@@ -198,6 +198,7 @@ def export_package(
         meta_float_rows,
         meta_bool_rows,
         revokes_rows,
+        claim_seq_rows,
     ) = _build_fact_rows(store)
 
     claim_path = facts_dir / "claim.facts"
@@ -208,6 +209,7 @@ def export_package(
     meta_float_path = facts_dir / "meta_float.facts"
     meta_bool_path = facts_dir / "meta_bool.facts"
     revokes_path = facts_dir / "revokes.facts"
+    claim_seq_path = facts_dir / "claim_seq.facts"
 
     write_tsv(claim_path, claim_rows)
     write_tsv(claim_arg_path, claim_arg_rows)
@@ -217,6 +219,7 @@ def export_package(
     write_tsv(meta_float_path, meta_float_rows)
     write_tsv(meta_bool_path, meta_bool_rows)
     write_tsv(revokes_path, revokes_rows)
+    write_tsv(claim_seq_path, claim_seq_rows)
 
     schema_digest_token = schema_digest(store.schema_ir)
     policy_digest_token = policy_digest(policy_ir)
@@ -230,6 +233,7 @@ def export_package(
         meta_float_path,
         meta_bool_path,
         revokes_path,
+        claim_seq_path,
     ]
     rules_files = [rules_dir / "idb.dl", rules_dir / "view.dl"]
 
@@ -260,6 +264,7 @@ def export_package(
                 "meta_float": "facts/meta_float.facts",
                 "meta_bool": "facts/meta_bool.facts",
                 "revokes": "facts/revokes.facts",
+                "claim_seq": "facts/claim_seq.facts",
             },
             "rules": {
                 "view": "rules/view.dl",
@@ -294,6 +299,7 @@ def _build_fact_rows(
     list[list[str]],
     list[list[str]],
     list[list[str]],
+    list[list[str]],
 ]:
     claim_rows: list[list[str]] = []
     for claim in store.ledger.claims:
@@ -307,26 +313,31 @@ def _build_fact_rows(
 
     meta_str_rows = [
         [row.asrt_id, row.key, _atom_to_str(row.value)]
-        for row in store.ledger.find_meta(kind="str")
+        for row in store.ledger.effective_meta_rows(kind="str")
     ]
     meta_time_rows = [
         [row.asrt_id, row.key, _atom_to_str(row.value)]
-        for row in store.ledger.find_meta(kind="time")
+        for row in store.ledger.effective_meta_rows(kind="time")
     ]
     meta_int_rows = [
         [row.asrt_id, row.key, _atom_to_str(row.value)]
-        for row in store.ledger.find_meta(kind="int")
+        for row in store.ledger.effective_meta_rows(kind="int")
     ]
     meta_float_rows = [
         [row.asrt_id, row.key, _float_to_meta_str(row.value)]
-        for row in store.ledger.find_meta(kind="float")
+        for row in store.ledger.effective_meta_rows(kind="float")
     ]
     meta_bool_rows = [
         [row.asrt_id, row.key, _atom_to_str(row.value)]
-        for row in store.ledger.find_meta(kind="bool")
+        for row in store.ledger.effective_meta_rows(kind="bool")
     ]
     revokes_rows = [
         [row.revoker_asrt_id, row.revoked_asrt_id] for row in store.ledger.revokes
+    ]
+    claim_seq_rows = [
+        [claim.asrt_id, str(sequence)]
+        for claim in store.ledger.claims
+        if (sequence := store.ledger.claim_sequence(claim.asrt_id)) is not None
     ]
 
     return (
@@ -338,6 +349,7 @@ def _build_fact_rows(
         sorted(meta_float_rows),
         sorted(meta_bool_rows),
         sorted(revokes_rows),
+        sorted(claim_seq_rows),
     )
 
 

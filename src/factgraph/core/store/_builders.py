@@ -6,10 +6,14 @@ import re
 from typing import Any
 from uuid import uuid4
 
-from factgraph.core.derivation.candidates import CandidateSet, compute_key_tuple_digest, make_candidate
+from factgraph.core.derivation.candidates import (
+    DerivationOutput,
+    compute_key_tuple_digest,
+    make_derivation_output,
+)
 from factgraph.core.evidence.write_protocol import now_epoch_nanos
-from factgraph.core.protocol.idref_v1 import encode_idref_v1
 from factgraph.core.protocol.digests import sha256_token
+from factgraph.core.protocol.idref_v1 import encode_idref_v1
 from factgraph.core.protocol.tup_v1 import CANONICAL_TAGS, canonical_bytes_tup_v1
 from factgraph.core.rules.where_eval import WhereValidationError
 from factgraph.core.store._support import (
@@ -21,7 +25,7 @@ from factgraph.core.store._support import (
 _BYTES_B64URL_RE = re.compile(r"^[A-Za-z0-9_-]*$")
 
 
-def candidates_from_bindings(
+def derivation_outputs_from_bindings(
     store: Any,
     *,
     derivation_id: str,
@@ -33,12 +37,12 @@ def candidates_from_bindings(
     rows: list[BindingSupportCapture] | None = None,
     bindings: list[dict[str, Any]] | None = None,
     confidence_kind_resolver: Any | None = None,
-) -> list[CandidateSet]:
+) -> list[DerivationOutput]:
     run_id = uuid4().hex
     group_key_indexes = read_group_key_indexes(schema_pred, len(arg_specs))
     binding_rows = _coerce_binding_rows(rows=rows, bindings=bindings)
 
-    candidates: list[CandidateSet] = []
+    outputs: list[DerivationOutput] = []
     for row in binding_rows:
         binding = row.binding_dict()
         tagged_args = build_tagged_args(arg_specs, head_vars, binding)
@@ -62,7 +66,7 @@ def candidates_from_bindings(
         key_terms = [("string", target_pred_id), ("entity_ref", e_ref), *dims_terms]
         tup_digest = sha256_token(canonical_bytes_tup_v1(rest_terms))
 
-        candidate = make_candidate(
+        output = make_derivation_output(
             derivation_id=derivation_id,
             derivation_version=version,
             run_id=run_id,
@@ -85,18 +89,18 @@ def candidates_from_bindings(
                 store,
             ),
         )
-        candidates.append(candidate)
+        outputs.append(output)
 
-    unique: dict[str, CandidateSet] = {}
-    for candidate in candidates:
-        existing = unique.get(candidate.candidate_key)
-        if existing is None or _support_is_better(candidate, existing):
-            unique[candidate.candidate_key] = candidate
+    unique: dict[str, DerivationOutput] = {}
+    for output in outputs:
+        existing = unique.get(output.candidate_key)
+        if existing is None or _support_is_better(output, existing):
+            unique[output.candidate_key] = output
 
     return sorted(unique.values(), key=lambda cand: cand.candidate_key)
 
 
-def entity_candidates_from_bindings(
+def entity_derivation_outputs_from_bindings(
     store: Any,
     *,
     derivation_id: str,
@@ -105,14 +109,14 @@ def entity_candidates_from_bindings(
     rows: list[BindingSupportCapture] | None = None,
     bindings: list[dict[str, Any]] | None = None,
     confidence_kind_resolver: Any | None = None,
-) -> list[CandidateSet]:
+) -> list[DerivationOutput]:
     run_id = uuid4().hex
     entity_type = entity_spec["entity_type"]
     role_defs = entity_spec["roles"]
     head_values = entity_spec["head_vars"]
     binding_rows = _coerce_binding_rows(rows=rows, bindings=bindings)
 
-    candidates: list[CandidateSet] = []
+    outputs: list[DerivationOutput] = []
     for row in binding_rows:
         binding = row.binding_dict()
         tagged_role_terms: list[tuple[str, Any]] = []
@@ -147,7 +151,7 @@ def entity_candidates_from_bindings(
                 [(name, tag, resolved_identity[name]) for name, tag in identity_fields if name in resolved_identity],
             )
 
-        entity_candidate = CandidateSet(
+        entity_output = DerivationOutput(
             derivation_id=derivation_id,
             derivation_version=version,
             run_id=run_id,
@@ -174,18 +178,18 @@ def entity_candidates_from_bindings(
                 store,
             ),
         )
-        candidates.append(entity_candidate)
+        outputs.append(entity_output)
 
         for role in role_payloads:
             role_terms = role["rest_terms"]
             value_tag, value_atom = role_terms[0]
             fact_terms = [
-                {"kind": "candidate_ref", "candidate_key": entity_candidate.candidate_key},
+                {"kind": "candidate_ref", "candidate_key": entity_output.candidate_key},
                 _term_from_tag_value(value_tag, value_atom),
             ]
-            fact_key_terms = [("string", role["pred_id"]), ("string", entity_candidate.candidate_key)]
+            fact_key_terms = [("string", role["pred_id"]), ("string", entity_output.candidate_key)]
             fact_tup_digest = sha256_token(canonical_bytes_tup_v1(role_terms))
-            role_candidate = make_candidate(
+            role_output = make_derivation_output(
                 derivation_id=derivation_id,
                 derivation_version=version,
                 run_id=run_id,
@@ -208,14 +212,14 @@ def entity_candidates_from_bindings(
                     store,
                 ),
             )
-            candidates.append(role_candidate)
+            outputs.append(role_output)
 
-    unique: dict[tuple[Any, ...], CandidateSet] = {}
-    for candidate in candidates:
-        key = (candidate.candidate_kind, candidate.candidate_key)
+    unique: dict[tuple[Any, ...], DerivationOutput] = {}
+    for output in outputs:
+        key = (output.candidate_kind, output.candidate_key)
         existing = unique.get(key)
-        if existing is None or _support_is_better(candidate, existing):
-            unique[key] = candidate
+        if existing is None or _support_is_better(output, existing):
+            unique[key] = output
     return sorted(unique.values(), key=lambda cand: (cand.candidate_kind, cand.candidate_key))
 
 
@@ -240,11 +244,11 @@ def _coerce_binding_rows(
     ]
 
 
-def _support_is_better(candidate: CandidateSet, existing: CandidateSet) -> bool:
-    if candidate.support_digest < existing.support_digest:
+def _support_is_better(output: DerivationOutput, existing: DerivationOutput) -> bool:
+    if output.support_digest < existing.support_digest:
         return True
-    if candidate.support_digest == existing.support_digest:
-        return candidate.support_kind < existing.support_kind
+    if output.support_digest == existing.support_digest:
+        return output.support_kind < existing.support_kind
     return False
 
 
@@ -337,7 +341,7 @@ def entity_spec_from_head(
     missing = [name for name in role_names if name not in kwargs]
     if missing:
         raise WhereValidationError(f"entity head missing field kwargs: {missing}")
-    extra = sorted([key for key in kwargs.keys() if key not in set(role_names)])
+    extra = sorted([key for key in kwargs if key not in set(role_names)])
     if extra:
         raise WhereValidationError(f"entity head contains unknown field kwargs: {extra}")
 

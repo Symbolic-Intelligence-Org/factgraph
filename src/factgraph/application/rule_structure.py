@@ -9,8 +9,12 @@ from factgraph.application.explain.structure_keys import (
     is_head_atom,
     join_id_for_materialization,
 )
-from factgraph.application.protocol.rule_expr import RuleExprError, RuleJoinConstraint
-from factgraph.application.protocol.rule_expr import _RuleExpr, _iter_rule_operands
+from factgraph.application.protocol.rule_expr import (
+    RuleExprError,
+    RuleJoinConstraint,
+    _iter_rule_operands,
+    _RuleExpr,
+)
 from factgraph.application.protocol.rule_expr_inspect import (
     ConditionDescriptor,
     OccurrenceInspect,
@@ -112,12 +116,20 @@ def _structure_branch(
 ) -> StructureBranch:
     join_indexes = {join.materialized_condition_index for join in trace.join_materializations}
     head_link_indexes = {link.materialized_condition_index for link in trace.head_port_link_materializations}
+    navigation_indexes = {
+        index
+        for navigation in trace.query_navigation_materializations
+        for index in (
+            navigation.lookup_materialized_condition_index,
+            navigation.projection_head_link_materialized_condition_index,
+        )
+    }
     body_atoms: dict[str, list[StructureAtom]] = {alias: [] for alias in lowered_branch.occurrence_aliases}
     head_atoms: list[StructureAtom] = []
     fallback_alias = lowered_branch.occurrence_aliases[0] if lowered_branch.occurrence_aliases else ""
 
     for index, atom in enumerate(atoms):
-        if index in join_indexes or index in head_link_indexes:
+        if index in join_indexes or index in head_link_indexes or index in navigation_indexes:
             continue
         structure_atom = _structure_atom(
             atom,
@@ -397,7 +409,7 @@ def _atom_repr_text(form: StructureAtomForm | None, *, schema_index: object | No
                 "%FLD": _term_repr_text(form.terms[1]) if len(form.terms) > 1 else "",
                 "%ENT": _static_entity_repr_for_fact(form, info),
             }
-            rendered = str(getattr(info, "repr"))
+            rendered = str(info.repr)
             for token, value in placeholder_values.items():
                 rendered = rendered.replace(token, value)
             return rendered
@@ -555,7 +567,7 @@ def _var_port_names(plan: RuleExprLoweringPlan) -> dict[str, str]:
     out: dict[str, str] = {}
     for port_name, var in plan.head.ports.items():
         out[var.name] = port_name
-        source = var.name[1:] if var.name.startswith("$") else var.name
+        source = var.name.removeprefix("$")
         out[f"$__head__{source}"] = port_name
     for occurrence in plan.occurrence_map:
         for binding in occurrence.port_bindings:

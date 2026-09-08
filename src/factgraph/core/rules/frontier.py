@@ -16,6 +16,7 @@ from factgraph.core.rules.where_ast_validate import (
 )
 from factgraph.core.rules.where_eval import (
     _ARITH_KINDS,
+    WhereValidationError,
     _adapt_where_ast_error,
     _eval_arith_atom,
     _eval_cmp_atom,
@@ -27,7 +28,6 @@ from factgraph.core.rules.where_eval import (
     _normalize_where,
     _plan_body_atoms,
     _where_ast_gate_enabled,
-    WhereValidationError,
 )
 
 NativeWhereFrontierFailureKind = Literal["empty_input", "atom_filter_empty"]
@@ -67,10 +67,10 @@ class NativeWhereFrontierEvaluation:
 
     def __post_init__(self) -> None:
         if not isinstance(self.bindings, list):
-            raise ValueError("bindings must be list")
+            raise ValueError("bindings must be list")  # noqa: TRY004 - Frontier evaluation DTO rejects shape drift as ValueError like its value guards.
         for binding in self.bindings:
             if not isinstance(binding, dict):
-                raise ValueError("bindings must contain dict rows")
+                raise ValueError("bindings must contain dict rows")  # noqa: TRY004 - Frontier evaluation DTO rejects shape drift as ValueError like its value guards.
         if not isinstance(self.rule_refs, tuple) or any(
             not isinstance(rule_ref, str) or not rule_ref for rule_ref in self.rule_refs
         ):

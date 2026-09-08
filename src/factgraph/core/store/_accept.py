@@ -23,10 +23,14 @@ from factgraph.core.derivation.candidates import CandidateSet
 from factgraph.core.policy.policy_ir import (
     PolicyIRValidationError,
     build_policy_ir_v1,
+)
+from factgraph.core.policy.policy_ir import (
     policy_digest as compute_policy_digest,
 )
 from factgraph.core.schema.schema_ir import (
     SchemaIRValidationError,
+)
+from factgraph.core.schema.schema_ir import (
     schema_digest as compute_schema_digest,
 )
 
@@ -57,6 +61,31 @@ def accept_store_candidate(
         raise ValueError("derivation_id mismatch")
     if candidate_set.derivation_version != version:
         raise ValueError("derivation_version mismatch")
+    return _accept_store_candidate_as_derived_rule(
+        store,
+        derivation_id=derivation_id,
+        version=version,
+        candidate_set=candidate_set,
+        options=options,
+    )
+
+
+def _accept_store_candidate_as_derived_rule(
+    store: Any,
+    *,
+    derivation_id: str,
+    version: str,
+    candidate_set: CandidateSet,
+    options: AcceptOptions,
+) -> AcceptResult:
+    """Materialize through Store-owned enrichment under a declared rule identity.
+
+    Application RuleExpr lowering may give an output a compiler-generated
+    derivation identity while the caller records the stable authored/business
+    rule identity in ledger provenance.  This internal seam preserves that
+    established distinction.  Direct ``Store.accept`` remains stricter and
+    validates that its derivation identity matches the output.
+    """
     schema_digest_token, policy_digest_token, diagnostics = _compute_accept_meta_digests(store)
     result = accept_candidate_set(
         ledger=store.ledger,
@@ -71,6 +100,7 @@ def accept_store_candidate(
     if not diagnostics:
         return result
     return replace(result, diagnostics=diagnostics)
+
 
 def accept_store_candidates_many(
     store: Any,

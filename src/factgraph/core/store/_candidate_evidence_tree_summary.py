@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
-from factgraph.core.store._support import PROBLOG_PROVENANCE_KIND, _DEGRADED_SUPPORT_KINDS
+from factgraph.core.store._support import _DEGRADED_SUPPORT_KINDS, PROBLOG_PROVENANCE_KIND
 
 
 class CandidateEvidenceTreeSummaryError(ValueError):

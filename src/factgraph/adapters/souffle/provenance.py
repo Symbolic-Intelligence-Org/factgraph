@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from factgraph.application.explain.evidence_tree import (
+    LAYOUT_TREE,
     Const,
     EvidenceAtom,
     EvidenceGraph,
@@ -16,7 +17,6 @@ from factgraph.application.explain.evidence_tree import (
     EvidenceTree,
     Fact,
     Holds,
-    LAYOUT_TREE,
     Source,
 )
 from factgraph.application.protocol.certainty import BOOLEAN_CERTAINTY
@@ -35,7 +35,7 @@ class SouffleProofNodeV0:
     relation: str
     args: tuple[str, ...]
     rule_number: str | None
-    children: tuple["SouffleProofNodeV0", ...]
+    children: tuple["SouffleProofNodeV0", ...]  # noqa: UP037 - Preserve Python 3.10 runtime hint shape.
 
 
 @dataclass(frozen=True)
@@ -157,13 +157,13 @@ def _evidence_atom_for_proof_node(
 def souffle_proof_tree_from_dict(row: dict[str, Any]) -> SouffleProofTreeV0:
     """Reconstruct ``SouffleProofTreeV0`` from an audit-package dict."""
     if not isinstance(row, dict):
-        raise ValueError("row must be dict")
+        raise ValueError("row must be dict")  # noqa: TRY004 - Audit-package provenance_tree decode keeps its ValueError rejection contract.
     root = row.get("root")
     if not isinstance(root, dict):
-        raise ValueError("row.root must be dict")
+        raise ValueError("row.root must be dict")  # noqa: TRY004 - Malformed proof root stays ValueError in the provenance_tree decode contract.
     raw_rules = row.get("rules", {})
     if not isinstance(raw_rules, dict):
-        raise ValueError("row.rules must be dict")
+        raise ValueError("row.rules must be dict")  # noqa: TRY004 - Malformed rules map stays ValueError in the provenance_tree decode contract.
     return SouffleProofTreeV0(
         query=str(row.get("query", "")),
         root=_souffle_proof_node_from_dict(root),
@@ -261,7 +261,7 @@ def run_package_provenance(
     with tempfile.TemporaryDirectory() as work_dir:
         program_path = Path(work_dir) / "program.dl"
         program_path.write_text(
-            "\n".join([view_text, policy_text, idb_text]) + "\n",
+            f"{view_text}\n{policy_text}\n{idb_text}\n",
             encoding="utf-8",
         )
 
@@ -447,13 +447,13 @@ def _proof_node_component_and_value(node: SouffleProofNodeV0) -> tuple[str, str]
 
 def _souffle_proof_node_from_dict(row: dict[str, Any]) -> SouffleProofNodeV0:
     if not isinstance(row, dict):
-        raise ValueError("proof node row must be dict")
+        raise ValueError("proof node row must be dict")  # noqa: TRY004 - Nested proof-node decode shares the provenance_tree ValueError contract.
     args = row.get("args")
     children = row.get("children")
     if not isinstance(args, list):
-        raise ValueError("proof node args must be list")
+        raise ValueError("proof node args must be list")  # noqa: TRY004 - Nested proof-node args decode shares the provenance_tree ValueError contract.
     if not isinstance(children, list):
-        raise ValueError("proof node children must be list")
+        raise ValueError("proof node children must be list")  # noqa: TRY004 - Nested proof-node children decode shares the provenance_tree ValueError contract.
     rule_number = row.get("rule_number")
     return SouffleProofNodeV0(
         node_type=str(row.get("node_type", "unknown")),
@@ -494,8 +494,8 @@ __all__ = [
     "SouffleProofTreeV0",
     "SouffleProvenanceError",
     "parse_souffle_proof_json",
-    "run_provenance_explain",
     "run_package_provenance",
+    "run_provenance_explain",
     "souffle_proof_tree_from_dict",
     "souffle_proof_tree_to_evidence_graph",
 ]

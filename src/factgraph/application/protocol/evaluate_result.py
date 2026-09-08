@@ -1,38 +1,48 @@
 from __future__ import annotations
 
+import base64
+import binascii
+import json
+import math
+import uuid
+import warnings
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import date, datetime
-import json
-import math
 from types import MappingProxyType
 from typing import Any, Literal
-import uuid
-import warnings
 
 from factgraph.application.explain.evidence_tree import (
+    LAYOUT_TREE,
     EvidenceGraph,
     EvidenceRule,
     EvidenceTree,
-    LAYOUT_TREE,
 )
-from factgraph.application.protocol.common import ErrorDTO, ProtocolShapeError, WarningDTO
 from factgraph.application.protocol.certainty import BOOLEAN_CERTAINTY, Certainty
+from factgraph.application.protocol.common import ErrorDTO, ProtocolShapeError, WarningDTO
+from factgraph.application.protocol.evaluation_expectation import ExpectationResultV0
+from factgraph.application.protocol.evaluation_run import EvaluationRunAnchorV0
+from factgraph.application.protocol.evaluation_run_bundle import EvaluationRunBundleV0
+from factgraph.application.protocol.evaluation_scenario import (
+    ScenarioFieldSubstitutionSetResolutionV0,
+    ScenarioResolutionV0,
+)
 from factgraph.application.protocol.explanation_render import narrate_evidence, walk_evidence
 from factgraph.application.protocol.rule import Rule, _is_projection_rule
 from factgraph.application.protocol.rule_expr import RuleExprError
 from factgraph.application.protocol.rule_expr_inspect import _inspect_closed_head
 from factgraph.application.protocol.schema_runtime import EntityRef
-from factgraph.core.derivation.candidates import CandidateSet
+from factgraph.core.derivation.candidates import DerivationOutput
 from factgraph.core.protocol.digests import sha256_hex, sha256_token
+from factgraph.core.protocol.tup_v1 import claim_args_from_rest_terms
 from factgraph.core.rules.where_ast import CmpAtom, Const, PredAtom
 from factgraph.core.semantics.profile import SemanticsProfile
-from factgraph.core.store.database import view_digest_for
 from factgraph.core.store._support import (
     SOUFFLE_WITNESS_KIND,
-    ProvenanceEnvelope,
     ProofReceipt,
+    ProvenanceEnvelope,
 )
+from factgraph.core.store.database import view_digest_for
 
 
 class DetachedRowError(RuntimeError):
@@ -81,6 +91,14 @@ _FORM1_ROW_SUPPORT_KINDS = frozenset({_NATIVE_FORM1_SUPPORT_KIND, SOUFFLE_WITNES
 
 @dataclass(frozen=True)
 class EvaluateRow:
+    """One row returned by the legacy live evaluation surface.
+
+    Notes:
+        ``explain()`` and ``close()`` require the row to remain attached to its
+        originating ``EvaluateResult``. Product V2 rows instead use explicit
+        sealed result views and explain targets.
+    """
+
     row_id: str
     bindings: Mapping[str, Any]
     kind: ClaimKind
@@ -107,14 +125,32 @@ class EvaluateRow:
         return self._result_resolver()
 
     def explain(self) -> Explanation:
+        """Explain this live row with its originating evaluation context.
+
+        Returns:
+            A legacy ``Explanation`` containing evidence when supported.
+
+        Raises:
+            DetachedRowError: If the row is detached from its result.
+        """
         return _explain_live_row(self, self._require_live_result())
 
     def close(self) -> Rule:
+        """Close this live row into a projection Rule.
+
+        Returns:
+            A Rule whose closed head represents this row.
+
+        Raises:
+            DetachedRowError: If the row is detached from its result.
+        """
         return _close_live_row(self, self._require_live_result())
 
 
 @dataclass(frozen=True)
 class ResultFingerprint:
+    """Stable semantic and execution digests for a legacy evaluation result."""
+
     expr_digest: str
     rule_set_digest: str
     view_snapshot_digest: str
@@ -134,6 +170,13 @@ class ResultFingerprint:
 
 @dataclass(frozen=True)
 class EvaluateResult:
+    """Legacy live evaluation rows plus engine and result identity.
+
+    Notes:
+        This V0-compatible object retains sequence conveniences and live-row
+        Explain. Product V2 uses sealed named result views instead.
+    """
+
     result_id: str
     rows: tuple[EvaluateRow, ...]
     head: Rule
@@ -141,6 +184,14 @@ class EvaluateResult:
     evaluated_at: object
     fingerprint: ResultFingerprint
     engine_meta: Mapping[str, Any]
+    run_anchor: EvaluationRunAnchorV0 | None = field(default=None, kw_only=True)
+    run_bundle: EvaluationRunBundleV0 | None = field(default=None, kw_only=True, repr=False)
+    scenario: ScenarioResolutionV0 | ScenarioFieldSubstitutionSetResolutionV0 | None = field(
+        default=None,
+        kw_only=True,
+        repr=False,
+    )
+    expectation_results: tuple[ExpectationResultV0, ...] = field(default=(), kw_only=True)
     _schema_index: object | None = field(default=None, repr=False, compare=False, hash=False)
     _row_close_builder: Callable[[EvaluateRow, EvaluateResult], Rule] | None = field(
         default=None,
@@ -166,6 +217,13 @@ class EvaluateResult:
         compare=False,
         hash=False,
     )
+    _scenario_resolution_digest_pin: str | None = field(
+        default=None,
+        kw_only=True,
+        repr=False,
+        compare=False,
+        hash=False,
+    )
 
     def __post_init__(self) -> None:
         _require_token_prefix(self.result_id, prefix=_RESULT_ID_PREFIX, field_name="EvaluateResult.result_id")
@@ -183,6 +241,37 @@ class EvaluateResult:
             raise ProtocolShapeError("EvaluateResult._row_close_builder must be callable or None")
         if self._row_graph_builder is not None and not callable(self._row_graph_builder):
             raise ProtocolShapeError("EvaluateResult._row_graph_builder must be callable or None")
+        if self.scenario is not None:
+            if not isinstance(
+                self.scenario,
+                (ScenarioResolutionV0, ScenarioFieldSubstitutionSetResolutionV0),
+            ):
+                raise ProtocolShapeError(
+                    "EvaluateResult.scenario must be ScenarioResolutionV0, "
+                    "ScenarioFieldSubstitutionSetResolutionV0 or None"
+                )
+            if self.run_anchor is not None or self.run_bundle is not None:
+                raise ProtocolShapeError(
+                    "Scenario EvaluateResult must not carry EvaluationRun anchor or bundle"
+                )
+        elif self._scenario_resolution_digest_pin is not None:
+            raise ProtocolShapeError(
+                "non-Scenario EvaluateResult must not retain a Scenario resolution seal"
+            )
+        if (
+            not isinstance(self.expectation_results, tuple)
+            or not all(isinstance(item, ExpectationResultV0) for item in self.expectation_results)
+        ):
+            raise ProtocolShapeError(
+                "EvaluateResult.expectation_results must be tuple[ExpectationResultV0, ...]"
+            )
+        expectation_ids = tuple(item.expectation_id for item in self.expectation_results)
+        if len(set(expectation_ids)) != len(expectation_ids):
+            raise ProtocolShapeError("EvaluateResult.expectation_results ids must be unique")
+        if self.expectation_results and (self.run_bundle is not None or self.scenario is not None):
+            raise ProtocolShapeError(
+                "EvaluateResult expectation results cannot coexist with a run bundle or Scenario"
+            )
 
         if not isinstance(self.rows, tuple):
             raise ProtocolShapeError("EvaluateResult.rows must be tuple[EvaluateRow, ...]")
@@ -206,44 +295,68 @@ class EvaluateResult:
         object.__setattr__(self, "_row_support_artifacts", row_support_artifacts)
         object.__setattr__(self, "_row_provenance_envelopes", row_provenance_envelopes)
         object.__setattr__(self, "rows", tuple(bound_rows))
+        _validate_scenario_result(
+            self,
+            support_artifacts=row_support_artifacts,
+            provenance_envelopes=row_provenance_envelopes,
+        )
+        if self.scenario is not None:
+            scenario_digest = self.scenario.scenario_digest
+            if self._scenario_resolution_digest_pin is None:
+                object.__setattr__(self, "_scenario_resolution_digest_pin", scenario_digest)
+            elif self._scenario_resolution_digest_pin != scenario_digest:
+                raise ProtocolShapeError(
+                    "Scenario EvaluateResult resolution changed after it was sealed to the result"
+                )
+        _validate_expectation_results(self)
+        _validate_run_anchor(self)
+        _validate_run_bundle(self)
 
     @property
     def run_id(self) -> str:
+        """Return the deprecated run id alias from ``fingerprint``."""
         _warn_deprecated_result_field("run_id", "EvaluateResult.fingerprint.run_id")
         return self.fingerprint.run_id
 
     @property
     def engine_version(self) -> str | None:
+        """Return the deprecated engine-version alias from ``engine_meta``."""
         _warn_deprecated_result_field("engine_version", "EvaluateResult.engine_meta['engine_version']")
         return _engine_meta_optional_str(self.engine_meta, "engine_version")
 
     @property
     def adapter_version(self) -> str | None:
+        """Return the deprecated adapter-version alias from ``engine_meta``."""
         _warn_deprecated_result_field("adapter_version", "EvaluateResult.engine_meta['adapter_version']")
         return _engine_meta_optional_str(self.engine_meta, "adapter_version")
 
     @property
     def expr_digest(self) -> str:
+        """Return the deprecated expression digest alias from ``fingerprint``."""
         _warn_deprecated_result_field("expr_digest", "EvaluateResult.fingerprint.expr_digest")
         return self.fingerprint.expr_digest
 
     @property
     def rule_set_digest(self) -> str:
+        """Return the deprecated Rule-set digest alias from ``fingerprint``."""
         _warn_deprecated_result_field("rule_set_digest", "EvaluateResult.fingerprint.rule_set_digest")
         return self.fingerprint.rule_set_digest
 
     @property
     def view_snapshot_digest(self) -> str:
+        """Return the deprecated view digest alias from ``fingerprint``."""
         _warn_deprecated_result_field("view_snapshot_digest", "EvaluateResult.fingerprint.view_snapshot_digest")
         return self.fingerprint.view_snapshot_digest
 
     @property
     def config_digest(self) -> str | None:
+        """Return the deprecated engine-config digest alias from ``fingerprint``."""
         _warn_deprecated_result_field("config_digest", "EvaluateResult.fingerprint.config_digest")
         return self.fingerprint.config_digest
 
     @property
     def result_digest(self) -> str:
+        """Return the deprecated result digest alias from ``fingerprint``."""
         _warn_deprecated_result_field("result_digest", "EvaluateResult.fingerprint.result_digest")
         return self.fingerprint.result_digest
 
@@ -257,17 +370,27 @@ class EvaluateResult:
         return self.rows[index]
 
     def first(self) -> EvaluateRow | None:
+        """Return the first row, or ``None`` when the result is empty."""
         return self.rows[0] if self.rows else None
 
     def exists(self) -> bool:
+        """Return whether at least one row exists."""
         return bool(self.rows)
 
     def count(self) -> int:
+        """Return the number of selected rows."""
         return len(self.rows)
 
 
 @dataclass(frozen=True)
 class Explanation:
+    """Legacy structured evidence with optional text renderings.
+
+    Notes:
+        ``evidence`` is the machine-readable source of truth. ``repr`` and
+        ``narrate()`` are presentation helpers and are not replay artifacts.
+    """
+
     status: ExplanationStatus
     evidence: EvidenceGraph | None
     row: EvaluateRow | None
@@ -326,6 +449,7 @@ class Explanation:
 
     @property
     def repr(self) -> tuple[str, ...] | None:
+        """Return cached structural evidence lines when rendering is supported."""
         if self.status in {"unsupported", "invalid_request"}:
             return None
         if self._repr_cache is not None:
@@ -336,6 +460,7 @@ class Explanation:
         return lines
 
     def narrate(self) -> tuple[str, ...] | None:
+        """Return cached human-readable evidence lines when supported."""
         if self.status in {"unsupported", "invalid_request"}:
             return None
         if self._narrate_cache is not None:
@@ -680,8 +805,8 @@ def rule_set_digest_for_entries(entries: Iterable[tuple[str, str]]) -> str:
     return sha256_token(canonical_bytes_for_evaluate("evaluate_rule_set_digest_v1", tuple(sorted(normalized))))
 
 
-def _candidate_set_to_evaluate_row(
-    candidate: CandidateSet,
+def _derivation_output_to_evaluate_row(
+    output: DerivationOutput,
     *,
     head: Rule,
     result_id: str,
@@ -689,19 +814,28 @@ def _candidate_set_to_evaluate_row(
     closed_head_digest: str,
     claim_kind: ClaimKind = "fact_triple",
     claim_name: str | None = None,
+    binding_types: Mapping[str, str] | None = None,
 ) -> EvaluateRow:
-    if not isinstance(candidate, CandidateSet):
-        raise ProtocolShapeError("candidate must be CandidateSet")
+    if not isinstance(output, DerivationOutput):
+        raise ProtocolShapeError("output must be DerivationOutput")
     if not isinstance(head, Rule):
         raise ProtocolShapeError("head must be application protocol Rule")
     _require_token_prefix(result_id, prefix=_RESULT_ID_PREFIX, field_name="result_id")
     _require_token_prefix(run_id, prefix=_RUN_ID_PREFIX, field_name="run_id")
     _require_sha256_token(closed_head_digest, field_name="closed_head_digest")
-    bindings = _bindings_from_candidate(candidate, head=head)
-    effective_claim_name = candidate.target if claim_name is None else claim_name
+    if binding_types is not None:
+        if output.candidate_kind != "fact" or output.target != head.id or output.payload.get("pred_id") != head.id:
+            raise ProtocolShapeError("derivation output projection target must exactly match its query head")
+        terms = output.payload.get("terms")
+        if not isinstance(terms, Sequence) or isinstance(terms, (str, bytes)) or len(terms) != len(head.ports):
+            raise ProtocolShapeError("derivation output projection terms must exactly align with head ports")
+    bindings = _bindings_from_output(output, head=head)
+    if binding_types is not None:
+        bindings = _typed_projection_bindings(bindings, head=head, binding_types=binding_types)
+    effective_claim_name = output.target if claim_name is None else claim_name
     digest = claim_digest_for(claim_kind, effective_claim_name, bindings)
     row_id = row_id_for(run_id, bindings)
-    certainty = _certainty_from_candidate(candidate)
+    certainty = _certainty_from_output(output)
     return EvaluateRow(
         row_id=row_id,
         bindings=bindings,
@@ -722,6 +856,26 @@ def _explain_live_row(
         raise ProtocolShapeError("row must be EvaluateRow")
     if not isinstance(result, EvaluateResult):
         raise ProtocolShapeError("result must be EvaluateResult")
+
+    if result.scenario is not None:
+        scenario_name = (
+            "ScenarioFieldSubstitutionV0"
+            if isinstance(result.scenario, ScenarioResolutionV0)
+            else "ScenarioFieldSubstitutionSetV0"
+        )
+        return Explanation(
+            status="unsupported",
+            evidence=None,
+            row=row,
+            result_id=result.result_id,
+            errors=(
+                ErrorDTO(
+                    code="SCENARIO_EXPLAIN_UNSUPPORTED",
+                    message=f"{scenario_name} rows have no ledger-backed EvidenceGraph",
+                    details={"row_id": row.row_id},
+                ),
+            ),
+        )
 
     checked_scope = _checked_scope_for_row_result(result, row)
     matched = next((candidate for candidate in result.rows if candidate.row_id == row.row_id), None)
@@ -795,6 +949,15 @@ def _close_live_row(row: EvaluateRow, result: EvaluateResult) -> Rule:
         raise ProtocolShapeError("row must be EvaluateRow")
     if not isinstance(result, EvaluateResult):
         raise ProtocolShapeError("result must be EvaluateResult")
+    if result.scenario is not None:
+        scenario_name = (
+            "ScenarioFieldSubstitutionV0"
+            if isinstance(result.scenario, ScenarioResolutionV0)
+            else "ScenarioFieldSubstitutionSetV0"
+        )
+        raise DetachedRowError(
+            f"{scenario_name} rows cannot be closed against ledger facts"
+        )
     if result._row_close_builder is not None:
         return result._row_close_builder(row, result)
     return _build_closed_head_from_row(row, result, schema_index=result._schema_index)
@@ -1021,7 +1184,7 @@ def _validate_evidence_metadata_for_row_result(
     result: EvaluateResult,
 ) -> None:
     if not isinstance(metadata, Mapping):
-        raise ValueError("EvidenceGraph.metadata must be a mapping")
+        raise ValueError("EvidenceGraph.metadata must be a mapping")  # noqa: TRY004 - explain_row catches only ValueError -> GRAPH_VALIDATION_FAILED.
     actual_keys = set(metadata)
     if actual_keys != _EVIDENCE_GRAPH_METADATA_KEY_SET:
         missing = tuple(key for key in _EVIDENCE_GRAPH_METADATA_KEYS if key not in actual_keys)
@@ -1084,24 +1247,168 @@ def _validate_row_provenance_envelopes(
     return MappingProxyType(normalized)
 
 
+def _scenario_semantic_rows_digest(rows: Sequence[EvaluateRow]) -> str:
+    """Stable Scenario result identity excluding run/result/proof identities."""
+
+    row_tokens: list[str] = []
+    for row in rows:
+        payload = {
+            "kind": row.kind,
+            "claim_digest": row.digest,
+            "bindings": row.bindings,
+            "closed_head_digest": row.closed_head_digest,
+            "certainty": _certainty_payload(row.certainty),
+        }
+        row_tokens.append(
+            sha256_token(canonical_bytes_for_evaluate("scenario_query_row_semantic_v0", payload))
+        )
+    return sha256_token(
+        canonical_bytes_for_evaluate("scenario_query_row_multiset_v0", tuple(sorted(row_tokens)))
+    )
+
+
+def _validate_scenario_result(
+    result: EvaluateResult,
+    *,
+    support_artifacts: Mapping[str, ProofReceipt],
+    provenance_envelopes: Mapping[str, ProvenanceEnvelope],
+) -> None:
+    """Bind the hypothetical effective relation and its diff to this result."""
+
+    scenario = result.scenario
+    if scenario is None:
+        return
+    if result.fingerprint.view_snapshot_digest != scenario.effective_relation_digest:
+        raise ProtocolShapeError(
+            "Scenario EvaluateResult fingerprint must commit its effective relation digest"
+        )
+    if support_artifacts or provenance_envelopes:
+        raise ProtocolShapeError(
+            "Scenario EvaluateResult must not carry ledger-backed support or provenance"
+        )
+    if scenario.result_diff is None:
+        raise ProtocolShapeError("Scenario EvaluateResult requires a result diff")
+    if scenario.result_diff.effective_row_count != len(result.rows):
+        raise ProtocolShapeError(
+            "Scenario result diff effective row count must match EvaluateResult rows"
+        )
+    if scenario.result_diff.effective_semantic_rows_digest != _scenario_semantic_rows_digest(result.rows):
+        raise ProtocolShapeError(
+            "Scenario result diff effective rows must match EvaluateResult rows"
+        )
+
+
+def _validate_expectation_results(result: EvaluateResult) -> None:
+    """Bind result-local query observations without changing result identity."""
+
+    if not result.expectation_results:
+        return
+    query_digest = result.fingerprint.expr_digest
+    if not isinstance(query_digest, str) or not query_digest.startswith("sha256:"):
+        raise ProtocolShapeError("EvaluateResult expectation results require an EvaluationQuery fingerprint")
+    query_digest = query_digest[7:]
+    valid_row_ids = {row.row_id for row in result.rows}
+    anchor_digest = None if result.run_anchor is None else result.run_anchor.anchor_digest
+    for item in result.expectation_results:
+        ExpectationResultV0.__post_init__(item)
+        if (
+            item.query_digest != query_digest
+            or item.result_id != result.result_id
+            or item.result_digest != result.fingerprint.result_digest
+            or item.run_anchor_digest != anchor_digest
+        ):
+            raise ProtocolShapeError("EvaluateResult expectation result does not match result identity")
+        if any(row_id not in valid_row_ids for row_id in item.matched_row_ids):
+            raise ProtocolShapeError("EvaluateResult expectation result names unknown row")
+
+
 def _checked_scope_for_row_result(result: EvaluateResult, row: EvaluateRow) -> Mapping[str, Any]:
     fingerprint = result.fingerprint
+    scope = {
+        "config_digest": fingerprint.config_digest,
+        "semantics_source": "row_result",
+        "evaluate_config_digest": fingerprint.config_digest,
+        "explain_config_digest": fingerprint.config_digest,
+        "semantics_match": True,
+        "result_id": result.result_id,
+        "row_id": row.row_id,
+        "expr_digest": fingerprint.expr_digest,
+        "rule_set_digest": fingerprint.rule_set_digest,
+        "view_snapshot_digest": fingerprint.view_snapshot_digest,
+        "closed_head_digest": row.closed_head_digest,
+    }
+    if result.run_anchor is not None:
+        scope["evaluation_run_anchor_digest"] = result.run_anchor.anchor_digest
     return _freeze_mapping(
-        {
-            "config_digest": fingerprint.config_digest,
-            "semantics_source": "row_result",
-            "evaluate_config_digest": fingerprint.config_digest,
-            "explain_config_digest": fingerprint.config_digest,
-            "semantics_match": True,
-            "result_id": result.result_id,
-            "row_id": row.row_id,
-            "expr_digest": fingerprint.expr_digest,
-            "rule_set_digest": fingerprint.rule_set_digest,
-            "view_snapshot_digest": fingerprint.view_snapshot_digest,
-            "closed_head_digest": row.closed_head_digest,
-        },
+        scope,
         field_name="Explanation.checked_scope",
     )
+
+
+def _validate_run_anchor(result: EvaluateResult) -> None:
+    anchor = result.run_anchor
+    if anchor is None:
+        return
+    if not isinstance(anchor, EvaluationRunAnchorV0):
+        raise ProtocolShapeError("EvaluateResult.run_anchor must be EvaluationRunAnchorV0 or None")
+    fingerprint = result.fingerprint
+    actual = (
+        result.result_id, fingerprint.result_digest, fingerprint.run_id,
+        fingerprint.view_snapshot_digest, result.engine, result.head.id,
+        result.head.content_digest, tuple(row.row_id for row in result.rows),
+        tuple(row.digest for row in result.rows),
+        tuple(row.closed_head_digest for row in result.rows),
+    )
+    expected = (
+        anchor.result_id, anchor.result_digest, anchor.run_id,
+        anchor.view_snapshot_digest, anchor.execution_profile.engine,
+        anchor.projection_head_id, anchor.projection_head_content_digest,
+        tuple(row.row_id for row in anchor.row_anchors),
+        tuple(row.claim_digest for row in anchor.row_anchors),
+        tuple(row.head_scope_digest for row in anchor.row_anchors),
+    )
+    row_semantics_match = all(
+        row.kind == row_anchor.claim_kind
+        and sha256_token(canonical_bytes_for_evaluate("evaluation_run_bindings_v0", row.bindings))
+            == row_anchor.bindings_digest
+        and sha256_token(canonical_bytes_for_evaluate(
+            "evaluation_run_certainty_v0", _certainty_payload(row.certainty),
+        )) == row_anchor.certainty_digest
+        for row, row_anchor in zip(result.rows, anchor.row_anchors, strict=True)
+    )
+    evaluated_at = result.evaluated_at.isoformat() if isinstance(result.evaluated_at, (datetime, date)) else result.evaluated_at
+    anchored_rule_set = rule_set_digest_for_entries((
+        (f"compiled-policy:{anchor.target.normalized_policy_id}", anchor.target.policy_digest),
+        (f"query-projection:{anchor.projection_head_id}", anchor.projection_head_content_digest),
+    ))
+    if (
+        actual != expected
+        or not row_semantics_match
+        or anchor.execution_profile.engine_version != result.engine_meta["engine_version"]
+        or anchor.execution_profile.adapter_version != result.engine_meta["adapter_version"]
+        or anchor.execution_profile.config_digest != fingerprint.config_digest
+        or anchor.evaluated_at != evaluated_at
+        or fingerprint.expr_digest != f"sha256:{anchor.query_digest}"
+        or fingerprint.rule_set_digest != anchored_rule_set
+    ):
+        raise ProtocolShapeError("EvaluateResult.run_anchor does not match this result")
+
+
+def _validate_run_bundle(result: EvaluateResult) -> None:
+    bundle = result.run_bundle
+    if bundle is None:
+        return
+    # Keep the codec import local: EvaluateResult is also used while the bundle
+    # protocol itself initializes.
+    from factgraph.application.evaluation_run_bundle_runtime import (
+        _assert_evaluation_run_bundle_current,
+    )
+
+    if not isinstance(bundle, EvaluationRunBundleV0):
+        raise ProtocolShapeError("EvaluateResult.run_bundle must be EvaluationRunBundleV0 or None")
+    _assert_evaluation_run_bundle_current(bundle)
+    if result.run_anchor is None or bundle.run_anchor != result.run_anchor:
+        raise ProtocolShapeError("EvaluateResult.run_bundle does not match this result")
 
 
 def _metadata_value(value: Any) -> Any:
@@ -1112,31 +1419,82 @@ def _metadata_value(value: Any) -> Any:
     return str(value)
 
 
-def _bindings_from_candidate(candidate: CandidateSet, *, head: Rule) -> Mapping[str, Any]:
+def _bindings_from_output(output: DerivationOutput, *, head: Rule) -> Mapping[str, Any]:
     if not isinstance(head, Rule):
         raise ProtocolShapeError("head must be application protocol Rule")
-    payload = candidate.payload
+    payload = output.payload
     if not isinstance(payload, Mapping):
-        raise ProtocolShapeError("candidate.payload must be mapping")
+        raise ProtocolShapeError("derivation_output.payload must be mapping")
     terms = payload.get("terms")
     port_names = tuple(head.ports)
     if isinstance(terms, Sequence) and not isinstance(terms, (str, bytes)):
         if len(terms) < len(port_names):
-            raise ProtocolShapeError("candidate.payload.terms must align with head ports")
-        return _freeze_mapping(dict(zip(port_names, terms[: len(port_names)])), field_name="candidate.payload.terms")
+            raise ProtocolShapeError("derivation_output.payload.terms must align with head ports")
+        return _freeze_mapping(
+            dict(zip(port_names, terms[: len(port_names)])),
+            field_name="derivation_output.payload.terms",
+        )
     maybe_bindings = payload.get("bindings")
     if isinstance(maybe_bindings, Mapping):
-        return _freeze_mapping(maybe_bindings, field_name="candidate.payload.bindings")
-    return _freeze_mapping(payload, field_name="candidate.payload")
+        return _freeze_mapping(
+            maybe_bindings, field_name="derivation_output.payload.bindings"
+        )
+    return _freeze_mapping(payload, field_name="derivation_output.payload")
 
 
-def _certainty_from_candidate(candidate: CandidateSet) -> Certainty | None:
-    if candidate.confidence is None or candidate.confidence_kind is None:
+def _typed_projection_bindings(
+    bindings: Mapping[str, Any], *, head: Rule, binding_types: Mapping[str, str],
+) -> Mapping[str, Any]:
+    port_names = tuple(head.ports)
+    if tuple(binding_types) != port_names:
+        raise ProtocolShapeError("typed projection domains must follow the exact head-port order")
+    if set(bindings) != set(port_names):
+        raise ProtocolShapeError("derivation output projection bindings must exactly match head ports")
+    typed: dict[str, Any] = {}
+    for port_name in port_names:
+        value_type = binding_types[port_name]
+        source = bindings[port_name]
+        if not isinstance(source, Mapping):
+            raise ProtocolShapeError(f"derivation output projection term for {port_name!r} must be typed")
+        source_kind = source.get("kind")
+        source_type = "entity_ref" if source_kind == "entity_ref" else source.get("tag")
+        if source_kind not in {"entity_ref", "literal"} or not isinstance(source_type, str):
+            raise ProtocolShapeError(f"derivation output projection term for {port_name!r} is malformed")
+        value = _public_term_value(source)
+        try:
+            claim_args_from_rest_terms([(source_type, value)])
+        except ValueError as exc:
+            raise ProtocolShapeError(f"derivation output projection term for {port_name!r} contradicts its runtime tag") from exc
+        if value_type == "bytes" and isinstance(value, str):
+            try:
+                encoded_value = value.encode("ascii")
+                value = base64.b64decode(encoded_value + b"=" * (-len(encoded_value) % 4), altchars=b"-_", validate=True)
+                if base64.urlsafe_b64encode(value).rstrip(b"=") != encoded_value:
+                    raise ValueError("bytes value is not canonical base64url")
+            except (ValueError, UnicodeEncodeError, binascii.Error) as exc:
+                raise ProtocolShapeError(f"derivation output projection value for {port_name!r} is not canonical bytes") from exc
+        try:
+            _idx, canonical, canonical_type = claim_args_from_rest_terms([(value_type, value)])[0]
+        except ValueError as exc:
+            raise ProtocolShapeError(f"derivation output projection value for {port_name!r} is not {value_type!r}") from exc
+        term = (
+            {"kind": "entity_ref", "value": canonical}
+            if canonical_type == "entity_ref"
+            else {"kind": "literal", "tag": canonical_type, "value": canonical}
+        )
+        typed[port_name] = _freeze_mapping(
+            term, field_name=f"derivation_output.typed_projection.{port_name}"
+        )
+    return _freeze_mapping(typed, field_name="derivation_output.typed_projection")
+
+
+def _certainty_from_output(output: DerivationOutput) -> Certainty | None:
+    if output.confidence is None or output.confidence_kind is None:
         return BOOLEAN_CERTAINTY
-    value = _require_finite_number(candidate.confidence, field_name="CandidateSet.confidence")
-    if candidate.confidence_kind == "probability":
+    value = _require_finite_number(output.confidence, field_name="DerivationOutput.confidence")
+    if output.confidence_kind == "probability":
         return Certainty(value, value, "probabilistic")
-    if candidate.confidence_kind == "certainty":
+    if output.confidence_kind == "certainty":
         return Certainty(value, value, "possibilistic")
     return None
 
@@ -1261,21 +1619,21 @@ __all__ = [
     "BOOLEAN_CERTAINTY",
     "Certainty",
     "DetachedRowError",
-    "Explanation",
     "EvaluateResult",
     "EvaluateRow",
+    "Explanation",
+    "ResultFingerprint",
     "canonical_bytes_for_evaluate",
     "claim_digest_for",
     "closed_head_digest_for",
     "closed_head_digest_for_parts",
+    "config_digest_for",
     "evidence_ref_id_for",
     "expr_digest_for_payload",
     "new_run_id",
     "result_digest_for",
     "result_id_for",
-    "ResultFingerprint",
     "row_id_for",
     "rule_set_digest_for_entries",
-    "config_digest_for",
     "view_snapshot_digest_for_parts",
 ]

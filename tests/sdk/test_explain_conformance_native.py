@@ -2,15 +2,15 @@ from __future__ import annotations
 
 import unittest
 
-import factgraph.sdk as sdk
+from factgraph import sdk
 from factgraph.application import build_schema_index, entity_info, field_predicate, resolve_selector
-from factgraph.application.protocol import EntitySelector, Rule
 from factgraph.application.explain.evidence_tree import Holds, NotReached
 from factgraph.application.explain.prober import ProbeEnv, _probe_atom
+from factgraph.application.protocol import EntitySelector, Rule
 from factgraph.core.evidence.write_protocol import set_field
-from factgraph.core.view.projector import project_view_facts
 from factgraph.core.rules.where_ast import AggregateAtom, CmpAtom, Const, PredAtom, Var
 from factgraph.core.rules.where_eval import WhereValidationError
+from factgraph.core.view.projector import project_view_facts
 from factgraph.sdk import Entity, Field, Identity
 
 

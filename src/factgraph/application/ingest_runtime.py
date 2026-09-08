@@ -15,9 +15,15 @@ from __future__ import annotations
 from typing import Any
 
 from factgraph.core.evidence.write_protocol import retract_by_asrt
+from factgraph.core.store import Database, RevocationInput
 from factgraph.core.store.runtime import Store
 
-from .entity_write import EntityWriteError, apply_write_plan, plan_write_command
+from .entity_write import (
+    EntityWriteError,
+    _revocation_meta_entries,
+    apply_write_plan,
+    plan_write_command,
+)
 from .protocol import (
     EntityWriteCommand,
     ErrorDTO,
@@ -61,6 +67,7 @@ def apply_ingest_request(
     *,
     store: Store,
     index: SchemaIndex,
+    database: Database | None = None,
 ) -> IngestResult:
     written: list[str] = []
     skipped: list[int] = []
@@ -74,6 +81,7 @@ def apply_ingest_request(
             item,
             store=store,
             index=index,
+            database=database,
         )
         errors.extend(item_errors)
         warnings.extend(item_warnings)
@@ -97,11 +105,12 @@ def _apply_item(
     *,
     store: Store,
     index: SchemaIndex,
+    database: Database | None,
 ) -> tuple[list[ErrorDTO], list[WarningDTO], list[str], list[int]]:
     if isinstance(item, IngestRetractItem):
-        return _apply_retract(idx, item, store=store, index=index)
+        return _apply_retract(idx, item, store=store, index=index, database=database)
     if isinstance(item, (IngestSetItem, IngestAddItem)):
-        return _apply_write(idx, item, store=store, index=index)
+        return _apply_write(idx, item, store=store, index=index, database=database)
     raise IngestRuntimeError(
         f"unsupported ingest item type: {type(item).__name__}",
         code="INGEST_UNSUPPORTED_ITEM",
@@ -115,6 +124,7 @@ def _apply_write(
     *,
     store: Store,
     index: SchemaIndex,
+    database: Database | None,
 ) -> tuple[list[ErrorDTO], list[WarningDTO], list[str], list[int]]:
     op = "set" if isinstance(item, IngestSetItem) else "add"
     command = EntityWriteCommand(
@@ -133,7 +143,7 @@ def _apply_write(
         plan = plan_write_command(command, store=store, index=index)
     except (EntityWriteError, SchemaResolutionError) as exc:
         return ([_exc_to_error_dto(exc, path=("items", str(idx)))], [], [], [])
-    except Exception as exc:  # pragma: no cover - defensive
+    except Exception as exc:  # pragma: no cover - defensive  # noqa: BLE001 - write planning crosses the schema index and store adapters; every fault becomes the INGEST_PLAN_FAILED item error.
         return (
             [
                 ErrorDTO(
@@ -149,7 +159,7 @@ def _apply_write(
         )
     if not plan.can_apply:
         return (list(plan.errors), list(plan.warnings), [], [])
-    result = apply_write_plan(plan, store=store, index=index)
+    result = apply_write_plan(plan, store=store, index=index, database=database)
     written: list[str] = []
     skipped: list[int] = []
     for applied in result.applied:
@@ -166,6 +176,7 @@ def _apply_retract(
     *,
     store: Store,
     index: SchemaIndex,
+    database: Database | None,
 ) -> tuple[list[ErrorDTO], list[WarningDTO], list[str], list[int]]:
     # Slice 2 Step 4: application ingest path leg of three-layer retract guard.
     # check_retract_allowed raises RetractGuardError for INV-7c-protected
@@ -210,8 +221,31 @@ def _apply_retract(
             [],
         )
     try:
-        revoker_id = retract_by_asrt(store.ledger, item.assertion_id, dict(item.meta) or None)
-    except Exception as exc:
+        if database is None:
+            revoker_id = retract_by_asrt(
+                store.ledger,
+                item.assertion_id,
+                dict(item.meta) or None,
+            )
+        else:
+            existing_revoker = store.ledger.find_revoker(item.assertion_id)
+            if existing_revoker is not None:
+                revoker_id = existing_revoker
+            else:
+                committed = database.commit_changes(
+                    assertions=(),
+                    revocations=(
+                        RevocationInput(
+                            revoked_asrt_id=item.assertion_id,
+                            meta=_revocation_meta_entries(
+                                item.assertion_id,
+                                dict(item.meta) or None,
+                            ),
+                        ),
+                    ),
+                )
+                revoker_id = committed.revocations[0].revoker_asrt_id
+    except Exception as exc:  # noqa: BLE001 - ledger/SQLite retraction boundary; every fault becomes the INGEST_RETRACT_FAILED item error instead of a silent no-op.
         return (
             [
                 ErrorDTO(

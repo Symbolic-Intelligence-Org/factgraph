@@ -9,7 +9,6 @@ from typing import Any
 
 from factgraph.core.store.ledger import Ledger
 
-
 WORKSPACE_MANIFEST_NAME = "factgraph_workspace.json"
 WORKSPACE_VERSION = "1"
 WORKSPACE_SAVE_SCOPE = "level_4"
@@ -119,7 +118,7 @@ def copy_ledger_to_workspace(*, ledger: Ledger, target_path: str | Path) -> None
         _checkpoint_ledger(ledger)
         return
     target.parent.mkdir(parents=True, exist_ok=True)
-    source_conn = ledger._get_connection()  # noqa: SLF001 - application runtime owns workspace persistence.
+    source_conn = ledger._get_connection()  # Application runtime owns workspace persistence.
     try:
         target_conn = sqlite3.connect(str(target))
         try:
@@ -164,7 +163,7 @@ def _load_manifest(path: Path) -> dict[str, Any] | None:
 
 
 def _checkpoint_ledger(ledger: Ledger) -> None:
-    conn = ledger._get_connection()  # noqa: SLF001 - application runtime owns workspace persistence.
+    conn = ledger._get_connection()  # Application runtime owns workspace persistence.
     try:
         conn.execute("PRAGMA wal_checkpoint(FULL)")
     except sqlite3.Error:

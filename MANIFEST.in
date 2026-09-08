@@ -1,0 +1,4 @@
+prune artifacts
+prune dist
+prune build
+global-exclude __pycache__ *.py[cod] *.whl

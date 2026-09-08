@@ -5,7 +5,10 @@ from pathlib import Path
 from typing import Any
 
 from factgraph.core.protocol.digests import sha256_token
-
+from factgraph.core.schema.meta_policy import (
+    MetaKeyPolicyError,
+    validate_canonical_meta_keys,
+)
 
 CANONICAL_TAGS = {
     "entity_ref",
@@ -26,6 +29,7 @@ REQUIRED_TOP_LEVEL_KEYS = (
     "protocol_version",
     "generated_at",
 )
+OPTIONAL_TOP_LEVEL_KEYS = frozenset({"meta_keys"})
 
 REQUIRED_PROTOCOL_KEYS = ("idref_v1", "tup_v1", "export_v1")
 SCHEMA_IDENTITY_EXCLUDED_TOP_LEVEL_KEYS = frozenset({"generated_at"})
@@ -57,6 +61,11 @@ def ensure_schema_ir(schema_ir: dict) -> dict:
     _validate_entities(schema_ir["entities"])
     _validate_predicates(schema_ir["predicates"])
     _validate_projection(schema_ir["projection"])
+    if "meta_keys" in schema_ir:
+        try:
+            validate_canonical_meta_keys(schema_ir["meta_keys"])
+        except MetaKeyPolicyError as exc:
+            raise SchemaIRValidationError(str(exc)) from exc
     return schema_ir
 
 
@@ -94,15 +103,27 @@ def schema_digest(schema_ir: dict) -> str:
     return sha256_token(canonical)
 
 
-def _schema_identity_view(value: Any) -> Any:
+def _schema_identity_view(value: Any, *, strip_schema_metadata: bool = True) -> Any:
     if isinstance(value, dict):
         return {
-            key: _schema_identity_view(child)
+            key: _schema_identity_view(
+                child,
+                strip_schema_metadata=strip_schema_metadata and key != "meta_keys",
+            )
             for key, child in value.items()
-            if key not in SCHEMA_IDENTITY_EXCLUDED_TOP_LEVEL_KEYS and key != "repr"
+            if not strip_schema_metadata
+            or (
+                key not in SCHEMA_IDENTITY_EXCLUDED_TOP_LEVEL_KEYS
+                and key != "repr"
+            )
         }
     if isinstance(value, list):
-        return [_schema_identity_view(child) for child in value]
+        return [
+            _schema_identity_view(
+                child, strip_schema_metadata=strip_schema_metadata
+            )
+            for child in value
+        ]
     return value
 
 
@@ -112,7 +133,7 @@ def _validate_top_level(schema_ir: dict) -> None:
     missing = [key for key in REQUIRED_TOP_LEVEL_KEYS if key not in keys]
     if missing:
         raise SchemaIRValidationError(f"missing top-level keys: {missing}")
-    extra = sorted(keys - required)
+    extra = sorted(keys - required - OPTIONAL_TOP_LEVEL_KEYS)
     if extra:
         raise SchemaIRValidationError(
             f"unexpected top-level keys: {extra}; top-level structure is canonical"

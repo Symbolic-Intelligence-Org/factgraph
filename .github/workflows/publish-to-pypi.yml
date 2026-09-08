@@ -1,51 +1,58 @@
 name: Publish to PyPI
 
 on:
-    push:
-        tags:
-            - "v[0-9]+.[0-9]+.[0-9]+"
+  push:
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+*"
+
+permissions:
+  contents: read
 
 jobs:
-    test:
-        uses: ./.github/workflows/factgraph-tests.yml
+  test:
+    uses: ./.github/workflows/factgraph-tests.yml
 
-    build:
-        name: Build dist
-        needs: test
-        runs-on: ubuntu-latest
-        steps:
-            - uses: actions/checkout@v6
-              with:
-                  persist-credentials: false
+  consumer:
+    name: require-consumer-acceptance
+    permissions:
+      contents: read
+      statuses: read
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Verify tag version and independent consumer acceptance
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python - <<'PY'
+          import os, tomllib
+          version = tomllib.load(open('pyproject.toml', 'rb'))['project']['version']
+          if os.environ['RELEASE_TAG'] != 'v' + version:
+              raise SystemExit('Version tag does not match committed package version')
+          PY
+          python scripts/ci/require_consumer_status.py
 
-            - uses: prefix-dev/setup-pixi@v0.9.5
-              with:
-                manifest-path: pyproject.toml
-                cache: false
-
-            - run: pixi run build
-
-            - uses: actions/upload-artifact@v6
-              with:
-                  name: python-package-distributions
-                  path: dist/
-
-    publish:
-        name: Publish to PyPI
-        needs:
-            - build
-        runs-on: ubuntu-latest
-        environment:
-            name: pypi
-            url: https://pypi.org/p/factgraph
-        permissions:
-            id-token: write
-        steps:
-            - name: Download all the dists
-              uses: actions/download-artifact@v6
-              with:
-                  name: python-package-distributions
-                  path: dist/
-
-            - name: Publish dist to PyPI
-              uses: pypa/gh-action-pypi-publish@release/v1
+  publish:
+    needs: [test, consumer]
+    runs-on: ubuntu-24.04
+    environment:
+      name: pypi
+      url: https://pypi.org/p/factgraph
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v6
+        with:
+          name: factgraph-distributions
+          path: verified
+      - name: Select verified distributions only
+        run: |
+          mkdir dist
+          cp verified/build-a/*.whl verified/build-a/*.tar.gz dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1

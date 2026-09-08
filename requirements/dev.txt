@@ -1,0 +1,2 @@
+# FactGraph development dependencies.
+-e .[dev]

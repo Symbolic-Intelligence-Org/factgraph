@@ -105,20 +105,16 @@ def _where_ast_gate_enabled() -> bool:
 def _adapt_where_ast_error(exc: Exception) -> WhereValidationError:
     adapted = WhereValidationError(str(exc))
     origin_path = getattr(exc, "path", None) or "$.where"
-    setattr(adapted, "kind", "where_ast_validate")
-    setattr(adapted, "path", origin_path)
-    setattr(
-        adapted,
-        "details",
-        {
-            "ast_error_code": type(exc).__name__,
-            "message": str(exc),
-            "origin_source": None,
-            "origin_path": getattr(exc, "path", None),
-            "op": None,
-            "tag": None,
-        },
-    )
+    adapted.kind = "where_ast_validate"
+    adapted.path = origin_path
+    adapted.details = {
+        "ast_error_code": type(exc).__name__,
+        "message": str(exc),
+        "origin_source": None,
+        "origin_path": getattr(exc, "path", None),
+        "op": None,
+        "tag": None,
+    }
     return adapted
 
 
@@ -369,7 +365,7 @@ def _validate_atom(atom: Any) -> tuple[Any, ...]:
     if kind == "pred":
         if len(atom) != 3:
             raise WhereValidationError("pred atom must be ('pred', pred_id, [terms...])")
-        _, pred_id, terms = atom
+        _, _pred_id, terms = atom
         if not isinstance(terms, list):
             raise WhereValidationError("pred terms must be list")
         if any(_is_aggregate_term(term) for term in terms):
@@ -671,11 +667,10 @@ def _eval_not_atom(
 
     out: list[dict[str, Any]] = []
     for env in envs:
-        if not any(var in env for var in vars_in_not_body):
-            if not ast_gate_on:
-                raise WhereValidationError(
-                    "not body must reference at least one outer bound variable"
-                )
+        if not any(var in env for var in vars_in_not_body) and not ast_gate_on:
+            raise WhereValidationError(
+                "not body must reference at least one outer bound variable"
+            )
         correlated_vars = sorted(var for var in vars_in_not_body if var in env)
         if len(not_branches) > 1 and correlated_vars:
             for branch in not_branches:
@@ -1146,9 +1141,7 @@ def _is_literal(value: Any) -> bool:
         return True
     if isinstance(value, int):
         return True
-    if isinstance(value, str) and not value.startswith("$"):
-        return True
-    return False
+    return isinstance(value, str) and not value.startswith("$")
 
 
 def _is_aggregate_term(value: Any) -> bool:
@@ -1259,7 +1252,7 @@ def _visible_vars_in_term(term: Any, bound_vars: set[str]) -> set[str]:
     if _is_var(term):
         return {term}
     if _is_aggregate_term(term):
-        kind, target, filter_atoms = term
+        _kind, target, filter_atoms = term
         target_vars = _visible_vars_in_term(target, bound_vars) if target is not None else set()
         filter_vars = set(_vars_in_atoms(filter_atoms))
         return target_vars | (filter_vars & bound_vars)

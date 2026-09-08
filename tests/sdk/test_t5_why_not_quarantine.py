@@ -4,11 +4,10 @@ import inspect
 import unittest
 
 import factgraph.sdk as factgraph_sdk
-from factgraph.application import build_schema_index, entity_info, resolve_selector
+from factgraph.application import build_schema_index, entity_info, resolve_selector, why_not_runtime
 from factgraph.application.protocol import EntitySelector, Explanation, Rule, WhyNotUniverseResult
 from factgraph.application.protocol import derivation_why_not as why_not_protocol
 from factgraph.application.protocol import evaluate_result as evaluate_result_protocol
-from factgraph.application import why_not_runtime
 from factgraph.core.evidence.write_protocol import set_field
 from factgraph.core.rules.where_ast import Const, PredAtom, Var
 from factgraph.sdk import Entity, Field, Identity, SDKStore

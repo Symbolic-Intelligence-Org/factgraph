@@ -307,15 +307,6 @@ the migration CLI for legacy workspaces.
     surface after Q8 Phase 2 (Slice 6); `fg.inferences.*` is an empty
     namespace. Persistence helpers were removed.
 - filesystem registry adapters were removed in A20(E) / Q6-A.
-- `service`
-  - The service layer exposes rules validation/preview and runtime execution,
-    not filesystem registry reads.
-- `ecss`
-  - `domains.ecss` provides shared domain presets (e.g. ECSS VCD
-    predicates, Scenario A's first-round temporal / uncertainty
-    predicates)
-  - `authoring` can consume these presets into the schema / registry
-    workflow but does not own the presets themselves
 - `audit`
   - `audit` reads exported packages; it does not consume the
     authoring registry directly

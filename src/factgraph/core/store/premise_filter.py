@@ -3,8 +3,9 @@
 A configured ``MetaExclusion`` makes every assertion whose meta ``key``
 currently carries a value in ``values`` invisible to rule evaluation: the
 assertion can neither support a derivation nor block one through negation.
-For evaluation, the assertion does not exist. Key and values are pure
-configuration — no consumer vocabulary is hardcoded here.
+For evaluation, the assertion does not exist. Keys are closed by the current
+Schema IR: only the two decision-pinned built-ins or keys explicitly declared
+``premise_eligible=true`` may be configured.
 
 A configured ``PredicatePremiseAllowance`` narrows a SINGLE predicate: for
 assertions of that predicate, only those whose meta ``key`` currently carries
@@ -18,19 +19,18 @@ pure configuration; no consumer vocabulary is hardcoded here.
 Visibility semantics (single logic, shared by every projection):
 
 - LAST-WINS per ``(asrt_id, key)``: only the most recent meta row under the
-  exclusion key decides, mirroring the canonical SDK meta read
-  (``_meta_raw_for_assertion`` in sdk/facade.py, which dict-overwrites per
-  key in iteration order). A later ``Ledger.append_meta`` reclassification
-  therefore moves an assertion INTO or OUT OF the excluded class for
-  evaluation exactly as every read path reports it.
+  exclusion key decides through the shared ``Ledger.effective_meta_rows``
+  event resolver. A later ``Ledger.append_meta`` reclassification therefore
+  moves an assertion INTO or OUT OF the excluded class for evaluation exactly
+  as every effective read path reports it.
 - LIVE per access: nothing is snapshotted at wrapper construction. A fact
   (or revoker) written or reclassified while an evaluation is running is
   judged the moment it becomes readable — evaluation can never diverge from
   the ledger state it actually reads. Baseline semantics for assertions
   without a configured key are identical to the unfiltered ledger.
 
-Both properties hinge on ``is_premise_excluded`` below; see its docstring
-for the ``find_meta`` ordering guarantee.
+Both properties hinge on ``is_premise_excluded`` below and the shared
+``(tx_seq, op_ordinal)`` effective-meta ordering guarantee.
 
 Scope (deliberate):
 
@@ -84,6 +84,7 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from typing import Any
 
+from factgraph.core.schema.meta_policy import require_premise_eligible_meta_key
 from factgraph.core.store.ledger import (
     AnnotationRow,
     Claim,
@@ -114,7 +115,7 @@ class MetaExclusion:
         if not isinstance(self.key, str) or not self.key:
             raise ValueError("MetaExclusion.key must be non-empty string")
         if isinstance(self.values, str):
-            raise ValueError(
+            raise ValueError(  # noqa: TRY004 - a str is iterable; this is a value-shape config rejection
                 "MetaExclusion.values must be an iterable of strings, not a single string"
             )
         try:
@@ -155,9 +156,9 @@ class PredicatePremiseAllowance:
         if not isinstance(self.key, str) or not self.key:
             raise ValueError("PredicatePremiseAllowance.key must be non-empty string")
         if not isinstance(self.absent_ok, bool):
-            raise ValueError("PredicatePremiseAllowance.absent_ok must be bool")
+            raise ValueError("PredicatePremiseAllowance.absent_ok must be bool")  # noqa: TRY004 - premise configuration rejections are one ValueError contract
         if isinstance(self.allowed_values, str):
-            raise ValueError(
+            raise ValueError(  # noqa: TRY004 - a str is iterable; this is a value-shape config rejection
                 "PredicatePremiseAllowance.allowed_values must be an iterable of strings, "
                 "not a single string"
             )
@@ -206,7 +207,7 @@ class PredicatePremiseBlock:
         if not isinstance(self.key, str) or not self.key:
             raise ValueError("PredicatePremiseBlock.key must be non-empty string")
         if isinstance(self.blocked_values, str):
-            raise ValueError(
+            raise ValueError(  # noqa: TRY004 - a str is iterable; this is a value-shape config rejection
                 "PredicatePremiseBlock.blocked_values must be an iterable of strings, "
                 "not a single string"
             )
@@ -242,14 +243,14 @@ def normalize_premise_exclusions(
         ) from exc
     for item in normalized:
         if not isinstance(item, MetaExclusion):
-            raise ValueError(
+            raise ValueError(  # noqa: TRY004 - normalizer folds TypeError into its ValueError contract
                 f"premise_exclusions entries must be MetaExclusion, got {type(item).__name__}"
             )
     return normalized
 
 
 def normalize_premise_allowances(
-    allowances: "PredicatePremiseAllowance | Iterable[PredicatePremiseAllowance] | None",
+    allowances: PredicatePremiseAllowance | Iterable[PredicatePremiseAllowance] | None,
 ) -> tuple[PredicatePremiseAllowance, ...]:
     """Normalize the per-predicate allowance input to a validated tuple (empty = disabled).
 
@@ -270,7 +271,7 @@ def normalize_premise_allowances(
     seen: set[str] = set()
     for item in normalized:
         if not isinstance(item, PredicatePremiseAllowance):
-            raise ValueError(
+            raise ValueError(  # noqa: TRY004 - normalizer folds TypeError into its ValueError contract
                 "premise_allowances entries must be PredicatePremiseAllowance, "
                 f"got {type(item).__name__}"
             )
@@ -281,7 +282,7 @@ def normalize_premise_allowances(
 
 
 def normalize_premise_blocks(
-    blocks: "PredicatePremiseBlock | Iterable[PredicatePremiseBlock] | None",
+    blocks: PredicatePremiseBlock | Iterable[PredicatePremiseBlock] | None,
 ) -> tuple[PredicatePremiseBlock, ...]:
     """Normalize the per-predicate blocklist input to a validated tuple (empty = disabled).
 
@@ -303,7 +304,7 @@ def normalize_premise_blocks(
     seen: set[str] = set()
     for item in normalized:
         if not isinstance(item, PredicatePremiseBlock):
-            raise ValueError(
+            raise ValueError(  # noqa: TRY004 - normalizer folds TypeError into its ValueError contract
                 "premise_blocks entries must be PredicatePremiseBlock, "
                 f"got {type(item).__name__}"
             )
@@ -313,6 +314,28 @@ def normalize_premise_blocks(
     return normalized
 
 
+def validate_premise_configuration(
+    schema_ir: Mapping[str, Any],
+    exclusions: tuple[MetaExclusion, ...] = (),
+    allowances: tuple[PredicatePremiseAllowance, ...] = (),
+    blocks: tuple[PredicatePremiseBlock, ...] = (),
+) -> None:
+    """Close every premise/visibility key against the current schema policy."""
+
+    for item in exclusions:
+        require_premise_eligible_meta_key(
+            schema_ir, item.key, context="MetaExclusion"
+        )
+    for item in allowances:
+        require_premise_eligible_meta_key(
+            schema_ir, item.key, context="PredicatePremiseAllowance"
+        )
+    for item in blocks:
+        require_premise_eligible_meta_key(
+            schema_ir, item.key, context="PredicatePremiseBlock"
+        )
+
+
 def is_premise_excluded(
     ledger: Ledger,
     asrt_id: str,
@@ -320,20 +343,16 @@ def is_premise_excluded(
 ) -> bool:
     """THE visibility decision — last-wins per exclusion key, read live from ``ledger``.
 
-    Per key only the LAST meta row under ``(asrt_id, key)`` decides, matching
-    the canonical SDK meta read (``_meta_raw_for_assertion``, sdk/facade.py:
-    dict-overwrite per key in iteration order). Ordering guarantee:
-    ``Ledger.find_meta(asrt_id=, key=)`` serves ``_meta_by_asrt_id_key``,
-    which ``_idx_add_meta`` appends to in write order and which
-    ``_load_from_db_via`` rebuilds with ``ORDER BY id`` — the last list entry
-    is therefore always the most recently written row, live and after
-    reload. Only string meta values participate in matching (FG free meta
-    keys allow scalars; a non-string last value never matches).
+    Per key only the event with maximal ``(tx_seq, op_ordinal)`` decides,
+    through the same resolver used by AssertionMeta and audit as-of replay.
+    An UNSET winner is missing. Only string effective values participate in
+    matching (FG free meta keys allow scalars; a non-string value never
+    matches).
 
     Cost per call: one indexed dict lookup per configured exclusion.
     """
     for exclusion in exclusions:
-        rows = ledger.find_meta(asrt_id=asrt_id, key=exclusion.key)
+        rows = ledger.effective_meta_rows(asrt_id=asrt_id, key=exclusion.key)
         if not rows:
             continue
         last_value = rows[-1].value
@@ -371,7 +390,7 @@ def is_predicate_premise_excluded(
     allowance = allowances_by_pred.get(claim.pred_id)
     if allowance is None:
         return False
-    rows = ledger.find_meta(asrt_id=asrt_id, key=allowance.key)
+    rows = ledger.effective_meta_rows(asrt_id=asrt_id, key=allowance.key)
     if not rows:
         return not allowance.absent_ok
     last_value = rows[-1].value
@@ -406,7 +425,7 @@ def is_predicate_premise_blocked(
     block = blocks_by_pred.get(claim.pred_id)
     if block is None:
         return False
-    rows = ledger.find_meta(asrt_id=asrt_id, key=block.key)
+    rows = ledger.effective_meta_rows(asrt_id=asrt_id, key=block.key)
     if not rows:
         return False
     last_value = rows[-1].value
@@ -416,8 +435,8 @@ def is_predicate_premise_blocked(
 def premise_scoped_ledger(
     ledger: Ledger,
     exclusions: MetaExclusion | Iterable[MetaExclusion] | None,
-    allowances: "PredicatePremiseAllowance | Iterable[PredicatePremiseAllowance] | None" = None,
-    blocks: "PredicatePremiseBlock | Iterable[PredicatePremiseBlock] | None" = None,
+    allowances: PredicatePremiseAllowance | Iterable[PredicatePremiseAllowance] | None = None,
+    blocks: PredicatePremiseBlock | Iterable[PredicatePremiseBlock] | None = None,
 ) -> Ledger:
     """Return ``ledger`` unchanged when nothing is configured, else a live filtered view.
 
@@ -482,11 +501,9 @@ class _PremiseExcludedLedger(Ledger):
             self._base, asrt_id, self._allowances_by_pred
         ):
             return False
-        if is_predicate_premise_blocked(
+        return not is_predicate_premise_blocked(
             self._base, asrt_id, self._blocks_by_pred
-        ):
-            return False
-        return True
+        )
 
     def _filter_claims(self, claims: Iterable[Claim]) -> list[Claim]:
         return [claim for claim in claims if self._is_visible(claim.asrt_id)]
@@ -495,6 +512,11 @@ class _PremiseExcludedLedger(Ledger):
         if not self._is_visible(asrt_id):
             return None
         return self._base.get_claim(asrt_id)
+
+    def claim_sequence(self, asrt_id: str) -> int | None:
+        if not self._is_visible(asrt_id):
+            return None
+        return self._base.claim_sequence(asrt_id)
 
     def find_claims(self, pred_id: str | None = None, e_ref: str | None = None) -> list[Claim]:
         return self._filter_claims(self._base.find_claims(pred_id=pred_id, e_ref=e_ref))
@@ -520,6 +542,30 @@ class _PremiseExcludedLedger(Ledger):
             return []
         rows = self._base.find_meta(asrt_id=asrt_id, key=key, kind=kind)
         return [row for row in rows if self._is_visible(row.asrt_id)]
+
+    def effective_meta_rows(
+        self,
+        *,
+        asrt_id: str | None = None,
+        key: str | None = None,
+        kind: str | None = None,
+        as_of: tuple[int, int] | None = None,
+    ) -> tuple[MetaRow, ...]:
+        if asrt_id is not None and not self._is_visible(asrt_id):
+            return ()
+        rows = self._base.effective_meta_rows(
+            asrt_id=asrt_id,
+            key=key,
+            kind=kind,
+            as_of=as_of,
+        )
+        return tuple(row for row in rows if self._is_visible(row.asrt_id))
+
+    def _latest_meta_event_sequence(self) -> tuple[int, int] | None:
+        return self._base._latest_meta_event_sequence()
+
+    def latest_event_sequence(self) -> tuple[int, int] | None:
+        return self._base.latest_event_sequence()
 
     def find_annotations(
         self,
@@ -628,11 +674,12 @@ __all__ = [
     "MetaExclusion",
     "PredicatePremiseAllowance",
     "PredicatePremiseBlock",
-    "is_premise_excluded",
-    "is_predicate_premise_excluded",
     "is_predicate_premise_blocked",
-    "normalize_premise_exclusions",
+    "is_predicate_premise_excluded",
+    "is_premise_excluded",
     "normalize_premise_allowances",
     "normalize_premise_blocks",
+    "normalize_premise_exclusions",
     "premise_scoped_ledger",
+    "validate_premise_configuration",
 ]

@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import copy
-from dataclasses import replace
 import tempfile
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -14,7 +14,7 @@ from factgraph.adapters.problog.problog_import import parse_problog_output
 from factgraph.adapters.problog.provenance import parse_problog_trace, problog_trace_to_dict
 from factgraph.adapters.problog.rule_ext import resolve_problog_engine_ext
 from factgraph.adapters.souffle.where_compile import extract_where_variables
-from factgraph.core.derivation.candidates import CandidateSet
+from factgraph.core.derivation.candidates import DerivationOutput
 from factgraph.core.rules.where_eval import WhereValidationError
 from factgraph.core.semantics import SemanticsProfile
 from factgraph.core.store import builders as store_builders
@@ -39,7 +39,7 @@ def evaluate_problog(
     engine_ext: EngineExtBase | None = None,
     engine_options: dict[str, Any] | None = None,
     semantics_profile: SemanticsProfile | None = None,
-) -> list[CandidateSet]:
+) -> list[DerivationOutput]:
     """Evaluate a derivation through the ProbLog adapter."""
     del mode
     resolved_engine_ext = resolve_problog_engine_ext(
@@ -112,15 +112,15 @@ def evaluate_problog(
 
     parse_spec = dict(rule_spec)
     parse_spec["store"] = store
-    candidates = parse_problog_output(raw_output, parse_spec, store.ledger)
-    candidates = _attach_problog_provenance(
+    outputs = parse_problog_output(raw_output, parse_spec, store.ledger)
+    outputs = _attach_problog_provenance(
         store,
-        candidates,
+        outputs,
         raw_output,
         projection_decisions=projection_decisions,
     )
-    _remember_pending_probability_annotations(store, candidates)
-    return candidates
+    _remember_pending_probability_annotations(store, outputs)
+    return outputs
 
 
 def resolve_problog_timeout(engine_options: dict[str, Any] | None) -> int:
@@ -129,7 +129,7 @@ def resolve_problog_timeout(engine_options: dict[str, Any] | None) -> int:
     if engine_options is None:
         return default_timeout
     if not isinstance(engine_options, dict):
-        raise ValueError(
+        raise ValueError(  # noqa: TRY004 - Documented engine_options rejections stay ValueError (ProbLog adapter docs 6A).
             f"ProbLog engine_options must be dict[str, Any] or None, got {type(engine_options).__name__}"
         )
 
@@ -148,9 +148,9 @@ def resolve_problog_timeout(engine_options: dict[str, Any] | None) -> int:
 
 def _remember_pending_probability_annotations(
     store: Any,
-    candidates: list[CandidateSet],
+    outputs: list[DerivationOutput],
 ) -> None:
-    if not isinstance(candidates, list) or not candidates:
+    if not isinstance(outputs, list) or not outputs:
         return
     if not hasattr(store, "_problog_pending_annotations"):
         store._problog_pending_annotations = {}
@@ -158,42 +158,42 @@ def _remember_pending_probability_annotations(
     if not isinstance(pending_by_run, dict):
         return
 
-    for candidate in candidates:
-        if not isinstance(candidate, CandidateSet):
+    for output in outputs:
+        if not isinstance(output, DerivationOutput):
             continue
-        if candidate.candidate_kind != "fact":
+        if output.candidate_kind != "fact":
             continue
-        if candidate.confidence is None:
+        if output.confidence is None:
             continue
-        run_pending = pending_by_run.setdefault(candidate.run_id, {})
+        run_pending = pending_by_run.setdefault(output.run_id, {})
         if not isinstance(run_pending, dict):
             continue
-        run_pending[candidate.candidate_id] = [
+        run_pending[output.candidate_id] = [
             {
                 "namespace": "problog",
                 "category": "semantic",
                 "key": "probability",
                 "kind": "float",
-                "value": float(candidate.confidence),
+                "value": float(output.confidence),
                 "origin": "derived",
-                "derivation": candidate.derivation_id,
+                "derivation": output.derivation_id,
             }
         ]
 
 
 def _attach_problog_provenance(
     store: Any,
-    candidates: list[CandidateSet],
+    outputs: list[DerivationOutput],
     raw_output: str,
     *,
     projection_decisions: dict[str, dict[str, Any]] | None = None,
-) -> list[CandidateSet]:
-    if not candidates or not isinstance(raw_output, str):
-        return candidates
+) -> list[DerivationOutput]:
+    if not outputs or not isinstance(raw_output, str):
+        return outputs
 
     trace = parse_problog_trace(raw_output)
     if not trace.events:
-        return candidates
+        return outputs
     trace_dict = problog_trace_to_dict(trace)
     if projection_decisions:
         trace_dict["uncertainty_projections"] = {
@@ -201,10 +201,10 @@ def _attach_problog_provenance(
             "decisions_by_asrt_id": copy.deepcopy(projection_decisions),
         }
 
-    attached: list[CandidateSet] = []
-    for candidate in candidates:
+    attached: list[DerivationOutput] = []
+    for output in outputs:
         envelope = ProvenanceEnvelope(
-            candidate_id=candidate.candidate_id,
+            candidate_id=output.candidate_id,
             engine="problog",
             payload_type="proof_trace",
             payload=copy.deepcopy(trace_dict),
@@ -213,7 +213,7 @@ def _attach_problog_provenance(
         store._remember_provenance_envelope(support_digest, envelope)
         attached.append(
             replace(
-                candidate,
+                output,
                 support_digest=support_digest,
                 support_kind=PROBLOG_PROVENANCE_KIND,
             )

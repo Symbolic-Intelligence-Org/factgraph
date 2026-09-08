@@ -1,7 +1,7 @@
 # Overview of the Application Module (`factgraph`)
 
 - Scope: `src/factgraph/application`
-- Last updated: 2026-06-08
+- Last updated: 2026-08-30
 - Target readers: developers who need to understand Python runtime authority, SDK adapter boundaries, and service/agent consumer constraints
 
 ## 1. Module Responsibilities
@@ -47,9 +47,11 @@ It is not responsible for:
   - `entity_read.py`: read request/response, snapshot, field value/assertion DTOs
   - `entity_write.py`: write command/plan/result DTOs
   - `query.py`: `QueryRuntimeRequest` / `QueryRuntimeResponse` / return contract
+  - `relation_query.py`: published stored-field/relation/path graph DTOs,
+    typed bindings and ordered selection DTOs. See `relation_query.md`.
   - `ingest.py`: normalized ingest item/request/result DTOs
   - `derivation.py`: compiled derivation evaluate/accept request DTOs
-  - `derivation_check.py`: explicit-binding Check protocol DTOs (`CheckRequest` / `CheckResult` / `EvidenceEnvelope`)
+  - `derivation_check.py`: explicit-binding Check protocol DTOs (`CheckRequest` / `CheckResult` / `EvidenceEnvelope`); the envelope records `as_of_event_seq=(tx_seq, op_ordinal)` while the proof body remains content-addressed independently
   - `derivation_diagnose.py`: explicit-binding Diagnose protocol DTOs (`DiagnoseRequest` / `DiagnoseResult` / `DiagnoseConditionLocator`)
   - `derivation_fact_overlay.py`: Fact Overlay Check protocol DTOs and shared overlay actions (`FactOverlayCheckRequest` / `FactOverlayCheckResult` / `FactOverlay` / `ReplaceFact` / `RemoveFact` / `RuleDisableAction` / `RuleLiteralReplaceAction` / `RuleAddConditionAction`)
   - `proofframe.py`: ProofFrame Rechecker protocol DTOs (`ProofFrameRecheckRequest` / `ProofFrameRecheckResult` / `ProofFrameConditionVerdict` / `ProofFrameStatus`)
@@ -73,6 +75,12 @@ It is not responsible for:
   - `plan_write_command(...)`, `apply_write_plan(...)`
 - `query_runtime.py`
   - `execute_query(...)`
+- `relation_query_runtime.py`
+  - `compile_published_relation_query(...)` admits a server-resolved published
+    stored-relation graph against the exact schema and returns a sealed,
+    digest-pinned native invocation; `execute_published_relation_query(...)`
+    executes only that compiler product over the current projected view. See
+    `relation_query.md`.
 - `ingest_runtime.py`
   - `apply_ingest_request(...)`
 - `authoring_runtime.py`
@@ -96,7 +104,15 @@ It is not responsible for:
     `added_fields`. Destructive delete/update/migrate planning is deliberately
     outside this module's first slices.
 - `derivation_runtime.py`
-  - `evaluate_derivation_plans(...)`, `accept_derivation_candidate_set(...)`, `accept_derivation_candidate_sets(...)`
+  - `evaluate_derivation_plans(...)` returns canonical read-only
+    `DerivationOutput` values. The separately named legacy materialization
+    wrappers remain compatibility surface: single-item acceptance uses a
+    private Store-owned accept-time enrichment seam while preserving separate
+    compiler-output and trusted business-rule provenance; direct `Store.accept`
+    remains identity-strict. Batch acceptance delegates to `Store.accept_many`,
+    rejects `dry_run=True`, and rejects one `identity_override` applied to
+    multiple outputs.
+  - `accept_derivation_candidate_set(...)`, `accept_derivation_candidate_sets(...)`
 - `derivation_check_runtime.py`
   - `check_derivation_binding(...)`: verifies a complete or partial binding against a single compiled derivation plan; native/souffle/problog/pyreason are handled through representability-gated final-result matching.
 - `diagnose_runtime.py`
@@ -204,7 +220,11 @@ Current SDK runtime delegation:
 - `sdk.get(...)` / `sdk.find(...)` use application read/hydration DTOs.
 - `SDKBatchTx.preview()` and `BatchPlan.apply()` delegate to application write planning/apply when staged operations can be represented by application protocol.
 - `sdk.run(Query(...))` lowers SDK `Query` to application `QueryRuntimeRequest`, then maps application `EntitySnapshotDTO` rows back to SDK `EntitySnapshot` / dict / instance shapes.
-- `sdk.schema.ingest(...)` keeps SDK descriptor parsing and diagnostics, then delegates cache-resolvable normalized set/add/retract items to `apply_ingest_request(...)`; cache misses fall back to the legacy SDK write path.
+- `sdk.schema.ingest(...)` keeps SDK descriptor parsing and diagnostics, then
+  delegates cache-resolvable normalized set/add/retract items to
+  `apply_ingest_request(...)`. Identity-cache misses fail closed on every
+  Database-backed lifecycle; the legacy SDK direct-write fallback survives
+  only under unmanaged `FactGraph.from_schema_classes(...)`.
 - `sdk.eval.evaluate(...)` / compiled derivation evaluate delegate compiled plans to `evaluate_derivation_plans(...)`.
 - `sdk.check(...)` / `sdk.diagnose(...)` (G1), `sdk.why_not(...)` (G4), `sdk.check_fact_overlay(...)` / `sdk.recheck_proof_frame(...)` (G2), `sdk.check_rule_disable(...)` / `sdk.check_rule_literal_replace(...)` / `sdk.check_rule_add_condition(...)` (G3), and `sdk.audit.diff_proof_frames(...)` (G5) are the L Direction SDK shell consumers of the capability helper / application protocol / audit packages. G1 + G4 lower SDK `Derivation` inputs and call `build_check_request(...)` / `build_diagnose_request(...)` / `build_why_not_candidate_universe(...)` before delegating to `check_derivation_binding(...)` / `diagnose_derivation_binding(...)` / `check_why_not_universe(...)`. G2 Fact Overlay reuses the same SDK `Derivation` lowering path and constructs `FactOverlayCheckRequest(...)` directly with a raw `FactOverlay` (no A-side helper); G2 ProofFrame Recheck takes a raw `ProofReceipt` + raw `FactOverlay` and constructs `ProofFrameRecheckRequest(...)` directly (no derivation lowering, no registry resolution, no engine arg). G3 lowers SDK `Rule` inputs through `_compile_rule_input(...)` to `RuleSpec`, accepts raw `ProofReceipt` + raw `ConditionPath` / `AddedCondition`, and calls `build_rule_disable_request(...)` / `build_rule_literal_replace_request(...)` / `build_rule_add_condition_request(...)` before delegating to `check_rule_disable_action(...)` / `check_rule_literal_replace_action(...)` / `check_rule_add_condition_action(...)`. G5 ProofFrame Diff is the simplest shape: pure pass-through over `factgraph.audit.proof_frame_diff.build_proof_frame_diff(...)` taking two raw `tuple[RoundEvent, ...]` (`factgraph.audit.round_events.RoundEvent`) + raw `tuple[WarningDTO, ...]` and returning raw `ProofFrameDiff` (`factgraph.audit.proof_frame_diff.ProofFrameDiff`); no derivation/rule lowering, no registry, no engine, no IO. All nine L methods reuse `factgraph.sdk.shells._validation` validators — `validate_derivation(...)` (G1+G4+G2 Fact Overlay), `validate_evaluation_overlay(...)` (G2 Fact Overlay + G2 ProofFrame Recheck), `validate_rule(...)` / `validate_support_artifact(...)` / `validate_optional_evaluation_overlay(...)` (G3) — except G5 which uses inline `isinstance` validation per §5.5 (only one G5 shell consumes `RoundEvent` tuples; no extraction trigger fires). All nine remap non-SDK exceptions to `SDKStoreError(...) from exc` with capability-specific paths.
 - **L cross-boundary DTO layer rule (locked at G5 §5.3 / §6):** raw cross-boundary DTOs at the SDK boundary must be "frozen canonical DTOs above `factgraph.core` using `factgraph.application.protocol` vocabulary". This includes both `factgraph.application.protocol` frozen DTOs (G2/G3) and `factgraph.audit` frozen DTOs (G5: `RoundEvent`, `ProofFrameDiff`, etc.); excludes `factgraph.core.*` substrate IR (e.g., `RuleSpec`, which the G3 SDK shells lower internally rather than accept directly).
@@ -216,6 +236,13 @@ SDK outward behavior remains the compatibility contract for end users; applicati
 ## 5.5 Durable Round Persistence Boundary
 
 Application capability runtimes return stable protocol DTOs, but they do not emit audit events internally. Batch 6 round persistence is owned by `factgraph.audit.round_events` and is invoked by an external caller/recorder after a capability result exists.
+
+Every passed Check `EvidenceEnvelope` captures the current inclusive ledger
+event boundary in `as_of_event_seq`. Normal proof verification deliberately
+continues to use latest-effective metadata. Audit/explain callers can replay
+metadata at the recorded boundary through `factgraph.audit.meta_history`; the
+field is provenance context and is not part of `ProofReceipt` canonical bytes
+or `support_digest`.
 
 Current persistable first-slice result surfaces are:
 
@@ -312,5 +339,5 @@ Key focused tests:
 
 ## 8. Related Documents
 
-- [docs/architecture_principles.md](../../../../docs/architecture_principles.md)
+- [src/factgraph/core/docs/01_architecture.en.md](../../core/docs/01_architecture.en.md)
 - [src/factgraph/sdk/docs/README.md](../../sdk/docs/README.md)

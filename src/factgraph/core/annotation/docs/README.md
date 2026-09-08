@@ -110,8 +110,8 @@ implementation".
 - Does not enter the formal `Store.evaluate(...)` public contract
 - Does not own `confidence_kind` producer routing; annotation only
   consumes the determined semantic lane
-- Does not modify the stable structure of `CandidateSet`
-- Does not write certainty summary back to `CandidateSet`,
+- Does not modify the stable structure of `DerivationOutput` / its legacy `CandidateSet` alias
+- Does not write certainty summary back to `DerivationOutput`,
   `ProofReceipt`, or the core 12-field summary of the evidence
   tree
 - Structured `certainty_summary` is exposed only as a

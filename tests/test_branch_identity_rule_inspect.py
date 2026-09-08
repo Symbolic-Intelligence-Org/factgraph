@@ -5,7 +5,8 @@ from __future__ import annotations
 import unittest
 
 from factgraph.authoring.rule_compile import AuthoringRuleCompileError, compile_authoring_rule_v1
-from factgraph.sdk import Case, EmitSpec, Inference, Pred, SDKStore, vars as sdk_vars
+from factgraph.sdk import Case, EmitSpec, Inference, Pred, SDKStore
+from factgraph.sdk import vars as sdk_vars
 from factgraph.sdk.dsl import Rule
 from factgraph.sdk.dsl.errors import SDKDSLError
 from factgraph.sdk.schema import Entity, Field, Identity
@@ -114,9 +115,11 @@ class BranchIdentityConstructionTests(unittest.TestCase):
             ("probability", 0.9),
             ("engine_ext", object()),
         ):
-            with self.subTest(keyword=keyword):
-                with self.assertRaises((TypeError, SDKDSLError)):
-                    Case([Pred("user:tag_seed", "$u", "$tag")], **{keyword: value})
+            with (
+                self.subTest(keyword=keyword),
+                self.assertRaises((TypeError, SDKDSLError)),
+            ):
+                Case([Pred("user:tag_seed", "$u", "$tag")], **{keyword: value})
 
 
 class RuleInspectTests(unittest.TestCase):

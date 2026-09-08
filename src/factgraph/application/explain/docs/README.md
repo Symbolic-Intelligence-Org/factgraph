@@ -1,7 +1,7 @@
 # Application Explain Module
 
 - Scope: `src/factgraph/application/explain`
-- Last updated: 2026-06-10
+- Last updated: 2026-08-13
 - Audience: developers building explain consumers, adapter writers, SDK layer maintainers, and test authors
 
 ---
@@ -19,6 +19,9 @@ Files:
   joins.
 - `prober.py` — `probe_native(...)`, `ProbeEnv`, native atom probing, row
   anchoring, and native `repr_text` baking.
+- `structure_keys.py` — shared key minting helpers for branch-local atom ids,
+  join ids, and occurrence ownership. Runtime evidence assembly and static
+  rule structure projection both use these helpers.
 - `__init__.py` — re-export surface for application-layer callers and tests.
 
 The legacy flat-DAG evidence model (`EvidenceNode`, `EvidenceEdge`,
@@ -36,10 +39,18 @@ thin compatibility facade over the paths model.
 
 Core tree DTOs:
 
-- `EvidenceTree(tree_id, status, rules, joins, certainty, metadata)`
+- `EvidenceTree(tree_id, status, rules, joins, certainty, metadata, policy_conditions=())`
 - `EvidenceRule(occurrence_alias, rule_id, role, status, ports, atoms)`
 - `EvidenceAtom(form, verdict, atom_id, repr_text, negated=False, timestep=None)`
 - `EvidenceJoin(left, right, status, join_id)`
+
+`policy_conditions` is empty for ordinary RuleExpr evidence. When a managed
+Policy uses a direct comparison, it contains compiler-owned
+`EvidencePolicyCondition(policy_node_id, condition_id, role, atom)` values for
+the optional `left_field` / `right_field` lookup and the final `compare` atom.
+They are Policy evidence, not atoms of a reusable `EvidenceRule`; this prevents
+an injected navigation lookup from being presented as authored Rule logic. The
+legacy serialized tree shape remains unchanged when this tuple is empty.
 
 `role` is either `"head"` or `"body"`. Native trees include a separate head
 rule and one body rule per real `RuleExpr` occurrence.
@@ -49,6 +60,19 @@ rule and one body rule per real `RuleExpr` occurrence.
 - `Holds(certainty=BOOLEAN_CERTAINTY, support=())`
 - `Fails(certainty=BOOLEAN_CERTAINTY)`
 - `NotReached(blocked_by=...)`
+
+`Holds.support` carries the provenance `Source`(s) backing the atom. The reach
+(souffle/problog via `diagnostic_assemble`) and native (`prober`) paths populate
+it for holding **Fact** atoms — one `Source` per matched EDB fact (a stable `ref`,
+a readable `value`, and `{engine, predicate}` `meta`). Compare / Builtin / Aggregate
+atoms have no backing fact, so their support stays empty.
+
+`Fails.support` symmetrically carries the *refuting* fact(s) for a failing Fact
+atom — the actual EDB fact(s) that share the atom's owner key but carry a different
+value (`meta["role"]="refuting"`, `meta["actual"]` = the actual terms); e.g.
+`project:active(P1, False)` behind a failed `== True`, or `assignment:user(AP1,
+Alice)` behind a failed `== Carol`. A pure absence (no fact for that owner) and
+unary existence facts keep empty support. `NotReached` carries none.
 
 `NotReached` is reserved for direct unbound-variable dependencies. It is not a
 generic "previous atom failed" marker. After an upstream failure, the prober
@@ -68,6 +92,9 @@ def probe_native(
     bindings: Mapping[str, Any] | None,
     view_facts: Mapping[str, Sequence[tuple[Any, ...]]],
     schema_index: object | None = None,
+    *,
+    rules_by_id: Mapping[str, Any] | None = None,
+    subject_binding: Mapping[str, Any] | None = None,
 ) -> EvidenceProbeResult:
 ```
 
@@ -90,6 +117,15 @@ the same lowering plan. This covers inline, projection, and external heads, plus
 branch-specific aliases for OR and join-heavy rule expressions. The seed builder
 lives outside this module, but `probe_native(...)` depends on receiving the
 lowered variable names it actually evaluates.
+
+The seed (a row's port bindings, or a closed head's pins on the failure path) is
+expanded **transitively** over the branch join / head-link eq-atoms before
+probing (`transitively_expand_seed`): an occurrence-local variable reached only
+through a cross-occurrence join is pinned to the value its join partner carries,
+so a non-holding subject's culprit is attributed to the failing occurrence atom
+rather than to a head-link the prober reaches last. Purely existential joins
+(neither endpoint seeded) stay free. On a holding row the expansion is an
+identity extension, so the holding result is unchanged.
 
 ---
 
@@ -127,10 +163,17 @@ flag and repr text are display metadata.
 
 - **Native** uses `probe_native(...)` for passed rows and closed-head-false
   failures.
-- **Souffle** converters produce `EvidenceTree` paths with head/body rules and
-  atom support.
-- **ProbLog** converters produce one `EvidenceTree` per answer/proof path and
-  probabilistic certainty.
+- **Souffle** uses a dedicated reach-chain row explain path for supported
+  lowered rule expressions. The static lowering plan supplies branch and
+  condition structure; the Souffle reach output supplies row-specific witness
+  bindings and failure values. Unsupported S1 shapes
+  such as `ruleref`, recursion, and aggregates degrade to the existing
+  ProofReceipt/minimal row paths rather than the shared diagnostic companion.
+- **ProbLog** uses a dedicated reach-chain row explain path for supported
+  lowered rule expressions. The reach program queries each branch prefix to
+  recover per-condition weighted model counts, row-specific witness bindings,
+  and failure values. Candidate proof-trace conversion remains as a fallback
+  and adapter-level provenance surface.
 - **PyReason** converters produce `EvidenceTimeline` paths with timestep-aware
   events and possibilistic certainty.
 
@@ -139,11 +182,126 @@ builder left in this layer.
 
 ---
 
-## 6. Test Entry Points
+## 6. Static RuleStructure Projection
+
+`RuleStructure` is the engine-neutral static projection of a Rule or RuleExpr.
+It is defined in `factgraph.application.protocol.rule_structure` and assembled
+by:
+
+```python
+assemble_static_structure(plan, schema_index=None, *, rule_expr=None)
+```
+
+The projection is read-only derived data. It is not an authoring substrate and
+must not be accepted by `core/` or derivation-chain functions as input. The
+same boundary applies to `EvidenceGraph`: both types can be rendered, walked,
+diffed, narrated, or overlaid for display, but they must not be used to derive
+facts or bypass Rule evaluation.
+
+`RuleStructure` and `EvidenceGraph` share the same `RuleExprLoweringPlan`
+backbone:
+
+- `StructureBranch.branch_id` aligns with `EvidenceTree.tree_id`.
+- `StructureOccurrence.occurrence_alias` aligns with `EvidenceRule`.
+- `StructureAtom.atom_id` aligns with `EvidenceAtom`.
+- `StructureJoin.join_id` aligns with `EvidenceJoin`.
+
+The container ids are intentionally different: `RuleStructure.structure_id` is
+per-rule static identity, while `EvidenceGraph.graph_id` is per-run identity.
+Only branch-and-below keys are node identity keys.
+
+`RuleStructure.ast`, `render(...)`, and `render_compact()` are authored inspect
+floor fields. When `rule_expr` is supplied, `RuleStructure.ast` is exactly the
+same authored AST returned by `RuleExprInspect`, not the DNF branch skeleton.
+DNF remains in `RuleStructure.branches`. If no authored `rule_expr` is supplied,
+`ast` is empty because the lowering plan does not retain enough source shape to
+reconstruct `RuleExprInspect.ast` verbatim.
+
+`RuleStructure.narrate()` is the static prose twin of
+`Explanation.narrate()`. It mirrors the same tree ordering and identity anchors
+but has no runtime verdicts, icons, certainty/probability, context token, or
+`produces:` line. Atom text uses naked variables (`FreeVar.name`, or `%port`
+when a port name is known) instead of executed `BoundVar.value` terms.
+
+`HeadClosure` is schema-gated. With a schema index, `head_closure` records the
+same closed-head result as `_inspect_closed_head`; without schema it is `None`.
+Compatibility properties expose `is_closed=False` and `unbound_ports=()` when
+closure was not computed.
+
+Scope is tree-only. PyReason's `EvidenceTimeline` is a runtime temporal shape
+and is outside node-identity alignment with `RuleStructure`.
+
+---
+
+## 7. Closed-Head-False (Full-Coverage Failure Explain)
+
+When `fg.eval.explain(expr, head=closed_head)` matches no result row (the closed
+head's pinned subject does not hold), the SDK does NOT fall back to a head-only
+probe. It lowers the FULL expr body against the closed head, extracts the head
+pins as a seed (`pin_specs_for_closed_head` → `SDKStore._pin_bindings_for_closed_head`,
+minting entity idrefs via the same `_ref` path the EDB uses, so the seed is
+byte-identical to engine facts — seed-parity), and routes that pin-seeded body
+plan through the same per-engine evidence builders the holding path uses:
+
+- **souffle / problog** → the engine-own reach-chain builder
+  (`*_reach_explain_to_evidence_graph`), seeded by the pins. Cross-occurrence join
+  failures are folded into each branch's tree status (`_fold_join_status`), so a
+  composite that fails only on a join — e.g. a same-project constraint where every
+  occurrence holds individually — is reported `fails`, not `holds`. OR composites
+  yield one tree per branch; the graph aggregates (all branches fail → failed).
+- **native / pyreason / reach-unsupported fallback** → the pin-seeded native
+  prober (never the minimal head-only graph, which would drop body coverage).
+
+The probe is labelled `probe_kind="structural_reachability"`: a non-holding
+conclusion has no derived weighted-model-count, so the verdicts are the objective
+structural reachability of each atom/join, not a fabricated probabilistic score.
+`Explanation.status="failed"` always carries a non-empty evidence graph
+(enforced by `Explanation.__post_init__`).
+
+Known limits / per-engine nuances:
+
+- **souffle large composites**: `fg.eval.explain(...)` first runs the
+  witness-building souffle evaluate, which raises when a witness relation arity
+  exceeds the souffle limit (22). This is pre-existing — it constrains HOLDING
+  souffle explain of large composites too — and independent of this path; large
+  composites are explained under problog/native.
+- **native vs reach downstream display**: after the culprit atom fails, the native
+  prober shows the occurrence's remaining atoms with their threaded per-atom
+  verdicts (often `Holds`), whereas the reach engines show them `NotReached`
+  (derivation-flow). Culprit attribution is identical on both.
+- **head-port links** hold by construction under the consistent pin seed and are
+  not folded into tree status (see `prober._fold_join_status`); a broken seed
+  invariant would need them folded + surfaced.
+- **bare single-rule heads** route via `head.as_("head")` (a single rule's body is
+  the head structurally); the full-body lowering applies to `RuleExpr` composites.
+
+---
+
+## 8. Evidence Codec Errors
+
+`evidence_graph_from_dict()` and `evidence_graph_to_dict()` retain their
+`ValueError` shape-validation contract, including wrong Python types. The
+Audit reader catches decoder `ValueError` and wraps it as `AuditReadError`
+with the candidate id and original cause; changing a shape check to `TypeError`
+would bypass that boundary. Retained V2 evidence decoding instead wraps the
+same codec errors as `ProtocolShapeError` with the original cause.
+
+The local, rule-specific `TRY004` exceptions in `evidence_tree.py` preserve
+these existing contracts. They cover the root/path/rule/atom/join/Policy/port/
+term/verdict/source/certainty records, collection and scalar helpers, the
+encoder's graph check, and the Policy-condition and terminal-inventory DTO
+checks. They do not disable type validation or change the accepted data.
+`tests/application/explain/test_evidence_codec_errors.py` checks each boundary
+through the codec and both readers, including exact error messages and causes.
+
+## 9. Test Entry Points
 
 ```bash
 PYTHONPATH=src python -m unittest tests.application.explain.test_prober
+PYTHONPATH=src python -m pytest tests/application/explain/test_evidence_codec_errors.py
+PYTHONPATH=src python -m unittest tests.application.test_rule_structure
 PYTHONPATH=src python -m unittest tests.sdk.test_explain_conformance_native
+PYTHONPATH=src python -m pytest tests/sdk/test_explain_composite_closed_head_false.py
 ```
 
 The focused native prober tests lock:

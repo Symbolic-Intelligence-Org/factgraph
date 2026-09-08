@@ -10,7 +10,7 @@ The model is a triangle:
 
 - **Entity** answers *"what thing is this?"* — a coordinate identified by its identity bundle.
 - **Field** answers *"what content does it have at one cell?"* — a `(Field descriptor, entity ref)` cell, plus a value when writing.
-- **Assertion** answers *"who wrote this particular fact, and when?"* — one individual write record, identified by its content-addressed `asrt_id`.
+- **Assertion** answers *"who wrote this particular fact, and when?"* — one individual write record, identified by its server-assigned `asrt_id`.
 
 Each layer's primary API takes its own navigation key:
 
@@ -20,7 +20,7 @@ Each layer's primary API takes its own navigation key:
 | 2 | `fg.fields.*` | `Field descriptor + e_ref` (+ value, when writing) | field-cell mutations + current-value reads |
 | 3 | `fg.assertions.*` | `asrt_id` string (or iterable) | per-write introspection + targeted retract |
 
-Errors are part of the design. Passing an `asrt_id` to `fg.entities.get(...)` does not implicitly route through `fg.assertions.by_id(...)` — it raises an error telling you to use the correct layer. The same goes for passing a Field descriptor to `fg.entities.*` or an `EntityClass` to `fg.fields.*`. The rationale is in [ADR-API §4.1.1](../../workflow/design/decisions/active/2026-05-29_q-api-namespace-decision.md): each layer's mental model is distinct enough that silent fallback would mask programmer intent.
+Errors are part of the design. Passing an `asrt_id` to `fg.entities.get(...)` does not implicitly route through `fg.assertions.by_id(...)` — it raises an error telling you to use the correct layer. The same goes for passing a Field descriptor to `fg.entities.*` or an `EntityClass` to `fg.fields.*`. Each layer's mental model is distinct enough that silent fallback would mask programmer intent.
 
 ## 2. Layer 1 — Entities (`fg.entities.*`)
 
@@ -44,7 +44,7 @@ Form 1 is for first-time lookup or creation; Form 2 is for following operations 
 
 | Method | What it does |
 |---|---|
-| `create(EntityCls, *, meta=None, **identity)` | Eagerly emits the complete Identity Claim bundle + `:exists` Claim; returns the new `e_ref` string |
+| `create(EntityCls, *, meta=None, **identity)` | Eagerly emits the complete Identity Claim bundle; the entity-domain `:exists` row is projected virtually and is not persisted; returns the new `e_ref` string |
 | `delete(e_ref_or_cls, *, meta=None, **identity)` | Whole-entity revoke. Two forms: `delete(e_ref)` (string passed back from `ref`/`create`) or `delete(EntityCls, **identity)` (rebuilds the e_ref from the identity bundle) |
 | `edit(EntityCls, **identity)` | Opens an `EntityEditor` context manager for staged multi-field writes against one entity |
 
@@ -118,7 +118,12 @@ fg.entities.match(
 
 There is no upper bound on how many `port_constraints` you can pass. Each one is independently translated and AND-joined into the template's body. A `Field` binding generates two implicit atoms — `(projected_entity, $hidden_var) ∈ <field_pred>` and `<port_var> == $hidden_var` — so you can think of `name=User.name` as "the named port equals whatever `User.name` is on the matched user".
 
-Cross-entity `Field` constraints are **not** supported via `port_constraints`: every `Field` descriptor passed as a constraint must belong to `EntityCls`. If you pass a Field of a different entity class, the call raises `"cross-entity Field constraints are not supported by fg.read.match(...); use RuleExpr.join_by_ports(...) to connect entities"`. To match across entities, express the join inside the `RuleExpr` (e.g., `RuleExpr.join_by_ports(...)`) rather than as a port constraint.
+Cross-entity `Field` constraints are **not** supported via `port_constraints`:
+every `Field` descriptor passed as a constraint must belong to `EntityCls`. If
+you pass a Field of a different entity class, the call raises a cross-entity
+constraint error for `fg.entities.match(...)`. To match across entities,
+express the join inside the `RuleExpr` (for the compatibility path) or author
+multiple typed occurrences and comparisons in a Product Policy.
 
 **Connectivity requirement.** When you provide any `port_constraints`, every constrained port must be reachable from the projection port through the template's body atoms. A constraint on a port that the template does not connect to the projection port raises. In practice this means: for every constrained port, at least one atom in the rule body must transitively tie that port's variable to the projected entity's variable. The check fires before any ledger work, so disconnected templates fail fast rather than silently returning an empty result.
 
@@ -211,7 +216,7 @@ Reads work the opposite way: `fg.fields.get(field, ref)` returns one scalar for 
 
 Identity values can be **read** (via `snap.user_id` / `snap.identity[...]`) and **introspected** (via `fg.assertions.field(User.user_id)`), but never **mutated** — all four write methods (`set` / `add` / `retract` / `delete`) reject `Identity` descriptors with `SDKStoreError(code="INV_7C_IDENTITY_PROTECTED")`. Identity Claims are the immutable entity anchor per INV-7c.
 
-To "change" an identity, delete and recreate: `fg.entities.delete(old_ref)` + `fg.entities.create(EntityCls, **new_identity)`. See [ADR-IC §4.1](../../workflow/design/decisions/active/2026-05-29_q-ic-identity-as-claim-decision.md).
+To "change" an identity, delete and recreate: `fg.entities.delete(old_ref)` + `fg.entities.create(EntityCls, **new_identity)`.
 
 ## 4. Layer 3 — Assertions (`fg.assertions.*`)
 
@@ -340,13 +345,14 @@ Remove verbs scale by layer to match granularity:
 
 ```text
   fg.entities.delete(e_ref)                 ► every claim on that entity
-                                              (Identity + :exists + every Field)
+                                              (Identity + every Field, plus any
+                                               legacy :exists Claim present)
   fg.fields.delete(field, e_ref)            ► every value at one field cell
                                               (fail-fast on first revoke error)
   fg.fields.retract(field, e_ref, value)    ► the one (field, ref, value) record
                                               (raises on 0 or >1 matches)
   fg.assertions.retract(asrt_id)            ► exactly one assertion id
-                                              (Identity / :exists asrt_ids rejected)
+                                              (Identity / legacy :exists ids rejected)
 ```
 
 Pick the smallest layer whose key you already have.

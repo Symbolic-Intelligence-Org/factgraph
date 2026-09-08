@@ -1,100 +1,214 @@
 # Core Store Docs
 
-`factgraph.core.store` contains the low-level ledger substrate and the
-Database identity boundary built above it.
+- Applicable scope: `src/factgraph/core/store`
+- Last updated: 2026-08-03
+- Audience: maintainers of the Ledger, Database commit protocol, and durable
+  workspace lifecycle
 
-## Database Identity Substrate
+This document records the current implementation contract for the low-level
+append-only Ledger substrate and the Database identity boundary above it.
 
-`factgraph.core.store.database` defines the first DB/view identity slice:
+## Scope
 
-- `Database` is a new boundary above `Ledger`; `Ledger` remains the storage
-  and compatibility substrate.
-- `DatabaseValue` is the immutable head identity (`db_id`, `tx_id`,
-  `schema_digest`, `data_digest`).
-- `AssertionRecord` is the canonical durable Database-owned assertion record.
-  It is not the SDK read DTO and not the raw `Ledger.Claim` storage shape.
-- `canonical_bytes_dbtx_v1`, `canonical_bytes_dbdata_v1`, and
-  `canonical_bytes_assertion_v1` provide the domain-separated byte protocols
-  used to derive `tx_id`, `data_digest`, `assertion_digest`, and `asrt_id`.
+The module owns SQLite row persistence, atomic Database commits, durable
+workspace identity, state/history commitments, writer locking, integrity
+validation, repair, migration, and frozen assertion-set objects.
 
-The no-view `DatabaseValue.data_digest` uses the Q5 active-only snapshot
-universe. View-scoped data-digest semantics, `FactGraph.attach(...)`, and public
-`view=` read/evaluate APIs are separate future slices.
+## Current Responsibilities
 
-Canonical assertion metadata is based on normalized `MetaRow` semantics. Raw
-user metadata dictionaries are write-normalization inputs, not identity inputs.
+- Persist append-only claims and claim-scoped metadata events in the three-table
+  `claims` / `claim_meta` / `ledger_meta` layout. Revocations are ordinary
+  internal claims with `pred_id="__system__.revokes"`; argument and annotation
+  compatibility reads are projections, not separate tables.
+- Commit one logical change batch through `Database.commit_changes(...)` as one
+  SQLite transaction, including the factual rows, metadata rows, CAS-protected
+  head, schema anchor, and state digest.
+- Maintain two commitments: an order-independent active-state `state_digest`
+  and an order-sensitive transaction chain rooted at `tx_id`.
+- Open durable workspaces fail-closed by replaying the transaction chain and
+  comparing it with the SQLite active set and assertion content digests.
+- Create, open, repair, migrate, lock, and close durable Database workspaces.
 
-Engine projection tuples such as `build_args_for_claim(...)` and
-`ProjectedFact.fact_tuple` are not assertion identity payloads.
+## Database Commit Protocol
+
+`DatabaseValue` is the immutable current head identity: `db_id`, `tx_id`,
+`schema_digest`, `state_digest`, `digest_scheme`, and `tx_seq`. The
+`data_digest` property is a compatibility alias for `state_digest`.
+
+`Database.commit_changes(...)` accepts assertions, revocations, metadata
+appends, batch metadata defaults, or one isolated schema transition. Assertion
+ids are server-generated UUID4 tokens. A transaction object commits only the
+normalized delta for that batch plus its parent, sequence, schema digest,
+`digest_scheme`, and optional canonical `meta_defaults`; it does not hash the
+whole ledger.
+
+The low-level `SchemaTransitionInput` path is deliberately policy-free: it
+commits and validates an already-authorized transition but does not decide
+whether the IR change is additive. It is not exported from `factgraph.sdk`.
+SDK users must go through `fg.schema.register/extend/apply`, whose application
+runtime enforces the current additive-only policy. A future schema-evolution
+blueprint owns diff generation and richer policy filtering.
+
+The current state scheme is `lthash16-v2`. Each multiset element binds both
+`asrt_id` and `assertion_digest`, so factual-content tampering is detected on
+open. Metadata appended after assertion creation is event history and does not
+change `state_digest`. A schema-transition transaction stores only the old and
+new schema digests; both canonical, content-addressed schema objects are
+required for replay, which validates transition continuity.
+
+`claim_meta` rows are immutable events ordered by `(tx_seq, op_ordinal)`.
+Effective reads choose the greatest event per `(asrt_id, key)`; a dual-NULL
+`kind`/`value` event is an internal UNSET tombstone. `Ledger.latest_event_sequence()`
+returns the inclusive current ledger boundary used by evidence envelopes. It
+does not alter `state_digest`, support digests, or view-snapshot digests.
+
+## Three-table Shape and Metadata Tiering
+
+The durable SQLite schema contains exactly three non-internal tables:
+
+```text
+claims(seq, asrt_id, pred_id, e_ref, rest_terms, value, value_tag, tx_ref)
+claim_meta(asrt_id, key, kind, value, tx_seq, op_ordinal)
+ledger_meta(key, value)
+```
+
+`claims.tx_ref` is the producing transaction's integer `tx_seq`. The retained
+nullable `rest_terms` column is a narrow legacy PyReason carrier; new
+application and SDK writes use `value` / `value_tag` and write `[]`. Dropping
+`rest_terms`, rewriting the adapter, and enforcing strict unary INV-9 are one
+Slice 5 change, not independent cleanups.
+
+Schema IR may declare a canonical-minimal `meta_keys` mapping. Each key has five
+orthogonal properties: `reader_class`, `premise_eligible`, `load_policy`,
+`storage_scope`, and `query_indexed`. Omitted properties mean the Phase 2
+defaults (`runtime`, `false`, `eager`, `claim`, `false`); default-valued
+properties and an empty mapping are omitted from canonical schema bytes.
+`query_indexed` is declarative in v0.3 and does not yet create a dedicated
+physical index.
+
+Keys declared `load_policy="lazy"` remain queryable from `claim_meta` but do
+not occupy the eager event/meta/annotation indexes. Keys declared
+`storage_scope="tx_liftable"` may be supplied once in
+`Database.commit_changes(meta_defaults=...)`. The sorted defaults are committed
+in the tx object's canonical bytes and inherited by every assertion and
+revoker in that batch. A claim event wins over its tx default; an internal
+claim-level UNSET removes inheritance. Tx defaults never use UNSET and no
+fourth table or ledger-meta mirror is created.
+
+Premise configuration is closed against the schema. Only the pinned built-ins
+`provenance_class` and `origin_binding`, or explicitly declared keys with
+`premise_eligible=true`, can control evaluation visibility. See
+`core/policy/README.md` and `premise_filter.py` for the evaluation boundary.
+
+`assertion_digest`, `schema_digest`, and `tx_id` are Database-owned assertion
+metadata keys. Assertion, revocation, and later meta-append inputs reject the
+same complete set for both factual assertion ids and revoker ids.
+
+`Ledger.commit_batch(...)` is the single SQLite transaction boundary. Head CAS
+and the persisted state are updated in the same transaction as the rows. A
+lost CAS raises `HeadConflictError`; an unsupported digest scheme or any
+history/data mismatch fails closed. `Database.repair(...)` is an explicit,
+auditable state rebuild and is not invoked automatically.
 
 ## Database Workspace Layout
 
-For durable, non-memory `Database.create(path=...)` and
-`Database.open(path=...)`, `path` is the workspace root. The Database-owned
-layout lives under `db/`:
+For durable `Database.create(path=...)` and `Database.open(path=...)`, `path`
+is the workspace root:
 
-- `db/objects/tx/<64hex>.json` stores immutable transaction objects. The
-  filename uses the raw hex suffix of the `tx:<hex>` token; object content keeps
-  and validates the full token.
-- `db/objects/schema/<64hex>.json` stores exact `canonicalize_schema_ir_jcs(...)`
-  bytes. It does not reuse the authoring-registry presentation newline or
-  manifest envelope. Repeated writes at the same schema identity are
-  idempotent: the existing object is kept as the source of truth, including the
-  first writer's `generated_at`.
-- `db/refs/head.txt` stores the current head `tx_id`. `Database.head()` resolves
-  `head.txt -> tx object -> DatabaseValue`; ledger metadata is only a
-  compatibility cache for this head identity.
-- `db/assertions.db` remains the SQLite `Ledger` storage substrate and mutable
-  assertion index.
-- `factgraph_workspace.json` points to the Database-owned `db/` component and
-  reserves `views/`. New clean Database and SDK workspaces do not create live
-  registry content. Legacy workspaces that still contain `registry/` or
-  `registry/schema/schema_ir.json` must be migrated with
-  `python -m factgraph migrate-workspace <path>` before SDK load.
+```text
+workspace/
+  factgraph_workspace.json
+  db/
+    assertions.db
+    meta.json
+    writer.lock
+    objects/
+      schema/<64hex>.json
+      tx/<64hex>.json
+    refs/                    # reserved; empty in v0.3 (head is in ledger_meta)
+  views/                     # created lazily by Database.create_view(...)
+    objects/<64hex>.json
+```
 
-Object and head writes use sibling temporary files followed by `os.replace(...)`
-for per-file atomic replacement. Cross-file atomicity across object, ref, and
-SQLite writes remains a future storage-hardening concern.
+`ledger_meta` inside `db/assertions.db` is authoritative for the current head,
+state digest, schema digest, sequence, scheme, and Database id. Immutable tx
+objects make the history replayable. Canonical schema objects and tx objects
+are write-once; repeated identical schema writes keep the first object's bytes.
+
+Every durable `Database.create/open` acquires a non-blocking exclusive
+`flock` for the lifetime of the object. There is no read-only durable open path
+in v0.3: a second open, including one intended only for reading, fails
+explicitly. `Database.close()` and its context-manager exit release the Ledger
+connection and lock idempotently.
+
+`FactGraph.save_workspace()` no longer persists factual data. Canonical SDK
+writes are already durable; save only updates `last_saved_at_epoch_ns` in
+`db/meta.json` and must not advance the Database head.
+
+## Legacy Migration
+
+`python -m factgraph migrate-workspace <path>` is the opt-in route from a
+closed v0.2 `ledger.db` workspace. It builds and verifies a staging v0.3
+workspace, preserves legacy assertion/revocation rows and ids, and writes one
+explicit genesis import transaction made from ordinary assertion, revocation,
+and append-meta operations because the old per-commit history cannot be
+reconstructed. The default keeps the complete old
+workspace under `workspace.legacy.<UTC timestamp>/`; `--no-archive` discards
+that backup only after verified replacement. Migration is never automatic.
+
+During the two-rename replacement window, the complete source is held in a
+visible sibling named `<workspace-name>.legacy-<UTC timestamp>`. If the process
+stops there, rerunning the CLI returns `workspace_recovery_required` and lists
+the candidate. When the requested workspace is absent, verify the sibling and
+rename it back before rerunning migration. When both the verified replacement
+and sibling exist, verify the replacement, then explicitly archive the sibling
+inside the workspace or remove it. The CLI does not guess which copy to keep.
+Torn-create and registry-only directories report `workspace_incomplete` with
+recreate guidance; only a complete v0.2 `ledger.db` source is migratable.
 
 ## Frozen Assertion View Persistence
 
-`Database.create_view(name, asrt_ids, *, base=None)` creates anonymous,
-content-addressed `FrozenAssertionSet` objects for new-layout workspaces only.
-Memory-mode and legacy-ledger-mode Databases reject durable view persistence.
+`Database.create_view(name, asrt_ids, *, base=None)` writes a content-addressed
+`FrozenAssertionSet` under `views/objects/`. Creation is current-head-only.
+Membership requires an existing claim but may include revoked assertions.
+Memory-mode Databases reject `create_view(...)` because view objects require a
+durable workspace. `FactGraph.attach(db, view=view)` is read-only; base attach
+is writable and routes canonical SDK writes through the caller-owned Database.
 
-The canonical view record has six fields: `name`, `db_id`, `base_tx_id`,
-`schema_digest`, sorted `asrt_ids`, and `view_digest`. The `view_digest` is a
-`sha256:<hex>` digest over `VIEW_V1_PREFIX = b"factpy\x00subset_view_v1\x00"`,
-the Database identity anchors, and the sorted assertion-id set. The `name`
-field is a label and is not part of the digest input.
+## Non-responsibilities
 
-View objects are written under `views/objects/<64hex>.json`. The filename uses
-the raw hex suffix of `view_digest`; object content keeps the full token and is
-write-once. Creation is current-head-only: callers may omit `base` or pass the
-current `Database.head()` value. Historical-base validation is deferred to a
-future snapshot/attach slice.
+- Schema authoring and additive compatibility policy belong to authoring and
+  application layers; this policy-free mechanism commits an already-approved
+  transition and must not be exposed as a product policy bypass.
+- SDK entity/field planning and ingest normalization belong to the application
+  and SDK layers.
+- Engine projection, premise filtering, evidence, and service routing consume
+  Ledger read APIs but do not belong to this module.
 
-Membership validation checks that each `asrt_id` exists as a ledger claim. It
-does not require assertions to be active; revoked assertions may remain in a
-frozen view scope per Q5. SDK in-memory `_SDKAssertionViewsManager` views and
-`fg.save_workspace(...)` compatibility behavior remain separate and unchanged.
+## Limitations and Compatibility
 
-## Attach Lifecycle
+- Durable workspaces have one exclusive writer and no read-only open channel.
+- A missing authoritative tx object cannot yet be re-anchored even when SQLite
+  is intact; repair requires a valid tx-object head anchor.
+- Portable `fsync` is explicit, but macOS `F_FULLFSYNC` is not requested.
+- Legacy migration preserves rows and active state, not unrecoverable v0.2
+  transaction history.
+- Bare 32/64-character legacy UUID assertion ids remain accepted so migrated
+  workspaces can be updated; new Database writes generate `asrt:<uuidhex>`.
 
-`FactGraph.attach(db, schema_classes=...)` binds the SDK runtime to an existing
-`Database` instance for the base writable attach form. The attached runtime
-shares the Database-owned Ledger substrate for reads, but Database-owned writes
-route through `fg.commit_assertions(...)`, which delegates to
-`Database.commit_assertions(...)` and returns `CommitResult` unchanged.
+## Test Entry Points
 
-Attached runtimes reject the shipped SDK mutation surfaces (`fg.set`,
-`fg.add`, `fg.retract`, `fg.edit`, `fg.ingest`, `fg.add_schema_classes`,
-`fg.save_rule`, `fg.save_inference`, `fg.accept`, `fg.accept_many`,
-`fg.batch`, `fg.save_workspace`, and the corresponding manager delegates) because those
-paths bypass the Database boundary. Non-attached `FactGraph.create`,
-`FactGraph.from_schema_classes`, and `FactGraph.load_workspace` runtimes keep the shipped
-behavior.
-
-View-scoped attach is shipped through `FactGraph.attach(db, view=view)` and is
-read-only. Snapshot attach (`db.as_of(...)`), `ReadOnlyAttachmentError`, and
-public method-level `view=` read/evaluate APIs remain future slices.
+- `tests/test_storage_hardening_phase1.py`
+- `tests/test_dbtx_v2_golden.py`
+- `tests/test_slice3b_phase1_read_equivalence.py`
+- `tests/test_slice3b_phase2_meta_events.py`
+- `tests/test_slice3b_phase3_meta_policy.py`
+- `tests/test_slice3b_phase3_tx_lift.py`
+- `tests/test_slice3b_phase3_lazy_meta.py`
+- `tests/test_slice3b_phase3_chosen_seq.py`
+- `tests/test_application_entity_write.py`
+- `tests/test_sdk_batch_application_delegate.py`
+- `tests/test_db_identity_substrate.py`
+- `tests/test_db_attach_lifecycle.py`
+- `tests/test_factgraph_workspace_lifecycle.py`
+- `tests/test_a20e_registry_final_removal.py`

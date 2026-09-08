@@ -35,12 +35,12 @@ manager method.
 fg = FactGraph.create(schema_classes=[User, Country, LivesIn])
 ```
 
-File-backed ledger:
+Durable workspace:
 
 ```python
 fg = FactGraph.create(
     schema_classes=[User, Country, LivesIn],
-    ledger_path="./data/ledger.db",
+    path="./data/workspace",
 )
 ```
 
@@ -49,15 +49,21 @@ To make explain artifacts readable across later `FactGraph` instances as well, y
 ```python
 fg = FactGraph.create(
     schema_classes=[User, Country, LivesIn],
-    ledger_path="./data/ledger.db",
+    path="./data/workspace",
     artifact_store_root="./data/artifacts",
 )
 ```
 
 Stable contract:
-- `classes` must be a non-empty `list[Entity subclass]`; `from_schema_classes(...)` / `schema_preflight_from_classes(...)` raise `SDKSchemaError`, while `SDKStore(...)` constructor-path checks raise `SDKStoreError`.
-- `ledger` and `ledger_path` are mutually exclusive.
-- `ledger_path` records `schema_digest` when the ledger is opened/created, and validates it on reopen.
+- `schema_classes` must be a non-empty `list[Entity subclass]`; schema
+  compilation failures raise `SDKSchemaError`, while lifecycle/storage errors
+  raise `SDKStoreError`.
+- `path=` creates a v0.3 Database workspace immediately. Writes are durable on
+  return and the workspace holds an exclusive writer lock until `close()`.
+- `FactGraph.create(...)` rejects `ledger=` and `ledger_path=`. The lower-level
+  unmanaged compatibility lifecycle is
+  `FactGraph.from_schema_classes(classes, ledger=... | ledger_path=...)`; those
+  two arguments are mutually exclusive there.
 - `artifact_store_root` is an optional `str`; when provided it enables sidecar-backed explain artifact readback, while omitting it keeps the default in-process explain registry behavior.
 - `default_row_format` and `FACTPY_ROW_FORMAT` are legacy row-dispatch
   settings. T5 public evaluation uses `fg.eval.evaluate(...)` and returns
@@ -118,6 +124,10 @@ with sdk.batch(meta={"trace_id": "seed"}) as tx:
 Additional semantics:
 - Batch meta merge precedence is `commit_meta > field_op_meta > entity_meta > batch_meta`.
 - `with sdk.batch() as tx:` context manager does not auto-commit or auto-rollback; you must call `commit()` explicitly.
+- Field type determines value semantics: a string beginning `idref_v1:` remains
+  unchanged scalar data on a string Field, including multi-valued `add` and wire
+  roundtrips. Only entity-reference Fields resolve tokens as relationships;
+  unresolved external relationships still reject the entire attached batch.
 
 ### 4.2 Cardinality and identity constraints
 
@@ -138,7 +148,9 @@ Additional semantics:
 `sdk_batch_plan_v1` notes:
 - Wire ops no longer carry `dims/fact_key`.
 - `cardinality` uses `single|multi`.
-- Wire export (`to_json`/`export`) rejects raw `idref_v1` token values; use same-tx handles for entity references.
+- Wire export (`to_json`/`export`) rejects raw `idref_v1` relationship tokens;
+  use same-tx handles for entity references. Token-shaped string Field values
+  use the existing scalar wire arm and are not entity references.
 
 ## 5. Entities Read and Edit
 
@@ -257,12 +269,21 @@ Boundaries:
 - SDK pre-validates all items with `items[i].*` paths.
 - Any `severity="error"` triggers collect-and-stop (whole batch is not written).
 - Warnings do not block writes.
-- After precheck, cache-resolvable `set/add/retract` items delegate to application `apply_ingest_request(...)`; when the target or entity_ref value cannot be recovered from the SDK identity cache, SDK conservatively falls back to the legacy write path.
+- After precheck, cache-resolvable `set/add/retract` items delegate to
+  application `apply_ingest_request(...)`. On Database-backed created, loaded,
+  or writable-attached graphs, a target or `entity_ref` value that cannot be
+  recovered from the SDK identity cache fails closed before writing. Obtain
+  references through `fg.entities.ref/create` first. Only the lower-level
+  unmanaged `FactGraph.from_schema_classes(...)` lifecycle retains the legacy
+  direct-write fallback.
 
 ### 7.3 Meta behavior
 
 - Top-level `meta` and item `meta` merge; item keys override top-level keys.
-- Hard-reserved keys: `ingested_at`, `ingest_key`, `revoked_asrt_id` (user writes are rejected).
+- Hard-reserved S-class keys: `ingested_at`, `ingest_key`,
+  `revoked_asrt_id` (user overrides are rejected). Use the ordinary
+  time-valued `event_time` key when importing or backfilling a source event
+  timestamp; `ingested_at` remains lifecycle-owned commit metadata.
 - `ingest_key` idempotency material includes:
   `claim + source + source_loc + trace_id + valid_from + valid_to + version`
 

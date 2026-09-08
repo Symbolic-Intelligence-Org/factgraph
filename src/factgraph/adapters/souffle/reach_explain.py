@@ -3,9 +3,10 @@ from __future__ import annotations
 import json
 import re
 import tempfile
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any
 
 from factgraph.adapters.problog.diagnostic_emit import (
     DiagnosticAtomProbability,
@@ -17,7 +18,9 @@ from factgraph.adapters.souffle.pred_norm import normalize_pred_id
 from factgraph.adapters.souffle.runner import run_package
 from factgraph.adapters.souffle.tsv_v1 import tsv_cell_v1_decode
 from factgraph.adapters.souffle.where_compile import SOUFFLE_MAX_SUPPORTED_ARITY
-from factgraph.application.explain.diagnostic_assemble import diagnostic_problog_result_to_evidence_graph
+from factgraph.application.explain.diagnostic_assemble import (
+    diagnostic_problog_result_to_evidence_graph,
+)
 from factgraph.application.explain.diagnostic_projection import BranchCompanion, CompanionProgram
 from factgraph.application.explain.evidence_tree import EvidenceGraph
 from factgraph.application.protocol.certainty import Certainty
@@ -277,9 +280,9 @@ def _compile_compare(
     if kind == "eq" and allow_bind:
         if lhs_var and lhs not in bound_vars and not rhs_var:
             next_bound_vars.append(lhs)
-        elif rhs_var and rhs not in bound_vars and not lhs_var:
-            next_bound_vars.append(rhs)
-        elif lhs_var and rhs_var and lhs in bound_vars and rhs not in bound_vars:
+        elif (rhs_var and rhs not in bound_vars and not lhs_var) or (
+            lhs_var and rhs_var and lhs in bound_vars and rhs not in bound_vars
+        ):
             next_bound_vars.append(rhs)
         elif lhs_var and rhs_var and rhs in bound_vars and lhs not in bound_vars:
             next_bound_vars.append(lhs)
@@ -632,7 +635,7 @@ def _extend_manifest_outputs(manifest_path: Path, entrypoints: Sequence[str]) ->
 
 
 def _var(name: str) -> str:
-    raw = name[1:] if name.startswith("$") else name
+    raw = name.removeprefix("$")
     safe = re.sub(r"[^A-Za-z0-9_]", "_", raw).strip("_") or "v"
     if safe[0].isdigit():
         safe = f"v_{safe}"
@@ -648,7 +651,7 @@ def _symbol(value: str) -> str:
 
 
 def _safe_suffix(value: str) -> str:
-    raw = value[1:] if value.startswith("$") else value
+    raw = value.removeprefix("$")
     safe = re.sub(r"[^A-Za-z0-9_]", "_", raw).strip("_") or "x"
     if safe[0].isdigit():
         safe = f"v_{safe}"

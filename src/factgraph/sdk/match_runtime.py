@@ -29,7 +29,6 @@ from .errors import SDKStoreError
 from .facade import EntitySnapshot, _build_snapshot
 from .schema import Entity, Field
 
-
 _MATCH_VIEW_UNSUPPORTED = (
     "method-level view= is not supported by fg.read.match(); use FactGraph.attach(db, view=view) instead"
 )
@@ -64,9 +63,10 @@ def sdk_match(
         raise SDKStoreError("fg.read.match(...) first argument must be an Entity subclass")
     if entity_cls not in sdk._entity_spec_by_class:
         raise SDKStoreError(f"Entity class {entity_cls.__name__!r} is not registered with this FactGraph")
-    if limit is not None:
-        if not isinstance(limit, int) or isinstance(limit, bool) or limit < 0:
-            raise SDKStoreError("fg.read.match(..., limit=...) must be a non-negative integer or None")
+    if limit is not None and (
+        not isinstance(limit, int) or isinstance(limit, bool) or limit < 0
+    ):
+        raise SDKStoreError("fg.read.match(..., limit=...) must be a non-negative integer or None")
     if not isinstance(template, Rule | _RuleExpr):
         raise SDKStoreError(
             "fg.read.match(...) template must be application Rule or AND RuleExpr; "

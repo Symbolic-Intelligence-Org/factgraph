@@ -18,7 +18,7 @@ from .common import (
 )
 from .schema_runtime import EntityRef, EntitySelector, FieldPath
 
-FieldValue: TypeAlias = JSONValue | EntityRef
+FieldValue: TypeAlias = JSONValue | bytes | EntityRef
 FieldFilterValue: TypeAlias = FieldValue | tuple[FieldValue, ...]
 
 
@@ -29,6 +29,8 @@ def _validate_field_value(value: Any, *, field_name: str, value_kind: str | None
         return
     if value_kind == "entity_ref":
         raise ProtocolShapeError(f"{field_name} must be EntityRef")
+    if isinstance(value, bytes):
+        return
     _validate_json_value(value, field_name=field_name)
 
 
@@ -148,9 +150,10 @@ class EntityReadRequest:
             raise ProtocolShapeError("limit must be non-negative int")
         _require_bool(self.include_assertions, field_name="include_assertions")
         _require_bool(self.include_history, field_name="include_history")
-        if self.at_time_ns is not None:
-            if isinstance(self.at_time_ns, bool) or not isinstance(self.at_time_ns, int):
-                raise ProtocolShapeError("at_time_ns must be int")
+        if self.at_time_ns is not None and (
+            isinstance(self.at_time_ns, bool) or not isinstance(self.at_time_ns, int)
+        ):
+            raise ProtocolShapeError("at_time_ns must be int")
         _require_optional_non_empty_str(self.version, field_name="version")
         if self.at_time_ns is not None and self.version is not None:
             raise ProtocolShapeError("at_time_ns and version are mutually exclusive")

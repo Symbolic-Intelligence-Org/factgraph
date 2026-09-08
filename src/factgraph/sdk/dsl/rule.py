@@ -6,6 +6,7 @@ from typing import Any
 
 from factgraph.core.rules.where_ast import WhereASTError, parse_where_ir_to_ast
 from factgraph.core.rules.where_ast_validate import WhereASTValidationError, validate_where_ast
+
 from ..error_codes import QUERY_ALIAS_CONFLICT, QUERY_UNBOUND_VAR
 from .branch import Case
 from .errors import SDKDSLError
@@ -113,6 +114,7 @@ class Rule:
         return payload
 
     def dependency_rules(self) -> list[Rule]:
+        """Return directly referenced in-memory Rules from this legacy body."""
         return _dependency_rules_from_where(self.where)
 
 
@@ -175,9 +177,18 @@ class Inference:
 
     @property
     def heads(self) -> list[HeadCall]:
+        """Return a copy of the normalized inference heads."""
         return list(self._heads)
 
     def to_authoring_payload(self) -> dict[str, Any]:
+        """Lower this legacy Inference into its authoring payload.
+
+        Returns:
+            A JSON-shaped mapping accepted by the compatibility compiler.
+
+        Notes:
+            This does not execute or accept derived candidates into the ledger.
+        """
         payload: dict[str, Any] = {
             "derivation_id": self.id,
             "version": self.version,
@@ -202,6 +213,7 @@ class Inference:
         return payload
 
     def dependency_rules(self) -> list[Rule]:
+        """Return directly referenced in-memory Rules from this inference."""
         return _dependency_rules_from_where(self.when)
 
 
@@ -279,17 +291,29 @@ class Query:
 
     @property
     def return_contract(self) -> list[ReturnContractEntry]:
+        """Return a copy of the normalized output-column contract."""
         return list(self._return_contract)
 
     @property
     def initial_bound_vars(self) -> set[str]:
+        """Return variables bound by the Query head before body validation."""
         return set(self._initial_bound_vars)
 
     @property
     def where_ir(self) -> list[Any]:
+        """Return a copy of the lowered compatibility body IR."""
         return list(self._where_ir)
 
     def to_runtime_payload(self) -> dict[str, Any]:
+        """Return the normalized compatibility runtime payload.
+
+        Returns:
+            A JSON-shaped Query payload with head, body and return contract.
+
+        Notes:
+            This legacy DSL payload is separate from Product
+            ``fg.query(target).bind(...).select(...)``.
+        """
         return {
             "head": [_query_head_item_to_payload(item) for item in self._normalized_head],
             "where": list(self._where_ir),
@@ -308,12 +332,13 @@ class Query:
         }
 
     def dependency_rules(self) -> list[Rule]:
+        """Return directly referenced in-memory Rules from this Query body."""
         return _dependency_rules_from_where(self.where)
 
 
 def _lower_select_item(item: Any) -> Any:
     if hasattr(item, "token") and isinstance(getattr(item, "token", None), str):
-        return getattr(item, "token")
+        return item.token
     return item
 
 
@@ -439,19 +464,19 @@ def _validate_query_where_branch_wrapper(node: Any, *, path: str) -> None:
         for idx, item in enumerate(node):
             _validate_query_where_branch_wrapper(item, path=f"{path}[{idx}]")
         return
-    if isinstance(node, tuple):
-        if (
-            len(node) == 3
-            and node[0] == "__body__"
-            and isinstance(node[1], list)
-        ):
-            for idx, atom in enumerate(node[1]):
-                _validate_query_where_branch_wrapper(atom, path=f"{path}[1][{idx}]")
+    if (
+        isinstance(node, tuple)
+        and len(node) == 3
+        and node[0] == "__body__"
+        and isinstance(node[1], list)
+    ):
+        for idx, atom in enumerate(node[1]):
+            _validate_query_where_branch_wrapper(atom, path=f"{path}[1][{idx}]")
 
 
 def _normalize_derivation_head_items(head: Any) -> tuple[HeadCall, ...]:
     if head is None:
-        return tuple()
+        return ()
     if isinstance(head, list):
         head_items = list(head)
     else:
@@ -594,9 +619,7 @@ def _is_query_unbound_error(exc: Exception) -> bool:
         return True
     if "requires at least one bound/constant side" in msg:
         return True
-    if "used in path comparison before" in msg:
-        return True
-    return False
+    return "used in path comparison before" in msg
 
 
 def _query_head_item_to_payload(item: Any) -> dict[str, Any]:

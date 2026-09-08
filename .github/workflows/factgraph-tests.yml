@@ -2,39 +2,46 @@ name: factgraph-tests
 
 on:
   workflow_call:
+  workflow_dispatch:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
 
 jobs:
-  test:
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
+  producer:
+    name: producer (${{ matrix.python-version }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
         python-version: ["3.10", "3.11"]
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-          cache: "pip"
-
-      - name: Install factgraph package and dev dependencies
+          cache: pip
+      - name: Install producer and test dependencies
+        run: python -m pip install -e '.[dev]' pytest==9.1.1 networkx==3.4.2 pandas==2.3.3 problog==2.2.10
+      - name: Install and require real engines
         run: |
-          python -m pip install --upgrade pip
-          python -m pip install -e ".[dev]"
-
+          bash scripts/ci/install_souffle.sh
+          command -v souffle
+          command -v problog
       - name: Ruff (factgraph gate)
-        run: |
-          python -m ruff check src/factgraph tests/application/protocol tests/sdk tests/test_branch_identity_rule_inspect.py tests/test_sdk_assertion_record_set_view_filters.py
-
-      - name: Mypy (factgraph audit)
-        continue-on-error: true
-        run: |
-          python -m mypy src/factgraph
-
-      - name: Test (G7 preservation + assertion ergonomics)
+        run: python -m ruff check src/factgraph tests/application/protocol tests/sdk tests/test_branch_identity_rule_inspect.py tests/test_sdk_assertion_record_set_view_filters.py scripts/ci
+      - name: Complete producer suite
+        env:
+          PYTHONPATH: src
+        run: python -m pytest -q --junitxml=dist/producer.xml
+      - name: Protocol preservation
         env:
           PYTHONPATH: src
         run: |
@@ -50,22 +57,105 @@ jobs:
             tests.sdk.test_rule_expr_evaluate \
             tests.application.protocol.test_rule_expr_head_validation \
             tests.test_sdk_assertion_record_set_view_filters
-
-      - name: Coverage report (factgraph focused, non-threshold)
+      - name: Mypy (non-blocking audit)
         continue-on-error: true
-        env:
-          PYTHONPATH: src
+        run: python -m mypy src/factgraph
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: producer-${{ matrix.python-version }}
+          path: dist/producer.xml
+          if-no-files-found: warn
+
+  distributions:
+    name: distributions
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install pinned build tools
+        run: python -m pip install build==1.6.0 setuptools==84.0.0 wheel==0.48.0
+      - name: Build twice from the exact commit
         run: |
-          python -m coverage run -m unittest \
-            tests.application.protocol.test_rule \
-            tests.application.protocol.test_rule_expr \
-            tests.sdk.test_ruleexpr_inspect \
-            tests.sdk.test_rule_naming \
-            tests.application.protocol.test_rule_aggregate \
-            tests.test_branch_identity_rule_inspect \
-            tests.application.protocol.test_rule_expr_lowering \
-            tests.application.protocol.test_rule_expr_lowering_adapter \
-            tests.sdk.test_rule_expr_evaluate \
-            tests.application.protocol.test_rule_expr_head_validation \
-            tests.test_sdk_assertion_record_set_view_filters
-          python -m coverage report
+          version=$(python -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["project"]["version"])')
+          bash scripts/release.sh "$version" --outdir dist/build-a
+          bash scripts/release.sh "$version" --outdir dist/build-b
+          python scripts/ci/verify_distributions.py dist/build-a dist/build-b --output dist/distribution-verification.json
+      - uses: actions/upload-artifact@v6
+        with:
+          name: factgraph-distributions
+          path: |
+            dist/build-a/*
+            dist/distribution-verification.json
+          if-no-files-found: error
+
+  installed:
+    name: installed-wheel (${{ matrix.python-version }})
+    needs: distributions
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11"]
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - uses: actions/download-artifact@v6
+        with:
+          name: factgraph-distributions
+          path: dist/downloaded
+      - name: Install only the built wheel
+        run: python -m pip install dist/downloaded/build-a/*.whl
+      - name: Verify installed origin and sealed golden outside the source tree
+        run: |
+          mkdir -p dist/golden
+          output="$GITHUB_WORKSPACE/dist/golden/${{ matrix.python-version }}.json"
+          cd "$RUNNER_TEMP"
+          python -I -c 'from pathlib import Path; import factgraph; assert "site-packages" in Path(factgraph.__file__).parts, factgraph.__file__'
+          python -I "$GITHUB_WORKSPACE/scripts/verify_c2_sealed_evaluation_wheel.py" > "$output"
+      - uses: actions/upload-artifact@v6
+        with:
+          name: installed-golden-${{ matrix.python-version }}
+          path: dist/golden/*.json
+          if-no-files-found: error
+
+  release-gate:
+    name: release-gate
+    if: always()
+    needs: [producer, distributions, installed]
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Require every producer and artifact job
+        env:
+          PRODUCER: ${{ needs.producer.result }}
+          DISTRIBUTIONS: ${{ needs.distributions.result }}
+          INSTALLED: ${{ needs.installed.result }}
+        run: test "$PRODUCER" = success && test "$DISTRIBUTIONS" = success && test "$INSTALLED" = success
+      - uses: actions/download-artifact@v6
+        with:
+          pattern: installed-golden-*
+          path: golden
+          merge-multiple: true
+      - name: Compare supported-Python golden values
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          values = [json.loads(Path('golden', version + '.json').read_text()) for version in ('3.10', '3.11')]
+          for value in values:
+              value.pop('python')
+              value.pop('factgraph_file')
+          assert values[0] == values[1], 'Installed producer goldens differ between Python versions'
+          PY

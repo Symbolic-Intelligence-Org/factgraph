@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 import ast
-from dataclasses import dataclass
-from datetime import datetime
 import re
 import reprlib
+from dataclasses import dataclass
+from datetime import datetime
 from types import UnionType
 from typing import Any, Literal, get_args, get_origin
 from uuid import UUID
@@ -37,12 +37,14 @@ class _DeclaredMember:
 
     @property
     def sdk_attr_name(self) -> str:
+        """Return the Python attribute name bound by the Entity metaclass."""
         if not self._sdk_attr_name:
             raise SDKSchemaError("descriptor is not bound to entity class")
         return self._sdk_attr_name
 
     @property
     def sdk_owner_cls(self) -> type:
+        """Return the Entity class that owns this descriptor."""
         if self._sdk_owner_cls is None:
             raise SDKSchemaError("descriptor owner is not available")
         return self._sdk_owner_cls
@@ -119,6 +121,14 @@ class Identity(_DataMember):
         super().__init__(pattern=pattern, repr=repr)
 
     def to_authoring(self, *, plan: _AnnotationPlan) -> dict[str, Any]:
+        """Return canonical schema-authoring data for this identity field.
+
+        Args:
+            plan: Type/cardinality information derived from the annotation.
+
+        Returns:
+            A canonical identity-field authoring mapping.
+        """
         if plan.cardinality != "single":
             raise SDKSchemaError("Identity fields must use a single-value annotation")
         out: dict[str, Any] = {
@@ -165,11 +175,20 @@ class Field(_DataMember):
 
     @property
     def cardinality(self) -> str:
+        """Return the cardinality inferred from the bound type annotation."""
         if self._inferred_cardinality is None:
             raise SDKSchemaError("Field cardinality is unavailable until the descriptor is bound to a schema class")
         return self._inferred_cardinality
 
     def to_authoring(self, *, plan: _AnnotationPlan) -> dict[str, Any]:
+        """Return canonical schema-authoring data for this field.
+
+        Args:
+            plan: Type/cardinality information derived from the annotation.
+
+        Returns:
+            A canonical field authoring mapping.
+        """
         self._inferred_cardinality = plan.cardinality
         out: dict[str, Any] = {
             "py_name": self.sdk_attr_name,
@@ -288,7 +307,7 @@ class Entity(metaclass=EntityMeta):
                 if isinstance(row, dict) and isinstance(row.get("py_name"), str)
             )
         seen = set(ordered_names)
-        ordered_names.extend(sorted(name for name in self.__dict__.keys() if name not in seen))
+        ordered_names.extend(sorted(name for name in self.__dict__ if name not in seen))
         items = [f"{name}={reprlib.repr(getattr(self, name))}" for name in ordered_names]
         preview = ", ".join(items[:8])
         if len(items) > 8:
@@ -297,6 +316,14 @@ class Entity(metaclass=EntityMeta):
 
     @classmethod
     def sdk_entity_spec(cls) -> dict[str, Any]:
+        """Return the schema specification compiled for this Entity class.
+
+        Returns:
+            The Entity declaration consumed by FactGraph schema compilation.
+
+        Raises:
+            SDKSchemaError: If the class is not a compiled Entity declaration.
+        """
         spec = getattr(cls, "__sdk_entity_spec__", None)
         if not isinstance(spec, dict):
             raise SDKSchemaError(f"class '{cls.__name__}' is not a compiled Entity declaration")
@@ -360,6 +387,14 @@ class Relationship(metaclass=RelationshipMeta):
 
     @classmethod
     def sdk_relationship_spec(cls) -> dict[str, Any]:
+        """Return the schema specification compiled for this Relationship.
+
+        Returns:
+            A copy of the relationship declaration.
+
+        Raises:
+            SDKSchemaError: If the class is not a compiled Relationship.
+        """
         spec = getattr(cls, "__sdk_relationship_spec__", None)
         if not isinstance(spec, dict):
             raise SDKSchemaError(f"class '{cls.__name__}' is not a compiled Relationship declaration")
@@ -385,7 +420,7 @@ class _UnsetFieldValue:
     def __bool__(self) -> bool:
         return False
 
-    def __eq__(self, other: Any) -> bool:
+    def __eq__(self, other: object) -> bool:
         return other is None
 
     def _raise_batch_only(self, method: str) -> None:
@@ -458,7 +493,7 @@ def _validate_member_repr_for_sdk(member: _DataMember, *, field_name: str) -> No
 def _is_sdk_dsl_value(value: Any) -> bool:
     try:
         from .dsl.expr import is_dsl_head_kwarg_value
-    except Exception:
+    except Exception:  # noqa: BLE001 - optional DSL module import boundary: an unimportable dsl.expr means the value cannot be a DSL head kwarg
         return False
     return bool(is_dsl_head_kwarg_value(value))
 
@@ -670,6 +705,6 @@ def _ast_literal_value(node: ast.AST) -> Any:
 def _typing_union_origin() -> Any:
     try:
         from typing import Union
-    except Exception:
+    except Exception:  # noqa: BLE001 - typing import boundary: without typing.Union there is no union origin to compare against
         return None
     return Union

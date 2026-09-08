@@ -97,6 +97,7 @@ class DiagnoseAtomLocatorProtocolTests(unittest.TestCase):
                 support_digest="sha256:" + ("1" * 64),
                 case_index=0,
                 proof=_atom_locator(),  # type: ignore[arg-type]
+                as_of_event_seq=(0, 0),
             )
 
 
@@ -461,6 +462,7 @@ class DiagnoseAtomLocatorEvidenceEnvelopeIsolationTests(unittest.TestCase):
             support_digest="sha256:" + ("1" * 64),
             case_index=0,
             proof=artifact,
+            as_of_event_seq=(0, 0),
         )
         self.assertIsInstance(env.proof, ProofReceipt)
 
@@ -477,6 +479,7 @@ class DiagnoseAtomLocatorEvidenceEnvelopeIsolationTests(unittest.TestCase):
             support_digest="sha256:" + ("2" * 64),
             case_index=None,
             proof=envelope,
+            as_of_event_seq=(0, 0),
         )
         self.assertIsInstance(env.proof, ProvenanceEnvelope)
 
@@ -490,6 +493,7 @@ class DiagnoseAtomLocatorEvidenceEnvelopeIsolationTests(unittest.TestCase):
                 support_digest="sha256:" + ("1" * 64),
                 case_index=0,
                 proof=_atom_locator(),  # type: ignore[arg-type]
+                as_of_event_seq=(0, 0),
             )
 
 

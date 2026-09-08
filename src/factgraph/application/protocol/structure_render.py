@@ -16,7 +16,7 @@ from .rule_structure import (
 def narrate_structure(structure: RuleStructure) -> tuple[str, ...]:
     """Render static RuleStructure lines aligned to Explanation.narrate()."""
     if not isinstance(structure, RuleStructure):
-        raise ValueError("structure must be RuleStructure")
+        raise ValueError("structure must be RuleStructure")  # noqa: TRY004 - Public renderer; shares the evidence codec ValueError contract.
     if not structure.branches:
         return ()
 

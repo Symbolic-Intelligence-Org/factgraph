@@ -7,7 +7,10 @@ from factgraph.authoring.dto import (
     build_schema_preflight_dto,
     build_schema_preflight_from_authoring_dto,
 )
-from factgraph.authoring.schema_compile import AuthoringSchemaCompileError, compile_authoring_schema_v1
+from factgraph.authoring.schema_compile import (
+    AuthoringSchemaCompileError,
+    compile_authoring_schema_v1,
+)
 
 
 class AuthoringSessionError(Exception):

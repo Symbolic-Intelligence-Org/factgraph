@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from factgraph.core.rules._trace import summarize_rule_trace_artifact_dict
+from factgraph.core.rules._trace_narrative import render_rule_run_narrative
 from factgraph.core.store._candidate_evidence_tree import (
     build_candidate_evidence_tree,
     build_degraded_candidate_evidence_tree,
@@ -13,46 +15,20 @@ from factgraph.core.store._candidate_evidence_tree_narrative import (
 from factgraph.core.store._candidate_evidence_tree_summary import (
     summarize_candidate_evidence_tree_dict,
 )
-from factgraph.core.store._support import _DEGRADED_SUPPORT_KINDS, _WITNESS_BEARING_SUPPORT_KINDS
-from factgraph.core.store._support import _PROVENANCE_BEARING_SUPPORT_KINDS
-from factgraph.core.rules._trace_narrative import render_rule_run_narrative
-from factgraph.core.rules._trace import summarize_rule_trace_artifact_dict
+from factgraph.core.store._support import (
+    _DEGRADED_SUPPORT_KINDS,
+    _PROVENANCE_BEARING_SUPPORT_KINDS,
+    _WITNESS_BEARING_SUPPORT_KINDS,
+)
 
 from .assertions import AuditAssertionReadError, load_assertion_index
-# Note: AuditComplianceError / build_compliance_matrix_rows moved with compliance.py to
-# domains.ecss.compliance during the namespace split. Imported lazily inside
-# list_compliance_matrix to keep factgraph free of an import-time dependency on domains.
-from .reader import AuditPackageData
 from .proof_frame_diff import ProofFrameDiff, ProofFrameDiffError, build_proof_frame_diff
-from .round_events import RoundEvent, RoundSummary, summarize_round_events
-from .round_events import make_warning
+from .reader import AuditPackageData
+from .round_events import RoundEvent, RoundSummary, make_warning, summarize_round_events
 
 
 class AuditQueryError(Exception):
     pass
-
-
-class AuditOptionalDomainError(AuditQueryError):
-    pass
-
-
-_ECSS_COMPLIANCE_OPTIONAL_DOMAIN_MESSAGE = (
-    "AuditQuery.list_compliance_matrix requires the optional domains.ecss package. "
-    "The factgraph wheel does not include optional domain packages; "
-    "use the monorepo/domain package, or call domains.ecss.compliance."
-    "build_compliance_matrix_rows when that domain package is installed."
-)
-
-
-def _load_ecss_compliance_helpers() -> tuple[type[Exception], Any]:
-    try:
-        from domains.ecss.compliance import AuditComplianceError, build_compliance_matrix_rows
-    except ModuleNotFoundError as exc:
-        missing_name = exc.name or ""
-        if missing_name == "domains" or missing_name.startswith("domains."):
-            raise AuditOptionalDomainError(_ECSS_COMPLIANCE_OPTIONAL_DOMAIN_MESSAGE) from exc
-        raise
-    return AuditComplianceError, build_compliance_matrix_rows
 
 
 @dataclass(frozen=True)
@@ -425,38 +401,6 @@ class AuditQuery:
             "events": events,
             "summary": summary,
         }
-
-    def list_compliance_matrix(
-        self,
-        *,
-        req_id: str | None = None,
-        status: str | None = None,
-        milestone: str | None = None,
-    ) -> list[dict[str, Any]]:
-        if req_id is not None and (not isinstance(req_id, str) or not req_id):
-            raise AuditQueryError("req_id must be non-empty string when provided")
-        if status is not None and (not isinstance(status, str) or not status):
-            raise AuditQueryError("status must be non-empty string when provided")
-        if milestone is not None and (not isinstance(milestone, str) or not milestone):
-            raise AuditQueryError("milestone must be non-empty string when provided")
-
-        # Lazy import: ECSS compliance lives in domains.ecss after the namespace split;
-        # importing here avoids factgraph.audit needing domains at module load time.
-        AuditComplianceError, build_compliance_matrix_rows = _load_ecss_compliance_helpers()
-
-        try:
-            assertion_index = load_assertion_index(self.package)
-            rows = build_compliance_matrix_rows(assertion_index)
-        except (AuditAssertionReadError, AuditComplianceError) as exc:
-            raise AuditQueryError(str(exc)) from exc
-
-        if req_id is not None:
-            rows = [row for row in rows if row.get("req_id") == req_id]
-        if status is not None:
-            rows = [row for row in rows if row.get("status") == status]
-        if milestone is not None:
-            rows = [row for row in rows if row.get("review_milestone") == milestone]
-        return rows
 
     def list_rule_traces(
         self,

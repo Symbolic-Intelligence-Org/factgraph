@@ -5,16 +5,22 @@ Scope: `authoring` / `core.derivation` / `core.store` / `sdk` / `service`
 
 ## 1. Chain
 
-This document defines the runtime contract for:
+This document defines the persisted compatibility contract for:
 
-Derivation -> CandidateSet -> Accept -> Ledger
+Derivation -> DerivationOutput -> optional CandidateSet-compatible materialization -> Ledger
 
 The v2 model separates entity materialization from fact writes and makes
 candidate identity/provenance explicit.
 
+`DerivationOutput` is the canonical in-process read-only type.
+`CandidateSet` is a direct type alias retained for this materialization and
+persisted v2 vocabulary; it is not a second DTO or a public evaluation result.
+The candidate-named fields and digest prefixes below remain byte-stable.
+
 ## 2. Hard Rules
 
-1. `CandidateSet` carries explicit v2 identity fields:
+1. `DerivationOutput` (and its `CandidateSet` compatibility alias) carries
+   explicit v2 identity fields:
    - `candidate_id` (`cand_v2:`): per-run handle
    - `candidate_key` (`candk_v2:`): cross-run stable key
    - `candidate_kind`: `fact` or `entity`
@@ -29,7 +35,7 @@ candidate identity/provenance explicit.
    Field writes are separate fact candidates.
 6. Provenance is stored in claim meta rows and is not encoded in `entity_ref`.
 
-## 3. CandidateSet v2
+## 3. DerivationOutput / CandidateSet-compatible v2 payload
 
 Shared top-level fields:
 

@@ -159,7 +159,6 @@ class FlatMethodRemovalInvariants(unittest.TestCase):
 # Class 4 — Docs taxonomy-first lint
 
 
-@unittest.skip("Slice 3a Step 12 owns load-bearing docs namespace migration")
 class DocsTaxonomyFirstLintInvariants(unittest.TestCase):
     """Per §5.5 + §5.5.6 lock: taxonomy-first docs reflect the lock.
 
@@ -220,44 +219,25 @@ class DocsTaxonomyFirstLintInvariants(unittest.TestCase):
         )
 
     def test_api_surface_canonical_signatures_match_flat_methods(self) -> None:
-        """Per pre-publish audit Blocker 1: SDK API docs canonical
-        taxonomy examples must match actual flat method signatures.
+        """Keep the original ID: copying canonical docs must call the real current SDK.
 
-        Flat signatures (per `src/factgraph/sdk/store.py`):
-        - ``check(inference, binding, ...)``
-        - ``check_fact_overlay(inference, binding, overlay, ...)``
-        - ``check_rule_disable(rule, support_artifact, *, case_index, condition_index, ...)``
-
-        The taxonomy examples MUST keep the same positional argument
-        names so users copy-pasting from docs get a valid call shape.
+        The removed what_if shells are not restored. The original wrong-order /
+        missing-argument intent is retained by executable mutation controls in
+        test_api_surface_examples, not by matching an obsolete call string.
         """
-        for relpath in ("src/factgraph/sdk/docs/04_api_surface.en.md",):
-            with self.subTest(doc=relpath):
-                text = self._read(relpath)
-                # Taxonomy what_if.check must take (inference, binding)
-                # — NOT (rule, binding) which was the pre-fix bug.
-                self.assertIn(
-                    "fg.what_if.check(inference, binding)",
-                    text,
-                    "fg.what_if.check must show (inference, binding) signature",
-                )
-                self.assertNotIn(
-                    "fg.what_if.check(rule, binding)",
-                    text,
-                    "fg.what_if.check must NOT show (rule, binding) — wrong argname per flat signature",
-                )
-                # Taxonomy fact_overlay.check must take 3 positional args
-                # — NOT (support, overlay) which was the pre-fix bug.
-                self.assertIn(
-                    "fg.what_if.fact_overlay.check(inference, binding, overlay)",
-                    text,
-                    "fg.what_if.fact_overlay.check must show (inference, binding, overlay) signature",
-                )
-                self.assertNotIn(
-                    "fg.what_if.fact_overlay.check(support, overlay)",
-                    text,
-                    "fg.what_if.fact_overlay.check must NOT show (support, overlay) — missing derivation+binding per flat signature",
-                )
+        from tests.sdk.api_surface_examples import execute_namespace_map
+
+        relpath = "src/factgraph/sdk/docs/04_api_surface.en.md"
+        with self.subTest(doc=relpath):
+            result = execute_namespace_map(self._read(relpath))
+            self.assertEqual(result["snapshot"].age, 30)
+            self.assertEqual(
+                tuple(tuple(value.value for value in row.values) for row in result["outcome"].effective.rows),
+                ((30,),),
+            )
+            self.assertEqual(result["outcome"].replay().status, "matched")
+            self.assertEqual(result["explanation"].to_dict()["source_protocol"], "evaluation_run_v2")
+            self.assertFalse(hasattr(result["fg"], "what_if"))
 
 
 # Class 5 — Sub-namespace structure under `what_if`

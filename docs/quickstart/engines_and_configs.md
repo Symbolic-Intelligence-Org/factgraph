@@ -1,8 +1,77 @@
 # Engines and configs
 
-Rule and RuleExpr declare *what* — engines and configs say *how to compute*. This chapter covers the `engine=` and `config=` parameters that `fg.eval.evaluate(...)` accepts, and the SDK wrappers (`ProbLogConfig`, `PyReasonConfig`) plus the canonical `SemanticsProfile`. It deliberately stops short of the actual `evaluate(...)` call shape, the `head=` parameter, and the returned `EvaluateRow` / `Explanation` rows — those live in `evaluation.md` and `evidence.md`.
+Rule/Policy declare *what*; execution semantics say *how to compute*. New
+Product V2 code uses target-pinned `fg.execution.*` profile builders. The
+older `engine=` / `config=` parameters, `ProbLogConfig`, `PyReasonConfig` and
+canonical `SemanticsProfile` remain the legacy `fg.eval.evaluate(...)` path.
+These generations are both documented here because their values are not
+interchangeable.
 
 The config fields are not arbitrary knobs; each one maps to a real feature of the underlying engine (ProbLog Annotated Disjunctions, PyReason temporal interval annotations, etc.). This chapter spells the mapping out so you can choose values from a position of understanding, not guessing.
+
+## Product V2 execution profiles (recommended)
+
+Every V2 profile is immutable, target-scoped and fully captured for replay:
+
+```python
+native = fg.execution.native_deterministic(target=policy).build()
+portable = fg.execution.portable_deterministic(target=policy).build()
+
+problog = (
+    fg.execution.problog(target=probability_policy, name="risk-v1")
+      .fact_semantics(identity_probability=True)
+      .for_occurrence(subject, fg.problog.occurrence_semantics())
+      .build()
+)
+```
+
+| V2 profile | Engine frames | Supported semantics |
+| --- | --- | --- |
+| `native_deterministic_v2` | Native | deterministic Product Rule/Policy/Function |
+| `portable_deterministic_v2` | Native, Soufflé, ProbLog | shared positive deterministic subset; all three selected-row sets must match |
+| `problog_point_v2` | ProbLog succeeded; Native/Soufflé typed unsupported | point-probability Scenario facts and explicit `WeightedChoice` |
+
+`target=` is the exact Product Rule/Policy, not a registry id. A deterministic
+candidate is pinned explicitly with
+`.for_target(candidate, side="candidate")`. ProbLog attachments use authored
+assets/handles rather than generated branch strings:
+
+- `.for_rule(rule, fg.problog.rule_semantics())`;
+- `.for_occurrence(handle, fg.problog.occurrence_semantics())`; and
+- `.for_choice(choice, fg.problog.choice_semantics())`.
+
+A Rule-level and occurrence-level attachment may not overlap the same lowering
+slot. Choice weights live only in authored `WeightedChoice` arms;
+`choice_semantics()` cannot override them. Product Function has deterministic
+semantics and no engine-parameter attachment: it is pre-materialized once per
+side and all selected engines consume that same relation.
+
+Scenario point probability uses the write-like SDK form:
+
+```python
+scenario = (
+    fg.scenario()
+      .set(
+          User.age,
+          alice,
+          25,
+          meta={"raw_kind": "probabilistic", "bound": [0.8, 0.8]},
+      )
+      .build()
+)
+```
+
+This metadata is sealed into the V2 effective world. The current ProbLog
+boundary exposes its declared Decimal → float64 projection explicitly in
+Result/Explain. Native/portable deterministic profiles reject probabilistic
+facts rather than dropping the semantics.
+
+V2 profiles accept closed resource/capture fields and version pins, not
+arbitrary `engine_options` or generic config dictionaries. A profile change
+means a new Run; Explain always describes the profile captured by that Run.
+
+The rest of this chapter describes the legacy `fg.eval.evaluate` configuration
+surface.
 
 ## 1. Four engines — one-paragraph triangle
 
@@ -110,7 +179,7 @@ fg.fields.add(
 
 The same keys are consumed in two places:
 
-- **Read-side time-travel**: `snap.field("role").at("2026-03-15T...")` filters assertions by their business-time interval (see [`assertions.md`](../official/kernel/quickstart/assertions.md))
+- **Read-side time-travel**: `snap.field("role").at("2026-03-15T...")` filters assertions by their business-time interval (see [`three_layer_api.md`](three_layer_api.md))
 - **PyReason `temporal_projection.valid_time_boundaries` / `fact_boundaries` modes** (§4.8): both modes treat every assertion's business-time interval as a fragment of the timeline that PyReason's timestep enumeration discretises. `fact_boundaries` is the canonical spelling per the adapter docs; `valid_time_boundaries` is the input alias kept for legacy profiles. They share one code path.
 
 A ProbLog evaluation ignores these keys entirely — there is no time dimension in ProbLog's semantics. Writing `valid_from` / `valid_to` is safe regardless of which engine you later choose; only the temporal modes of `PyReasonConfig` read them.
@@ -348,7 +417,7 @@ SemanticsProfile(
 
 ### 5.3 Pattern parallel
 
-This split (`SemanticsProfile` canonical / `ProbLogConfig` + `PyReasonConfig` ergonomic) is the same SDK-shadow / application-DTO pattern documented at [`docs/quickstart/rules.md`](rules.md) §2.6 for Rule vs the lower-level data shape. The SemanticsProfile naming is benign — application takes a neutral name, SDK takes the user-facing engine-specific names. (Compare the deferred Rule-namespace redesign discussed in [`workflow/design/design-points/active/rule-namespace-rulespec-redesign.zh.md`](../../workflow/design/design-points/active/rule-namespace-rulespec-redesign.zh.md) §2.2, where the same pattern is *not* yet applied.)
+This split (`SemanticsProfile` canonical / `ProbLogConfig` + `PyReasonConfig` ergonomic) is the same SDK-shadow / application-DTO pattern documented at [`docs/quickstart/rules.md`](rules.md) §2.6 for Rule vs the lower-level data shape. The SemanticsProfile naming is benign — application takes a neutral name, SDK takes the user-facing engine-specific names.
 
 ## 6. `fg.eval.preview_config(...)` — inspect-only
 
@@ -371,13 +440,24 @@ Use it to verify your config lowers to what you expect before running a long eva
 
 ## 7. → evaluation (next chapter)
 
-This chapter stops at *what* engines and configs are. The actual call:
+The recommended Product V2 call is:
+
+```python
+run = fg.query(policy).select("value", handle.value).plan(
+    profile=portable,
+    scenario=scenario,
+).run()
+```
+
+See [`product_workflow_v2.md`](product_workflow_v2.md) and
+[`evaluate_and_evidence.md`](evaluate_and_evidence.md). The legacy call is:
 
 ```python
 result = fg.eval.evaluate(rule_or_expr, head=<Rule>, engine=..., config=...)
 ```
 
-— with its `head=` parameter, returned `EvaluateResult` shape, row iteration, and explain integration — lives in `evaluation.md`. The shape of `EvaluateRow` / `Explanation` / claim payloads lives in `evidence.md`.
+Its `head=`, returned `EvaluateResult`, row iteration and legacy Explain are
+documented in [`evaluate_and_evidence.md`](evaluate_and_evidence.md).
 
 ## 8. Reference
 
@@ -385,6 +465,7 @@ result = fg.eval.evaluate(rule_or_expr, head=<Rule>, engine=..., config=...)
 
 ```python
 from factgraph.sdk import (
+    # Product V2 builders are reached through fg.execution / fg.problog.
     ProbLogConfig,        # 5 fields, lowers to SemanticsProfile(engine="problog")
     PyReasonConfig,       # 11 fields, lowers to SemanticsProfile(engine="pyreason")
     SemanticsProfile,     # canonical DTO (factgraph.core.semantics.profile.SemanticsProfile)
@@ -409,9 +490,11 @@ from factgraph.sdk import (
 ### 8.3 Related chapters
 
 - [`rules.md`](rules.md) — declarations that `evaluate(...)` consumes
+- [`product_workflow_v2.md`](product_workflow_v2.md) — current profile,
+  Scenario, Product Function and replay path
 - [`data_model.md`](data_model.md) §2.2 — the `raw_kind` / `bound` meta keys that `uncertainty_projection` projects
-- `evaluation.md` *(next chapter)* — actual `fg.eval.evaluate(...)` call, `head=`, returned `EvaluateResult`
-- `evidence.md` *(later chapter)* — `EvaluateRow` / `Explanation` / claim payload shapes
+- [`evaluate_and_evidence.md`](evaluate_and_evidence.md) — Product V2 outcome
+  plus legacy `fg.eval.evaluate(...)`, `EvaluateRow` and `Explanation`
 - Adapter docs:
   - [`src/factgraph/adapters/problog/`](../../src/factgraph/adapters/problog/) — `rule_ext.py`, `problog_export.py`
   - [`src/factgraph/adapters/pyreason/`](../../src/factgraph/adapters/pyreason/) — `rule_ext.py`, `where_compile.py`, `engine_eval.py`

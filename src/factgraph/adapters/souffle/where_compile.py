@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 import hashlib
 import json
 import os
+from dataclasses import dataclass
 from typing import Any
 
 from factgraph.adapters.souffle.pred_norm import normalize_pred_id
@@ -321,38 +321,30 @@ def _where_ast_gate_enabled() -> bool:
 def _adapt_where_ast_error(exc: Exception) -> WhereValidationError:
     adapted = WhereValidationError(str(exc))
     origin_path = getattr(exc, "path", None) or "$.where"
-    setattr(adapted, "kind", "where_ast_validate")
-    setattr(adapted, "path", origin_path)
-    setattr(
-        adapted,
-        "details",
-        {
-            "ast_error_code": type(exc).__name__,
-            "message": str(exc),
-            "origin_source": None,
-            "origin_path": getattr(exc, "path", None),
-            "op": None,
-            "tag": None,
-        },
-    )
+    adapted.kind = "where_ast_validate"
+    adapted.path = origin_path
+    adapted.details = {
+        "ast_error_code": type(exc).__name__,
+        "message": str(exc),
+        "origin_source": None,
+        "origin_path": getattr(exc, "path", None),
+        "op": None,
+        "tag": None,
+    }
     return adapted
 
 
 def _runtime_invariant_error(message: str, *, op: str | None = None) -> WhereValidationError:
     err = WhereValidationError(message)
-    setattr(err, "kind", "where_compile_runtime")
-    setattr(err, "path", "$.where")
-    setattr(
-        err,
-        "details",
-        {
-            "message": message,
-            "origin_source": "where_compile",
-            "origin_path": "$.where",
-            "op": op,
-            "tag": "validator_miss",
-        },
-    )
+    err.kind = "where_compile_runtime"
+    err.path = "$.where"
+    err.details = {
+        "message": message,
+        "origin_source": "where_compile",
+        "origin_path": "$.where",
+        "op": op,
+        "tag": "validator_miss",
+    }
     return err
 
 
@@ -570,7 +562,7 @@ def _expand_ruleref_relations_for_query_export(
     where: list[Any],
     registry: Any | None,
     pred_type_domains: dict[str, list[str]],
-) -> "_ExpandedRuleRefQuery":
+) -> _ExpandedRuleRefQuery:
     relation_specs: dict[str, _RuleRefRelationSpec] = {}
     pending_rule_specs: dict[tuple[str, str], tuple[str, tuple[str, ...], list[Any]]] = {}
 
@@ -1085,7 +1077,7 @@ def _validate_atom_subset(atom: Any) -> tuple[Any, ...]:
     if kind == "pred":
         if len(atom) != 3:
             raise WhereValidationError("pred atom must be ('pred', pred_id, [terms...])")
-        _, pred_id, terms = atom
+        _, _pred_id, terms = atom
         if not isinstance(terms, list):
             raise WhereValidationError("pred terms must be list")
         return atom
@@ -1918,9 +1910,7 @@ def _is_literal(value: Any) -> bool:
         return True
     if isinstance(value, int):
         return True
-    if isinstance(value, str) and not value.startswith("$"):
-        return True
-    return False
+    return isinstance(value, str) and not value.startswith("$")
 
 
 def _is_atom(value: Any) -> bool:

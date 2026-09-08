@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from collections.abc import Iterable
 from dataclasses import dataclass
 from itertools import combinations, product
-from typing import Iterable, Literal, NoReturn
+from typing import Literal, NoReturn
 
 from factgraph._sdk_errors import SDKDSLError
+
 from .rule import Rule, RuleOccurrence, RulePortRef, RuleValidationError
 
 
@@ -19,6 +21,8 @@ class ExplicitBoolError(RuleExprError):
 
 @dataclass(frozen=True, eq=False)
 class RuleJoinConstraint:
+    """Explicit equality join between ports of two Rule occurrences."""
+
     left: RulePortRef
     right: RulePortRef
     op: Literal["eq"] = "eq"
@@ -45,10 +49,26 @@ class RuleExpr:
 
     @staticmethod
     def all(*operands: object) -> _RuleExpr:
+        """Compose Rule occurrences with explicit logical conjunction.
+
+        Args:
+            *operands: Rules, occurrences, RuleExpr groups, or join constraints.
+
+        Returns:
+            A canonical conjunction expression.
+        """
         return _combine("and", operands)
 
     @staticmethod
     def any(*operands: object) -> _RuleExpr:
+        """Compose Rule occurrences with explicit logical disjunction.
+
+        Args:
+            *operands: Rules, occurrences, or compatible RuleExpr groups.
+
+        Returns:
+            A canonical disjunction expression.
+        """
         return _combine("or", operands)
 
     def __and__(self, other: object) -> _RuleExpr:
@@ -89,6 +109,7 @@ class _RuleOperand(_RuleExpr):
     rule: Rule
     alias: str
     explicit_alias: bool
+    authored_alias: str | None = None
 
     def _canonical(self) -> CanonicalExpr:
         return ("rule", _rule_identity(self.rule), self.alias)
@@ -361,7 +382,7 @@ def _validate_endpoint_matches_operand(endpoint: RulePortRef, operand: _RuleOper
 
 
 def _rule_identity(rule: object) -> tuple[str, str]:
-    return (str(getattr(rule, "id")), str(getattr(rule, "content_digest")))
+    return (str(rule.id), str(rule.content_digest))
 
 
 def _is_legacy_sdk_rule(value: object) -> bool:
@@ -371,7 +392,7 @@ def _is_legacy_sdk_rule(value: object) -> bool:
 
 __all__ = [
     "ExplicitBoolError",
-    "RuleJoinConstraint",
     "RuleExpr",
     "RuleExprError",
+    "RuleJoinConstraint",
 ]

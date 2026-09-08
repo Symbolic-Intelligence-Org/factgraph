@@ -11,19 +11,17 @@ from factgraph.adapters.problog.diagnostic_emit import (
 from factgraph.application.explain.diagnostic_projection import CompanionProgram
 from factgraph.application.explain.evidence_tree import (
     BOOLEAN_CERTAINTY,
+    LAYOUT_TREE,
     BoundVar,
     EvidenceAtom,
     EvidenceGraph,
     EvidenceTree,
     Fails,
     Holds,
-    LAYOUT_TREE,
     NotReached,
 )
 from factgraph.application.explain.prober import (
     ProbeEnv,
-    fact_source_for_atom,
-    refuting_sources_for_atom,
     _atom_form,
     _atom_status,
     _bake_repr_text,
@@ -34,9 +32,11 @@ from factgraph.application.explain.prober import (
     _is_not_atom,
     _joins_for_trace,
     _normalize_compiled_body,
-    _repr_not_atom,
     _render_term_value,
+    _repr_not_atom,
     _tree_status,
+    fact_source_for_atom,
+    refuting_sources_for_atom,
 )
 from factgraph.application.protocol.certainty import Certainty
 from factgraph.application.protocol.rule_expr_lowering import (

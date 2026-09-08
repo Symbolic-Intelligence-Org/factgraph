@@ -5,15 +5,15 @@ import os
 import re
 from typing import Any
 
-from factgraph.core.rules.backend_profile import BackendProfile, PROFILE_SOUFFLE_STRICT
+from factgraph.authoring.where_schema_lowering import (
+    WhereSchemaLoweringError,
+    lower_blueprint_where_sugar_with_schema_v1,
+)
+from factgraph.core.rules.backend_profile import PROFILE_SOUFFLE_STRICT, BackendProfile
 from factgraph.core.rules.rule_ast import RuleASTError, parse_query_rule_ir_to_ast
 from factgraph.core.rules.rule_ast_validate import (
     RuleASTValidationError,
     validate_query_rule_ast,
-)
-from factgraph.authoring.where_schema_lowering import (
-    WhereSchemaLoweringError,
-    lower_blueprint_where_sugar_with_schema_v1,
 )
 
 _IDENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
@@ -227,15 +227,11 @@ def _rule_ast_gate_enabled() -> bool:
 def _adapt_rule_ast_error(exc: Exception) -> AuthoringRuleCompileError:
     origin_path = getattr(exc, "path", None) or "$.query_rule"
     err = AuthoringRuleCompileError(str(exc), path=origin_path)
-    setattr(err, "kind", "rule_ast_validate")
-    setattr(
-        err,
-        "details",
-        {
-            "ast_error_code": type(exc).__name__,
-            "message": str(exc),
-            "origin_source": "authoring.rule_compile",
-            "origin_path": getattr(exc, "path", None),
-        },
-    )
+    err.kind = "rule_ast_validate"
+    err.details = {
+        "ast_error_code": type(exc).__name__,
+        "message": str(exc),
+        "origin_source": "authoring.rule_compile",
+        "origin_path": getattr(exc, "path", None),
+    }
     return err

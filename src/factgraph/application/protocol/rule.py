@@ -1,23 +1,24 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 import json
 import re
+from collections.abc import Mapping
+from dataclasses import dataclass
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Any, Literal, Mapping, NoReturn
+from typing import TYPE_CHECKING, Any, Literal, NoReturn
 
 from factgraph.core.protocol.digests import sha256_hex
 from factgraph.core.rules.where_ast import (
-    AndExpr,
     AggregateAtom,
+    AndExpr,
     Atom,
     BuiltinAtom,
     CmpAtom,
     Const,
     InAtom,
     NotAtom,
-    Origin,
     OrExpr,
+    Origin,
     PredAtom,
     RuleRefAtom,
     Term,
@@ -97,14 +98,17 @@ class Rule:
 
     @property
     def atom_ids(self) -> tuple[str, ...]:
+        """Return stable positional ids for this Rule's body atoms."""
         return tuple(f"{self.id}:atom_{idx}" for idx in range(len(self.when)))
 
     @property
     def port_types(self) -> Mapping[str, PortType]:
+        """Return the inferred entity/value type of every public Rule port."""
         return self._port_types
 
     @property
     def content_digest(self) -> str:
+        """Return the canonical digest of ports and logical body content."""
         payload = {
             "ports": [(name, _serialize_var(var)) for name, var in sorted(self.ports.items())],
             "when": [_serialize_atom(atom) for atom in self.when],
@@ -113,6 +117,17 @@ class Rule:
         return sha256_hex(canonical)
 
     def render_repr(self, bindings: Mapping[str, Any] | None = None) -> str:
+        """Render this Rule's optional representation template.
+
+        Args:
+            bindings: Optional public-port values used for interpolation.
+
+        Returns:
+            The rendered template, or an empty string when no template exists.
+
+        Raises:
+            RuleValidationError: If ``bindings`` is not a mapping.
+        """
         if self.repr is None:
             return ""
         values = {} if bindings is None else bindings
@@ -177,11 +192,33 @@ class Rule:
             raise RuleValidationError(str(exc)) from exc
 
     def as_(self, alias: str | None = None) -> RuleOccurrence:
+        """Create a named Rule occurrence for RuleExpr composition.
+
+        Args:
+            alias: Optional occurrence alias. Defaults to the Rule id.
+
+        Returns:
+            A typed occurrence exposing this Rule's ports.
+        """
         effective_alias = self.id if alias is None else alias
         return RuleOccurrence(rule=self, alias=_validate_occurrence_alias(effective_alias))
 
     @classmethod
     def projection(cls, *port_names: str) -> Rule:
+        """Create a synthetic projection head for selected ports.
+
+        Args:
+            *port_names: Ordered, unique output port names.
+
+        Returns:
+            A projection Rule used as a compiled Query head.
+
+        Raises:
+            RuleValidationError: If no names are supplied or a name is invalid.
+
+        Notes:
+            This is a structural compiler helper, not a persisted business Rule.
+        """
         if not port_names:
             raise RuleValidationError("Rule.projection(...) requires at least one port name")
         seen: set[str] = set()
@@ -574,11 +611,14 @@ def _find_entity_ref_type(var: Var, atoms: tuple[Atom, ...]) -> str | None:
 
 
 def _find_entity_ref_type_in_atom(var: Var, atom: Atom) -> str | None:
-    if isinstance(atom, PredAtom) and atom.pred_id.endswith(":exists"):
-        if any(term == var for term in atom.terms):
-            entity_type = atom.pred_id[: -len(":exists")]
-            if entity_type:
-                return entity_type
+    if (
+        isinstance(atom, PredAtom)
+        and atom.pred_id.endswith(":exists")
+        and any(term == var for term in atom.terms)
+    ):
+        entity_type = atom.pred_id[: -len(":exists")]
+        if entity_type:
+            return entity_type
     if isinstance(atom, NotAtom):
         return _find_entity_ref_type_in_expr(var, atom.body)
     return None

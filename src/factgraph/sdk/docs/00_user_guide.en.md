@@ -1,8 +1,18 @@
-# FactPy SDK User Guide
+# FactGraph SDK User Guide
+
+- Applicable scope: `src/factgraph/sdk`
+- Last updated: 2026-08-30
 
 The end-to-end tour of `factgraph.sdk` for new users. Reading this doc plus
 running the snippets is enough to use the SDK confidently for typical
 workloads.
+
+> **Current product path.** Sections 5–6 below retain the live/legacy
+> `fg.eval.evaluate(...)` surface for compatibility. New Rule/Policy/Function
+> work should start with the
+> [complete Product V2 workflow](../../../../docs/quickstart/product_workflow_v2.md),
+> which covers typed Query, Scenario, target-pinned execution profiles,
+> structured Result/Explain data and detached replay.
 
 For exhaustive API listings see
 [`04_api_surface.en.md`](04_api_surface.en.md). For counterfactual
@@ -19,13 +29,14 @@ For walker views and advanced importables see
 3. [Reading](#3-reading)
 4. [Writing](#4-writing)
 5. [Eval — Rule / Query / Inference](#5-eval--rule--query--inference)
-6. [What-if](#6-what-if)
+6. [Evidence and why-not](#6-evidence-and-why-not)
 7. [Audit](#7-audit)
 8. [Views and packages](#8-views-and-packages)
 9. [Error handling](#9-error-handling)
-10. [Registry](#10-registry)
-11. [Where to go next](#11-where-to-go-next)
-12. [Appendix: migration notes (v2 → v3)](#12-appendix-migration-notes-v2--v3)
+10. [Additive schema changes](#10-additive-schema-changes)
+11. [Workspace lifecycle and legacy migration](#11-workspace-lifecycle-and-legacy-migration)
+12. [Where to go next](#12-where-to-go-next)
+13. [Appendix: migration notes (v2 → v3)](#13-appendix-migration-notes-v2--v3)
 
 ---
 
@@ -40,8 +51,8 @@ python -m pip install factgraph
 For development from source:
 
 ```bash
-git clone https://github.com/Symbolic-Intelligence-Org/factgraph_test.git
-cd factgraph_test
+git clone https://github.com/Symbolic-Intelligence-Org/factgraph.git
+cd factgraph
 python -m pip install -e .
 ```
 
@@ -77,7 +88,10 @@ retracts, and `fg.schema.*` for schema operations.
 
 The public namespaces:
 `entities`, `fields`, `assertions`, `schema`, `eval`, `audit`, `package`,
-`views`, `rules`, and `inferences`. See [§0 of 04_api_surface.en.md](04_api_surface.en.md#0-namespace-map)
+`assertion_views`, `meta`, `rules`, and `inferences`. `meta` is the read-only
+runtime-capability namespace (`fg.meta.capabilities()`); session-local named
+assertion sets live under `fg.assertion_views`. See
+[§0 of 04_api_surface.en.md](04_api_surface.en.md#0-namespace-map)
 for the full map.
 
 ---
@@ -112,19 +126,24 @@ fg = FactGraph.create(schema_classes=[User, Document])
 ```
 
 Pass `path=` when the graph should own a durable workspace. A workspace stores
-the ledger plus a Database-owned schema object:
+the Database ledger, immutable transaction chain, and content-addressed schema
+objects. Writes are durable when their SDK call returns:
 
 ```python
 fg = FactGraph.create(schema_classes=[User, Document], path="./workspace")
-fg.save_workspace()
+ref = fg.entities.create(User, user_id="u-1")
+fg.fields.set(User.name, ref, "Alice")
+fg.close()
 
 same_graph = FactGraph.load_workspace("./workspace", schema_classes=[User, Document])
+same_graph.close()
 ```
 
 `FactGraph.load_workspace(...)` requires the same Python `Entity` classes used to create
-the workspace. It validates the manifest, ledger schema digest, Database schema
-object, any legacy registry schema entry that is still present, and supplied
-classes before returning a graph.
+the workspace. It validates the transaction history, active-state
+digest, assertion content digests, Database schema object, and supplied classes
+before returning a graph. Create/load holds an exclusive writer lock until
+`close()`; opening the same durable workspace twice fails explicitly.
 
 You can also compile separately:
 
@@ -638,7 +657,11 @@ For PyReason, prefer canonical `iteration_count`, `derived_bound`,
 `head_bound`, `case_bounds`, `fixed_timesteps`, and `valid_time_boundaries`
 remain compatibility surfaces. `atom_bounds` keys use application atom ids such
 as `<rule_id>:atom_<index>` and are for application `Rule` inputs. For full
-examples, see `docs/official/kernel/quickstart/semantics.md`.
+legacy configuration examples, see
+[`docs/quickstart/engines_and_configs.md`](../../../../docs/quickstart/engines_and_configs.md).
+For new Product V2 code, use target-pinned execution profiles from the
+[complete Product V2 workflow](../../../../docs/quickstart/product_workflow_v2.md)
+instead of passing arbitrary engine config to a Rule or Policy.
 
 ### Semantic annotations
 
@@ -667,6 +690,12 @@ Failed explanations use `Explanation(status="failed")` with
 There is no public `.eval.why_not(...)` or `fg.what_if.*`
 candidate-universe shell in T5.
 
+For the distinct, replacement-only Scenario path, start from a resolved Query:
+`fg.query(...).bind(...).select(...).what_if(scenario).run()`. It returns a
+detached `ScenarioRunV0` with `.diff()`, `.verify()`, and side-specific
+`.explain(...)`; it is not a general What-if shell or an `EvaluateResult`.
+See [`06_what_if_and_proof.en.md`](06_what_if_and_proof.en.md).
+
 For native or Souffle passed rows, `row.explain().evidence` is a row-level Form
 1 `EvidenceGraph`: a root conclusion, selected-branch premises, assertion
 seeds, and `supports` edges. For ProbLog passed rows, it is a row-level
@@ -676,9 +705,10 @@ row/result audit context; `run_id` stays on the `EvaluateResult` envelope.
 Read `row.explain().repr` for deterministic multi-line text walked from that
 graph. Unsupported and invalid request explanations return `None` for `repr`.
 Treat PyReason row-level graphs, aggregate contributor envelopes, failed-graph
-trees, and match witness output as future evidence tracks. The full DTO chain
-and boundaries are documented in the official
-[evidence quickstart](../../../../docs/official/kernel/quickstart/evidence.md).
+trees, and match witness output as future evidence tracks. The full legacy DTO
+chain and current Product V2 structured Result/Explain/replay boundaries are
+documented in
+[Evaluation and evidence](../../../../docs/quickstart/evaluate_and_evidence.md).
 
 ---
 
@@ -893,11 +923,11 @@ multi-cardinality fields. After field-add, use the replacement class object;
 reads or writes through superseded entity classes or descriptors raise
 `SDKStoreError`.
 
-The operation is immediate for the active graph: new classes can be used for
-`fg.entities.*`, `fg.fields.*`, `fg.assertions.*`, in-memory `Rule(...)`, and
-in-memory `Inference(...)` right away. If the graph is workspace-backed, call
-`fg.save_workspace()` to persist the new workspace manifest digest; the manifest is not
-rewritten implicitly.
+The operation is immediate and durable for a Database-backed graph: new
+classes can be used for `fg.entities.*`, `fg.fields.*`, `fg.assertions.*`,
+in-memory `Rule(...)`, and in-memory `Inference(...)` right away. The schema
+change is an isolated transaction that commits the old/new schema digests and
+the new canonical schema object. `fg.save_workspace()` is not required.
 
 Only additive entity-class extension and additive non-identity field extension
 are implemented here. Identity-field changes, field rewrites, destructive
@@ -907,7 +937,7 @@ removal, deprecation metadata, and migration planning are deferred:
 
 ---
 
-## 11. Workspace Registry Removal
+## 11. Workspace Lifecycle and Legacy Migration
 
 Workspace persistence is now graph-bound and Database-owned. Bind a graph to a
 workspace with `path=`:
@@ -920,6 +950,18 @@ fg = FactGraph.create(
     path="/var/factpy/workspace",
 )
 ```
+
+`FactGraph.create(path=...)` and `FactGraph.load_workspace(...)` own their
+Database and hold its exclusive writer lock. Use `fg.close()` or a context
+manager before another process or graph opens the same workspace. v0.3 does
+not provide a read-only durable open channel.
+
+All canonical writes are write-through. `fg.save_workspace()` only updates
+`db/meta.json:last_saved_at_epoch_ns`; it does not copy SQLite, advance the
+transaction head, or form a commit boundary. Consequently, the legacy
+"load, modify, omit save to discard" pattern no longer works. Copy the entire
+closed workspace directory first, then open the copy for dry-run or sandbox
+work.
 
 > Q8 Phase 2 removed the SavedRule/SavedInference persistence layer. The
 > graph-bound `fg.rules.*` namespace exposes `fg.rules.inspect(...)` only;
@@ -945,8 +987,7 @@ candidates = fg.eval.evaluate(my_inference)
 
 `SDKRegistry`, `FileAuthoringRegistry`, `SDKRegistryError`, `registry_root=`,
 and `registry=` were removed by A20(E) / Q6-A. Pass `path=` for workspace
-persistence. If an old workspace still carries `registry/`, migrate it
-explicitly:
+persistence. Migrate a closed v0.2 `ledger.db` workspace explicitly:
 
 ```bash
 python -m factgraph migrate-workspace /var/factpy/workspace
@@ -957,32 +998,46 @@ The workspace layout is intentionally compact:
 ```text
 workspace/
   factgraph_workspace.json
-  ledger.db
   db/
+    assertions.db
+    meta.json
+    writer.lock
     objects/
       schema/
         <schema-digest>.json
+      tx/
+        <tx-digest>.json
+    refs/                      # reserved; empty in v0.3 (head is in ledger_meta)
+  views/                       # created lazily by db.create_view(...)
+    objects/<view-digest>.json
 ```
 
-`factgraph_workspace.json` uses version `"1"` and save scope `"level_4"`.
-Level 4 includes ledger data and the Database schema object. The top-level
-`schema_digest` is a compatibility cross-check; the live schema anchor is the
-content-addressed object under `db/objects/schema/`. Level 4 does not include
-artifact sidecars, in-memory views, audit/evidence round files, package-export
-output, or a new `registry/` directory. Use `fg.package.export_package(...)`
-when you need a distribution/reproduction artifact rather than an editable
-workspace.
+`factgraph_workspace.json` uses version `"1"` and points only to `db/` and
+`views/`. The current head and state commitment live transactionally in
+`db/assertions.db`; schema and tx objects are content-addressed and write-once.
+The workspace excludes artifact sidecars, in-memory assertion views,
+audit/evidence round files, package-export output, and live registry content.
+Use `fg.package.export_package(...)` for a distribution/reproduction artifact.
 
-Old workspaces written before Q8 Phase 2 may contain `registry/rules/` and
-`registry/inferences/` directories on disk; those files are inert. Old
-workspaces with `registry/schema/schema_ir.json` are no longer auto-loaded:
-`FactGraph.load_workspace(...)` raises `SDKStoreError` with the migration command above.
-The migration writes the Database schema object and can archive the historical
-registry directory. Apply-log readers remain read-only compatible with
+Legacy workspaces are never auto-migrated: `FactGraph.load_workspace(...)`
+raises `SDKStoreError` with the command above. The CLI verifies a staging v0.3
+workspace, preserves legacy rows and assertion ids, and writes a genesis import
+transaction using ordinary assertion, revocation, and append-meta
+operations because v0.2 commit history cannot be reconstructed. By default the
+complete source is retained under `workspace.legacy.<UTC timestamp>/`; use
+`--no-archive` only when that backup is intentionally unnecessary. Apply-log
+readers remain compatible with
 historical `db/audit/authoring_apply_events.jsonl`,
 package-local `authoring_apply_events.jsonl`, and legacy
 `registry/authoring_apply_events.jsonl` inputs. The service `/v1/registry/*`
 routes were deleted.
+
+During replacement, the CLI temporarily holds the complete source in a visible
+`<workspace-name>.legacy-<UTC timestamp>` sibling. If migration is interrupted,
+rerun the command. A `workspace_recovery_required` response lists candidate
+siblings and says whether a replacement exists. Verify the candidate, then
+restore it when the workspace is missing, or explicitly archive/remove it when
+the replacement is valid. The CLI never chooses automatically.
 
 See [`04_api_surface.en.md`](04_api_surface.en.md#27-rules-namespace-fgrules)
 for the post-Phase-2 `fg.rules.*` and `fg.inferences.*` namespace shape.
@@ -999,7 +1054,8 @@ for the post-Phase-2 `fg.rules.*` and `fg.inferences.*` namespace shape.
 - **[`04_api_surface.en.md`](04_api_surface.en.md)** — full API
   reference with every method signature
 - **[`06_what_if_and_proof.en.md`](06_what_if_and_proof.en.md)** —
-  end-to-end tutorial of all nine what-if and proof methods
+  V1 Query/Scenario What-if, detached Explain/replay boundaries, and the
+  bounded legacy captured ScenarioRun path
 - **[`07_walker_and_advanced.en.md`](07_walker_and_advanced.en.md)** —
   walker views, recorder lifecycle, raw DTO construction, optional
   domain helpers, engine adapter registration
@@ -1019,7 +1075,7 @@ Notable changes:
 | `temporal` field on `Field` | (removed) | Temporal semantics moved to `meta` |
 | `dims` field on `Field` | (removed) | Multi-dimensional fields not supported |
 | `fg.get/find/ref/match` | `fg.entities.get/where/ref/match` | Layer 1 entity navigation |
-| (new in v3) | `fg.entities.create` | Explicit Identity Claim + `:exists` Claim emit; replaces implicit-create through `fg.fields.set` |
+| (new in v3) | `fg.entities.create` | Explicit complete Identity Claim bundle emit; entity-domain `:exists` is projected virtually rather than persisted |
 | (new in v3) | `fg.entities.delete` | Whole-entity retract; PF-S2 Form A `(e_ref)` or Form B `(EntityCls, **identity)` |
 | (new in v3) | `fg.entities.exists` | Boolean visibility check on the active Identity Claim bundle (no snapshot materialization) |
 | `fg.set/add` | `fg.fields.set/add` | Layer 2 field writes |

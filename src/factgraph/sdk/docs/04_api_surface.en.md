@@ -1,5 +1,8 @@
 # SDK API Surface Reference
 
+- Applicable scope: `src/factgraph/sdk`
+- Last updated: 2026-08-15
+
 The exact public surface of `factgraph.sdk`. For tutorials see
 [`00_user_guide.en.md`](00_user_guide.en.md).
 
@@ -11,34 +14,57 @@ The exact public surface of `factgraph.sdk`. For tutorials see
 `SDKStore` — both names refer to the same class object and accept the
 same calls.
 
-`FactGraph` exposes operations through focused namespaces. T5 keeps the public
-evaluation/evidence path under `fg.eval`.
+`FactGraph` exposes operations through focused namespaces. This self-contained,
+in-memory example uses the current Product V2 Query path. The retained
+`fg.eval` namespace is for the documented live/legacy evaluation surface, not
+a replacement for the Product V2 execution profile and sealed Run.
 
 ```python
-from factgraph.sdk import FactGraph
+from factgraph.sdk import Entity, FactGraph, Field, Identity, outcome_from_run_v2, vars
+
+
+class User(Entity):
+    user_id: str = Identity()
+    age: int = Field()
+
 
 fg = FactGraph.create(schema_classes=[User])
 
 # Canonical namespaces
-alice = fg.entities.ref(User, user_id="u-1")
-fg.fields.add(User.tag, alice, "engineer")
-fg.entities.get(User, user_id="u-1")
-result = fg.eval.evaluate(inference)
-row = result.first()
-explanation = row.explain() if row is not None else None
-fg.audit.diff_proof_frames(round_a_id, round_b_id, round_a_events, round_b_events)
+alice = fg.entities.create(User, user_id="u-1")
+fg.fields.set(User.age, alice, 30)
+snapshot = fg.entities.get(User, user_id="u-1")
+
+# Headless Product Rule and an explicitly named Policy occurrence.
+with vars("user", "age") as (user, age):
+    user_ages = fg.build_rule(
+        id="user_ages", version="1",
+        when=(User(user), User(user).age == age),
+        ports={"user": user, "age": age},
+        semantic_ports={"user": User, "age": User.age},
+    )
+policy = fg.policy_builder("users", version="1")
+users = policy.use(user_ages).as_("users")
+target = policy.build(users)
+profile = fg.execution.native_deterministic(target=target).build()
+run = fg.query(target).select("age", users.age).plan(profile=profile).run()
+outcome = outcome_from_run_v2(run)
+row = outcome.effective.rows[0]  # Explicit row choice for this one-user fixture.
+explanation = outcome.explain(row)
+fg.close()
 ```
 
 | Namespace | Methods |
 |---|---|
 | `entities` | `get`, `where`, `match`, `ref`, `create`, `delete`, `exists`, `edit` |
 | `fields` | `set`, `add`, `retract`, `delete`, `get` |
-| `assertions` | `by_id`, `by_ids`, `where`, `retract`, `active`, `all` |
+| `assertions` | `by_id`, `by_ids`, `where`, `retract`, `append_meta`, `active`, `all` |
 | `schema` | `register`, `extend`, `apply`, `ingest`, `validate_provenance` |
 | `eval` | `evaluate`, `explain`, `preview_config` |
 | `audit` | `explain`, `conflicts`, `diff_proof_frames` |
 | `package` | `export_package`, `run_package` |
-| `views` | `create`, `update`, `delete`, `get`, `list` |
+| `assertion_views` | `create`, `update`, `delete`, `get`, `list` |
+| `meta` | `capabilities` |
 
 Namespace accessors return private manager objects. The managers are
 read-only — assigning attributes to namespace managers raises
@@ -49,8 +75,11 @@ should not be imported directly.
 
 ## 1. Top-Level Exports
 
-Everything below is importable as `from factgraph.sdk import <name>`.
-The export list currently has 59 names.
+Everything below is importable as `from factgraph.sdk import <name>`. The
+export list is intentionally curated; inspect `factgraph.sdk.__all__` for its
+exact current membership. `SchemaTransitionInput` is deliberately absent: it
+is a policy-free core mechanism, while SDK schema changes go through the
+additive-only `fg.schema` namespace.
 
 ### 1.1 Schema and store
 
@@ -67,9 +96,9 @@ The export list currently has 59 names.
 values in declaration order; unset `Field` values render as `None`.
 
 `FactGraph.create(schema_classes=[...])` is the canonical constructor.
-`FactGraph.load_workspace(path, schema_classes=[...])` restores a saved workspace.
+`FactGraph.load_workspace(path, schema_classes=[...])` opens a durable workspace.
 `FactGraph.from_schema_classes([...])` remains available as the lower-level
-class-first constructor name and does not accept workspace `path=`.
+unmanaged-Ledger constructor and does not accept workspace `path=`.
 
 #### Form I schema descriptors
 
@@ -143,9 +172,11 @@ exported from `factgraph.sdk`.
 | `RuleExprError` (← `SDKDSLError`) | Raised when RuleExpr authoring input violates the expression contract |
 | `RuleJoinConstraint` | Immutable RuleExpr join constraint produced by `occurrence.port.eq(other_port)` / `occurrence.port_name.eq(other.port_name)`; initial joins use explicit `.eq(...)`, not Python `==` |
 | `RuleExprInspect` | Immutable object returned by `fg.rules.inspect(application_rule_or_rule_expr)`; exposes `ast`, `occurrences`, `joins`, `unjoined_same_name_ports`, `render()`, and `render_compact()` |
+| `RuleStructure` | Immutable object returned by `fg.rules.structure(application_rule_or_rule_expr, head=...)`; exposes the authored inspect floor, `narrate()`, plus DNF branches keyed to explain evidence |
 | `OccurrenceInspect` | Immutable occurrence descriptor used by `RuleExprInspect.occurrences`; exposes alias, template id, port names, and atom descriptors |
 | `ConditionDescriptor` | Immutable authoring-time atom descriptor used by `OccurrenceInspect.atoms`; exposes structured fields plus a display `summary` |
 | `PortInspect` | Immutable rich port descriptor used by `RuleExprInspect.ports`; exposes port name, kind, entity type, field, and value type |
+| `StructureBranch`, `StructureOccurrence`, `StructureAtom`, `StructureJoin`, `StructurePort`, `FreeVar`, `Const`, `HeadClosure` | Immutable `RuleStructure` DTOs; branch/occurrence/atom/join keys align with tree evidence keys but carry no runtime verdicts |
 | `ExplicitBoolError` (← `RuleExprError`) | Raised when application `Rule` or RuleExpr values are used in Python boolean contexts; use `&` / `|`, not `and` / `or` |
 
 The application Rule bridge additionally exposes aggregate helpers from
@@ -179,7 +210,41 @@ Use `from factgraph.sdk import build_application_rule` and
 | `IngestResult` | Result of `fg.schema.ingest(...)`: counts, ids, validation report |
 | `ValidationReport` | Per-row provenance/shape validation outcome |
 
-### 1.5 Errors and error codes
+### 1.5 Q18 V1 and Product V2 Query / Scenario / Run
+
+V1 is a deliberate, separately versioned public surface. It is entered through
+`fg.query(...).plan(...)`; it does not change the behavior or wire shape of
+V0 `fg.eval.evaluate(...)`, `capture()`, or `ScenarioRunV0`.
+
+| Symbols | Purpose |
+|---|---|
+| `SDKStore.rule_builder(id, *, version=None, meta=None)`, `SDKStore.build_rule(...)`, `RuleBuilder`, `ProductRuleV1` | Product Rule authoring. A complete `semantic_ports` declaration is resolved against this graph at build time, so the returned Rule is immediately usable in `use(...)` and `query(...)`. Public SDK code uses an `Entity` class for an identity port and a bound `Field` descriptor for a scalar field port, e.g. `{"person": Person, "age": Person.age}`; this does not register a Rule. |
+| `SDKStore.function_builder(id, *, version=None, meta=None)`, `SDKStore.build_function(...)`, `FunctionBuilder`, `ProductFunctionV1`, `FunctionPortV1` | Product Function authoring. Defines one pure deterministic scalar callable with ordered typed inputs and one typed output. It creates an immutable asset but no registry entry, Rule builtin, action tool, or replay-time callback. Python annotations infer `string` / `int` / `float64` / `bool`; explicit domains also support canonical `time` and `uuid` values. |
+| `SDKStore.policy_builder(id, *, version=None, meta=None)`, `SDKStore.build_policy(id=..., build=...)`, `PolicyBuilder`, `ProductPolicyV1` | Preferred product Policy authoring path. Occurrences remain local/owner-bound. The direct callback receives one exact builder and returns its root; it does not register or execute a Policy. `SDKStore.policy(...)`, `PolicyDraft`, and `AuthoredPolicyTargetV1` remain Q19 compatibility forms. |
+| `AssetMeta`, `AssetMetaAbsentV1`, `ASSET_META_ABSENT_V1`, `asset_snapshot_v1(...)` | Canonical descriptive asset metadata and its explicit raw-target absent state. Metadata stays outside logical Rule/Policy digests; product wrappers expose an independent `asset_binding_digest` for sealed V2 capture. |
+| `WeightedChoiceArmV1`, `WeightedChoiceTopologyV1`, `WeightedChoiceHandle` | Explicit exclusive categorical Policy topology. It uses canonical decimal-string probabilities and a branch-total direct semantic-port key. It is V2 ProbLog-only; ordinary `all`/`any` retain deterministic semantics. |
+| `FunctionInputBindingV1`, `FunctionOccurrenceTopologyV1`, `FunctionOccurrenceHandleV1` | Policy-owned Function occurrence and its sealed input edges. Every input comes from direct scalar ports of one Rule occurrence; output ports are select/compare values and cannot be bound as Query inputs. Function chaining and Rule/Function nesting are rejected. |
+| `PolicyOccurrenceHandle`, `PolicyPortHandle`, `PolicyEntityPortHandle`, `PolicyScalarPortHandle`, `PolicyFieldHandle`, `PolicyNodeHandle`, `PolicyConstraintHandle`, `PolicyAuthoringError` | Typed SDK façade values for occurrence membership, direct ports, one-hop field navigation, authored topology, and direct constraints. Symbolic values are not Python booleans or hash keys. |
+| `EvaluationQueryBuilderV1`, `ScenarioGoalPlanBuilderV1` | Returned by `fg.query(...)` / V1 `what_if(...)`; build immutable V1 intent before `.plan()` / `.run()` |
+| `ProviderQueryTargetV1` | Explicit alternate wrapper for a resolved Rule/Policy plus one `RelationProviderV1`; `.using(provider)` is the usual fluent form |
+| `GoalPlanInvocationV1`, `GoalPlanRunV1`, `GoalPlanFailureV1` | In-process plan, completed sealed run wrapper, or fail-closed pre-run outcome |
+| `GoalPlanV1`, `GoalResultV1`, `GoalResultRowV1`, `GoalTechnicalAssessmentV1`, `GoalValueV1` | Immutable plan/result/technical-assessment protocol values (row results use set semantics) |
+| `GoalRowExpectationV1`, `ContainsRowExpectationV1`, `ExistsExpectationV1`, `CountEqExpectationV1`, `SetEqualsExpectationV1`, `ExactLocalAbsenceExpectationV1` | Typed V1 expectation constructors; absence names an exact Scenario closure target rather than a zero Query row |
+| `ScenarioSpecV1`, `ScenarioValueV1`, `ScenarioSetEffectiveValueV1`, `ScenarioEnsureMemberV1`, `ScenarioSetExactMembersV1`, `ScenarioWithoutFieldV1`, `ScenarioWithoutValueV1`, `ScenarioWithoutAssertionV1`, `ScenarioCreateEphemeralEntityV1`, `ScenarioEnsureRelationV1`, `ScenarioWithoutRelationV1`, `ScenarioWithoutEntityV1` | Grounded declarative Scenario input; resolved worlds are non-persistent and all-or-fail |
+| `EvidenceScopeV1`, `ExactLocalClosureTargetV1` | Baseline admission filter and exact local absence target; neither creates global negative facts |
+| `RelationProviderV1`, `ProviderRequestV1`, `ProviderRelationRowV1`, `ProviderMaterializationV1`, `provider_binding_slot_v1` | Restricted finite, typed pre-engine relation input attached to a Rule/Policy Query through `.using(provider)` / `ProviderQueryTargetV1`; never a bare logical target |
+| `EvaluationEnginePinV1`, `EvaluationExecutionProfileV1`, `native_deterministic_profile_v1`, `portable_deterministic_profile_v1` | Exact zero-config native or all-three-engine portable profile declaration |
+| `EvaluationRunV1`, `ExplainTargetV1`, `EvaluationRunExplanationV1`, `EvaluationRunPolicyProjectionV1`, `EvaluationRunReplayV1`, `PolicyVariantComparisonV1`, `ScenarioDiffV1` | Sealed run, explicit detached Explain target, native-inner EvidenceGraph/Policy overlay wrapper, replay observation, immutable candidate comparison, and non-causal captured Scenario diff |
+| `ProductEvaluationOutcomeV2`, `outcome_from_run_v2(run)` | Thin SDK read facade over a raw sealed `EvaluationRunV2`. `.run` remains the raw carrier; `.baseline` / `.effective` / optional `.candidate_effective` are named V2 result views, `.explain(row_or_explicit_target)` is row-explicit and data-first, and `.replay()` delegates to sealed replay. It has no implicit first-row, Boolean, `close()`, or negative-proof behavior. |
+| `SDKStore.execution.native_deterministic(target=...)`, `.portable_deterministic(target=...)`, `.problog(target=...)` | Target-pinned Product V2 profile builders. Portable deterministic executes Native, Soufflé and ProbLog over the same sealed deterministic world and pre-materialized Function relations, without engine fallback or proof-parity claims. |
+
+Use a structured `SemanticPortAddress` for every V1 binding. There is no
+string policy registry, dotted port grammar, generic public NAF, Action, or
+engine fallback in this interface. See
+[`03_rules_and_inferences.en.md`](03_rules_and_inferences.en.md) for a flow and
+the application protocol docs for exact codec/assessment semantics.
+
+### 1.6 Errors and error codes
 
 | Class | Triggered by |
 |---|---|
@@ -229,10 +294,11 @@ FactGraph.create(
 
 Class-validation errors raise `SDKSchemaError`; constructor-path errors
 raise `SDKStoreError`. `path=` binds the graph to a compact workspace root and
-derives the default `ledger.db` component path and Database schema-object
-anchor. Explicit `ledger_path=` may be supplied with `path=` only when it
-matches the workspace default. `registry_root=` and `registry=` were removed by
-A20(E) / Q6-A; passing either raises `SDKStoreError` with migration guidance.
+creates an owned `Database` immediately. Canonical writes are write-through.
+`ledger=` and `ledger_path=` are rejected by `FactGraph.create(...)`; use
+`FactGraph.from_schema_classes(...)` for the unmanaged compatibility lifecycle.
+`registry_root=` and `registry=` were removed by A20(E) / Q6-A; passing either
+raises `SDKStoreError` with migration guidance.
 `artifact_store_root` enables sidecar-backed
 explain artifact readback (ignored if a fully constructed `store=` is
 supplied).
@@ -241,36 +307,52 @@ class-first constructor name.
 
 ```python
 FactGraph.load_workspace(path, *, schema_classes=[...], default_row_format=None)
+FactGraph.attach(db, *, schema_classes=[...], view=None, default_row_format=None)
 fg.save_workspace(path=None)
+fg.close()
 ```
 
-`fg.save_workspace()` writes the bound workspace. `fg.save_workspace(path)` writes and rebinds the
-graph to that workspace. An unbound graph raises
-`SDKStoreError("workspace path not bound; pass fg.save_workspace(path=...) or create with FactGraph.create(path=...)")`.
-`FactGraph.load_workspace(...)` requires Python schema classes and validates the workspace
-manifest digest, ledger schema digest, Database schema object, any legacy
-registry schema entry that is still present, and the digest compiled from the
-supplied classes.
+`FactGraph.create(path=...)` and `FactGraph.load_workspace(...)` own the opened
+Database. They hold its exclusive writer lock until idempotent `close()` or
+context-manager exit. v0.3 has no concurrent read-only open channel; a second
+open fails explicitly. `FactGraph.attach(db, schema_classes=[...])` is writable
+but caller-owned, so closing the graph does not close `db`; view attach is
+read-only.
+
+`fg.save_workspace()` only updates lifecycle metadata and returns its path,
+manifest path, and `last_saved_at_epoch_ns`. It does not persist facts, advance
+the head, copy, or rebind. Passing a different path raises `SDKStoreError` with
+directory-copy guidance. An unbound graph raises
+`SDKStoreError("workspace path not bound; create with FactGraph.create(path=...) before saving")`.
+`FactGraph.load_workspace(...)` requires Python schema classes and fail-closed
+validates the transaction chain, active-state digest, assertion
+content digests, Database schema objects, and compiled schema digest.
 
 Workspace v1 layout:
 
 ```text
 workspace/
   factgraph_workspace.json
-  ledger.db
   db/
+    assertions.db
+    meta.json
+    writer.lock
     objects/
       schema/
         <schema-digest>.json
+      tx/
+        <tx-digest>.json
+    refs/                      # reserved; empty in v0.3 (head is in ledger_meta)
+  views/                       # created lazily by db.create_view(...)
+    objects/<view-digest>.json
 ```
 
-`factgraph_workspace.json` records `factgraph_workspace_version="1"`,
-`save_scope="level_4"`, `schema_digest`, component paths, and timestamps.
-Level 4 includes the ledger and Database schema object. The top-level
-`schema_digest` is a compatibility cross-check; the authoritative schema bytes
-live under `db/objects/schema/`. Level 4 excludes artifact sidecars, in-memory
-views, audit/evidence round files, package exports, saved rules/inferences, and
-new registry content.
+`factgraph_workspace.json` records `factgraph_workspace_version="1"` and the
+`db/` and `views/` component paths. `db/assertions.db:ledger_meta` owns the
+current head, sequence, schema digest, and state commitment. Schema and tx
+objects are content-addressed and write-once. The workspace excludes artifact
+sidecars, in-memory assertion views, audit/evidence round files, package
+exports, saved rules/inferences, and live registry content.
 
 ### 2.2 Schema namespace (`fg.schema.*`)
 
@@ -291,9 +373,9 @@ fields, changing field type/cardinality, and changing the generated `:exists`
 predicate are rejected with zero side effects.
 
 On success, the in-memory schema, compiled SchemaIndex, class registry,
-descriptor maps, ledger schema digest, and Database schema object are updated
-as one schema transaction. If the graph is bound to a workspace, the manifest is
-not rewritten until a later explicit `fg.save_workspace(...)`.
+descriptor maps, Database schema digest, and canonical schema object are
+updated by one isolated `schema_change` transaction. Its history operation
+commits the old and new schema digests; `fg.save_workspace()` is not required.
 
 Field-add uses a replacement class object. After a field-add succeeds, reads
 or writes through superseded entity classes or their descriptors raise
@@ -348,9 +430,12 @@ trusted internal paths and do not run this SDK-layer validation.
 | `field(Field)` | Return `AssertionView` for one schema field; exposes `active_records` and `history_records` |
 | `where(*, field=None, e_ref=None, value=None, value_tag=None, _meta=None)` | Filter active assertions by canonical Layer 3 criteria |
 | `retract(asrt_id, *, meta=None)` | Retract a specific assertion id; Identity Claims and legacy `:exists` Claims are protected |
+| `append_meta(asrt_id, key, value)` | Append one scalar metadata event to an assertion; Database-reserved keys are rejected |
 | `active` / `all` | Active or all assertion records |
 
-`fg.assertions.retract(...)` is the only public assertion-id mutation entry.
+`fg.assertions.retract(...)` is the only public assertion-id revocation entry.
+`fg.assertions.append_meta(...)` appends history without changing the active
+state commitment.
 Identity Claim retracts raise `INV_7C_IDENTITY_PROTECTED`; legacy
 `<EntityType>:exists` retracts raise `EXISTENCE_CLAIM_TRANSITIONAL_GUARD`.
 
@@ -358,7 +443,9 @@ Identity Claim retracts raise `INV_7C_IDENTITY_PROTECTED`; legacy
 
 | Method | One-liner |
 |---|---|
-| `evaluate(inference_or_expr, *, head=None, engine=None, config=None)` | Evaluate an `Inference`, `Rule`, or `RuleExpr`; returns `EvaluateResult`. `engine=None` resolves to `"native"`; explicit values must be one of `"native"`, `"souffle"`, `"problog"`, `"pyreason"`. |
+| `query(resolved_rule_or_policy_or_authored_target, *, address_space=None)` | Start the resolved Query builder. A `ResolvedRuleBundle` (including `ProductRuleV1`) is lifted under alias `target`; an advanced `Policy` requires its exact `SemanticAddressSpace`; an `AuthoredPolicyTargetV1` / `ProductPolicyV1` already owns that space and rejects an override. The v0 terminal `.bind(SemanticPortAddress, value).select(alias, SemanticPortAddress \| EvaluationQueryFieldNavigationV0).expect_contains(id, /, **selected_values).compile()/evaluate()` delegates to the existing native compiled Query path. The authored target additionally accepts direct typed handles in `bind`, direct scalar handles in `select`, and one-hop typed field handles in `select`; all lower to the same structured compiler inputs. Product Function outputs are directional select/compare values and reject `bind`. Its `.capture()` form returns `CapturedEvaluationQueryRunV0`, and `.what_if(Q7_or_Q11_scenario).run()` returns a captured `ScenarioRunV0`; those retain their historical, narrow contracts. The V1 terminal is `.plan(...)`, optionally following `.what_if(ScenarioSpecV1)` or `.using(provider)`: it returns a sealed `GoalPlanRunV1` over the restricted Query/Scenario/portable profile documented in §1.5 and `06_what_if_and_proof.en.md`. A provider is only a typed relation input attached to this Rule/Policy target; bare `fg.query(provider)` rejects. A ProductPolicy carrying `WeightedChoice` or Product Function topology instead fails closed at every legacy/V1 terminal with `WEIGHTED_CHOICE_V2_ONLY` or `FUNCTION_V2_ONLY`; only the controlled Product V2 plan may lower these intrinsic nodes. The navigation form is select-only: one structured identity-to-same-entity, single non-identity scalar-field lookup; missing field evidence yields no row. It does not accept navigation in `bind`, bare Rules, string lookup, or generic operators. |
+| `evaluate(inference_or_expr_or_compiled_query, *, head=None, engine=None, config=None, capture=None, scenario=None)` | Evaluate an `Inference`, `Rule`, `RuleExpr`, an application-compiled `CompiledEvaluationQueryV0`, or the `TargetedCompiledEvaluationQueryV0` produced by `fg.query(...)`; returns `EvaluateResult`. Ordinary Query v0 consumes its own projection head, is native-only, rejects `config=`, and adds an identity-only `run_anchor`. It alone accepts `capture="run_bundle_v0"`, which atomically attaches a detached, strict-codec `run_bundle`; this artifact is not replay and contains sensitive cleartext under caller-managed custody. A targeted Query carrying F5B1 `expect_contains` attaches `result.expectation_results`, but rejects `capture=` and `scenario=` because their current contracts cannot preserve its inventory. A Query with no expectation alone accepts either `scenario=ScenarioFieldSubstitutionV0(...)` or `ScenarioFieldSubstitutionSetV0((...))`: direct scalar-field replacement only, with the set resolved atomically against one baseline. Internally this first produces a Query-dependency `QueryEffectiveSnapshotV1` identity; it is not a global/historical snapshot and is not exposed through `EvaluateResult`. Both return `result.scenario`, have no Run anchor/bundle/close/explain path, and reject any `capture=` argument. Neither is a general What-if or overlay API. Other inputs reject `capture` and `scenario` and retain their documented engine/config behavior with `run_anchor=None` and `run_bundle=None`. |
+| `run_scenario(compiled_or_targeted_query, scenario)` | The low-level explicit `ScenarioRunV0` entry. It accepts only a current native compiled Query or a no-expectation targeted Query plus the existing Q7/Q11 replacement-only Scenario forms. It captures two frozen relation sides with no Store support-sidecar writes; `.diff()`, `.verify()`, `.explain(...)`, and codec decode are detached. Synthetic effective sources are labelled `scenario_hypothesis`; the output is digest-sealed but not authenticated, historical replay or premise truth proof. |
 | `explain(expr, *, head, engine=None, config=None)` | Replay a closed-head explanation; `head=` is required (no default). `engine=` resolves the same way as `evaluate`. Returns `Explanation`. |
 | `preview_config(profile)` | Inspect public semantics wrappers or canonical `SemanticsProfile`. |
 
@@ -400,7 +487,9 @@ removed by Q8 Phase 2.
 Direct `check`, `diagnose`, `why_not`, `what_if.*`, `accept`, and
 `accept_many` candidate workflows are not part of the T5 public SDK evidence
 path. Use `fg.eval.evaluate(...)`, `row.explain()`, `row.close()`, and
-`fg.eval.explain(...)`.
+`fg.eval.explain(...)`; for the separate bounded scalar-replacement capture,
+use `fg.query(...).what_if(scenario).run()` rather than restoring a
+`what_if.*` namespace.
 
 ### 2.12 Audit namespace (`fg.audit.*`)
 
@@ -475,7 +564,9 @@ additional SDK export is required for the protocol-layer evidence walker.
 SDK code should use `FactGraph.create(..., path=...)` for workspace
 persistence, `Rule(...)` / `Inference(...)` as in-memory values, and
 `python -m factgraph migrate-workspace <path>` for legacy workspaces that still
-carry a filesystem `registry/` directory.
+use the v0.2 layout. The CLI preserves legacy rows and ids, creates an explicit
+genesis import transaction using ordinary assertion, revocation, and
+append-meta operations, and retains the complete source workspace by default.
 
 ---
 
@@ -638,6 +729,17 @@ cached. `row_format="tuple"` still works but emits `DeprecationWarning`.
 `accept(CandidateSet, ...)` and `accept_many(...)` are removed from the public
 SDK path. Evaluation is read-only; explicit writes go through `fg.fields.*`,
 `fg.assertions.retract(...)`, `fg.entities.edit(...)`, or `fg.batch(...)`.
+
+Captured predicate witnesses can be inspected without another evaluation through
+`fg.audit.support_witnesses(support_digest)`; see the
+[V1 support witness contract](21_support_witnesses.en.md). Classification and
+material availability are independent; old evidence is never backfilled.
+
+`fg.eval.evaluate_candidates(...)` remains only as temporary cross-repository
+compatibility debt for shipped Meander code. It returns the internal
+`DerivationOutput` class (also reachable under the legacy `CandidateSet` alias),
+must not be used with `CompiledEvaluationQueryV0` or `TargetedCompiledEvaluationQueryV0`, and is not recommended for
+new integrations.
 
 ---
 

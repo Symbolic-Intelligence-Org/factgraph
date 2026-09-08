@@ -21,7 +21,7 @@ class PyReasonRuleExt(EngineExtBase):
 
     def __post_init__(self) -> None:
         if isinstance(self.timestep_delay, bool) or not isinstance(self.timestep_delay, int):
-            raise ValueError("timestep_delay must be int")
+            raise ValueError("timestep_delay must be int")  # noqa: TRY004 - Public PyReasonRuleExt rejects wrong-type delay as ValueError, including bool.
         if self.timestep_delay < 0:
             raise ValueError("timestep_delay must be >= 0")
         _normalize_body_predicate_bounds(self.body_predicate_bounds)
@@ -50,16 +50,16 @@ class PyReasonFactDef:
         if not isinstance(self.name, str) or not self.name:
             raise ValueError("name must be non-empty string")
         if isinstance(self.start, bool) or not isinstance(self.start, int):
-            raise ValueError("start must be int")
+            raise ValueError("start must be int")  # noqa: TRY004 - Public PyReasonFactDef field rejections share one ValueError family.
         if isinstance(self.end, bool) or not isinstance(self.end, int):
-            raise ValueError("end must be int")
+            raise ValueError("end must be int")  # noqa: TRY004 - Public PyReasonFactDef field rejections share one ValueError family.
         if not isinstance(self.bound, (list, tuple)) or len(self.bound) != 2:
             raise ValueError("bound must be [float, float]")
         lo_raw, hi_raw = self.bound
         if isinstance(lo_raw, bool) or not isinstance(lo_raw, (int, float)):
-            raise ValueError("bound[0] must be numeric")
+            raise ValueError("bound[0] must be numeric")  # noqa: TRY004 - PyReasonFactDef bound rejections stay ValueError like sibling range checks.
         if isinstance(hi_raw, bool) or not isinstance(hi_raw, (int, float)):
-            raise ValueError("bound[1] must be numeric")
+            raise ValueError("bound[1] must be numeric")  # noqa: TRY004 - PyReasonFactDef bound rejections stay ValueError like sibling range checks.
         lo = float(lo_raw)
         hi = float(hi_raw)
         if not 0.0 <= lo <= hi <= 1.0:
@@ -122,7 +122,7 @@ def _normalize_pyreason_engine_ext(engine_ext: EngineExtBase | None) -> PyReason
     if engine_ext is None:
         return None
     if not isinstance(engine_ext, PyReasonRuleExt):
-        raise ValueError(
+        raise ValueError(  # noqa: TRY004 - Carrier-conflict resolver rejects foreign engine_ext as ValueError (adapter docs 5C.0a).
             f"PyReason engine_ext must be PyReasonRuleExt or None, got {type(engine_ext).__name__}"
         )
     return PyReasonRuleExt(
@@ -144,7 +144,7 @@ def _materialize_profile_rule_ext(
     if semantics_profile is None:
         return None
     if not isinstance(semantics_profile, SemanticsProfile):
-        raise ValueError(
+        raise ValueError(  # noqa: TRY004 - Profile consumption rejections stay ValueError (adapter docs 5C.0a).
             f"semantics_profile must be SemanticsProfile or None, got {type(semantics_profile).__name__}"
         )
     if semantics_profile.engine != "pyreason":
@@ -295,9 +295,9 @@ def _normalize_profile_interval(value: Any, *, path: str) -> tuple[float, float]
         raise ValueError(f"{path}.value must be [lower, upper]")
     lower_raw, upper_raw = value
     if isinstance(lower_raw, bool) or not isinstance(lower_raw, (int, float)):
-        raise ValueError(f"{path}.value lower bound must be numeric")
+        raise ValueError(f"{path}.value lower bound must be numeric")  # noqa: TRY004 - Profile interval value rejections share the consumption ValueError contract.
     if isinstance(upper_raw, bool) or not isinstance(upper_raw, (int, float)):
-        raise ValueError(f"{path}.value upper bound must be numeric")
+        raise ValueError(f"{path}.value upper bound must be numeric")  # noqa: TRY004 - Profile interval value rejections share the consumption ValueError contract.
     lower = float(lower_raw)
     upper = float(upper_raw)
     if not 0.0 <= lower <= upper <= 1.0:
@@ -394,7 +394,7 @@ def _normalize_body_predicate_bounds(
     if bounds is None:
         return {}
     if not isinstance(bounds, dict):
-        raise ValueError("body_predicate_bounds must be dict[str, [float, float]]")
+        raise ValueError("body_predicate_bounds must be dict[str, [float, float]]")  # noqa: TRY004 - where_compile wraps this ValueError into PyReasonWhereCompileError.
 
     normalized: dict[str, tuple[float, float]] = {}
     for pred_id, bound in bounds.items():
@@ -410,7 +410,7 @@ def _normalize_branch_head_bounds(
     if bounds is None:
         return {}
     if not isinstance(bounds, dict):
-        raise ValueError("branch_head_bounds must be dict[int, [float, float]]")
+        raise ValueError("branch_head_bounds must be dict[int, [float, float]]")  # noqa: TRY004 - PyReasonRuleExt carrier shape rejections stay ValueError (branch bounds tests).
 
     normalized: dict[int, tuple[float, float]] = {}
     for branch_idx, bound in bounds.items():
@@ -428,9 +428,9 @@ def _validate_bound_pair(
         raise ValueError(f"{name} must be [float, float]")
     lo_raw, hi_raw = bound
     if isinstance(lo_raw, bool) or not isinstance(lo_raw, (int, float)):
-        raise ValueError(f"{name} lower bound must be numeric")
+        raise ValueError(f"{name} lower bound must be numeric")  # noqa: TRY004 - where_compile wraps this ValueError into PyReasonWhereCompileError.
     if isinstance(hi_raw, bool) or not isinstance(hi_raw, (int, float)):
-        raise ValueError(f"{name} upper bound must be numeric")
+        raise ValueError(f"{name} upper bound must be numeric")  # noqa: TRY004 - where_compile wraps this ValueError into PyReasonWhereCompileError.
     lo = float(lo_raw)
     hi = float(hi_raw)
     if not 0.0 <= lo <= hi <= 1.0:
@@ -443,7 +443,7 @@ def _compile_term(term: Any) -> str:
         token = term.token or term.label
         if not isinstance(token, str) or not token:
             raise PyReasonCompileError("LogicVar has neither token nor label")
-        return token[1:] if token.startswith("$") else token
+        return token.removeprefix("$")
     if isinstance(term, str):
         return term
     if isinstance(term, (int, float)) and not isinstance(term, bool):

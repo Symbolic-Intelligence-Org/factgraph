@@ -1,8 +1,16 @@
+"""Derivation outputs and legacy candidate-protocol compatibility names.
+
+``DerivationOutput`` is the canonical read-only evaluation vocabulary.  The
+class remains defined in this historical module so persisted references to
+``factgraph.core.derivation.candidates.CandidateSet`` can resolve through the
+direct compatibility alias below.
+"""
+
 from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, TypeAlias
 
 from factgraph.core.protocol.digests import sha256_hex, sha256_token
 from factgraph.core.protocol.tup_v1 import canonical_bytes_tup_v1
@@ -11,7 +19,7 @@ CONFIDENCE_KINDS = frozenset({"none", "probability", "certainty"})
 
 
 @dataclass(frozen=True)
-class CandidateSet:
+class DerivationOutput:
     derivation_id: str
     derivation_version: str
     run_id: str
@@ -33,7 +41,7 @@ class CandidateSet:
         if self.candidate_kind not in {"fact", "entity"}:
             raise ValueError("candidate_kind must be 'fact' or 'entity'")
         if not isinstance(self.payload, dict):
-            raise ValueError("payload must be object")
+            raise ValueError("payload must be object")  # noqa: TRY004 - DerivationOutput field rejections are one ValueError contract
         if not isinstance(self.target, str) or not self.target:
             raise ValueError("target must be non-empty string")
         if not isinstance(self.derivation_id, str) or not self.derivation_id:
@@ -44,9 +52,10 @@ class CandidateSet:
             raise ValueError("run_id must be non-empty string")
         if not isinstance(self.key_tuple_digest, str) or not self.key_tuple_digest.startswith("sha256:"):
             raise ValueError("key_tuple_digest must be sha256 token")
-        if self.confidence is not None:
-            if isinstance(self.confidence, bool) or not isinstance(self.confidence, float):
-                raise ValueError("confidence must be float or None")
+        if self.confidence is not None and (
+            isinstance(self.confidence, bool) or not isinstance(self.confidence, float)
+        ):
+            raise ValueError("confidence must be float or None")
         if not isinstance(self.confidence_kind, str) or self.confidence_kind not in CONFIDENCE_KINDS:
             raise ValueError("confidence_kind must be one of: none, probability, certainty")
         key = self.candidate_key or compute_candidate_key_v2(
@@ -164,7 +173,7 @@ def canonical_candidate_content(*, candidate_kind: str, target: str, payload: di
     )
 
 
-def extract_candidate_refs(candidate_set: CandidateSet) -> set[str]:
+def extract_candidate_refs(candidate_set: DerivationOutput) -> set[str]:
     payload = candidate_set.payload
     if not isinstance(payload, dict):
         return set()
@@ -225,7 +234,7 @@ def _to_jsonable(value: Any) -> Any:
     return value
 
 
-def make_candidate(
+def make_derivation_output(
     *,
     derivation_id: str,
     derivation_version: str,
@@ -241,7 +250,7 @@ def make_candidate(
     candidate_kind: str = "fact",
     confidence: float | None = None,
     confidence_kind: str = "none",
-) -> CandidateSet:
+) -> DerivationOutput:
     if not isinstance(derivation_id, str) or not derivation_id:
         raise ValueError("derivation_id must be non-empty string")
     if not isinstance(derivation_version, str) or not derivation_version:
@@ -251,9 +260,9 @@ def make_candidate(
     if not isinstance(target, str) or not target:
         raise ValueError("target must be non-empty string")
     if not isinstance(payload, dict):
-        raise ValueError("payload must be dict")
+        raise ValueError("payload must be dict")  # noqa: TRY004 - make_derivation_output rejections are one ValueError contract
     if not isinstance(generated_at, int) or isinstance(generated_at, bool):
-        raise ValueError("generated_at must be epoch-nanos int")
+        raise ValueError("generated_at must be epoch-nanos int")  # noqa: TRY004 - make_derivation_output rejections are one ValueError contract
 
     key_tuple_digest = compute_key_tuple_digest(key_terms)
     candidate_key = compute_candidate_key_v2(
@@ -270,7 +279,7 @@ def make_candidate(
         candidate_key=candidate_key,
     )
 
-    return CandidateSet(
+    return DerivationOutput(
         derivation_id=derivation_id,
         derivation_version=derivation_version,
         run_id=run_id,
@@ -288,3 +297,24 @@ def make_candidate(
         candidate_key=candidate_key,
         candidate_id=candidate_id,
     )
+
+
+# Persisted candidate identifiers and payload keys remain the v2 compatibility
+# protocol.  These direct aliases keep existing construction, ``isinstance``,
+# unpickling, and equality semantics intact while read-only evaluation code
+# adopts the accurate in-process name.
+CandidateSet: TypeAlias = DerivationOutput
+make_candidate = make_derivation_output
+
+__all__ = [
+    "CONFIDENCE_KINDS",
+    "CandidateSet",
+    "DerivationOutput",
+    "canonical_candidate_content",
+    "compute_candidate_id_v2",
+    "compute_candidate_key_v2",
+    "compute_key_tuple_digest",
+    "extract_candidate_refs",
+    "make_candidate",
+    "make_derivation_output",
+]

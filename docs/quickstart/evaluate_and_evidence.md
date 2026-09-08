@@ -1,6 +1,147 @@
 # Evaluation and evidence
 
-This chapter has two halves stitched into one chapter because they share too much vocabulary to live apart: running a rule (`fg.eval.evaluate(...)` and its result) and reading what the evaluator returned (the `Explanation` DTO and its `EvidenceGraph`). It builds on [`engines_and_configs.md`](engines_and_configs.md) (the `engine=` / `config=` parameters) and [`rules.md`](rules.md) (the `Rule` / `RuleExpr` / `head` declaration shape).
+This chapter distinguishes the current Product V2 outcome/Explain/replay
+facade from the legacy `fg.eval.evaluate(...)` / `EvaluateResult` /
+`Explanation` path. Both are supported, but they have different identity,
+evidence and replay contracts. It builds on
+[`engines_and_configs.md`](engines_and_configs.md) and
+[`rules.md`](rules.md).
+
+## Product V2 Result, Explain and replay (recommended)
+
+Product V2 `.run()` returns the raw sealed `EvaluationRunV2`. Open the thin
+user-facing facade explicitly:
+
+```python
+from factgraph.sdk import outcome_from_run_v2
+
+raw_run = (
+    fg.query(policy)
+      .bind(people.person, alice)
+      .select("age", people.age)
+      .plan(profile=profile, scenario=scenario)
+      .run()
+)
+
+outcome = outcome_from_run_v2(raw_run)
+baseline = outcome.baseline
+effective = outcome.effective
+candidate = outcome.candidate_effective  # None unless independently planned
+
+row = effective.rows[0]       # caller explicitly selects the observation
+data = outcome.explain(row)   # no implicit first row
+replay = outcome.replay()
+
+wire = data.to_dict()
+canonical_bytes = data.to_canonical_bytes()
+projection_digest = data.content_digest
+```
+
+The facade deliberately has no Boolean coercion, implicit `first()`, live-row
+`close()`, or synthesized absence proof. Named ResultViews expose sealed row
+identity/observation digests, engine frames, completeness and point probability
+when present.
+
+`EvaluationRunV2ExplanationDataV2` is machine-readable business data. Its
+`to_dict()` projection always carries
+`$schema="factgraph.product_explanation"`, `schema_version=2`, and
+`source_protocol="evaluation_run_v2"`. Its independent sections include:
+
+- run/query/row identity and selected observation;
+- execution profile, engine frames and probability materialization;
+- captured asset descriptor/binding and authored `WeightedChoice` topology;
+- Scenario effective facts, operation evidence and safe provenance references;
+- Product Function definition pins and typed per-side calls; and
+- evidence availability plus explicit proof/source/authority boundaries.
+
+`to_dict()` returns only detached JSON-safe dict/list/scalar values.
+`to_canonical_bytes()` serializes that projection deterministically, while
+`content_digest` is SHA-256 over those exact bytes. This digest identifies the
+read projection only: it is not the run seal, authentication, source authority
+or an access-control decision.
+
+`data.render_text()` / `data.narrate()` are lossy presentation helpers. Do not
+parse their prose in business code and do not include rendered text in a
+machine cache key.
+
+### EvidenceGraph availability is a closed business state
+
+Always dispatch the source protocol before its protocol-specific sections, then
+branch on the closed structured evidence state:
+
+```python
+if wire["source_protocol"] == "evaluation_run_v1":
+    protocol_section = wire["execution"]
+elif wire["source_protocol"] == "evaluation_run_v2":
+    protocol_section = wire["profile"]
+else:
+    raise ValueError("unsupported Product Explain source protocol")
+assert isinstance(protocol_section, dict)
+
+evidence = wire["evidence"]
+graph_bearing_states = {
+    "native_detached_recomputed",
+    "portable_native_inner_not_parity",
+    "problog_trace_captured",
+}
+
+if evidence["state"] in graph_bearing_states:
+    graph = evidence["graph"]       # sanitized structured EvidenceGraph view
+    assert graph is not None
+else:
+    assert evidence["graph"] is None
+    reason = evidence["reason_code"]
+    proof_parity = evidence["proof_parity"]
+```
+
+Do not infer `false`, negative proof, or an engine failure merely because
+`graph` is null. `native_detached_recomputed`,
+`portable_native_inner_not_parity`, and `problog_trace_captured` are the only
+graph-bearing states; all other states are reason-bearing and graphless.
+`state`, `reason_code`, `proof_parity`, and `graph` form one availability
+contract.
+
+The same wire schema also adapts a sealed V1 Native detached Explain through
+`EvaluationExplanationDataV2`. That variant retains
+`source_protocol="evaluation_run_v1"` and may carry a real sanitized graph;
+it is not rewritten to look like a V2 run. Consumers must dispatch on
+`source_protocol` before reading protocol-specific sections.
+
+### Product Function Explain
+
+Function is materialized before the final Query program. Structured Explain
+therefore carries the validated Function asset, occurrence, typed inputs,
+typed output, implementation pin, call digest and materialization digest:
+
+```python
+function = data.functions.occurrences[0]
+call = next(item for item in function.calls if item.inputs[0].value == 35)
+assert call.output.value == 3
+assert function.callable_capture == "not_captured"
+```
+
+The call inventory describes the complete upstream Rule occurrence relation
+for that side, not necessarily only the selected Query row. Match by typed
+values/digests rather than tuple position.
+
+Product V2 does not manufacture an `EvidenceGraph` from structured Function,
+Scenario or ProbLog data. When a graph was not captured,
+`data.evidence.graph is None` and a typed reason explains why. This honesty is
+intentional; the structured sections remain complete enough for a product UI.
+
+### Detached replay
+
+`outcome.replay()` reads only sealed program/profile/world/result/Function
+materialization capture. It does not read the live ledger or re-invoke a
+provider/Function. `matched` is a replay observation, not artifact
+authentication, source authority or a causal explanation.
+
+See [`product_workflow_v2.md`](product_workflow_v2.md) for the complete
+authoring-to-replay path. The executed
+[`examples/10_structured_explanation_contract.ipynb`](../../examples/10_structured_explanation_contract.ipynb)
+demonstrates both graph-present and graph-unavailable structured branches.
+The remainder of this chapter documents the legacy live `EvaluateResult` /
+`Explanation` API.
 
 ## 1. `fg.eval.evaluate` — running a rule
 
@@ -28,9 +169,10 @@ with vars("u", "r") as (u, r):
 result = fg.eval.evaluate(region_rule, head=region_rule)
 ```
 
-This is the canonical user-facing form: `build_application_rule(...)` with Entity-DSL atoms (see [`rules.md`](rules.md) §2.2).
-
-> **Current shipped status — known gap.** `build_application_rule(when=[User(u).field == v])` lowering auto-prepends `PredAtom("User:exists", [u])`. `fg.entities.create(...)` does not currently emit `User:exists` claims to the ledger, so the body above does not match anything and `result.count()` returns `0` today. The example shows the form you *should* write. Until the gap closes, demonstrations later in this chapter that need live rows fall back to a direct `Rule(...)` + `PredAtom(...)` construction (see §2.1).
+This is the legacy user-facing form: `build_application_rule(...)` with
+Entity-DSL atoms (see [`rules.md`](rules.md) §2.2). New Product code normally
+uses `fg.build_rule(...)` so the typed semantic-port contract is resolved at
+authoring time, then executes through `fg.query(...)`.
 
 ### 1.2 `head=` parameter
 
@@ -445,41 +587,6 @@ The atom line's `repr_text` is the schema-authored / default-rendered text (§4.
 
 **Unsupported / invalid_request** — `repr` is `None`. Read `errors[*].code` + `errors[*].message`.
 
-### 4.5.1 Selected rule programs
-
-`fg.eval.evaluate_program(program, goal)` exposes the same two-level contract for
-an explicitly selected Horn program:
-
-```python
-result = fg.eval.evaluate_program(program, goal)
-proof = result.explain()
-
-proof.status
-proof.evidence       # canonical EvidenceGraph from this evaluation snapshot
-proof.repr           # deterministic walk of proof.evidence
-proof.steps          # recursive native RuleRef support receipts
-proof.checked_scope  # engine, rule-set, premise-scope and view digests
-proof.narrate()      # canonical narrate_evidence(proof.evidence, ...)
-```
-
-For an entailed goal, `steps` retains the recursive RuleRef receipts and
-`evidence` projects that exact selected proof into the standard
-`EvidenceGraph`/`EvidenceTree` model, with original assertion ids in
-`EvidenceAtom.verdict.support`. `repr` and `narrate()` are therefore two
-renderings of the same structural artifact. For a non-entailed closed goal, the
-explanation reports `closed_goal_not_entailed`, preserves the exact checked
-scope, and runs the canonical native prober for every selected rule that can
-produce the goal. The resulting graph carries condition-level
-`Holds`/`Fails`/`NotReached` verdicts and joins from the selected program only.
-Pre-materialized conclusions from outside that selected program cannot satisfy
-or rewrite this explanation.
-
-Program narration is computed during evaluation and retained on the immutable
-result. Calling `result.explain().narrate()` later performs no ledger read and no
-re-evaluation, so facts appended after the decision cannot rewrite its account.
-Applications that persist decisions should store `evidence`, `steps`,
-`checked_scope`, and `narrate()` together as one append-only evaluation receipt.
-
 ### 4.6 Per-engine fidelity today
 
 | Engine | layout | paths | Notes |
@@ -490,6 +597,26 @@ Applications that persist decisions should store `evidence`, `steps`,
 | PyReason | timeline | `EvidenceTimeline` | events by `timestep`, possibilistic `Certainty`; reuses `EvidenceAtom` leaves |
 
 ### 4.7 `certainty` carry-over
+
+ProbLog evaluation and reach Explain include canonical virtual Entity domains
+from complete, chosen Identity bundles in their premise-scoped view. Missing,
+retracted or excluded Identity members do not establish membership; persisted
+legacy domain markers are not membership authority. Domain membership is
+deterministic and does not create a ledger assertion or probability annotation.
+
+An empty eligible relation is a valid empty result. The evaluation importer
+recognizes only a probability-zero, whole-query variable-renaming placeholder
+as no ground answer. Ground zero-probability rows remain valid; positive or
+partially ground variable answers and malformed results raise import errors
+before exposing candidates. Engine/process failures are never empty success.
+
+The existing `problog_provenance_v1` trace format is unchanged. Virtual witness
+tokens in engine trace are not assertion citations or label bases.
+`fg.audit.support_witnesses` reports `support_missing` for a ProbLog-only
+provenance digest, not a fabricated Store ProofReceipt. This legacy Explain
+path is not a new sealed replay guarantee, and prior evidence is not rewritten.
+Branch probability and input certainty remain distinct: input atom certainty
+uses its existing `raw_kind/bound` source, not the adapter probability annotation.
 
 When the source row has uncertainty meta, `Explanation.row.certainty` carries the normalized `Certainty(lo, hi, kind)` value — read-side counterpart to the write-side uncertainty metadata in [`engines_and_configs.md`](engines_and_configs.md) §2.1. Native/Souffle rows use boolean certainty; ProbLog uses probabilistic certainty; PyReason uses possibilistic interval certainty.
 
@@ -557,12 +684,12 @@ This chapter covers the shipped surface. Several user-facing capabilities are *d
 
 | Capability | Status | Where designed |
 |---|---|---|
-| `fg.diagnose(...)` SDK public surface | Internal application-layer logic shipped; SDK shell deferred | [`explanation-completion-roadmap.zh.md`](../../workflow/design/design-points/active/explanation-completion-roadmap.zh.md) §6.2 (D1) |
-| Why-not / counterfactual explanation | Deferred — only `failure_class="closed_head_false"` available today | [`explanation-completion-roadmap.zh.md`](../../workflow/design/design-points/active/explanation-completion-roadmap.zh.md) §6.2 (D5) |
-| PyReason multi-timestep timeline evidence | Deferred — current PyReason `EvidenceGraph` is single-conclusion fallback | [`explanation-completion-roadmap.zh.md`](../../workflow/design/design-points/active/explanation-completion-roadmap.zh.md) §6.1 (D11) |
-| Attribution / salience decomposition | Deferred (D6 / D7) | [`explanation-completion-roadmap.zh.md`](../../workflow/design/design-points/active/explanation-completion-roadmap.zh.md) §6.3 |
-| Match witness `as_assertions() / witnesses() / to_view()` | Deferred — `fg.entities.match` returns snapshots only today | [`explanation-completion-roadmap.zh.md`](../../workflow/design/design-points/active/explanation-completion-roadmap.zh.md) §6.5 (D20) |
-| Desc auto-render in `Explanation` payloads | Shipped as `Explanation.repr` multi-line rendering for passed/failed explanations; deeper PyReason timeline rendering remains deferred | [`explanation-completion-roadmap.zh.md`](../../workflow/design/design-points/active/explanation-completion-roadmap.zh.md) §6.6 (D21) |
+| `fg.diagnose(...)` SDK public surface | Internal application-layer logic shipped; SDK shell deferred | Deferred |
+| General zero-row why-not / negative proof | Deferred. V1 can project positive-row Policy topology as `holds` / `fails` / `not_reached`, while Product V2 summaries still make no negative-proof claim. | Deferred |
+| PyReason multi-timestep timeline evidence | Deferred — current PyReason `EvidenceGraph` is single-conclusion fallback | Deferred |
+| Attribution / salience decomposition | Deferred (D6 / D7) | Deferred |
+| Match witness `as_assertions() / witnesses() / to_view()` | Deferred — `fg.entities.match` returns snapshots only today | Deferred |
+| Desc auto-render in `Explanation` payloads | Shipped as `Explanation.repr` multi-line rendering for passed/failed explanations; deeper PyReason timeline rendering remains deferred | Partially shipped |
 
 ## 8. Reference
 
@@ -579,6 +706,8 @@ from factgraph.sdk import (
     EvaluateRow,     # in result.rows / result.first() / iter(result)
     Explanation,     # what fg.eval.explain / row.explain() returns
     DetachedRowError,  # raised by row.explain() if parent result GC'd
+    ProductEvaluationOutcomeV2,
+    outcome_from_run_v2,
 )
 
 # Application-layer rule construction (for §1.1 minimal example)
@@ -626,12 +755,23 @@ row.close() -> Rule
 fg.audit.explain(target) -> dict       # chosen-policy state for a cell
 fg.audit.conflicts(target) -> dict     # conflict diagnostics for a cell
 fg.audit.diff_proof_frames(...) -> ... # compare two recorded proof outcomes
+
+# Product V2
+raw_run = fg.query(product_target).plan(profile=profile, scenario=scenario).run()
+outcome = outcome_from_run_v2(raw_run)
+data = outcome.explain(outcome.effective.rows[0])
+wire = data.to_dict()
+canonical_bytes = data.to_canonical_bytes()
+projection_digest = data.content_digest
+report = outcome.replay()
 ```
 
 ### 8.4 Related chapters
 
 - [`rules.md`](rules.md) — `Rule` / `RuleExpr` / `head` declaration, and `fg.rules.inspect`
+- [`product_workflow_v2.md`](product_workflow_v2.md) — current Product
+  Rule/Policy/Function, Scenario, Outcome/Explain and replay path
 - [`engines_and_configs.md`](engines_and_configs.md) — `engine=` / `config=` parameters consumed by `evaluate`
 - [`data_model.md`](data_model.md) §2.2 — write-side uncertainty metadata that surfaces as `EvaluateRow.certainty`
-- [`assertions.md`](../official/kernel/quickstart/assertions.md) — assertion-level read APIs that `fg.audit.explain` / `conflicts` resolve against
-- [`explanation-completion-roadmap.zh.md`](../../workflow/design/design-points/active/explanation-completion-roadmap.zh.md) — the deferred capabilities listed in §7
+- [`three_layer_api.md`](three_layer_api.md) — assertion-level read APIs that
+  `fg.audit.explain` / `conflicts` resolve against

@@ -13,8 +13,8 @@ from factgraph.core.evidence.write_protocol import (
     retract_by_asrt,
     set_field,
 )
-from factgraph.core.protocol.idref_v1 import encode_idref_v1
 from factgraph.core.protocol.digests import sha256_token
+from factgraph.core.protocol.idref_v1 import encode_idref_v1
 from factgraph.core.store.ledger import Ledger
 
 _META_PRIMARY_KEYS = {
@@ -223,7 +223,7 @@ def accept_many_candidate_sets(
                 schema_ir=schema_ir,
                 resolved_candidate_refs=accepted_entity_refs,
             )
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - accept_candidate_set spans ledger and write-protocol adapters; each fault becomes a FAILED_VALIDATION/FAILED_RUNTIME item and blocks the key.
             code = _error_code_from_exception(exc)
             state = "FAILED_VALIDATION" if isinstance(exc, WriteProtocolError) else "FAILED_RUNTIME"
             results[idx] = _accept_many_item(
@@ -650,17 +650,17 @@ def _accept_entity_candidate_v2(
     if not isinstance(override, dict):
         raise WriteProtocolError("IDENTITY_OVERRIDE_INVALID: identity_override must be object")
 
-    unknown_override_keys = sorted([key for key in override.keys() if key not in set(identity_fields)])
+    unknown_override_keys = sorted([key for key in override if key not in set(identity_fields)])
     if unknown_override_keys:
         raise WriteProtocolError(
             f"IDENTITY_FIELD_UNKNOWN: identity_override contains unknown fields: {unknown_override_keys}"
         )
-    conflict_keys = sorted([key for key in override.keys() if key in resolved_identity])
+    conflict_keys = sorted([key for key in override if key in resolved_identity])
     if conflict_keys:
         raise WriteProtocolError(
             f"IDENTITY_FIELD_CONFLICT: identity_override cannot include resolved fields: {conflict_keys}"
         )
-    non_missing_override = sorted([key for key in override.keys() if key not in missing_identity_fields])
+    non_missing_override = sorted([key for key in override if key not in missing_identity_fields])
     if non_missing_override:
         raise WriteProtocolError(
             f"IDENTITY_FIELD_CONFLICT: identity_override only accepts missing fields: {non_missing_override}"
@@ -929,7 +929,7 @@ def _resolve_candidate_key_to_entity_ref(
             return in_batch
 
     refs: set[str] = set()
-    for row in ledger.find_meta(key="candidate_key", kind="str"):
+    for row in ledger.effective_meta_rows(key="candidate_key", kind="str"):
         if row.value != candidate_key:
             continue
         if ledger.has_active_revocation(row.asrt_id):
@@ -986,7 +986,7 @@ def _find_existing_claim_assertions_v2(
 def _business_meta_for_duplicate(
     ledger: Ledger, asrt_id: str, actor_meta_keys: frozenset[str] = frozenset()
 ) -> dict[str, Any]:
-    meta = {row.key: row.value for row in ledger.find_meta(asrt_id=asrt_id)}
+    meta = {row.key: row.value for row in ledger.effective_meta_rows(asrt_id=asrt_id)}
     return _filter_business_meta(meta, actor_meta_keys)
 
 
@@ -1121,7 +1121,7 @@ def _assert_duplicate_meta_compatible(
 
 
 def _meta_value(ledger: Ledger, asrt_id: str, key: str) -> str | None:
-    for row in ledger.find_meta(asrt_id=asrt_id, key=key):
+    for row in ledger.effective_meta_rows(asrt_id=asrt_id, key=key):
         if isinstance(row.value, str):
             return row.value
     return None

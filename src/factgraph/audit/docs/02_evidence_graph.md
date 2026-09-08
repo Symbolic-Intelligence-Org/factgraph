@@ -137,4 +137,3 @@ Round-trip helpers for durable storage. These are canonical at
 
 - `src/factgraph/application/explain/docs/README.md` — full type reference
 - `src/factgraph/application/protocol/docs/README.md` — `EvaluateRow.explain()` contract
-- `workflow/blueprints/archive/2026-06-08_explain-layer-s3-prober.md` — S3 paths model origin

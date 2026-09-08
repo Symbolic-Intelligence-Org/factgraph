@@ -12,7 +12,6 @@ It covers:
 
 It does not cover:
 
-- HTTP service authentication (monorepo-only; see `docs/SECURITY_monorepo.md`)
 - RBAC or per-user permissions
 - API audit logging
 - rate limiting

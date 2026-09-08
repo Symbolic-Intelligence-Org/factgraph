@@ -7,6 +7,7 @@ from factgraph.application.protocol.evaluate_result import (
     canonical_bytes_for_evaluate,
     claim_digest_for,
     closed_head_digest_for_parts,
+    config_digest_for,
     evidence_ref_id_for,
     expr_digest_for_payload,
     new_run_id,
@@ -14,7 +15,6 @@ from factgraph.application.protocol.evaluate_result import (
     result_id_for,
     row_id_for,
     rule_set_digest_for_entries,
-    config_digest_for,
     view_snapshot_digest_for_parts,
 )
 from factgraph.core.protocol.digests import sha256_hex, sha256_token
@@ -64,20 +64,20 @@ class EvaluateResultDigestTests(unittest.TestCase):
         run_id = "run_v1:" + "b" * 64
         result_id = "evalr_v1:" + "c" * 64
         row_digest = sha256_token(b"row")
-        kwargs = dict(
-            result_id=result_id,
-            run_id=run_id,
-            row_digests=(row_digest,),
-            head_id="head",
-            head_content_digest=sha256_hex(b"head"),
-            engine="native",
-            engine_version=None,
-            adapter_version=None,
-            expr_digest=sha256_token(b"expr"),
-            rule_set_digest=sha256_token(b"rules"),
-            view_snapshot_digest=sha256_token(b"view"),
-            config_digest=None,
-        )
+        kwargs = {
+            "result_id": result_id,
+            "run_id": run_id,
+            "row_digests": (row_digest,),
+            "head_id": "head",
+            "head_content_digest": sha256_hex(b"head"),
+            "engine": "native",
+            "engine_version": None,
+            "adapter_version": None,
+            "expr_digest": sha256_token(b"expr"),
+            "rule_set_digest": sha256_token(b"rules"),
+            "view_snapshot_digest": sha256_token(b"view"),
+            "config_digest": None,
+        }
 
         self.assertEqual(result_digest_for(**kwargs), result_digest_for(**kwargs))
         self.assertNotIn("evaluated_at", result_digest_for(**kwargs))

@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
-from typing import Any, Literal, Mapping, Sequence, TypeAlias
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass, field
+from typing import Any, Literal, TypeAlias
 
 from factgraph.core.protocol.digests import sha256_token
 
@@ -24,24 +25,56 @@ _PROVENANCE_BEARING_SUPPORT_KINDS = frozenset(
 class ProjectedFact:
     asrt_id: str
     fact_tuple: tuple[Any, ...]
+    # Origin metadata is not part of projected row identity/equality.
+    witness_kind: Literal["assertion", "virtual", "unknown"] = field(default="unknown", compare=False)
 
     def __post_init__(self) -> None:
         if not isinstance(self.asrt_id, str) or not self.asrt_id:
             raise ValueError("ProjectedFact.asrt_id must be non-empty string")
         if not isinstance(self.fact_tuple, tuple):
-            raise ValueError("ProjectedFact.fact_tuple must be tuple")
+            raise ValueError("ProjectedFact.fact_tuple must be tuple")  # noqa: TRY004 - Retain exact ProjectedFact construction ValueError; pinned by constructor contract tests.
+        if self.witness_kind not in {"assertion", "virtual", "unknown"}:
+            raise ValueError("invalid projected witness kind")
+
+
+@dataclass(frozen=True)
+class WitnessCapture:
+    """Origin-owned classification, never inferred from a reference spelling."""
+
+    witness_ref: str
+    kind: Literal["assertion", "virtual", "unknown"]
+    predicate_id: str
+    terms: tuple[Any, ...]
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.witness_ref, str) or not self.witness_ref:
+            raise ValueError("witness_ref must be non-empty")
+        if self.kind not in {"assertion", "virtual", "unknown"}:
+            raise ValueError("invalid captured witness kind")
+        if not isinstance(self.predicate_id, str) or not self.predicate_id:
+            raise ValueError("predicate_id must be non-empty")
+        if not isinstance(self.terms, tuple) or not self.terms:
+            raise ValueError("captured witness terms must be a non-empty tuple")
 
 
 @dataclass(frozen=True)
 class PredWitness:
     pred_condition_key: str
     asrt_ids: tuple[str, ...]
+    witnesses: tuple[WitnessCapture, ...] | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.pred_condition_key, str) or not self.pred_condition_key:
             raise ValueError("PredWitness.pred_condition_key must be non-empty string")
         if tuple(self.asrt_ids) != normalize_asrt_ids(self.asrt_ids):
             raise ValueError("PredWitness.asrt_ids must be sorted unique non-empty strings")
+        if self.witnesses is not None:
+            if not isinstance(self.witnesses, tuple) or any(
+                not isinstance(item, WitnessCapture) for item in self.witnesses
+            ):
+                raise ValueError("witnesses must be a tuple of WitnessCapture")
+            if tuple(item.witness_ref for item in self.witnesses) != self.asrt_ids:
+                raise ValueError("witness metadata must exactly cover original refs in order")
 
 
 @dataclass(frozen=True)
@@ -102,8 +135,18 @@ class ProofReceipt:
     non_fact_steps: tuple[NonFactStep, ...] = ()
     rule_refs: tuple[str, ...] = ()
     rule_ref_edges: tuple[RuleRefEdge, ...] = ()
+    witness_capture_version: int | None = None
 
     def __post_init__(self) -> None:
+        if self.witness_capture_version is not None and (
+            type(self.witness_capture_version) is not int or self.witness_capture_version != 1
+        ):
+            raise ValueError("unsupported witness capture version")
+        if any(
+            (row.witnesses is not None) != (self.witness_capture_version == 1)
+            for row in self.pred_witnesses
+        ):
+            raise ValueError("witness capture version and metadata coverage disagree")
         if not isinstance(self.kind, str) or not self.kind:
             raise ValueError("ProofReceipt.kind must be non-empty string")
         if self.root_result_kind not in {"fact", "entity", "row"}:
@@ -159,7 +202,7 @@ class ProvenanceEnvelope:
         if not isinstance(self.payload_type, str) or not self.payload_type:
             raise ValueError("ProvenanceEnvelope.payload_type must be non-empty string")
         if not isinstance(self.payload, dict):
-            raise ValueError("ProvenanceEnvelope.payload must be dict")
+            raise ValueError("ProvenanceEnvelope.payload must be dict")  # noqa: TRY004 - Retain exact ProvenanceEnvelope construction ValueError; decoder Mapping normalization is separate.
 
 
 def normalize_binding_items(binding: Mapping[str, Any] | Sequence[tuple[str, Any]]) -> BindingItems:
@@ -228,7 +271,7 @@ def make_non_fact_step_key(
 
 def support_artifact_to_dict(artifact: ProofReceipt) -> dict[str, Any]:
     # This shape is optimized for canonical digest/round-trip stability, not display formatting.
-    return {
+    result: dict[str, Any] = {
         "kind": artifact.kind,
         "root_result_kind": artifact.root_result_kind,
         "binding": [[key, _to_jsonable(value)] for key, value in artifact.binding_items],
@@ -260,11 +303,25 @@ def support_artifact_to_dict(artifact: ProofReceipt) -> dict[str, Any]:
             for row in artifact.rule_ref_edges
         ],
     }
+    # Absence preserves historical canonical bytes. Readers never backfill it.
+    if artifact.witness_capture_version is not None:
+        result["witness_capture_version"] = artifact.witness_capture_version
+        for row, encoded in zip(artifact.pred_witnesses, result["pred_witnesses"]):
+            encoded["witnesses"] = [
+                {
+                    "witness_ref": item.witness_ref,
+                    "kind": item.kind,
+                    "predicate_id": item.predicate_id,
+                    "terms": _to_jsonable(item.terms),
+                }
+                for item in row.witnesses or ()
+            ]
+    return result
 
 
 def support_artifact_from_dict(row: Mapping[str, Any]) -> ProofReceipt:
     if not isinstance(row, Mapping):
-        raise ValueError("row must be Mapping[str, Any]")
+        raise ValueError("row must be Mapping[str, Any]")  # noqa: TRY004 - Closed ProofReceipt decode; bundle/witness callers wrap ValueError.
     return ProofReceipt(
         kind=row["kind"],
         root_result_kind=row["root_result_kind"],
@@ -273,6 +330,10 @@ def support_artifact_from_dict(row: Mapping[str, Any]) -> ProofReceipt:
             PredWitness(
                 pred_condition_key=item["pred_condition_key"],
                 asrt_ids=tuple(item["asrt_ids"]),
+                witnesses=(
+                    tuple(_witness_capture_from_dict(value) for value in item["witnesses"])
+                    if "witnesses" in item else None
+                ),
             )
             for item in row["pred_witnesses"]
         ),
@@ -286,6 +347,7 @@ def support_artifact_from_dict(row: Mapping[str, Any]) -> ProofReceipt:
             for item in row.get("non_fact_steps", ())
         ),
         rule_refs=tuple(row.get("rule_refs", ())),
+        witness_capture_version=row.get("witness_capture_version"),
         rule_ref_edges=tuple(
             RuleRefEdge(
                 ruleref_condition_key=item["ruleref_condition_key"],
@@ -296,6 +358,19 @@ def support_artifact_from_dict(row: Mapping[str, Any]) -> ProofReceipt:
             )
             for item in row.get("rule_ref_edges", ())
         ),
+    )
+
+
+def _witness_capture_from_dict(row: Mapping[str, Any]) -> WitnessCapture:
+    if not isinstance(row, Mapping) or set(row) != {
+        "witness_ref", "kind", "predicate_id", "terms"
+    }:
+        raise ValueError("invalid witness capture fields")
+    if not isinstance(row["terms"], list):
+        raise TypeError("captured terms must be a list")
+    return WitnessCapture(
+        witness_ref=row["witness_ref"], kind=row["kind"], predicate_id=row["predicate_id"],
+        terms=tuple(_from_jsonable(value) for value in row["terms"]),
     )
 
 
@@ -323,10 +398,10 @@ def provenance_envelope_to_dict(envelope: ProvenanceEnvelope) -> dict[str, Any]:
 
 def provenance_envelope_from_dict(row: Mapping[str, Any]) -> ProvenanceEnvelope:
     if not isinstance(row, Mapping):
-        raise ValueError("row must be Mapping[str, Any]")
+        raise ValueError("row must be Mapping[str, Any]")  # noqa: TRY004 - Closed ProvenanceEnvelope decode shares the *_from_dict ValueError contract.
     payload = row.get("payload")
     if not isinstance(payload, Mapping):
-        raise ValueError("row.payload must be Mapping[str, Any]")
+        raise ValueError("row.payload must be Mapping[str, Any]")  # noqa: TRY004 - Closed ProvenanceEnvelope decode shares the *_from_dict ValueError contract.
     return ProvenanceEnvelope(
         candidate_id=row["candidate_id"],
         engine=row["engine"],
@@ -390,23 +465,23 @@ def _from_jsonable(value: Any) -> Any:
 
 
 __all__ = [
-    "BindingSupportCapture",
-    "BindingItems",
-    "DetailItems",
     "ENGINE_NO_WITNESS_KIND",
-    "NonFactStep",
-    "PredWitness",
-    "ProjectedFact",
     "PROBLOG_PROVENANCE_KIND",
     "PYREASON_PROVENANCE_KIND",
-    "ProvenanceEnvelope",
-    "RuleRefEdge",
     "SOUFFLE_WITNESS_KIND",
-    "ProofReceipt",
-    "SupportRootResultKind",
     "_DEGRADED_SUPPORT_KINDS",
     "_PROVENANCE_BEARING_SUPPORT_KINDS",
     "_WITNESS_BEARING_SUPPORT_KINDS",
+    "BindingItems",
+    "BindingSupportCapture",
+    "DetailItems",
+    "NonFactStep",
+    "PredWitness",
+    "ProjectedFact",
+    "ProofReceipt",
+    "ProvenanceEnvelope",
+    "RuleRefEdge",
+    "SupportRootResultKind",
     "binding_dict_from_items",
     "compute_provenance_digest",
     "compute_support_digest",

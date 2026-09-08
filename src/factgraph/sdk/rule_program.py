@@ -8,10 +8,11 @@ multi-layer proof back to the original premise assertion ids.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import datetime
 from types import MappingProxyType
-from typing import Any, Mapping
+from typing import Any
 
 from factgraph.application.explain import EvidenceGraph
 from factgraph.application.protocol.explanation_render import (
@@ -25,6 +26,7 @@ from factgraph.core.store.premise_filter import (
 )
 
 from .errors import SDKValueError
+from .program_witnesses import RuleProgramWitnessReportV1
 
 
 @dataclass(frozen=True)
@@ -165,10 +167,15 @@ class RuleProgramExplanation:
     steps: tuple[dict[str, Any], ...]
     checked_scope: dict[str, Any]
     evidence: EvidenceGraph
+    witness_report: RuleProgramWitnessReportV1 | None = None
 
     @property
     def repr(self) -> tuple[str, ...]:
-        """Deterministic machine-readable walk of the canonical evidence graph."""
+        """Return a deterministic structural walk of the EvidenceGraph.
+
+        Returns:
+            Stable presentation lines derived from structured evidence.
+        """
 
         return walk_evidence(
             self.evidence,
@@ -177,7 +184,11 @@ class RuleProgramExplanation:
         )
 
     def narrate(self) -> tuple[str, ...]:
-        """Render this evidence through FactGraph's canonical narrator."""
+        """Render this evidence through FactGraph's canonical narrator.
+
+        Returns:
+            Human-readable lines derived from structured evidence.
+        """
 
         return narrate_evidence(
             self.evidence,
@@ -211,12 +222,28 @@ class RuleProgramResult:
         compare=False,
         default=(),
     )
+    _witness_report: RuleProgramWitnessReportV1 | None = field(default=None, repr=False, compare=False)
 
     def explain(self) -> RuleProgramExplanation:
-        """Return the immutable evidence and support captured by this evaluation."""
+        """Return immutable evidence and support captured by this evaluation.
+
+        Returns:
+            A passed or failed Rule-program explanation.
+
+        Raises:
+            SDKValueError: If this result carries no canonical EvidenceGraph.
+
+        Notes:
+            Explain reads captured support only and does not rerun the program.
+        """
 
         if self._evidence is None:
             raise SDKValueError("RuleProgramResult has no canonical EvidenceGraph")
+        # New native results read only the sealed result-owned capture. Earlier
+        # mutable projections and live Store/cache state cannot alter Explain.
+        captured = self._witness_report.to_dict() if self._witness_report is not None else None
+        evidence = self._witness_report.evidence if self._witness_report is not None else self._evidence
+        steps = tuple(captured["support_steps"]) if captured is not None else self._support_steps
         checked_scope = {
             "engine": self.engine,
             "effective_rule_ids": list(self.effective_rule_ids),
@@ -231,16 +258,18 @@ class RuleProgramResult:
                 root_support_digest=None,
                 steps=(),
                 checked_scope=checked_scope,
-                evidence=self._evidence,
+                evidence=evidence,
+                witness_report=self._witness_report,
             )
 
         return RuleProgramExplanation(
             status="passed",
             failure_class=None,
             root_support_digest=self.support_digest,
-            steps=self._support_steps,
+            steps=steps,
             checked_scope=checked_scope,
-            evidence=self._evidence,
+            evidence=evidence,
+            witness_report=self._witness_report,
         )
 
 
