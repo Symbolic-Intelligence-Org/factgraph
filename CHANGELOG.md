@@ -13,8 +13,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   installed-consumer gates as `main`, and CI for release-branch pushes.
 - Reconcile historical changelog entries, recover original alpha/0.2 release
   files, and retain exact-version source branches as read-only snapshots.
+- Retain `release/0.4-baseline` as a read-only marker of producer `2a4f6b8f`,
+  the existing source ancestor of `0.4.0rc1` used by Meander's preserved
+  `0.2.0rc3` wheel. The branch name identifies a source baseline, not a new
+  package version.
 
-These repository maintenance changes do not publish another package version.
+As verified on 2026-09-08, `main` and `release/0.4.x` descend from published
+`0.4.0rc1` and contain only CI/documentation changes since that release.
+Runtime source, package APIs, runtime dependencies and tests are unchanged;
+all 310 runtime files match Meander's retained wheel. See the
+[0.4 source lineage](docs/release-history.md#04-source-lineage) for the exact
+checkpoints and the distinction between runtime equality and wheel identity.
+These maintenance changes do not publish another package version or replace
+Meander's wheel. No `0.4.0rc2` has been published at this checkpoint.
 
 ## [0.4.0rc1] - 2026-09-08
 
