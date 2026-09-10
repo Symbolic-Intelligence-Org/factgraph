@@ -103,7 +103,11 @@ build extras; existing developer/consumer environments are not modified.
 ## Original cloud refs and rollback
 
 The immutable `archive/main-before-2026-09-08` tag preserves old main. The original
-rc3 wheel and manifest are tracked under `artifacts/compatibility/`. Existing
+rc3 wheel and manifest are retained in the dedicated
+[compatibility archive](https://github.com/Symbolic-Intelligence-Org/factgraph/releases/tag/archive%2Fmeander-main-07f782f).
+`artifacts/compatibility/` tracks the original manifest, checksum pins and retrieval
+location; the wheel remains in prior Git history and is absent from the current
+source tree. Existing
 public version tags are not rewritten. The table records branch heads before
 consolidation; branch deletion is allowed only after the head is included in
 verified main or otherwise explicitly preserved with resolved provenance.

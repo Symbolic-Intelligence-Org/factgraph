@@ -1,0 +1,32 @@
+{
+  "storage": "github-release-archive",
+  "repository": "Symbolic-Intelligence-Org/factgraph",
+  "tag": "archive/meander-main-07f782f",
+  "release_id": 386337014,
+  "release_url": "https://github.com/Symbolic-Intelligence-Org/factgraph/releases/tag/archive/meander-main-07f782f",
+  "source_commit": "2a4f6b8fb1e9204c9782213590c61c5d21c069d8",
+  "source_branch": "release/0.4-baseline",
+  "assets": [
+    {
+      "name": "SHA256SUMS",
+      "id": 555135420,
+      "url": "https://github.com/Symbolic-Intelligence-Org/factgraph/releases/download/archive/meander-main-07f782f/SHA256SUMS",
+      "sha256": "dcda8d76e86fd17251dccd085e195742b17276c9013516700a830343a31a87d8",
+      "size_bytes": 182
+    },
+    {
+      "name": "factgraph-0.2.0rc3-py3-none-any.whl",
+      "id": 555135419,
+      "url": "https://github.com/Symbolic-Intelligence-Org/factgraph/releases/download/archive/meander-main-07f782f/factgraph-0.2.0rc3-py3-none-any.whl",
+      "sha256": "2255138bd7682bb251ee581a7cce92001e3ec313e7499bc3cbb200e751915486",
+      "size_bytes": 1281302
+    },
+    {
+      "name": "manifest.json",
+      "id": 555135421,
+      "url": "https://github.com/Symbolic-Intelligence-Org/factgraph/releases/download/archive/meander-main-07f782f/manifest.json",
+      "sha256": "d1bbc1efdd8226e1fdd9c37ede2d62b29bd5879de56268760c89531a2a940801",
+      "size_bytes": 913
+    }
+  ]
+}

@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Build and release
 
+- Move the original Meander `07f782f` compatibility wheel to a dedicated artifact
+  archive at its original producer source. Keep unchanged manifest/checksum pins
+  and retrieval metadata in the repository; preserve historical Git objects and
+  consumer dependencies.
 - Add protected `release/0.4.x` maintenance with the same producer and independent
   installed-consumer gates as `main`, and CI for release-branch pushes.
 - Reconcile historical changelog entries, recover original alpha/0.2 release
