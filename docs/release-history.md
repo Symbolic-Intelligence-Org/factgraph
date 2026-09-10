@@ -83,7 +83,11 @@ and published distributions retain their original bytes, including old wording.
 - GitHub Release restoration attaches original wheel/sdist bytes, checksums and
   provenance to existing tags. It does not republish to PyPI, change a version,
   or assert that old source passes today's consumer compatibility gate.
-- Meander main `07f782f` still retains its exact `0.2.0rc3` wheel, SHA256
+- Meander commit `07f782f` identifies the retained `0.2.0rc3` wheel, SHA256
   `2255138bd7682bb251ee581a7cce92001e3ec313e7499bc3cbb200e751915486`.
   This privately retained development artifact is distinct from public `0.2.0`.
-  Its [backup](../artifacts/compatibility/meander-main-07f782f/) remains unchanged.
+  Its original bytes and manifest are now stored in the dedicated
+  [compatibility archive](https://github.com/Symbolic-Intelligence-Org/factgraph/releases/tag/archive%2Fmeander-main-07f782f);
+  repository [provenance and retrieval instructions](../artifacts/compatibility/meander-main-07f782f/)
+  retain the same digest pins. The archive adds no package release or consumer
+  promotion; the historical publication table above is unchanged.

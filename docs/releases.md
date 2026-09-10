@@ -9,12 +9,21 @@ historical source branches and original distribution provenance.
 
 ## Preserve the shared baseline
 
-Meander main `07f782f` uses the exact rc3 wheel from producer `2a4f6b8f`, SHA-256
+Meander commit `07f782f` uses the exact rc3 wheel from producer `2a4f6b8f`, SHA-256
 `2255138bd7682bb251ee581a7cce92001e3ec313e7499bc3cbb200e751915486`.
-An immutable backup and original manifest are retained in the repository at
-`artifacts/compatibility/meander-main-07f782f/`. Verify its `SHA256SUMS` before use.
-Those files are not included in distributions. UI-only development can continue
-on that artifact while new candidates are tested separately.
+The original bytes are retained in a dedicated
+[compatibility archive](https://github.com/Symbolic-Intelligence-Org/factgraph/releases/tag/archive%2Fmeander-main-07f782f).
+The repository keeps the original manifest, `SHA256SUMS`, exact asset locations
+and [retrieval instructions](../artifacts/compatibility/meander-main-07f782f/).
+Download outside the source tree and verify against those repository checksum
+pins before use. The current source tree contains no backup wheel; compatibility
+metadata remains excluded from distributions. Consumers can retain that exact
+artifact while new candidates are tested separately.
+
+The archive is a historical storage record, marked prerelease and not latest.
+Its tag points to the original producer and its manifest retains
+`release_eligible=false`; relocation adds no package publication or consumer
+promotion. Source history is preserved, including the original committed backup.
 
 The read-only branch `release/0.4-baseline` points to that original producer
 commit. It marks an existing ancestor of published `0.4.0rc1` and the maintained
